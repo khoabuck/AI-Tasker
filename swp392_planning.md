@@ -1,6 +1,6 @@
 # SWP392 — Kế Hoạch Dự Án (3 Topics)
 
-> **Bối cảnh team:** 5 thành viên (4 BE mới + 1 BE có kinh nghiệm .NET C#) | 9 tuần | .NET C# + ReactJS + SQL Server
+> **Bối cảnh team:** 5 thành viên (4 BE mới + 1 BE có kinh nghiệm .NET C#) | 9 tuần | .NET C# + ReactJS + SQL Server 
 
 ---
 
