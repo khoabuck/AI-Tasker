@@ -1,0 +1,19 @@
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# .NET
+bin/
+obj/
+**/bin/
+**/obj/
+appsettings.Development.json
+
+# Frontend
+node_modules/
+dist/
+.env
+.env.local
