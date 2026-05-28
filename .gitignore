@@ -1,0 +1,17 @@
+# Visual Studio
+.vs/
+**/.vs/
+*.user
+*.suo
+
+# .NET
+bin/
+obj/
+**/bin/
+**/obj/
+
+# Frontend
+node_modules/
+dist/
+.env
+.env.local
