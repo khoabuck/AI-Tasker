@@ -5,24 +5,7 @@
 
 ## 1.1 Background
 
-Trong những năm gần đây, AI được sử dụng ngày càng nhiều trong doanh nghiệp. Nhiều công ty nhỏ, startup hoặc người không chuyên kỹ thuật muốn áp dụng AI để tự động hóa các công việc như chatbot chăm sóc khách hàng, phân tích dữ liệu, OCR hóa đơn, xử lý hình ảnh, tạo nội dung, hoặc tự động hóa quy trình kinh doanh.
-
-Tuy nhiên, nhóm người dùng này thường gặp khó khăn khi triển khai AI:
-
-- Không biết nên dùng giải pháp AI nào cho vấn đề của mình.
-- Không biết viết yêu cầu dự án AI rõ ràng.
-- Khó tìm đúng chuyên gia AI phù hợp.
-- Khó đánh giá năng lực thật của AI Expert.
-- Lo ngại rủi ro thanh toán, trễ deadline hoặc deliverable không đúng yêu cầu.
-
-Trong khi đó, các AI Expert như freelancer, AI engineer hoặc consultant cũng gặp nhiều vấn đề:
-
-- Khó tiếp cận đúng khách hàng có nhu cầu AI.
-- Các nền tảng freelance hiện tại như Fiverr hoặc Upwork quá rộng, không tập trung riêng cho AI.
-- Khó thể hiện năng lực AI một cách chuyên nghiệp.
-- Thiếu một quy trình đáng tin cậy để nhận job, gửi proposal, trao đổi, giao sản phẩm và nhận thanh toán.
-
-Vì vậy, đề tài **AITasker** được đề xuất như một nền tảng marketplace chuyên về dịch vụ AI, giúp kết nối **Client cần giải pháp AI** với **AI Expert có kỹ năng phù hợp**. Hệ thống tập trung vào quy trình job/proposal/project giống Upwork, đồng thời bổ sung AI support để cải thiện chất lượng requirement, matching và độ tin cậy trong quá trình thực hiện project.
+In recent years, AI adoption has increased rapidly in businesses, especially among startups, small companies, and non-technical users. However, they often face difficulties in defining AI project requirements, finding suitable AI experts, and ensuring trust in project delivery and payment. Therefore, AITasker is proposed as a specialized AI marketplace that connects Clients with AI Experts through AI-assisted job creation, expert matching, project management, escrow, and review.
 
 ---
 
@@ -914,473 +897,598 @@ SQL Server Database
 
 ---
 
-# 6. Conceptual & Logical ERD
+# Conceptual & Logical ERD
 
-## 6.1 Conceptual ERD
+## 6. Conceptual & Logical ERD
 
-### Main Entities
+### 6.1 Conceptual ERD
+
+#### 6.1.1 Main Entities
 
 | Entity | Ý nghĩa |
-|---|---|
-| Users | Lưu tài khoản chung của tất cả người dùng |
-| ClientProfiles | Hồ sơ Client |
-| ExpertProfiles | Hồ sơ AI Expert |
-| Skills | Danh mục kỹ năng AI |
-| ExpertSkills | Kỹ năng của AI Expert |
-| JobPostings | Job do Client đăng |
-| JobSkills | Kỹ năng yêu cầu của job |
-| AIRecommendations | Kết quả gợi ý Expert cho job |
-| Proposals | Proposal do Expert gửi |
-| ProposalMilestones | Kế hoạch milestone trong proposal |
-| ProjectContracts | Điều khoản contract đã chốt |
-| Projects | Dự án được tạo sau khi contract confirmed |
-| Milestones | Các cột mốc chính thức của project |
-| Deliverables | Sản phẩm bàn giao từng milestone |
-| Messages | Tin nhắn trong negotiation/project chat |
-| Wallets | Ví mô phỏng của user |
-| Escrows | Tiền ký quỹ theo project/milestone |
-| PaymentTransactions | Giao dịch escrow/release/refund |
-| Disputes | Tranh chấp |
-| DisputeEvidences | Bằng chứng tranh chấp |
-| Reviews | Đánh giá sau project |
-| Notifications | Thông báo hệ thống |
-| AuditLogs | Lưu lịch sử thao tác quan trọng |
+| :--- | :--- |
+| **Users** | Lưu thông tin tài khoản chung của toàn bộ người dùng trong hệ thống, bao gồm Client, AI Expert và Admin. |
+| **ClientProfiles** | Lưu hồ sơ riêng của Client như công ty, ngành nghề, nhu cầu AI và ngân sách dự kiến. |
+| **ExpertProfiles** | Lưu hồ sơ riêng của AI Expert như bio, portfolio, kinh nghiệm, hourly rate, profile score và trạng thái xác thực. |
+| **Wallets** | Lưu ví mô phỏng của mỗi user để phục vụ escrow/payment simulation. |
+| **Services** | Lưu các service/template AI do Admin tạo hoặc quản lý để Client và Expert sử dụng trong marketplace. |
+| **ExpertServices** | Bảng trung gian thể hiện AI Expert có thể cung cấp những service/template nào. |
+| **JobPostings** | Lưu AI job/request do Client đăng lên hệ thống. |
+| **JobServices** | Bảng trung gian thể hiện job thuộc những service/template nào. |
+| **JobSkills** | Lưu các kỹ năng yêu cầu của từng job. |
+| **ExpertSkills** | Lưu các kỹ năng mà AI Expert có. |
+| **AIRecommendations** | Lưu kết quả matching giữa job của Client và AI Expert. |
+| **Proposals** | Lưu proposal do AI Expert gửi cho một job. |
+| **ProjectContracts** | Lưu contract preview/contract chính thức sau khi Client và Expert thống nhất điều khoản. |
+| **Projects** | Lưu project được tạo sau khi proposal/contract được xác nhận. |
+| **Milestones** | Lưu các milestone của project. |
+| **Deliverables** | Lưu sản phẩm bàn giao của Expert cho từng milestone. |
+| **Escrows** | Lưu khoản tiền ký quỹ theo project/milestone. |
+| **PaymentTransactions** | Lưu lịch sử giao dịch mô phỏng như escrow lock, release, refund. |
+| **Messages** | Lưu tin nhắn giữa Client và Expert trong job/proposal/project. |
+| **Disputes** | Lưu tranh chấp phát sinh trong project hoặc milestone. |
+| **DisputeEvidences** | Lưu bằng chứng tranh chấp do user gửi. |
+| **Reviews** | Lưu đánh giá giữa Client và Expert sau khi project hoàn thành. |
+| **Notifications** | Lưu thông báo hệ thống gửi đến user. |
+| **AuditLogs** | Lưu lịch sử thao tác quan trọng trong hệ thống. |
 
-> Entity `Services` có thể bỏ khỏi ERD chính hoặc để optional/future enhancement vì flow Fiverr-style service marketplace đã bị loại khỏi main flow.
-
----
-
-## 6.2 Key Relationships
+#### 6.1.2 Conceptual Relationships
 
 | Relationship | Cardinality | Mô tả |
-|---|---|---|
-| Users — ClientProfiles | 1 — 0..1 | Một user có thể có hồ sơ Client |
-| Users — ExpertProfiles | 1 — 0..1 | Một user có thể có hồ sơ Expert |
-| ExpertProfiles — ExpertSkills | 1 — N | Một Expert có nhiều skill |
-| Skills — ExpertSkills | 1 — N | Một skill có thể thuộc nhiều Expert |
-| ClientProfiles — JobPostings | 1 — N | Một Client có thể đăng nhiều job |
-| JobPostings — JobSkills | 1 — N | Một job có nhiều skill yêu cầu |
-| JobPostings — AIRecommendations | 1 — N | Một job có nhiều Expert được recommend |
-| ExpertProfiles — AIRecommendations | 1 — N | Một Expert có thể được recommend cho nhiều job |
-| JobPostings — Proposals | 1 — N | Một job có nhiều proposal |
-| ExpertProfiles — Proposals | 1 — N | Một Expert có thể gửi nhiều proposal |
-| Proposals — ProposalMilestones | 1 — N | Một proposal có nhiều milestone đề xuất |
-| Proposals — ProjectContracts | 1 — 0..1 | Proposal được chọn thì tạo contract |
-| ProjectContracts — Projects | 1 — 0..1 | Contract confirmed thì tạo project |
-| Projects — Milestones | 1 — N | Một project có nhiều milestone |
-| Milestones — Deliverables | 1 — N | Một milestone có nhiều deliverable version |
-| Projects — Messages | 1 — N | Một project có nhiều tin nhắn |
-| Users — Wallets | 1 — 1 | Mỗi user có một ví mô phỏng |
-| Projects — Escrows | 1 — N | Một project có escrow theo milestone |
-| Projects — PaymentTransactions | 1 — N | Một project có nhiều transaction |
-| Projects — Disputes | 1 — 0..N | Một project có thể có nhiều dispute theo milestone |
-| Disputes — DisputeEvidences | 1 — N | Một dispute có nhiều evidence |
-| Projects — Reviews | 1 — N | Một project có review từ hai bên |
-| Users — Notifications | 1 — N | Một user có nhiều notification |
-| Users — AuditLogs | 1 — N | Một user có thể tạo nhiều audit logs |
+| :--- | :--- | :--- |
+| Users — DisputeEvidences | 1 — 0..N | Một user có thể gửi nhiều bằng chứng tranh chấp. |
+| Users — Disputes | 1 — 0..N | Một user có thể mở hoặc liên quan đến nhiều tranh chấp. |
+| Users — PaymentTransactions | 1 — 0..N | Một user có thể có nhiều giao dịch mô phỏng. |
+| Users — Reviews | 1 — 0..N | Một user có thể viết hoặc nhận nhiều review. |
+| Users — AuditLogs | 1 — 0..N | Một user có thể tạo nhiều log thao tác. |
+| Users — Notifications | 1 — 0..N | Một user có thể nhận nhiều thông báo. |
+| Users — Wallets | 1 — 0..1 | Một user có tối đa một ví mô phỏng. |
+| Users — ExpertProfiles | 1 — 0..1 | Một user có thể có một hồ sơ AI Expert. |
+| Users — ClientProfiles | 1 — 0..1 | Một user có thể có một hồ sơ Client. |
+| Users — Messages | 1 — 0..N | Một user có thể gửi nhiều tin nhắn. |
+| Users(Admin) — Services | 1 — 0..N | Admin có thể tạo hoặc quản lý nhiều service/template. |
+| ClientProfiles — Projects | 1 — 0..N | Một Client có thể có nhiều project. |
+| ClientProfiles — JobPostings | 1 — 0..N | Một Client có thể đăng nhiều job. |
+| ClientProfiles — ProjectContracts | 1 — 0..N | Một Client có thể có nhiều contract. |
+| ClientProfiles — Escrows | 1 — 0..N | Một Client có thể tạo nhiều escrow. |
+| ExpertProfiles — AIRecommendations | 1 — 0..N | Một Expert có thể được recommend cho nhiều job. |
+| ExpertProfiles — Services | M — M | Một Expert có thể cung cấp nhiều service/template và một service/template có thể có nhiều Expert. |
+| ExpertProfiles — ProjectContracts | 1 — 0..N | Một Expert có thể có nhiều contract. |
+| ExpertProfiles — ExpertSkills | 1 — 0..N | Một Expert có nhiều kỹ năng. |
+| ExpertProfiles — Proposals | 1 — 0..N | Một Expert có thể gửi nhiều proposal. |
+| ExpertProfiles — Deliverables | 1 — 0..N | Một Expert có thể nộp nhiều deliverable. |
+| JobPostings — Messages | 1 — 0..N | Một job có thể có nhiều tin nhắn trao đổi. |
+| JobPostings — JobSkills | 1 — 0..N | Một job có nhiều kỹ năng yêu cầu. |
+| JobPostings — AIRecommendations | 1 — 0..N | Một job có nhiều kết quả recommendation. |
+| JobPostings — Proposals | 1 — 0..N | Một job có thể nhận nhiều proposal. |
+| JobPostings — Services | M — M | Một job có thể thuộc nhiều service/template và một service/template có thể áp dụng cho nhiều job. |
+| JobSkills — ExpertSkills | M — M | Kỹ năng yêu cầu của job được dùng để match với kỹ năng của Expert; kết quả matching lưu trong AIRecommendations. |
+| Proposals — Messages | 1 — 0..N | Một proposal có thể có nhiều tin nhắn thương lượng. |
+| Proposals — ProjectContracts | 1 — 0..1 | Một proposal được chọn có thể tạo tối đa một contract. |
+| Proposals — Projects | 1 — 0..1 | Một proposal được accept có thể tạo tối đa một project. |
+| ProjectContracts — Projects | 1 — 0..1 | Một contract sau khi confirmed có thể tạo một project. |
+| Projects — Disputes | 1 — 0..N | Một project có thể có nhiều dispute. |
+| Projects — PaymentTransactions | 1 — 0..N | Một project có nhiều transaction mô phỏng. |
+| Projects — Escrows | 1 — 0..N | Một project có thể có nhiều escrow theo milestone. |
+| Projects — Messages | 1 — 0..N | Một project có nhiều tin nhắn trao đổi. |
+| Projects — Milestones | 1 — N | Một project phải có ít nhất một milestone. |
+| Projects — Reviews | 1 — 0..1 | Một project có một review: Client review Expert |
+| Milestones — Deliverables | 1 — 0..N | Một milestone có thể có nhiều deliverable version. |
+| Milestones — Escrows | 1 — 0..1 | Một milestone có thể có một escrow tương ứng. |
+| Milestones — PaymentTransactions | 1 — 0..N | Một milestone có thể phát sinh nhiều transaction. |
+| Milestones — Disputes | 1 — 0..N | Một milestone có thể phát sinh dispute. |
+| Escrows — PaymentTransactions | 1 — 0..N | Một escrow có thể sinh nhiều transaction như lock, release, refund. |
+| Disputes — DisputeEvidences | 1 — 0..N | Một dispute có thể có nhiều bằng chứng. |
 
 ---
 
-## 6.3 Logical ERD — Key Tables
+### 6.2 Logical ERD
 
-### 1. Users
+#### 6.2.1 Users
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| UserId | INT | PK | Khóa chính |
+| Email | NVARCHAR(255) | UNIQUE | Email đăng nhập |
+| PasswordHash | NVARCHAR(255) | | Mật khẩu đã hash |
+| FullName | NVARCHAR(255) | | Họ tên |
+| Role | NVARCHAR(20) | | CLIENT / EXPERT / ADMIN |
+| AuthProvider | NVARCHAR(20) | | LOCAL / GOOGLE |
+| GoogleId | NVARCHAR(255) | UNIQUE NULL | ID Google nếu đăng nhập Google |
+| AvatarUrl | NVARCHAR(500) | NULL | Ảnh đại diện |
+| Status | NVARCHAR(30) | | PENDING_ROLE / ACTIVE / SUSPENDED / BANNED |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
 
-| Column | Data Type | Note |
-|---|---|---|
-| UserId | INT PK IDENTITY | Khóa chính |
-| Email | NVARCHAR(255) UNIQUE | Email đăng nhập |
-| PasswordHash | NVARCHAR(255) NULL | Mật khẩu đã hash, NULL nếu dùng Google |
-| FullName | NVARCHAR(255) | Họ tên |
-| Role | NVARCHAR(20) NULL | CLIENT / EXPERT / ADMIN |
-| AuthProvider | NVARCHAR(20) | LOCAL / GOOGLE |
-| GoogleId | NVARCHAR(255) NULL | ID tài khoản Google |
-| AvatarUrl | NVARCHAR(500) NULL | Avatar từ Google |
-| Status | NVARCHAR(30) | PENDING_ROLE / PENDING_PROFILE / PENDING_AI_REVIEW / ACTIVE / SUSPENDED / BANNED |
-| CreatedAt | DATETIME2 | Ngày tạo |
-| UpdatedAt | DATETIME2 NULL | Ngày cập nhật |
+#### 6.2.2 ClientProfiles
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ClientId | INT | PK | Khóa chính |
+| UserId | INT | FK, UNIQUE | Liên kết Users |
+| CompanyName | NVARCHAR(255) | | Tên công ty |
+| Industry | NVARCHAR(255) | | Ngành nghề |
+| BusinessType | NVARCHAR(100) | | Loại hình kinh doanh |
+| CompanySize | NVARCHAR(50) | NULL | Quy mô công ty |
+| AINeeds | NVARCHAR(MAX) | | Nhu cầu AI |
+| MainProblems | NVARCHAR(MAX) | | Vấn đề cần giải quyết |
+| ExpectedBudgetMin | DECIMAL(18,2) | NULL | Ngân sách tối thiểu |
+| ExpectedBudgetMax | DECIMAL(18,2) | NULL | Ngân sách tối đa |
+| RatingAverage | DECIMAL(3,2) | | Rating trung bình |
+| ReviewCount | INT | | Số review |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Key:**
+* `ClientProfiles.UserId` → `Users.UserId`
+
+#### 6.2.3 ExpertProfiles
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ExpertId | INT | PK | Khóa chính |
+| UserId | INT | FK, UNIQUE | Liên kết Users |
+| Bio | NVARCHAR(MAX) | | Giới thiệu chuyên môn |
+| PortfolioUrl | NVARCHAR(500) | | Link portfolio |
+| CertificateUrl | NVARCHAR(500) | NULL | Link chứng chỉ |
+| ExperienceYears | INT | | Số năm kinh nghiệm |
+| HourlyRate | DECIMAL(18,2) | | Giá theo giờ |
+| RatingAverage | DECIMAL(3,2) | | Rating trung bình |
+| ReviewCount | INT | | Số review |
+| CompletedProjects | INT | | Số project đã hoàn thành |
+| ProfileScore | DECIMAL(3,2) | | Điểm hồ sơ |
+| Level | NVARCHAR(20) | | JUNIOR / MID / SENIOR |
+| ProfileReviewStatus | NVARCHAR(30) | | PENDING_REVIEW / APPROVED / REJECTED |
+| ProfileReviewNote | NVARCHAR(MAX) | NULL | Ghi chú review hồ sơ |
+| IsVerified | BIT | | Đã xác thực hay chưa |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Key:**
+* `ExpertProfiles.UserId` → `Users.UserId`
+
+#### 6.2.4 Wallets
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| WalletId | INT | PK | Khóa chính |
+| UserId | INT | FK, UNIQUE | Chủ ví |
+| AvailableBalance | DECIMAL(18,2) | | Số dư khả dụng |
+| LockedBalance | DECIMAL(18,2) | | Số dư đang bị khóa |
+| TotalEarning | DECIMAL(18,2) | | Tổng thu nhập mô phỏng |
+| UpdatedAt | DATETIME2 | | Ngày cập nhật |
+
+**Foreign Key:**
+* `Wallets.UserId` → `Users.UserId`
+
+#### 6.2.5 Services
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ServiceId | INT | PK | Khóa chính |
+| CreatedByAdminId | INT | FK | Admin tạo service/template |
+| ServiceName | NVARCHAR(255) | | Tên service/template |
+| Description | NVARCHAR(MAX) | | Mô tả service |
+| AIgeneratedDescription | NVARCHAR(MAX) | NULL | Mô tả do AI hỗ trợ tạo |
+| Category | NVARCHAR(100) | NULL | Nhóm service |
+| Status | NVARCHAR(30) | | ACTIVE / INACTIVE / HIDDEN |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
+
+**Foreign Key:**
+* `Services.CreatedByAdminId` → `Users.UserId`
+
+#### 6.2.6 ExpertServices
+*Bảng trung gian cho quan hệ M-M giữa ExpertProfiles và Services.*
+
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ExpertServiceId | INT | PK | Khóa chính |
+| ExpertId | INT | FK | Expert cung cấp service |
+| ServiceId | INT | FK | Service/template |
+| CustomDescription | NVARCHAR(MAX) | NULL | Mô tả tùy chỉnh của Expert |
+| CustomPrice | DECIMAL(18,2) | NULL | Giá tùy chỉnh |
+| DeliveryDays | INT | NULL | Số ngày giao dự kiến |
+| Status | NVARCHAR(30) | | ACTIVE / PAUSED / REMOVED |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Keys:**
+* `ExpertServices.ExpertId` → `ExpertProfiles.ExpertId`
+* `ExpertServices.ServiceId` → `Services.ServiceId`
+
+**Constraint đề xuất:**
+* `UNIQUE(ExpertId, ServiceId)`
+
+#### 6.2.7 JobPostings
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| JobId | INT | PK | Khóa chính |
+| ClientId | INT | FK | Client đăng job |
+| Title | NVARCHAR(255) | | Tiêu đề job |
+| Description | NVARCHAR(MAX) | | Mô tả job |
+| AIgeneratedDescription | NVARCHAR(MAX) | NULL | Mô tả do AI gợi ý |
+| BudgetMin | DECIMAL(18,2) | | Budget thấp nhất |
+| BudgetMax | DECIMAL(18,2) | | Budget cao nhất |
+| Deadline | DATETIME2 | | Hạn hoàn thành |
+| ProjectType | NVARCHAR(100) | | Loại project |
+| Complexity | NVARCHAR(50) | | SIMPLE / MEDIUM / COMPLEX |
+| ExpectedDeliverables | NVARCHAR(MAX) | | Output mong muốn |
+| Status | NVARCHAR(20) | | DRAFT / OPEN / CLOSED / CANCELLED / EXPIRED |
+| IsAIAssisted | BIT | | Có dùng AI Job Assistant hay không |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
+
+**Foreign Key:**
+* `JobPostings.ClientId` → `ClientProfiles.ClientId`
+
+#### 6.2.8 JobServices
+*Bảng trung gian cho quan hệ M-M giữa JobPostings và Services.*
+
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| JobServiceId | INT | PK | Khóa chính |
+| JobId | INT | FK | |
+| ServiceId | INT | FK | Service/template |
+
+**Foreign Keys:**
+* `JobServices.JobId` → `JobPostings.JobId`
+* `JobServices.ServiceId` → `Services.ServiceId`
+
+**Constraint đề xuất:**
+* `UNIQUE(JobId, ServiceId)`
+
+#### 6.2.9 JobSkills
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| JobSkillId | INT | PK | Khóa chính |
+| JobId | INT | FK | |
+| JobSkillName | NVARCHAR(100) | | Tên skill yêu cầu |
+| SkillLevelRequired | NVARCHAR(30) | NULL | Mức kỹ năng yêu cầu |
+| IsRequired | BIT | | Skill bắt buộc hay optional |
+
+**Foreign Key:**
+* `JobSkills.JobId` → `JobPostings.JobId`
+
+**Constraint đề xuất:**
+* `UNIQUE(JobId, JobSkillName)`
+
+#### 6.2.10 ExpertSkills
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ExpertSkillId | INT | PK | Khóa chính |
+| ExpertId | INT | FK | Expert |
+| ExpertSkillName | NVARCHAR(100) | | Tên skill của Expert |
+| SkillLevel | NVARCHAR(30) | | BEGINNER / INTERMEDIATE / ADVANCED |
+| YearsOfExperience | INT | NULL | Số năm kinh nghiệm với skill này |
+
+**Foreign Key:**
+* `ExpertSkills.ExpertId` → `ExpertProfiles.ExpertId`
+
+**Constraint đề xuất:**
+* `UNIQUE(ExpertId, ExpertSkillName)`
+
+#### 6.2.11 AIRecommendations
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| RecommendationId | INT | PK | Khóa chính |
+| JobId | INT | FK | Job được match |
+| ExpertId | INT | FK | Expert được recommend |
+| MatchScore | DECIMAL(5,2) | | Điểm matching |
+| MatchedSkillSummary | NVARCHAR(MAX) | NULL | Tóm tắt skill match |
+| MatchReason | NVARCHAR(MAX) | | Lý do recommend |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Keys:**
+* `AIRecommendations.JobId` → `JobPostings.JobId`
+* `AIRecommendations.ExpertId` → `ExpertProfiles.ExpertId`
+
+**Constraint đề xuất:**
+* `UNIQUE(JobId, ExpertId)`
+* `CHECK(MatchScore BETWEEN 0 AND 100)`
+
+**Ghi chú:**
+* `JobSkills` M-M `ExpertSkills` là quan hệ matching logic.
+* Kết quả matching tổng được lưu trong `AIRecommendations`.
+
+#### 6.2.12 Proposals
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ProposalId | INT | PK | Khóa chính |
+| JobId | INT | FK | Job được apply |
+| ExpertId | INT | FK | Expert gửi proposal |
+| CoverLetter | NVARCHAR(MAX) | | Nội dung proposal |
+| ProposedPrice | DECIMAL(18,2) | | Giá đề xuất |
+| ProposedTimelineDays | INT | | Timeline đề xuất |
+| ExpectedOutputs | NVARCHAR(MAX) | | Output dự kiến |
+| WorkingApproach | NVARCHAR(MAX) | | Cách thực hiện |
+| CounterPrice | DECIMAL(18,2) | NULL | Giá counter offer |
+| CounterTimelineDays | INT | NULL | Timeline counter offer |
+| CounterMessage | NVARCHAR(MAX) | NULL | Nội dung counter |
+| Status | NVARCHAR(30) | | SUBMITTED / COUNTER_OFFERED / ACCEPTED / REJECTED / WITHDRAWN / NOT_SELECTED |
+| CreatedAt | DATETIME2 | | Ngày gửi |
+
+**Foreign Keys:**
+* `Proposals.JobId` → `JobPostings.JobId`
+* `Proposals.ExpertId` → `ExpertProfiles.ExpertId`
+
+**Constraint đề xuất:**
+* `UNIQUE(JobId, ExpertId)`
+
+#### 6.2.13 ProjectContracts
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ContractId | INT | PK | Khóa chính |
+| ProposalId | INT | FK, UNIQUE | Proposal được chọn |
+| ClientId | INT | FK | Client |
+| ExpertId | INT | FK | Expert |
+| ProjectScope | NVARCHAR(MAX) | | Scope cuối cùng |
+| FinalPrice | DECIMAL(18,2) | | Giá cuối cùng |
+| FinalTimelineDays | INT | | Timeline cuối cùng |
+| Deliverables | NVARCHAR(MAX) | | Deliverables đã thống nhất |
+| AcceptanceCriteria | NVARCHAR(MAX) | | Tiêu chí nghiệm thu |
+| RevisionLimit | INT | | Số lần revision tối đa |
+| PaymentTerms | NVARCHAR(MAX) | | Điều khoản thanh toán |
+| ClientConfirmed | BIT | | Client đã xác nhận |
+| ExpertConfirmed | BIT | | Expert đã xác nhận |
+| Status | NVARCHAR(30) | | DRAFT / CONFIRMED / CANCELLED |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+| ConfirmedAt | DATETIME2 | NULL | Ngày xác nhận |
+
+**Foreign Keys:**
+* `ProjectContracts.ProposalId` → `Proposals.ProposalId`
+* `ProjectContracts.ClientId` → `ClientProfiles.ClientId`
+* `ProjectContracts.ExpertId` → `ExpertProfiles.ExpertId`
+
+#### 6.2.14 Projects
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ProjectId | INT | PK | Khóa chính |
+| ContractId | INT | FK, UNIQUE | Contract tương ứng |
+| ProposalId | INT | FK, UNIQUE | Proposal được accept |
+| ClientId | INT | FK | Client |
+| ExpertId | INT | FK | Expert |
+| TotalAmount | DECIMAL(18,2) | | Tổng tiền project |
+| Status | NVARCHAR(30) | | PENDING_ESCROW / ACTIVE / COMPLETED / CANCELLED / DISPUTED |
+| EscrowStatus | NVARCHAR(30) | | NOT_LOCKED / LOCKED / PARTIALLY_RELEASED / RELEASED / REFUNDED / FROZEN |
+| StartDate | DATETIME2 | NULL | Ngày bắt đầu |
+| EndDate | DATETIME2 | NULL | Ngày kết thúc |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Keys:**
+* `Projects.ContractId` → `ProjectContracts.ContractId`
+* `Projects.ProposalId` → `Proposals.ProposalId`
+* `Projects.ClientId` → `ClientProfiles.ClientId`
+* `Projects.ExpertId` → `ExpertProfiles.ExpertId`
+
+#### 6.2.15 Milestones
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| MilestoneId | INT | PK | Khóa chính |
+| ProjectId | INT | FK | Project |
+| Title | NVARCHAR(255) | | Tên milestone |
+| Description | NVARCHAR(MAX) | | Mô tả milestone |
+| ExpectedDeliverable | NVARCHAR(MAX) | | Deliverable mong đợi |
+| AcceptanceCriteria | NVARCHAR(MAX) | | Tiêu chí nghiệm thu milestone |
+| Amount | DECIMAL(18,2) | | Tiền milestone |
+| OrderIndex | INT | | Thứ tự milestone |
+| DueDate | DATETIME2 | | Deadline milestone |
+| RevisionLimit | INT | | Số lần revision tối đa |
+| RevisionUsed | INT | | Số lần revision đã dùng |
+| PaymentStatus | NVARCHAR(30) | | ESCROW_LOCKED / RELEASED / REFUNDED / FROZEN |
+| Status | NVARCHAR(30) | | PENDING / IN_PROGRESS / SUBMITTED / REVISION_REQUESTED / APPROVED / DISPUTED / CANCELLED |
+
+**Foreign Key:**
+* `Milestones.ProjectId` → `Projects.ProjectId`
+
+**Constraint đề xuất:**
+* `UNIQUE(ProjectId, OrderIndex)`
+
+#### 6.2.16 Deliverables
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| DeliverableId | INT | PK | Khóa chính |
+| MilestoneId | INT | FK | Milestone |
+| ExpertId | INT | FK | Expert nộp |
+| FileUrl | NVARCHAR(500) | NULL | Link file bàn giao |
+| DemoUrl | NVARCHAR(500) | NULL | Link demo |
+| Description | NVARCHAR(MAX) | | Mô tả deliverable |
+| HandoverNotes | NVARCHAR(MAX) | NULL | Ghi chú bàn giao |
+| TestResultUrl | NVARCHAR(500) | NULL | Link kết quả test nếu có |
+| ClientFeedback | NVARCHAR(MAX) | NULL | Feedback từ Client |
+| VersionNumber | INT | | Version deliverable |
+| Status | NVARCHAR(30) | | SUBMITTED / APPROVED / REVISION_REQUESTED / DISPUTED |
+| SubmittedAt | DATETIME2 | | Ngày nộp |
+
+**Foreign Keys:**
+* `Deliverables.MilestoneId` → `Milestones.MilestoneId`
+* `Deliverables.ExpertId` → `ExpertProfiles.ExpertId`
+
+**Constraint đề xuất:**
+* `UNIQUE(MilestoneId, VersionNumber)`
+
+#### 6.2.17 Escrows
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| EscrowId | INT | PK | Khóa chính |
+| ProjectId | INT | FK | Project |
+| MilestoneId | INT | FK, UNIQUE NULL | Milestone tương ứng |
+| ClientId | INT | FK | Client ký quỹ |
+| ExpertId | INT | FK | Expert nhận tiền khi release |
+| Amount | DECIMAL(18,2) | | Số tiền ký quỹ |
+| Status | NVARCHAR(30) | | PENDING / LOCKED / RELEASED / REFUNDED / FROZEN |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
+
+**Foreign Keys:**
+* `Escrows.ProjectId` → `Projects.ProjectId`
+* `Escrows.MilestoneId` → `Milestones.MilestoneId`
+* `Escrows.ClientId` → `ClientProfiles.ClientId`
+* `Escrows.ExpertId` → `ExpertProfiles.ExpertId`
+
+#### 6.2.18 PaymentTransactions
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| TransactionId | INT | PK | Khóa chính |
+| EscrowId | INT | FK NULL | Escrow liên quan |
+| ProjectId | INT | FK | Project |
+| MilestoneId | INT | FK NULL | Milestone liên quan |
+| UserId | INT | FK | User liên quan đến giao dịch |
+| Type | NVARCHAR(30) | | ESCROW_LOCK / ESCROW_RELEASE / REFUND / PARTIAL_REFUND |
+| Amount | DECIMAL(18,2) | | Số tiền |
+| Status | NVARCHAR(20) | | PENDING / SUCCESS / FAILED |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Keys:**
+* `PaymentTransactions.EscrowId` → `Escrows.EscrowId`
+* `PaymentTransactions.ProjectId` → `Projects.ProjectId`
+* `PaymentTransactions.MilestoneId` → `Milestones.MilestoneId`
+* `PaymentTransactions.UserId` → `Users.UserId`
+
+#### 6.2.19 Messages
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| MessageId | INT | PK | Khóa chính |
+| SenderId | INT | FK | Người gửi |
+| JobId | INT | FK NULL | Tin nhắn trong job |
+| ProposalId | INT | FK NULL | Tin nhắn trong proposal/negotiation |
+| ProjectId | INT | FK NULL | Tin nhắn trong project |
+| MessageText | NVARCHAR(MAX) | | Nội dung tin nhắn |
+| SentAt | DATETIME2 | | Thời gian gửi |
+| IsRead | BIT | | Đã đọc chưa |
+
+**Foreign Keys:**
+* `Messages.SenderId` → `Users.UserId`
+* `Messages.JobId` → `JobPostings.JobId`
+* `Messages.ProposalId` → `Proposals.ProposalId`
+* `Messages.ProjectId` → `Projects.ProjectId`
+
+**Constraint đề xuất:**
+* `JobId IS NOT NULL OR ProposalId IS NOT NULL OR ProjectId IS NOT NULL`
+
+#### 6.2.20 Disputes
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| DisputeId | INT | PK | Khóa chính |
+| ProjectId | INT | FK | Project bị tranh chấp |
+| MilestoneId | INT | FK NULL | Milestone bị tranh chấp |
+| OpenedByUserId | INT | FK | Người mở dispute |
+| RespondentUserId | INT | FK | Bên còn lại |
+| Reason | NVARCHAR(MAX) | | Lý do tranh chấp |
+| DisputedAmount | DECIMAL(18,2) | | Số tiền tranh chấp |
+| Status | NVARCHAR(30) | | OPEN / UNDER_REVIEW / RESOLVED |
+| ResolutionType | NVARCHAR(30) | NULL | RELEASE_TO_EXPERT / REFUND_TO_CLIENT / PARTIAL_SPLIT |
+| AdminDecision | NVARCHAR(MAX) | NULL | Quyết định của Admin |
+| CreatedAt | DATETIME2 | | Ngày mở |
+| ResolvedAt | DATETIME2 | NULL | Ngày xử lý |
+
+**Foreign Keys:**
+* `Disputes.ProjectId` → `Projects.ProjectId`
+* `Disputes.MilestoneId` → `Milestones.MilestoneId`
+* `Disputes.OpenedByUserId` → `Users.UserId`
+* `Disputes.RespondentUserId` → `Users.UserId`
+
+#### 6.2.21 DisputeEvidences
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| EvidenceId | INT | PK | Khóa chính |
+| DisputeId | INT | FK | Dispute |
+| UploadedByUserId | INT | FK | Người gửi bằng chứng |
+| EvidenceText | NVARCHAR(MAX) | | Nội dung bằng chứng |
+| FileUrl | NVARCHAR(500) | NULL | File/hình ảnh/link bằng chứng |
+| CreatedAt | DATETIME2 | | Ngày gửi |
+
+**Foreign Keys:**
+* `DisputeEvidences.DisputeId` → `Disputes.DisputeId`
+* `DisputeEvidences.UploadedByUserId` → `Users.UserId`
+
+#### 6.2.22 Reviews
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| ReviewId | INT | PK | Khóa chính |
+| ProjectId | INT | FK | Project |
+| ReviewerId | INT | FK | Người đánh giá |
+| RevieweeId | INT | FK | Người được đánh giá |
+| Rating | INT | | Điểm 1–5 |
+| Comment | NVARCHAR(MAX) | | Nội dung đánh giá |
+| Status | NVARCHAR(20) | | VISIBLE / HIDDEN |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Keys:**
+* `Reviews.ProjectId` → `Projects.ProjectId`
+* `Reviews.ReviewerId` → `Users.UserId`
+* `Reviews.RevieweeId` → `Users.UserId`
+
+**Constraint đề xuất:**
+* `UNIQUE(ProjectId, ReviewerId, RevieweeId)`
+* `CHECK(Rating BETWEEN 1 AND 5)`
+* `CHECK(ReviewerId <> RevieweeId)`
+
+#### 6.2.23 Notifications
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| NotificationId | INT | PK | Khóa chính |
+| UserId | INT | FK | Người nhận |
+| Title | NVARCHAR(255) | | Tiêu đề |
+| Content | NVARCHAR(MAX) | | Nội dung |
+| Type | NVARCHAR(50) | | JOB_ALERT / PROPOSAL / CONTRACT / PROJECT / MILESTONE / DISPUTE / REVIEW / PAYMENT / SERVICE / SYSTEM |
+| IsRead | BIT | | Đã đọc chưa |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Key:**
+* `Notifications.UserId` → `Users.UserId`
+
+#### 6.2.24 AuditLogs
+| Column | Data Type | Key | Note |
+| :--- | :--- | :--- | :--- |
+| AuditLogId | INT | PK | Khóa chính |
+| UserId | INT | FK NULL | Người thực hiện |
+| Action | NVARCHAR(100) | | Hành động |
+| EntityName | NVARCHAR(100) | | Tên entity bị tác động |
+| EntityId | INT | NULL | ID bản ghi bị tác động |
+| Description | NVARCHAR(MAX) | | Mô tả thao tác |
+| CreatedAt | DATETIME2 | | Ngày tạo |
+
+**Foreign Key:**
+* `AuditLogs.UserId` → `Users.UserId`
 
 ---
 
-### 2. ClientProfiles
+### 6.3 Key Constraints
 
-| Column | Data Type | Note |
-|---|---|---|
-| ClientId | INT PK IDENTITY | Khóa chính |
-| UserId | INT FK | Liên kết Users |
-| CompanyName | NVARCHAR(255) | Tên công ty |
-| Industry | NVARCHAR(255) | Ngành nghề |
-| BusinessType | NVARCHAR(100) | Loại hình kinh doanh |
-| CompanySize | NVARCHAR(50) NULL | Quy mô công ty |
-| AINeeds | NVARCHAR(MAX) | Nhu cầu AI |
-| MainProblems | NVARCHAR(MAX) | Vấn đề chính cần giải quyết |
-| ExpectedBudgetMin | DECIMAL(18,2) NULL | Budget thấp nhất |
-| ExpectedBudgetMax | DECIMAL(18,2) NULL | Budget cao nhất |
-| RatingAverage | DECIMAL(3,2) | Điểm trung bình |
-| ReviewCount | INT | Số lượng review |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-### 3. ExpertProfiles
-
-| Column | Data Type | Note |
-|---|---|---|
-| ExpertId | INT PK IDENTITY | Khóa chính |
-| UserId | INT FK | Liên kết Users |
-| Bio | NVARCHAR(MAX) | Giới thiệu |
-| PortfolioUrl | NVARCHAR(500) | Link portfolio |
-| CertificateUrl | NVARCHAR(500) NULL | Link certificate |
-| ExperienceYears | INT | Số năm kinh nghiệm |
-| HourlyRate | DECIMAL(18,2) | Giá theo giờ |
-| RatingAverage | DECIMAL(3,2) | Rating trung bình |
-| ReviewCount | INT | Số lượng review |
-| CompletedProjects | INT | Số project hoàn thành |
-| ProfileScore | DECIMAL(3,2) | Điểm hồ sơ ban đầu |
-| Level | NVARCHAR(20) | JUNIOR / MID / SENIOR |
-| ProfileReviewStatus | NVARCHAR(30) | PENDING_REVIEW / APPROVED / REJECTED |
-| ProfileReviewNote | NVARCHAR(MAX) NULL | Góp ý/lý do từ chối |
-| IsVerified | BIT | Hồ sơ đã được duyệt chưa |
-| CreatedAt | DATETIME2 | Ngày tạo |
+| Constraint | Mục đích |
+| :--- | :--- |
+| `Users.Email` UNIQUE | Không cho trùng email đăng nhập. |
+| `ClientProfiles.UserId` UNIQUE | Một user chỉ có tối đa một Client profile. |
+| `ExpertProfiles.UserId` UNIQUE | Một user chỉ có tối đa một Expert profile. |
+| `Wallets.UserId` UNIQUE | Một user chỉ có tối đa một ví. |
+| `ExpertServices(ExpertId, ServiceId)` UNIQUE | Một Expert không bị gán trùng một service/template. |
+| `JobServices(JobId, ServiceId)` UNIQUE | Một job không bị gán trùng một service/template. |
+| `JobSkills(JobId, SkillName)` UNIQUE | Một job không bị trùng skill requirement. |
+| `ExpertSkills(ExpertId, SkillName)` UNIQUE | Một Expert không bị trùng skill. |
+| `AIRecommendations(JobId, ExpertId)` UNIQUE | Một job chỉ recommend một Expert một lần. |
+| `Proposals(JobId, ExpertId)` UNIQUE | Một Expert chỉ gửi một proposal cho một job. |
+| `ProjectContracts.ProposalId` UNIQUE | Một proposal chỉ sinh tối đa một contract. |
+| `Projects.ContractId` UNIQUE | Một contract chỉ sinh tối đa một project. |
+| `Projects.ProposalId` UNIQUE | Một proposal chỉ sinh tối đa một project. |
+| `Milestones(ProjectId, OrderIndex)` UNIQUE | Milestone trong cùng project không trùng thứ tự. |
+| `Escrows.MilestoneId` UNIQUE | Một milestone chỉ có tối đa một escrow. |
+| `Deliverables(MilestoneId, VersionNumber)` UNIQUE | Deliverable version trong cùng milestone không trùng. |
+| `Reviews(ProjectId, ReviewerId, RevieweeId)` UNIQUE | Một cặp user chỉ review nhau một lần trong một project. |
 
 ---
 
-### 4. Skills
-
-| Column | Data Type | Note |
-|---|---|---|
-| SkillId | INT PK IDENTITY | Khóa chính |
-| SkillName | NVARCHAR(100) UNIQUE | NLP, Chatbot, Computer Vision, LLM |
-| Description | NVARCHAR(500) | Mô tả skill |
-
----
-
-### 5. ExpertSkills
-
-| Column | Data Type | Note |
-|---|---|---|
-| ExpertSkillId | INT PK IDENTITY | Khóa chính |
-| ExpertId | INT FK | Chuyên gia AI |
-| SkillId | INT FK | Skill |
-| Level | NVARCHAR(20) | BEGINNER / INTERMEDIATE / ADVANCED |
-
-Constraint đề xuất:
-
-```sql
-UNIQUE(ExpertId, SkillId)
-```
-
----
-
-### 6. JobPostings
-
-| Column | Data Type | Note |
-|---|---|---|
-| JobId | INT PK IDENTITY | Khóa chính |
-| ClientId | INT FK | Client đăng job |
-| Title | NVARCHAR(255) | Tiêu đề job |
-| Description | NVARCHAR(MAX) | Mô tả job cuối cùng |
-| AIgeneratedDescription | NVARCHAR(MAX) NULL | Mô tả do AI gợi ý |
-| BudgetMin | DECIMAL(18,2) | Budget thấp nhất |
-| BudgetMax | DECIMAL(18,2) | Budget cao nhất |
-| Deadline | DATETIME2 | Hạn hoàn thành |
-| ProjectType | NVARCHAR(100) | Loại project |
-| Complexity | NVARCHAR(50) | SIMPLE / MEDIUM / COMPLEX |
-| ExpectedDeliverables | NVARCHAR(MAX) | Output mong muốn |
-| Status | NVARCHAR(20) | DRAFT / OPEN / CLOSED / CANCELLED / EXPIRED |
-| IsAIAssisted | BIT | Có dùng AI hay không |
-| CreatedAt | DATETIME2 | Ngày tạo |
-| UpdatedAt | DATETIME2 NULL | Ngày cập nhật |
-
----
-
-### 7. JobSkills
-
-| Column | Data Type | Note |
-|---|---|---|
-| JobSkillId | INT PK IDENTITY | Khóa chính |
-| JobId | INT FK | Job |
-| SkillId | INT FK | Skill |
-| IsRequired | BIT | Skill bắt buộc hay optional |
-
----
-
-### 8. AIRecommendations
-
-| Column | Data Type | Note |
-|---|---|---|
-| RecommendationId | INT PK IDENTITY | Khóa chính |
-| JobId | INT FK | Job |
-| ExpertId | INT FK | Expert được gợi ý |
-| MatchScore | DECIMAL(5,2) | Điểm matching |
-| Reason | NVARCHAR(MAX) | Lý do recommend |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-### 9. Proposals
-
-| Column | Data Type | Note |
-|---|---|---|
-| ProposalId | INT PK IDENTITY | Khóa chính |
-| JobId | INT FK | Job |
-| ExpertId | INT FK | Expert gửi proposal |
-| CoverLetter | NVARCHAR(MAX) | Nội dung proposal |
-| ProposedPrice | DECIMAL(18,2) | Giá đề xuất |
-| ProposedTimelineDays | INT | Timeline đề xuất |
-| ExpectedOutputs | NVARCHAR(MAX) | Output dự kiến |
-| WorkingApproach | NVARCHAR(MAX) | Cách làm |
-| CounterPrice | DECIMAL(18,2) NULL | Giá counter offer |
-| CounterTimelineDays | INT NULL | Timeline counter offer |
-| CounterMessage | NVARCHAR(MAX) NULL | Nội dung thương lượng |
-| Status | NVARCHAR(30) | SUBMITTED / COUNTER_OFFERED / ACCEPTED / REJECTED / REJECTED_BY_EXPERT / WITHDRAWN / NOT_SELECTED |
-| CreatedAt | DATETIME2 | Ngày gửi |
-
-Constraint đề xuất:
-
-```sql
-UNIQUE(JobId, ExpertId)
-```
-
----
-
-### 10. ProposalMilestones
-
-| Column | Data Type | Note |
-|---|---|---|
-| ProposalMilestoneId | INT PK IDENTITY | Khóa chính |
-| ProposalId | INT FK | Proposal |
-| Title | NVARCHAR(255) | Tên milestone |
-| Description | NVARCHAR(MAX) | Mô tả milestone |
-| Amount | DECIMAL(18,2) | Số tiền milestone |
-| OrderIndex | INT | Thứ tự |
-| EstimatedDays | INT | Số ngày dự kiến |
-| ExpectedDeliverable | NVARCHAR(MAX) | Output của milestone |
-
----
-
-### 11. ProjectContracts
-
-| Column | Data Type | Note |
-|---|---|---|
-| ContractId | INT PK IDENTITY | Khóa chính |
-| ProposalId | INT FK | Proposal được chọn |
-| ClientId | INT FK | Client |
-| ExpertId | INT FK | Expert |
-| ProjectScope | NVARCHAR(MAX) | Scope cuối cùng |
-| FinalPrice | DECIMAL(18,2) | Giá cuối cùng |
-| FinalTimelineDays | INT | Timeline cuối cùng |
-| Deliverables | NVARCHAR(MAX) | Deliverables cuối cùng |
-| RevisionLimit | INT | Số lần revision |
-| PaymentTerms | NVARCHAR(MAX) | Điều khoản payment |
-| AcceptanceCriteria | NVARCHAR(MAX) | Tiêu chí nghiệm thu |
-| ClientConfirmed | BIT | Client đã xác nhận |
-| ExpertConfirmed | BIT | Expert đã xác nhận |
-| Status | NVARCHAR(30) | DRAFT / CONFIRMED / CANCELLED |
-| CreatedAt | DATETIME2 | Ngày tạo |
-| ConfirmedAt | DATETIME2 NULL | Ngày xác nhận |
-
----
-
-### 12. Projects
-
-| Column | Data Type | Note |
-|---|---|---|
-| ProjectId | INT PK IDENTITY | Khóa chính |
-| ContractId | INT FK | Contract |
-| ProposalId | INT FK | Proposal |
-| ClientId | INT FK | Client |
-| ExpertId | INT FK | Expert |
-| TotalAmount | DECIMAL(18,2) | Tổng tiền |
-| Status | NVARCHAR(30) | PENDING_ESCROW / ACTIVE / COMPLETED / CANCELLED / DISPUTED |
-| EscrowStatus | NVARCHAR(30) | NOT_LOCKED / LOCKED / PARTIALLY_RELEASED / RELEASED / REFUNDED / FROZEN |
-| StartDate | DATETIME2 NULL | Ngày bắt đầu |
-| EndDate | DATETIME2 NULL | Ngày kết thúc |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-### 13. Milestones
-
-| Column | Data Type | Note |
-|---|---|---|
-| MilestoneId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK | Project |
-| Title | NVARCHAR(255) | Tên milestone |
-| Description | NVARCHAR(MAX) | Mô tả |
-| Amount | DECIMAL(18,2) | Tiền milestone |
-| OrderIndex | INT | Thứ tự |
-| DueDate | DATETIME2 | Deadline |
-| RevisionLimit | INT | Số lần revision tối đa |
-| RevisionUsed | INT | Số lần revision đã dùng |
-| PaymentStatus | NVARCHAR(30) | ESCROW_LOCKED / RELEASED / REFUNDED / FROZEN |
-| Status | NVARCHAR(30) | PENDING / IN_PROGRESS / SUBMITTED / REVISION_REQUESTED / APPROVED / DISPUTED / CANCELLED |
-
----
-
-### 14. Deliverables
-
-| Column | Data Type | Note |
-|---|---|---|
-| DeliverableId | INT PK IDENTITY | Khóa chính |
-| MilestoneId | INT FK | Milestone |
-| ExpertId | INT FK | Expert nộp |
-| FileUrl | NVARCHAR(500) NULL | Link file |
-| DemoUrl | NVARCHAR(500) NULL | Link demo |
-| Description | NVARCHAR(MAX) | Mô tả |
-| Notes | NVARCHAR(MAX) NULL | Ghi chú |
-| VersionNumber | INT | Version |
-| Status | NVARCHAR(20) | SUBMITTED / APPROVED / REVISION_REQUESTED / DISPUTED |
-| SubmittedAt | DATETIME2 | Ngày nộp |
-
----
-
-### 15. Wallets
-
-| Column | Data Type | Note |
-|---|---|---|
-| WalletId | INT PK IDENTITY | Khóa chính |
-| UserId | INT FK | User |
-| AvailableBalance | DECIMAL(18,2) | Số dư có thể dùng |
-| LockedBalance | DECIMAL(18,2) | Số dư bị khóa |
-| TotalEarning | DECIMAL(18,2) | Tổng earning mô phỏng |
-| UpdatedAt | DATETIME2 | Ngày cập nhật |
-
----
-
-### 16. Escrows
-
-| Column | Data Type | Note |
-|---|---|---|
-| EscrowId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK | Project |
-| MilestoneId | INT FK NULL | Milestone |
-| ClientId | INT FK | Client |
-| ExpertId | INT FK | Expert |
-| Amount | DECIMAL(18,2) | Số tiền |
-| Status | NVARCHAR(30) | PENDING / LOCKED / RELEASED / REFUNDED / FROZEN |
-| CreatedAt | DATETIME2 | Ngày tạo |
-| UpdatedAt | DATETIME2 NULL | Ngày cập nhật |
-
----
-
-### 17. PaymentTransactions
-
-| Column | Data Type | Note |
-|---|---|---|
-| TransactionId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK | Project |
-| MilestoneId | INT FK NULL | Milestone |
-| UserId | INT FK | User liên quan |
-| Type | NVARCHAR(30) | ESCROW_LOCK / ESCROW_RELEASE / REFUND / PARTIAL_REFUND |
-| Amount | DECIMAL(18,2) | Số tiền |
-| Status | NVARCHAR(20) | PENDING / SUCCESS / FAILED |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-### 18. Messages
-
-| Column | Data Type | Note |
-|---|---|---|
-| MessageId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK NULL | Project |
-| JobId | INT FK NULL | Job |
-| ProposalId | INT FK NULL | Proposal |
-| SenderId | INT FK | Người gửi |
-| MessageText | NVARCHAR(MAX) | Nội dung |
-| SentAt | DATETIME2 | Thời gian gửi |
-
----
-
-### 19. Disputes
-
-| Column | Data Type | Note |
-|---|---|---|
-| DisputeId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK | Project |
-| MilestoneId | INT FK NULL | Milestone bị tranh chấp |
-| OpenedBy | INT FK | Người mở tranh chấp |
-| RespondentId | INT FK | Bên còn lại |
-| Reason | NVARCHAR(MAX) | Lý do |
-| DisputedAmount | DECIMAL(18,2) | Số tiền tranh chấp |
-| Status | NVARCHAR(30) | OPEN / UNDER_REVIEW / RESOLVED |
-| ResolutionType | NVARCHAR(30) NULL | RELEASE_TO_EXPERT / REFUND_TO_CLIENT / PARTIAL_SPLIT |
-| AdminDecision | NVARCHAR(MAX) NULL | Quyết định admin |
-| CreatedAt | DATETIME2 | Ngày mở |
-| ResolvedAt | DATETIME2 NULL | Ngày xử lý |
-
----
-
-### 20. DisputeEvidences
-
-| Column | Data Type | Note |
-|---|---|---|
-| EvidenceId | INT PK IDENTITY | Khóa chính |
-| DisputeId | INT FK | Tranh chấp |
-| UploadedBy | INT FK | Người gửi bằng chứng |
-| EvidenceText | NVARCHAR(MAX) | Mô tả bằng chứng |
-| FileUrl | NVARCHAR(500) NULL | File/hình ảnh/link |
-| CreatedAt | DATETIME2 | Ngày gửi |
-
----
-
-### 21. Reviews
-
-| Column | Data Type | Note |
-|---|---|---|
-| ReviewId | INT PK IDENTITY | Khóa chính |
-| ProjectId | INT FK | Project |
-| ReviewerId | INT FK | Người đánh giá |
-| RevieweeId | INT FK | Người được đánh giá |
-| Rating | INT | 1 đến 5 |
-| Comment | NVARCHAR(MAX) | Nội dung review |
-| Status | NVARCHAR(20) | VISIBLE / HIDDEN |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
-Constraint đề xuất:
-
-```sql
-UNIQUE(ProjectId, ReviewerId, RevieweeId)
-```
-
----
-
-### 22. Notifications
-
-| Column | Data Type | Note |
-|---|---|---|
-| NotificationId | INT PK IDENTITY | Khóa chính |
-| UserId | INT FK | Người nhận |
-| Title | NVARCHAR(255) | Tiêu đề |
-| Content | NVARCHAR(MAX) | Nội dung |
-| Type | NVARCHAR(50) | JOB_ALERT / PROPOSAL / CONTRACT / PROJECT / MILESTONE / DISPUTE / REVIEW / PAYMENT |
-| IsRead | BIT | Đã đọc chưa |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-### 23. AuditLogs
-
-| Column | Data Type | Note |
-|---|---|---|
-| AuditLogId | INT PK IDENTITY | Khóa chính |
-| UserId | INT FK NULL | Người thực hiện |
-| Action | NVARCHAR(100) | Hành động |
-| EntityName | NVARCHAR(100) | Bảng bị tác động |
-| EntityId | INT NULL | ID bản ghi |
-| Description | NVARCHAR(MAX) | Mô tả |
-| CreatedAt | DATETIME2 | Ngày tạo |
-
----
-
-## 6.4 ERD Mapping with Research Questions
-
-| Research Question | Bảng/Cột liên quan |
-|---|---|
-| RQ1: Recommend suitable AI Experts | AIRecommendations.MatchScore, JobSkills, ExpertSkills, ExpertProfiles.RatingAverage, ExpertProfiles.ProfileScore |
-| RQ2: AI helps Client create better job descriptions | JobPostings.IsAIAssisted, JobPostings.AIgeneratedDescription, JobPostings.Description |
-| RQ3: Trust through negotiation, milestone, escrow, dispute | ProjectContracts, Milestones.Status, Escrows.Status, PaymentTransactions.Type, Disputes.Status |
-| RQ4: Role-based profile verification | ClientProfiles, ExpertProfiles, ExpertProfiles.ProfileScore, ExpertProfiles.ProfileReviewStatus |
+### 6.4 ERD Mapping With System Requirements
+
+| Requirement / Feature | Related Tables |
+| :--- | :--- |
+| Register/Login and role-based profile | Users, ClientProfiles, ExpertProfiles |
+| Client posts AI job | JobPostings, JobSkills, JobServices |
+| Browse AI services marketplace | Services, JobServices, ExpertServices |
+| Expert provides AI services | ExpertProfiles, ExpertServices, Services |
+| AI Job Assistant | JobPostings.AIgeneratedDescription, JobPostings.IsAIAssisted |
+| AI Expert Recommendation | JobSkills, ExpertSkills, AIRecommendations |
+| Proposal submission | Proposals, Messages |
+| Negotiation and contract confirmation | Proposals, ProjectContracts, Messages |
+| Project lifecycle management | Projects, Milestones, Deliverables |
+| Wallet-based escrow | Wallets, Escrows, PaymentTransactions |
+| Deliverable approval/revision | Milestones, Deliverables |
+| Dispute resolution | Disputes, DisputeEvidences, Escrows, PaymentTransactions |
+| Review and rating | Reviews, ClientProfiles, ExpertProfiles |
+| Notification | Notifications |
+| Admin dashboard and audit | Users, Services, Projects, Disputes, PaymentTransactions, Reviews, AuditLogs |
 
 ---
 
