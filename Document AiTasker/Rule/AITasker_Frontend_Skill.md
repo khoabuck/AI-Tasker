@@ -557,25 +557,12 @@ Proposed price
 Proposed timeline days
 Expected outputs
 Working approach
-Milestone plan list
-```
-
-Milestone plan fields:
-
-```text
-Title
-Description
-Amount
-Estimated days
-Expected deliverable
-Order index
 ```
 
 Validation:
 
-- Sum milestone amount should equal proposed price.
 - Timeline must be positive.
-- At least one milestone for medium/complex job.
+- Milestone plan is NOT required during Proposal phase (Milestones are negotiated and created directly inside the Project Contract during Flow 5/6).
 
 ---
 
@@ -587,7 +574,6 @@ Client view should show:
 Expert profile summary
 Cover letter
 Price/timeline
-Milestone plan
 Expected outputs
 Working approach
 Counter offer area

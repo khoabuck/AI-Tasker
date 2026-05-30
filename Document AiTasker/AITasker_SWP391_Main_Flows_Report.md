@@ -237,44 +237,7 @@ Hệ thống giải quyết vấn đề bằng cách:
 | Notification Service | Notification request | Notification delivery status |
 | Wallet/Escrow Module | Escrow lock/release/refund request | Escrow status, transaction status |
 
-### Context Diagram dạng Mermaid
-
-```mermaid
-flowchart LR
-    Guest[Guest / Visitor]
-    Client[Client]
-    Expert[AI Expert]
-    Admin[Admin]
-    Google[Google OAuth]
-    AI[AI API / AI Modules]
-    Notify[Notification Service]
-    Wallet[Wallet / Escrow Module]
-    Platform[AITasker Platform]
-
-    Guest -->|Register / Login / Google Login| Platform
-    Platform -->|Registration / Login Result| Guest
-
-    Client -->|Profile, Job Request, Proposal Decision, Contract Confirmation, Escrow Confirmation, Review| Platform
-    Platform -->|AI Job Suggestion, Recommended Experts, Proposal List, Project Status, Payment Status| Client
-
-    Expert -->|Profile, Skills, Proposal, Deliverable, Dispute Evidence, Review| Platform
-    Platform -->|Profile Review Result, Recommended Jobs, Proposal Status, Project Status, Earning History| Expert
-
-    Admin -->|Manage Users, Resolve Disputes, Moderate Data| Platform
-    Platform -->|Dashboard, User List, Project Records, Dispute Details, Transactions| Admin
-
-    Platform -->|OAuth Request| Google
-    Google -->|Google User Info| Platform
-
-    Platform -->|Prompt / Matching Data| AI
-    AI -->|Generated Job / Profile Score / Match Result| Platform
-
-    Platform -->|Send Notification Request| Notify
-    Notify -->|Delivery Status| Platform
-
-    Platform -->|Lock / Release / Refund Request| Wallet
-    Wallet -->|Escrow Status / Transaction Status| Platform
-```
+![Context Diagram](./MainFlow/context.drawio.png)
 
 ---
 
@@ -324,6 +287,8 @@ Guest, Client, AI Expert, System, Google OAuth, AI Profile Checker.
 - Client và Expert có profile form khác nhau.
 - Expert được AI kiểm tra hồ sơ trước khi được nhận job/proposal.
 
+![Register/Login with Email or Google & Role-based Profile Verification](./MainFlow/flow1_auth_profile.drawio.png)
+
 ---
 
 ## Flow 2: Client Creates Main Request / Job with AI Job Assistant
@@ -364,6 +329,8 @@ Client, System, AI Job Assistant, AI Expert Recommendation Module.
 ### Output
 
 Client tạo được AI job rõ ràng, đủ thông tin để hệ thống match với AI Expert.
+
+![Flow 2: Client Creates Main Request / Job with AI Job Assistant](./MainFlow/flow2_client_job_ai_assistant.drawio.png)
 
 ---
 
@@ -409,6 +376,8 @@ Match Score =
 ### Output
 
 Main request của Client được match với skill của AI Expert. Đây là điểm AI-specialized chính của AITasker.
+
+![Flow 3: System Matches Client Main Request with AI Expert Skills](./MainFlow/flow3_ai_expert_recommendation.drawio.png)
 
 ---
 
@@ -458,6 +427,8 @@ AI Expert, System, AI Recommendation Module, Client.
 
 Expert có thể connect với Client bằng proposal rõ ràng về price, timeline, milestone, outputs và approach.
 
+![Flow 4: Expert Reviews AI-recommended Jobs / Browses Jobs and Sends Proposal](./MainFlow/flow_4_Expert_review_AI-recommended_Jobs_Browses_Jobs_and_Sends_Proposal.drawio.png)
+
 ---
 
 ## Flow 5: Client and Expert Negotiate and Confirm Project Terms
@@ -498,6 +469,8 @@ Client, AI Expert, System, Project Chat, Wallet/Escrow Module.
 ### Output
 
 Trước khi project bắt đầu, hai bên đã chốt rõ scope, timeline, budget, deliverables, milestones và acceptance criteria.
+
+![Flow 5: Client and Expert Negotiate and Confirm Project Terms](./MainFlow/flow_5_Client_and_Expert_Negoatie_and_confirm_Project_terms.drawio.png)
 
 ---
 
@@ -578,6 +551,8 @@ Client, AI Expert, System, Wallet Module, Escrow Module.
 
 Payment được quản lý bằng wallet + escrow nội bộ. Expert chỉ nhận tiền khi Client approve deliverable đúng với contract/milestone đã chốt.
 
+![Flow 6: Wallet-based Escrow Management and Project Execution](./MainFlow/Flow6_Escrow_Management_2.drawio.png)
+
 ---
 
 ## Flow 7: Dispute Resolution, Project Completion, Review and Rating
@@ -646,6 +621,8 @@ Client, AI Expert, Admin, System, Wallet/Escrow Module.
 ### Output
 
 Project được hoàn tất minh bạch. Nếu có tranh chấp, Admin xử lý dựa trên contract, milestone, deliverable, chat history và transaction history.
+
+![Flow 7: Dispute Resolution, Project Completion, Review and Rating](./MainFlow/flow7_dispute_resolution.drawio.png)
 
 ---
 
@@ -897,598 +874,729 @@ SQL Server Database
 
 ---
 
-# Conceptual & Logical ERD
+# 6. Conceptual & Logical ERD
 
-## 6. Conceptual & Logical ERD
+## 6.1 Conceptual ERD
 
-### 6.1 Conceptual ERD
+### 6.1.1 Main Entities
 
-#### 6.1.1 Main Entities
-
-| Entity | Ý nghĩa |
-| :--- | :--- |
-| **Users** | Lưu thông tin tài khoản chung của toàn bộ người dùng trong hệ thống, bao gồm Client, AI Expert và Admin. |
-| **ClientProfiles** | Lưu hồ sơ riêng của Client như công ty, ngành nghề, nhu cầu AI và ngân sách dự kiến. |
-| **ExpertProfiles** | Lưu hồ sơ riêng của AI Expert như bio, portfolio, kinh nghiệm, hourly rate, profile score và trạng thái xác thực. |
-| **Wallets** | Lưu ví mô phỏng của mỗi user để phục vụ escrow/payment simulation. |
-| **Services** | Lưu các service/template AI do Admin tạo hoặc quản lý để Client và Expert sử dụng trong marketplace. |
-| **ExpertServices** | Bảng trung gian thể hiện AI Expert có thể cung cấp những service/template nào. |
-| **JobPostings** | Lưu AI job/request do Client đăng lên hệ thống. |
-| **JobServices** | Bảng trung gian thể hiện job thuộc những service/template nào. |
-| **JobSkills** | Lưu các kỹ năng yêu cầu của từng job. |
-| **ExpertSkills** | Lưu các kỹ năng mà AI Expert có. |
-| **AIRecommendations** | Lưu kết quả matching giữa job của Client và AI Expert. |
-| **Proposals** | Lưu proposal do AI Expert gửi cho một job. |
-| **ProjectContracts** | Lưu contract preview/contract chính thức sau khi Client và Expert thống nhất điều khoản. |
-| **Projects** | Lưu project được tạo sau khi proposal/contract được xác nhận. |
-| **Milestones** | Lưu các milestone của project. |
-| **Deliverables** | Lưu sản phẩm bàn giao của Expert cho từng milestone. |
-| **Escrows** | Lưu khoản tiền ký quỹ theo project/milestone. |
-| **PaymentTransactions** | Lưu lịch sử giao dịch mô phỏng như escrow lock, release, refund. |
-| **Messages** | Lưu tin nhắn giữa Client và Expert trong job/proposal/project. |
-| **Disputes** | Lưu tranh chấp phát sinh trong project hoặc milestone. |
-| **DisputeEvidences** | Lưu bằng chứng tranh chấp do user gửi. |
-| **Reviews** | Lưu đánh giá giữa Client và Expert sau khi project hoàn thành. |
-| **Notifications** | Lưu thông báo hệ thống gửi đến user. |
-| **AuditLogs** | Lưu lịch sử thao tác quan trọng trong hệ thống. |
-
-#### 6.1.2 Conceptual Relationships
-
-| Relationship | Cardinality | Mô tả |
-| :--- | :--- | :--- |
-| Users — DisputeEvidences | 1 — 0..N | Một user có thể gửi nhiều bằng chứng tranh chấp. |
-| Users — Disputes | 1 — 0..N | Một user có thể mở hoặc liên quan đến nhiều tranh chấp. |
-| Users — PaymentTransactions | 1 — 0..N | Một user có thể có nhiều giao dịch mô phỏng. |
-| Users — Reviews | 1 — 0..N | Một user có thể viết hoặc nhận nhiều review. |
-| Users — AuditLogs | 1 — 0..N | Một user có thể tạo nhiều log thao tác. |
-| Users — Notifications | 1 — 0..N | Một user có thể nhận nhiều thông báo. |
-| Users — Wallets | 1 — 0..1 | Một user có tối đa một ví mô phỏng. |
-| Users — ExpertProfiles | 1 — 0..1 | Một user có thể có một hồ sơ AI Expert. |
-| Users — ClientProfiles | 1 — 0..1 | Một user có thể có một hồ sơ Client. |
-| Users — Messages | 1 — 0..N | Một user có thể gửi nhiều tin nhắn. |
-| Users(Admin) — Services | 1 — 0..N | Admin có thể tạo hoặc quản lý nhiều service/template. |
-| ClientProfiles — Projects | 1 — 0..N | Một Client có thể có nhiều project. |
-| ClientProfiles — JobPostings | 1 — 0..N | Một Client có thể đăng nhiều job. |
-| ClientProfiles — ProjectContracts | 1 — 0..N | Một Client có thể có nhiều contract. |
-| ClientProfiles — Escrows | 1 — 0..N | Một Client có thể tạo nhiều escrow. |
-| ExpertProfiles — AIRecommendations | 1 — 0..N | Một Expert có thể được recommend cho nhiều job. |
-| ExpertProfiles — Services | M — M | Một Expert có thể cung cấp nhiều service/template và một service/template có thể có nhiều Expert. |
-| ExpertProfiles — ProjectContracts | 1 — 0..N | Một Expert có thể có nhiều contract. |
-| ExpertProfiles — ExpertSkills | 1 — 0..N | Một Expert có nhiều kỹ năng. |
-| ExpertProfiles — Proposals | 1 — 0..N | Một Expert có thể gửi nhiều proposal. |
-| ExpertProfiles — Deliverables | 1 — 0..N | Một Expert có thể nộp nhiều deliverable. |
-| JobPostings — Messages | 1 — 0..N | Một job có thể có nhiều tin nhắn trao đổi. |
-| JobPostings — JobSkills | 1 — 0..N | Một job có nhiều kỹ năng yêu cầu. |
-| JobPostings — AIRecommendations | 1 — 0..N | Một job có nhiều kết quả recommendation. |
-| JobPostings — Proposals | 1 — 0..N | Một job có thể nhận nhiều proposal. |
-| JobPostings — Services | M — M | Một job có thể thuộc nhiều service/template và một service/template có thể áp dụng cho nhiều job. |
-| JobSkills — ExpertSkills | M — M | Kỹ năng yêu cầu của job được dùng để match với kỹ năng của Expert; kết quả matching lưu trong AIRecommendations. |
-| Proposals — Messages | 1 — 0..N | Một proposal có thể có nhiều tin nhắn thương lượng. |
-| Proposals — ProjectContracts | 1 — 0..1 | Một proposal được chọn có thể tạo tối đa một contract. |
-| Proposals — Projects | 1 — 0..1 | Một proposal được accept có thể tạo tối đa một project. |
-| ProjectContracts — Projects | 1 — 0..1 | Một contract sau khi confirmed có thể tạo một project. |
-| Projects — Disputes | 1 — 0..N | Một project có thể có nhiều dispute. |
-| Projects — PaymentTransactions | 1 — 0..N | Một project có nhiều transaction mô phỏng. |
-| Projects — Escrows | 1 — 0..N | Một project có thể có nhiều escrow theo milestone. |
-| Projects — Messages | 1 — 0..N | Một project có nhiều tin nhắn trao đổi. |
-| Projects — Milestones | 1 — N | Một project phải có ít nhất một milestone. |
-| Projects — Reviews | 1 — 0..1 | Một project có một review: Client review Expert |
-| Milestones — Deliverables | 1 — 0..N | Một milestone có thể có nhiều deliverable version. |
-| Milestones — Escrows | 1 — 0..1 | Một milestone có thể có một escrow tương ứng. |
-| Milestones — PaymentTransactions | 1 — 0..N | Một milestone có thể phát sinh nhiều transaction. |
-| Milestones — Disputes | 1 — 0..N | Một milestone có thể phát sinh dispute. |
-| Escrows — PaymentTransactions | 1 — 0..N | Một escrow có thể sinh nhiều transaction như lock, release, refund. |
-| Disputes — DisputeEvidences | 1 — 0..N | Một dispute có thể có nhiều bằng chứng. |
+| Entity              | Description                                                     |
+| ------------------- | --------------------------------------------------------------- |
+| Users               | Stores account information for Clients, AI Experts, and Admins. |
+| ClientProfiles      | Stores Client profile information.                              |
+| ExpertProfiles      | Stores AI Expert profile information.                           |
+| Wallets             | Stores simulated wallet balance of each user.                   |
+| Services            | Stores AI service templates created by Admin.                   |
+| Skills              | Stores standardized skill names used for matching.              |
+| JobPostings         | Stores jobs posted by Clients.                                  |
+| JobSkills           | Stores required skills of each job.                             |
+| ExpertSkills        | Stores skills owned by each Expert.                             |
+| AIRecommendations   | Stores matching results between jobs and experts.               |
+| Proposals           | Stores proposals submitted by Experts.                          |
+| ProjectContracts    | Stores final project terms confirmed by Client and Expert.      |
+| Projects            | Stores active/completed/disputed projects.                      |
+| Milestones          | Stores milestones of each project.                              |
+| Deliverables        | Stores submitted work/products for milestones.                  |
+| Escrows             | Stores escrow records for projects/milestones.                  |
+| PaymentTransactions | Stores simulated payment transaction history.                   |
+| Messages            | Stores chat messages in job/proposal/project context.           |
+| Disputes            | Stores disputes opened during project execution.                |
+| DisputeEvidences    | Stores evidence submitted for disputes.                         |
+| Reviews             | Stores reviews and ratings after project completion.            |
+| Notifications       | Stores user notifications.                                      |
+| AuditLogs           | Stores important system/user actions.                           |
+| ExpertServices      | Junction table between ExpertProfiles and Services.             |
+| JobServices         | Junction table between JobPostings and Services.                |
 
 ---
 
-### 6.2 Logical ERD
+### 6.1.2 Conceptual Relationships
 
-#### 6.2.1 Users
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| UserId | INT | PK | Khóa chính |
-| Email | NVARCHAR(255) | UNIQUE | Email đăng nhập |
-| PasswordHash | NVARCHAR(255) | | Mật khẩu đã hash |
-| FullName | NVARCHAR(255) | | Họ tên |
-| Role | NVARCHAR(20) | | CLIENT / EXPERT / ADMIN |
-| AuthProvider | NVARCHAR(20) | | LOCAL / GOOGLE |
-| GoogleId | NVARCHAR(255) | UNIQUE NULL | ID Google nếu đăng nhập Google |
-| AvatarUrl | NVARCHAR(500) | NULL | Ảnh đại diện |
-| Status | NVARCHAR(30) | | PENDING_ROLE / ACTIVE / SUSPENDED / BANNED |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
-
-#### 6.2.2 ClientProfiles
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ClientId | INT | PK | Khóa chính |
-| UserId | INT | FK, UNIQUE | Liên kết Users |
-| CompanyName | NVARCHAR(255) | | Tên công ty |
-| Industry | NVARCHAR(255) | | Ngành nghề |
-| BusinessType | NVARCHAR(100) | | Loại hình kinh doanh |
-| CompanySize | NVARCHAR(50) | NULL | Quy mô công ty |
-| AINeeds | NVARCHAR(MAX) | | Nhu cầu AI |
-| MainProblems | NVARCHAR(MAX) | | Vấn đề cần giải quyết |
-| ExpectedBudgetMin | DECIMAL(18,2) | NULL | Ngân sách tối thiểu |
-| ExpectedBudgetMax | DECIMAL(18,2) | NULL | Ngân sách tối đa |
-| RatingAverage | DECIMAL(3,2) | | Rating trung bình |
-| ReviewCount | INT | | Số review |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Key:**
-* `ClientProfiles.UserId` → `Users.UserId`
-
-#### 6.2.3 ExpertProfiles
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ExpertId | INT | PK | Khóa chính |
-| UserId | INT | FK, UNIQUE | Liên kết Users |
-| Bio | NVARCHAR(MAX) | | Giới thiệu chuyên môn |
-| PortfolioUrl | NVARCHAR(500) | | Link portfolio |
-| CertificateUrl | NVARCHAR(500) | NULL | Link chứng chỉ |
-| ExperienceYears | INT | | Số năm kinh nghiệm |
-| HourlyRate | DECIMAL(18,2) | | Giá theo giờ |
-| RatingAverage | DECIMAL(3,2) | | Rating trung bình |
-| ReviewCount | INT | | Số review |
-| CompletedProjects | INT | | Số project đã hoàn thành |
-| ProfileScore | DECIMAL(3,2) | | Điểm hồ sơ |
-| Level | NVARCHAR(20) | | JUNIOR / MID / SENIOR |
-| ProfileReviewStatus | NVARCHAR(30) | | PENDING_REVIEW / APPROVED / REJECTED |
-| ProfileReviewNote | NVARCHAR(MAX) | NULL | Ghi chú review hồ sơ |
-| IsVerified | BIT | | Đã xác thực hay chưa |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Key:**
-* `ExpertProfiles.UserId` → `Users.UserId`
-
-#### 6.2.4 Wallets
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| WalletId | INT | PK | Khóa chính |
-| UserId | INT | FK, UNIQUE | Chủ ví |
-| AvailableBalance | DECIMAL(18,2) | | Số dư khả dụng |
-| LockedBalance | DECIMAL(18,2) | | Số dư đang bị khóa |
-| TotalEarning | DECIMAL(18,2) | | Tổng thu nhập mô phỏng |
-| UpdatedAt | DATETIME2 | | Ngày cập nhật |
-
-**Foreign Key:**
-* `Wallets.UserId` → `Users.UserId`
-
-#### 6.2.5 Services
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ServiceId | INT | PK | Khóa chính |
-| CreatedByAdminId | INT | FK | Admin tạo service/template |
-| ServiceName | NVARCHAR(255) | | Tên service/template |
-| Description | NVARCHAR(MAX) | | Mô tả service |
-| AIgeneratedDescription | NVARCHAR(MAX) | NULL | Mô tả do AI hỗ trợ tạo |
-| Category | NVARCHAR(100) | NULL | Nhóm service |
-| Status | NVARCHAR(30) | | ACTIVE / INACTIVE / HIDDEN |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
-
-**Foreign Key:**
-* `Services.CreatedByAdminId` → `Users.UserId`
-
-#### 6.2.6 ExpertServices
-*Bảng trung gian cho quan hệ M-M giữa ExpertProfiles và Services.*
-
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ExpertServiceId | INT | PK | Khóa chính |
-| ExpertId | INT | FK | Expert cung cấp service |
-| ServiceId | INT | FK | Service/template |
-| CustomDescription | NVARCHAR(MAX) | NULL | Mô tả tùy chỉnh của Expert |
-| CustomPrice | DECIMAL(18,2) | NULL | Giá tùy chỉnh |
-| DeliveryDays | INT | NULL | Số ngày giao dự kiến |
-| Status | NVARCHAR(30) | | ACTIVE / PAUSED / REMOVED |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Keys:**
-* `ExpertServices.ExpertId` → `ExpertProfiles.ExpertId`
-* `ExpertServices.ServiceId` → `Services.ServiceId`
-
-**Constraint đề xuất:**
-* `UNIQUE(ExpertId, ServiceId)`
-
-#### 6.2.7 JobPostings
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| JobId | INT | PK | Khóa chính |
-| ClientId | INT | FK | Client đăng job |
-| Title | NVARCHAR(255) | | Tiêu đề job |
-| Description | NVARCHAR(MAX) | | Mô tả job |
-| AIgeneratedDescription | NVARCHAR(MAX) | NULL | Mô tả do AI gợi ý |
-| BudgetMin | DECIMAL(18,2) | | Budget thấp nhất |
-| BudgetMax | DECIMAL(18,2) | | Budget cao nhất |
-| Deadline | DATETIME2 | | Hạn hoàn thành |
-| ProjectType | NVARCHAR(100) | | Loại project |
-| Complexity | NVARCHAR(50) | | SIMPLE / MEDIUM / COMPLEX |
-| ExpectedDeliverables | NVARCHAR(MAX) | | Output mong muốn |
-| Status | NVARCHAR(20) | | DRAFT / OPEN / CLOSED / CANCELLED / EXPIRED |
-| IsAIAssisted | BIT | | Có dùng AI Job Assistant hay không |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
-
-**Foreign Key:**
-* `JobPostings.ClientId` → `ClientProfiles.ClientId`
-
-#### 6.2.8 JobServices
-*Bảng trung gian cho quan hệ M-M giữa JobPostings và Services.*
-
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| JobServiceId | INT | PK | Khóa chính |
-| JobId | INT | FK | |
-| ServiceId | INT | FK | Service/template |
-
-**Foreign Keys:**
-* `JobServices.JobId` → `JobPostings.JobId`
-* `JobServices.ServiceId` → `Services.ServiceId`
-
-**Constraint đề xuất:**
-* `UNIQUE(JobId, ServiceId)`
-
-#### 6.2.9 JobSkills
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| JobSkillId | INT | PK | Khóa chính |
-| JobId | INT | FK | |
-| JobSkillName | NVARCHAR(100) | | Tên skill yêu cầu |
-| SkillLevelRequired | NVARCHAR(30) | NULL | Mức kỹ năng yêu cầu |
-| IsRequired | BIT | | Skill bắt buộc hay optional |
-
-**Foreign Key:**
-* `JobSkills.JobId` → `JobPostings.JobId`
-
-**Constraint đề xuất:**
-* `UNIQUE(JobId, JobSkillName)`
-
-#### 6.2.10 ExpertSkills
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ExpertSkillId | INT | PK | Khóa chính |
-| ExpertId | INT | FK | Expert |
-| ExpertSkillName | NVARCHAR(100) | | Tên skill của Expert |
-| SkillLevel | NVARCHAR(30) | | BEGINNER / INTERMEDIATE / ADVANCED |
-| YearsOfExperience | INT | NULL | Số năm kinh nghiệm với skill này |
-
-**Foreign Key:**
-* `ExpertSkills.ExpertId` → `ExpertProfiles.ExpertId`
-
-**Constraint đề xuất:**
-* `UNIQUE(ExpertId, ExpertSkillName)`
-
-#### 6.2.11 AIRecommendations
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| RecommendationId | INT | PK | Khóa chính |
-| JobId | INT | FK | Job được match |
-| ExpertId | INT | FK | Expert được recommend |
-| MatchScore | DECIMAL(5,2) | | Điểm matching |
-| MatchedSkillSummary | NVARCHAR(MAX) | NULL | Tóm tắt skill match |
-| MatchReason | NVARCHAR(MAX) | | Lý do recommend |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Keys:**
-* `AIRecommendations.JobId` → `JobPostings.JobId`
-* `AIRecommendations.ExpertId` → `ExpertProfiles.ExpertId`
-
-**Constraint đề xuất:**
-* `UNIQUE(JobId, ExpertId)`
-* `CHECK(MatchScore BETWEEN 0 AND 100)`
-
-**Ghi chú:**
-* `JobSkills` M-M `ExpertSkills` là quan hệ matching logic.
-* Kết quả matching tổng được lưu trong `AIRecommendations`.
-
-#### 6.2.12 Proposals
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ProposalId | INT | PK | Khóa chính |
-| JobId | INT | FK | Job được apply |
-| ExpertId | INT | FK | Expert gửi proposal |
-| CoverLetter | NVARCHAR(MAX) | | Nội dung proposal |
-| ProposedPrice | DECIMAL(18,2) | | Giá đề xuất |
-| ProposedTimelineDays | INT | | Timeline đề xuất |
-| ExpectedOutputs | NVARCHAR(MAX) | | Output dự kiến |
-| WorkingApproach | NVARCHAR(MAX) | | Cách thực hiện |
-| CounterPrice | DECIMAL(18,2) | NULL | Giá counter offer |
-| CounterTimelineDays | INT | NULL | Timeline counter offer |
-| CounterMessage | NVARCHAR(MAX) | NULL | Nội dung counter |
-| Status | NVARCHAR(30) | | SUBMITTED / COUNTER_OFFERED / ACCEPTED / REJECTED / WITHDRAWN / NOT_SELECTED |
-| CreatedAt | DATETIME2 | | Ngày gửi |
-
-**Foreign Keys:**
-* `Proposals.JobId` → `JobPostings.JobId`
-* `Proposals.ExpertId` → `ExpertProfiles.ExpertId`
-
-**Constraint đề xuất:**
-* `UNIQUE(JobId, ExpertId)`
-
-#### 6.2.13 ProjectContracts
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ContractId | INT | PK | Khóa chính |
-| ProposalId | INT | FK, UNIQUE | Proposal được chọn |
-| ClientId | INT | FK | Client |
-| ExpertId | INT | FK | Expert |
-| ProjectScope | NVARCHAR(MAX) | | Scope cuối cùng |
-| FinalPrice | DECIMAL(18,2) | | Giá cuối cùng |
-| FinalTimelineDays | INT | | Timeline cuối cùng |
-| Deliverables | NVARCHAR(MAX) | | Deliverables đã thống nhất |
-| AcceptanceCriteria | NVARCHAR(MAX) | | Tiêu chí nghiệm thu |
-| RevisionLimit | INT | | Số lần revision tối đa |
-| PaymentTerms | NVARCHAR(MAX) | | Điều khoản thanh toán |
-| ClientConfirmed | BIT | | Client đã xác nhận |
-| ExpertConfirmed | BIT | | Expert đã xác nhận |
-| Status | NVARCHAR(30) | | DRAFT / CONFIRMED / CANCELLED |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-| ConfirmedAt | DATETIME2 | NULL | Ngày xác nhận |
-
-**Foreign Keys:**
-* `ProjectContracts.ProposalId` → `Proposals.ProposalId`
-* `ProjectContracts.ClientId` → `ClientProfiles.ClientId`
-* `ProjectContracts.ExpertId` → `ExpertProfiles.ExpertId`
-
-#### 6.2.14 Projects
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ProjectId | INT | PK | Khóa chính |
-| ContractId | INT | FK, UNIQUE | Contract tương ứng |
-| ProposalId | INT | FK, UNIQUE | Proposal được accept |
-| ClientId | INT | FK | Client |
-| ExpertId | INT | FK | Expert |
-| TotalAmount | DECIMAL(18,2) | | Tổng tiền project |
-| Status | NVARCHAR(30) | | PENDING_ESCROW / ACTIVE / COMPLETED / CANCELLED / DISPUTED |
-| EscrowStatus | NVARCHAR(30) | | NOT_LOCKED / LOCKED / PARTIALLY_RELEASED / RELEASED / REFUNDED / FROZEN |
-| StartDate | DATETIME2 | NULL | Ngày bắt đầu |
-| EndDate | DATETIME2 | NULL | Ngày kết thúc |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Keys:**
-* `Projects.ContractId` → `ProjectContracts.ContractId`
-* `Projects.ProposalId` → `Proposals.ProposalId`
-* `Projects.ClientId` → `ClientProfiles.ClientId`
-* `Projects.ExpertId` → `ExpertProfiles.ExpertId`
-
-#### 6.2.15 Milestones
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| MilestoneId | INT | PK | Khóa chính |
-| ProjectId | INT | FK | Project |
-| Title | NVARCHAR(255) | | Tên milestone |
-| Description | NVARCHAR(MAX) | | Mô tả milestone |
-| ExpectedDeliverable | NVARCHAR(MAX) | | Deliverable mong đợi |
-| AcceptanceCriteria | NVARCHAR(MAX) | | Tiêu chí nghiệm thu milestone |
-| Amount | DECIMAL(18,2) | | Tiền milestone |
-| OrderIndex | INT | | Thứ tự milestone |
-| DueDate | DATETIME2 | | Deadline milestone |
-| RevisionLimit | INT | | Số lần revision tối đa |
-| RevisionUsed | INT | | Số lần revision đã dùng |
-| PaymentStatus | NVARCHAR(30) | | ESCROW_LOCKED / RELEASED / REFUNDED / FROZEN |
-| Status | NVARCHAR(30) | | PENDING / IN_PROGRESS / SUBMITTED / REVISION_REQUESTED / APPROVED / DISPUTED / CANCELLED |
-
-**Foreign Key:**
-* `Milestones.ProjectId` → `Projects.ProjectId`
-
-**Constraint đề xuất:**
-* `UNIQUE(ProjectId, OrderIndex)`
-
-#### 6.2.16 Deliverables
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| DeliverableId | INT | PK | Khóa chính |
-| MilestoneId | INT | FK | Milestone |
-| ExpertId | INT | FK | Expert nộp |
-| FileUrl | NVARCHAR(500) | NULL | Link file bàn giao |
-| DemoUrl | NVARCHAR(500) | NULL | Link demo |
-| Description | NVARCHAR(MAX) | | Mô tả deliverable |
-| HandoverNotes | NVARCHAR(MAX) | NULL | Ghi chú bàn giao |
-| TestResultUrl | NVARCHAR(500) | NULL | Link kết quả test nếu có |
-| ClientFeedback | NVARCHAR(MAX) | NULL | Feedback từ Client |
-| VersionNumber | INT | | Version deliverable |
-| Status | NVARCHAR(30) | | SUBMITTED / APPROVED / REVISION_REQUESTED / DISPUTED |
-| SubmittedAt | DATETIME2 | | Ngày nộp |
-
-**Foreign Keys:**
-* `Deliverables.MilestoneId` → `Milestones.MilestoneId`
-* `Deliverables.ExpertId` → `ExpertProfiles.ExpertId`
-
-**Constraint đề xuất:**
-* `UNIQUE(MilestoneId, VersionNumber)`
-
-#### 6.2.17 Escrows
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| EscrowId | INT | PK | Khóa chính |
-| ProjectId | INT | FK | Project |
-| MilestoneId | INT | FK, UNIQUE NULL | Milestone tương ứng |
-| ClientId | INT | FK | Client ký quỹ |
-| ExpertId | INT | FK | Expert nhận tiền khi release |
-| Amount | DECIMAL(18,2) | | Số tiền ký quỹ |
-| Status | NVARCHAR(30) | | PENDING / LOCKED / RELEASED / REFUNDED / FROZEN |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-| UpdatedAt | DATETIME2 | NULL | Ngày cập nhật |
-
-**Foreign Keys:**
-* `Escrows.ProjectId` → `Projects.ProjectId`
-* `Escrows.MilestoneId` → `Milestones.MilestoneId`
-* `Escrows.ClientId` → `ClientProfiles.ClientId`
-* `Escrows.ExpertId` → `ExpertProfiles.ExpertId`
-
-#### 6.2.18 PaymentTransactions
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| TransactionId | INT | PK | Khóa chính |
-| EscrowId | INT | FK NULL | Escrow liên quan |
-| ProjectId | INT | FK | Project |
-| MilestoneId | INT | FK NULL | Milestone liên quan |
-| UserId | INT | FK | User liên quan đến giao dịch |
-| Type | NVARCHAR(30) | | ESCROW_LOCK / ESCROW_RELEASE / REFUND / PARTIAL_REFUND |
-| Amount | DECIMAL(18,2) | | Số tiền |
-| Status | NVARCHAR(20) | | PENDING / SUCCESS / FAILED |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Keys:**
-* `PaymentTransactions.EscrowId` → `Escrows.EscrowId`
-* `PaymentTransactions.ProjectId` → `Projects.ProjectId`
-* `PaymentTransactions.MilestoneId` → `Milestones.MilestoneId`
-* `PaymentTransactions.UserId` → `Users.UserId`
-
-#### 6.2.19 Messages
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| MessageId | INT | PK | Khóa chính |
-| SenderId | INT | FK | Người gửi |
-| JobId | INT | FK NULL | Tin nhắn trong job |
-| ProposalId | INT | FK NULL | Tin nhắn trong proposal/negotiation |
-| ProjectId | INT | FK NULL | Tin nhắn trong project |
-| MessageText | NVARCHAR(MAX) | | Nội dung tin nhắn |
-| SentAt | DATETIME2 | | Thời gian gửi |
-| IsRead | BIT | | Đã đọc chưa |
-
-**Foreign Keys:**
-* `Messages.SenderId` → `Users.UserId`
-* `Messages.JobId` → `JobPostings.JobId`
-* `Messages.ProposalId` → `Proposals.ProposalId`
-* `Messages.ProjectId` → `Projects.ProjectId`
-
-**Constraint đề xuất:**
-* `JobId IS NOT NULL OR ProposalId IS NOT NULL OR ProjectId IS NOT NULL`
-
-#### 6.2.20 Disputes
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| DisputeId | INT | PK | Khóa chính |
-| ProjectId | INT | FK | Project bị tranh chấp |
-| MilestoneId | INT | FK NULL | Milestone bị tranh chấp |
-| OpenedByUserId | INT | FK | Người mở dispute |
-| RespondentUserId | INT | FK | Bên còn lại |
-| Reason | NVARCHAR(MAX) | | Lý do tranh chấp |
-| DisputedAmount | DECIMAL(18,2) | | Số tiền tranh chấp |
-| Status | NVARCHAR(30) | | OPEN / UNDER_REVIEW / RESOLVED |
-| ResolutionType | NVARCHAR(30) | NULL | RELEASE_TO_EXPERT / REFUND_TO_CLIENT / PARTIAL_SPLIT |
-| AdminDecision | NVARCHAR(MAX) | NULL | Quyết định của Admin |
-| CreatedAt | DATETIME2 | | Ngày mở |
-| ResolvedAt | DATETIME2 | NULL | Ngày xử lý |
-
-**Foreign Keys:**
-* `Disputes.ProjectId` → `Projects.ProjectId`
-* `Disputes.MilestoneId` → `Milestones.MilestoneId`
-* `Disputes.OpenedByUserId` → `Users.UserId`
-* `Disputes.RespondentUserId` → `Users.UserId`
-
-#### 6.2.21 DisputeEvidences
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| EvidenceId | INT | PK | Khóa chính |
-| DisputeId | INT | FK | Dispute |
-| UploadedByUserId | INT | FK | Người gửi bằng chứng |
-| EvidenceText | NVARCHAR(MAX) | | Nội dung bằng chứng |
-| FileUrl | NVARCHAR(500) | NULL | File/hình ảnh/link bằng chứng |
-| CreatedAt | DATETIME2 | | Ngày gửi |
-
-**Foreign Keys:**
-* `DisputeEvidences.DisputeId` → `Disputes.DisputeId`
-* `DisputeEvidences.UploadedByUserId` → `Users.UserId`
-
-#### 6.2.22 Reviews
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| ReviewId | INT | PK | Khóa chính |
-| ProjectId | INT | FK | Project |
-| ReviewerId | INT | FK | Người đánh giá |
-| RevieweeId | INT | FK | Người được đánh giá |
-| Rating | INT | | Điểm 1–5 |
-| Comment | NVARCHAR(MAX) | | Nội dung đánh giá |
-| Status | NVARCHAR(20) | | VISIBLE / HIDDEN |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Keys:**
-* `Reviews.ProjectId` → `Projects.ProjectId`
-* `Reviews.ReviewerId` → `Users.UserId`
-* `Reviews.RevieweeId` → `Users.UserId`
-
-**Constraint đề xuất:**
-* `UNIQUE(ProjectId, ReviewerId, RevieweeId)`
-* `CHECK(Rating BETWEEN 1 AND 5)`
-* `CHECK(ReviewerId <> RevieweeId)`
-
-#### 6.2.23 Notifications
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| NotificationId | INT | PK | Khóa chính |
-| UserId | INT | FK | Người nhận |
-| Title | NVARCHAR(255) | | Tiêu đề |
-| Content | NVARCHAR(MAX) | | Nội dung |
-| Type | NVARCHAR(50) | | JOB_ALERT / PROPOSAL / CONTRACT / PROJECT / MILESTONE / DISPUTE / REVIEW / PAYMENT / SERVICE / SYSTEM |
-| IsRead | BIT | | Đã đọc chưa |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Key:**
-* `Notifications.UserId` → `Users.UserId`
-
-#### 6.2.24 AuditLogs
-| Column | Data Type | Key | Note |
-| :--- | :--- | :--- | :--- |
-| AuditLogId | INT | PK | Khóa chính |
-| UserId | INT | FK NULL | Người thực hiện |
-| Action | NVARCHAR(100) | | Hành động |
-| EntityName | NVARCHAR(100) | | Tên entity bị tác động |
-| EntityId | INT | NULL | ID bản ghi bị tác động |
-| Description | NVARCHAR(MAX) | | Mô tả thao tác |
-| CreatedAt | DATETIME2 | | Ngày tạo |
-
-**Foreign Key:**
-* `AuditLogs.UserId` → `Users.UserId`
+| Relationship                            | Cardinality | Meaning                                                                         |
+| --------------------------------------- | ----------- | ------------------------------------------------------------------------------- |
+| User has ClientProfile                  | 1 — 0..1    | A user may have one Client profile.                                             |
+| User has ExpertProfile                  | 1 — 0..1    | A user may have one Expert profile.                                             |
+| User owns Wallet                        | 1 — 0..1    | A user may own one wallet.                                                      |
+| User sends Message                      | 1 — 0..N    | A user can send many messages.                                                  |
+| User receives Notification              | 1 — 0..N    | A user can receive many notifications.                                          |
+| User performs AuditLog                  | 1 — 0..N    | A user can create many audit logs.                                              |
+| User makes PaymentTransaction           | 1 — 0..N    | A user can have many transactions.                                              |
+| User writes/receives Review             | 1 — 0..N    | A user can write or receive many reviews.                                       |
+| User opens/responds to Dispute          | 1 — 0..N    | A user can be involved in many disputes.                                        |
+| User uploads DisputeEvidence            | 1 — 0..N    | A user can upload many dispute evidences.                                       |
+| Admin creates Service                   | 1 — 0..N    | Admin can create many service templates.                                        |
+| ClientProfile posts JobPosting          | 1 — 0..N    | A Client can post many jobs.                                                    |
+| ClientProfile owns Project              | 1 — 0..N    | A Client can own many projects.                                                 |
+| ClientProfile signs ProjectContract     | 1 — 0..N    | A Client can sign many contracts.                                               |
+| ClientProfile creates Escrow            | 1 — 0..N    | A Client can create many escrow records.                                        |
+| ExpertProfile submits Proposal          | 1 — 0..N    | An Expert can submit many proposals.                                            |
+| ExpertProfile has ExpertSkill           | 1 — 0..N    | An Expert can have many skills.                                                 |
+| ExpertProfile receives AIRecommendation | 1 — 0..N    | An Expert can be recommended for many jobs.                                     |
+| ExpertProfile signs ProjectContract     | 1 — 0..N    | An Expert can sign many contracts.                                              |
+| ExpertProfile submits Deliverable       | 1 — 0..N    | An Expert can submit many deliverables.                                         |
+| ExpertProfile provides Service          | M — M       | An Expert can provide many services; a service can be provided by many Experts. |
+| JobPosting belongs to Service           | M — M       | A job can belong to many services; a service can apply to many jobs.            |
+| JobPosting requires JobSkill            | 1 — 0..N    | A job can require many skills.                                                  |
+| JobPosting receives AIRecommendation    | 1 — 0..N    | A job can have many recommended Experts.                                        |
+| JobPosting receives Proposal            | 1 — 0..N    | A job can receive many proposals.                                               |
+| JobPosting has Message                  | 1 — 0..N    | A job can have many messages.                                                   |
+| Skill is used in JobSkill               | 1 — 0..N    | One skill can be required by many jobs.                                         |
+| Skill is used in ExpertSkill            | 1 — 0..N    | One skill can belong to many Experts.                                           |
+| Proposal has Message                    | 1 — 0..N    | A proposal can have many negotiation messages.                                  |
+| Proposal generates ProjectContract      | 1 — 0..1    | An accepted proposal can generate one contract.                                 |
+| Proposal creates Project                | 1 — 0..1    | An accepted proposal can create one project.                                    |
+| ProjectContract creates Project         | 1 — 0..1    | A confirmed contract can create one project.                                    |
+| Project contains Milestone              | 1 — N       | A project must have at least one milestone.                                     |
+| Project has Escrow                      | 1 — 0..N    | A project can have many escrow records.                                         |
+| Project has PaymentTransaction          | 1 — 0..N    | A project can have many transactions.                                           |
+| Project has Message                     | 1 — 0..N    | A project can have many messages.                                               |
+| Project has Dispute                     | 1 — 0..N    | A project can have many disputes.                                               |
+| Project receives Review                 | 1 — 0..1    | A project can have up to one reviews.                                           |
+| Milestone receives Deliverable          | 1 — 0..N    | A milestone can have many deliverable versions.                                 |
+| Milestone has Escrow                    | 1 — 0..1    | A milestone can have one escrow record.                                         |
+| Milestone has PaymentTransaction        | 1 — 0..N    | A milestone can have many transactions.                                         |
+| Milestone has Dispute                   | 1 — 0..N    | A milestone can have many disputes.                                             |
+| Escrow generates PaymentTransaction     | 1 — 0..N    | An escrow can generate many transactions.                                       |
+| Dispute contains DisputeEvidence        | 1 — 0..N    | A dispute can have many evidences.                                              |
 
 ---
 
-### 6.3 Key Constraints
+## 6.2 Logical ERD
 
-| Constraint | Mục đích |
-| :--- | :--- |
-| `Users.Email` UNIQUE | Không cho trùng email đăng nhập. |
-| `ClientProfiles.UserId` UNIQUE | Một user chỉ có tối đa một Client profile. |
-| `ExpertProfiles.UserId` UNIQUE | Một user chỉ có tối đa một Expert profile. |
-| `Wallets.UserId` UNIQUE | Một user chỉ có tối đa một ví. |
-| `ExpertServices(ExpertId, ServiceId)` UNIQUE | Một Expert không bị gán trùng một service/template. |
-| `JobServices(JobId, ServiceId)` UNIQUE | Một job không bị gán trùng một service/template. |
-| `JobSkills(JobId, SkillName)` UNIQUE | Một job không bị trùng skill requirement. |
-| `ExpertSkills(ExpertId, SkillName)` UNIQUE | Một Expert không bị trùng skill. |
-| `AIRecommendations(JobId, ExpertId)` UNIQUE | Một job chỉ recommend một Expert một lần. |
-| `Proposals(JobId, ExpertId)` UNIQUE | Một Expert chỉ gửi một proposal cho một job. |
-| `ProjectContracts.ProposalId` UNIQUE | Một proposal chỉ sinh tối đa một contract. |
-| `Projects.ContractId` UNIQUE | Một contract chỉ sinh tối đa một project. |
-| `Projects.ProposalId` UNIQUE | Một proposal chỉ sinh tối đa một project. |
-| `Milestones(ProjectId, OrderIndex)` UNIQUE | Milestone trong cùng project không trùng thứ tự. |
-| `Escrows.MilestoneId` UNIQUE | Một milestone chỉ có tối đa một escrow. |
-| `Deliverables(MilestoneId, VersionNumber)` UNIQUE | Deliverable version trong cùng milestone không trùng. |
-| `Reviews(ProjectId, ReviewerId, RevieweeId)` UNIQUE | Một cặp user chỉ review nhau một lần trong một project. |
+### 6.2.1 Users
+
+| Attribute    | Data Type     | Key         | Description               |
+| ------------ | ------------- | ----------- | ------------------------- |
+| UserId       | INT           | PK          | Unique identifier of user |
+| Email        | NVARCHAR(255) | UNIQUE      | User email                |
+| PasswordHash | NVARCHAR(255) |             | Hashed password           |
+| FullName     | NVARCHAR(255) |             | Full name                 |
+| Role         | NVARCHAR(20)  |             | CLIENT / EXPERT / ADMIN   |
+| AuthProvider | NVARCHAR(20)  |             | LOCAL / GOOGLE            |
+| GoogleId     | NVARCHAR(255) | UNIQUE NULL | Google account id         |
+| AvatarUrl    | NVARCHAR(500) | NULL        | User avatar               |
+| Status       | NVARCHAR(30)  |             | Account status            |
+| CreatedAt    | DATETIME2     |             | Created date              |
+| UpdatedAt    | DATETIME2     | NULL        | Updated date              |
 
 ---
 
-### 6.4 ERD Mapping With System Requirements
+### 6.2.2 ClientProfiles
 
-| Requirement / Feature | Related Tables |
-| :--- | :--- |
-| Register/Login and role-based profile | Users, ClientProfiles, ExpertProfiles |
-| Client posts AI job | JobPostings, JobSkills, JobServices |
-| Browse AI services marketplace | Services, JobServices, ExpertServices |
-| Expert provides AI services | ExpertProfiles, ExpertServices, Services |
-| AI Job Assistant | JobPostings.AIgeneratedDescription, JobPostings.IsAIAssisted |
-| AI Expert Recommendation | JobSkills, ExpertSkills, AIRecommendations |
-| Proposal submission | Proposals, Messages |
-| Negotiation and contract confirmation | Proposals, ProjectContracts, Messages |
-| Project lifecycle management | Projects, Milestones, Deliverables |
-| Wallet-based escrow | Wallets, Escrows, PaymentTransactions |
-| Deliverable approval/revision | Milestones, Deliverables |
-| Dispute resolution | Disputes, DisputeEvidences, Escrows, PaymentTransactions |
-| Review and rating | Reviews, ClientProfiles, ExpertProfiles |
-| Notification | Notifications |
-| Admin dashboard and audit | Users, Services, Projects, Disputes, PaymentTransactions, Reviews, AuditLogs |
+| Attribute         | Data Type     | Key        | Description                         |
+| ----------------- | ------------- | ---------- | ----------------------------------- |
+| ClientId          | INT           | PK         | Unique identifier of Client profile |
+| UserId            | INT           | FK, UNIQUE | References Users                    |
+| CompanyName       | NVARCHAR(255) |            | Company name                        |
+| Industry          | NVARCHAR(255) |            | Business industry                   |
+| BusinessType      | NVARCHAR(100) |            | Type of business                    |
+| CompanySize       | NVARCHAR(50)  | NULL       | Company size                        |
+| AINeeds           | NVARCHAR(MAX) |            | AI needs                            |
+| MainProblems      | NVARCHAR(MAX) |            | Main problems                       |
+| ExpectedBudgetMin | DECIMAL(18,2) | NULL       | Minimum expected budget             |
+| ExpectedBudgetMax | DECIMAL(18,2) | NULL       | Maximum expected budget             |
+| RatingAverage     | DECIMAL(3,2)  |            | Average rating                      |
+| ReviewCount       | INT           |            | Number of reviews                   |
+| CreatedAt         | DATETIME2     |            | Created date                        |
+
+Foreign Key:
+
+```text
+ClientProfiles.UserId → Users.UserId
+```
+
+---
+
+### 6.2.3 ExpertProfiles
+
+| Attribute           | Data Type     | Key        | Description                         |
+| ------------------- | ------------- | ---------- | ----------------------------------- |
+| ExpertId            | INT           | PK         | Unique identifier of Expert profile |
+| UserId              | INT           | FK, UNIQUE | References Users                    |
+| Bio                 | NVARCHAR(MAX) |            | Expert biography                    |
+| PortfolioUrl        | NVARCHAR(500) |            | Portfolio URL                       |
+| CertificateUrl      | NVARCHAR(500) | NULL       | Certificate URL                     |
+| ExperienceYears     | INT           |            | Years of experience                 |
+| HourlyRate          | DECIMAL(18,2) |            | Hourly rate                         |
+| RatingAverage       | DECIMAL(3,2)  |            | Average rating                      |
+| ReviewCount         | INT           |            | Number of reviews                   |
+| CompletedProjects   | INT           |            | Completed projects                  |
+| ProfileScore        | DECIMAL(3,2)  |            | AI profile score                    |
+| Level               | NVARCHAR(20)  |            | JUNIOR / MID / SENIOR               |
+| ProfileReviewStatus | NVARCHAR(30)  |            | Profile review status               |
+| ProfileReviewNote   | NVARCHAR(MAX) | NULL       | Review note                         |
+| IsVerified          | BIT           |            | Verification status                 |
+| CreatedAt           | DATETIME2     |            | Created date                        |
+
+Foreign Key:
+
+```text
+ExpertProfiles.UserId → Users.UserId
+```
+
+---
+
+### 6.2.4 Wallets
+
+| Attribute        | Data Type     | Key        | Description                 |
+| ---------------- | ------------- | ---------- | --------------------------- |
+| WalletId         | INT           | PK         | Unique identifier of wallet |
+| UserId           | INT           | FK, UNIQUE | References Users            |
+| AvailableBalance | DECIMAL(18,2) |            | Available balance           |
+| LockedBalance    | DECIMAL(18,2) |            | Locked balance              |
+| TotalEarning     | DECIMAL(18,2) |            | Total earning               |
+| UpdatedAt        | DATETIME2     |            | Updated date                |
+
+Foreign Key:
+
+```text
+Wallets.UserId → Users.UserId
+```
+
+---
+
+### 6.2.5 Services
+
+| Attribute              | Data Type     | Key    | Description                  |
+| ---------------------- | ------------- | ------ | ---------------------------- |
+| ServiceId              | INT           | PK     | Unique identifier of service |
+| CreatedByAdminId       | INT           | FK     | Admin who created service    |
+| ServiceName            | NVARCHAR(255) | UNIQUE | Service/template name        |
+| Description            | NVARCHAR(MAX) |        | Service description          |
+| AIgeneratedDescription | NVARCHAR(MAX) | NULL   | AI-generated description     |
+| Category               | NVARCHAR(100) | NULL   | Service category             |
+| Status                 | NVARCHAR(30)  |        | ACTIVE / INACTIVE / HIDDEN   |
+| CreatedAt              | DATETIME2     |        | Created date                 |
+| UpdatedAt              | DATETIME2     | NULL   | Updated date                 |
+
+Foreign Key:
+
+```text
+Services.CreatedByAdminId → Users.UserId
+```
+
+---
+
+### 6.2.6 Skills
+
+| Attribute   | Data Type     | Key    | Description                |
+| ----------- | ------------- | ------ | -------------------------- |
+| SkillId     | INT           | PK     | Unique identifier of skill |
+| SkillName   | NVARCHAR(100) | UNIQUE | Skill name                 |
+| Description | NVARCHAR(500) | NULL   | Skill description          |
+| Category    | NVARCHAR(100) | NULL   | Skill category             |
+| IsActive    | BIT           |        | Skill active status        |
+| CreatedAt   | DATETIME2     |        | Created date               |
+
+---
+
+### 6.2.7 ExpertServices
+
+| Attribute         | Data Type     | Key  | Description                       |
+| ----------------- | ------------- | ---- | --------------------------------- |
+| ExpertServiceId   | INT           | PK   | Unique identifier                 |
+| ExpertId          | INT           | FK   | References ExpertProfiles         |
+| ServiceId         | INT           | FK   | References Services               |
+| CustomDescription | NVARCHAR(MAX) | NULL | Expert custom service description |
+| CustomPrice       | DECIMAL(18,2) | NULL | Custom price                      |
+| DeliveryDays      | INT           | NULL | Estimated delivery days           |
+| Status            | NVARCHAR(30)  |      | ACTIVE / PAUSED / REMOVED         |
+| CreatedAt         | DATETIME2     |      | Created date                      |
+
+Foreign Keys:
+
+```text
+ExpertServices.ExpertId → ExpertProfiles.ExpertId
+ExpertServices.ServiceId → Services.ServiceId
+```
+
+---
+
+### 6.2.8 JobPostings
+
+| Attribute              | Data Type     | Key  | Description                                 |
+| ---------------------- | ------------- | ---- | ------------------------------------------- |
+| JobId                  | INT           | PK   | Unique identifier of job                    |
+| ClientId               | INT           | FK   | Client who posted job                       |
+| Title                  | NVARCHAR(255) |      | Job title                                   |
+| Description            | NVARCHAR(MAX) |      | Job description                             |
+| AIgeneratedDescription | NVARCHAR(MAX) | NULL | AI-generated job description                |
+| BudgetMin              | DECIMAL(18,2) |      | Minimum budget                              |
+| BudgetMax              | DECIMAL(18,2) |      | Maximum budget                              |
+| Deadline               | DATETIME2     |      | Deadline                                    |
+| ProjectType            | NVARCHAR(100) |      | Project type                                |
+| Complexity             | NVARCHAR(50)  |      | SIMPLE / MEDIUM / COMPLEX                   |
+| ExpectedDeliverables   | NVARCHAR(MAX) |      | Expected deliverables                       |
+| Status                 | NVARCHAR(20)  |      | DRAFT / OPEN / CLOSED / CANCELLED / EXPIRED |
+| IsAIAssisted           | BIT           |      | Whether AI assistant was used               |
+| CreatedAt              | DATETIME2     |      | Created date                                |
+| UpdatedAt              | DATETIME2     | NULL | Updated date                                |
+
+Foreign Key:
+
+```text
+JobPostings.ClientId → ClientProfiles.ClientId
+```
+
+---
+
+### 6.2.9 JobServices
+
+| Attribute    | Data Type | Key | Description            |
+| ------------ | --------- | --- | ---------------------- |
+| JobServiceId | INT       | PK  | Unique identifier      |
+| JobId        | INT       | FK  | References JobPostings |
+| ServiceId    | INT       | FK  | References Services    |
+
+Foreign Keys:
+
+```text
+JobServices.JobId → JobPostings.JobId
+JobServices.ServiceId → Services.ServiceId
+```
+
+---
+
+### 6.2.10 JobSkills
+
+| Attribute          | Data Type    | Key  | Description                |
+| ------------------ | ------------ | ---- | -------------------------- |
+| JobSkillId         | INT          | PK   | Unique identifier          |
+| JobId              | INT          | FK   | References JobPostings     |
+| SkillId            | INT          | FK   | References Skills          |
+| SkillLevelRequired | NVARCHAR(30) | NULL | Required skill level       |
+| IsRequired         | BIT          |      | Required or optional skill |
+
+Foreign Keys:
+
+```text
+JobSkills.JobId → JobPostings.JobId
+JobSkills.SkillId → Skills.SkillId
+```
+
+---
+
+### 6.2.11 ExpertSkills
+
+| Attribute         | Data Type    | Key  | Description                        |
+| ----------------- | ------------ | ---- | ---------------------------------- |
+| ExpertSkillId     | INT          | PK   | Unique identifier                  |
+| ExpertId          | INT          | FK   | References ExpertProfiles          |
+| SkillId           | INT          | FK   | References Skills                  |
+| SkillLevel        | NVARCHAR(30) |      | BEGINNER / INTERMEDIATE / ADVANCED |
+| YearsOfExperience | INT          | NULL | Experience years with this skill   |
+
+Foreign Keys:
+
+```text
+ExpertSkills.ExpertId → ExpertProfiles.ExpertId
+ExpertSkills.SkillId → Skills.SkillId
+```
+
+---
+
+### 6.2.12 AIRecommendations
+
+| Attribute           | Data Type     | Key  | Description               |
+| ------------------- | ------------- | ---- | ------------------------- |
+| RecommendationId    | INT           | PK   | Unique identifier         |
+| JobId               | INT           | FK   | References JobPostings    |
+| ExpertId            | INT           | FK   | References ExpertProfiles |
+| MatchScore          | DECIMAL(5,2)  |      | Matching score            |
+| MatchedSkillSummary | NVARCHAR(MAX) | NULL | Summary of matched skills |
+| MatchReason         | NVARCHAR(MAX) |      | Reason for recommendation |
+| CreatedAt           | DATETIME2     |      | Created date              |
+
+Foreign Keys:
+
+```text
+AIRecommendations.JobId → JobPostings.JobId
+AIRecommendations.ExpertId → ExpertProfiles.ExpertId
+```
+
+---
+
+### 6.2.13 Proposals
+
+| Attribute            | Data Type     | Key  | Description                   |
+| -------------------- | ------------- | ---- | ----------------------------- |
+| ProposalId           | INT           | PK   | Unique identifier of proposal |
+| JobId                | INT           | FK   | References JobPostings        |
+| ExpertId             | INT           | FK   | References ExpertProfiles     |
+| CoverLetter          | NVARCHAR(MAX) |      | Proposal cover letter         |
+| ProposedPrice        | DECIMAL(18,2) |      | Proposed price                |
+| ProposedTimelineDays | INT           |      | Proposed timeline             |
+| ExpectedOutputs      | NVARCHAR(MAX) |      | Expected outputs              |
+| WorkingApproach      | NVARCHAR(MAX) |      | Working approach              |
+| CounterPrice         | DECIMAL(18,2) | NULL | Counter offer price           |
+| CounterTimelineDays  | INT           | NULL | Counter offer timeline        |
+| CounterMessage       | NVARCHAR(MAX) | NULL | Counter offer message         |
+| Status               | NVARCHAR(30)  |      | Proposal status               |
+| CreatedAt            | DATETIME2     |      | Created date                  |
+
+Foreign Keys:
+
+```text
+Proposals.JobId → JobPostings.JobId
+Proposals.ExpertId → ExpertProfiles.ExpertId
+```
+
+---
+
+### 6.2.14 ProjectContracts
+
+| Attribute          | Data Type     | Key        | Description                   |
+| ------------------ | ------------- | ---------- | ----------------------------- |
+| ContractId         | INT           | PK         | Unique identifier of contract |
+| ProposalId         | INT           | FK, UNIQUE | References Proposals          |
+| ClientId           | INT           | FK         | References ClientProfiles     |
+| ExpertId           | INT           | FK         | References ExpertProfiles     |
+| ProjectScope       | NVARCHAR(MAX) |            | Final project scope           |
+| FinalPrice         | DECIMAL(18,2) |            | Final project price           |
+| FinalTimelineDays  | INT           |            | Final timeline                |
+| Deliverables       | NVARCHAR(MAX) |            | Agreed deliverables           |
+| AcceptanceCriteria | NVARCHAR(MAX) |            | Acceptance criteria           |
+| RevisionLimit      | INT           |            | Maximum revision count        |
+| PaymentTerms       | NVARCHAR(MAX) |            | Payment terms                 |
+| ClientConfirmed    | BIT           |            | Client confirmation           |
+| ExpertConfirmed    | BIT           |            | Expert confirmation           |
+| Status             | NVARCHAR(30)  |            | DRAFT / CONFIRMED / CANCELLED |
+| CreatedAt          | DATETIME2     |            | Created date                  |
+| ConfirmedAt        | DATETIME2     | NULL       | Confirmed date                |
+
+Foreign Keys:
+
+```text
+ProjectContracts.ProposalId → Proposals.ProposalId
+ProjectContracts.ClientId → ClientProfiles.ClientId
+ProjectContracts.ExpertId → ExpertProfiles.ExpertId
+```
+
+---
+
+### 6.2.15 Projects
+
+| Attribute    | Data Type     | Key        | Description                  |
+| ------------ | ------------- | ---------- | ---------------------------- |
+| ProjectId    | INT           | PK         | Unique identifier of project |
+| ContractId   | INT           | FK, UNIQUE | References ProjectContracts  |
+| ProposalId   | INT           | FK, UNIQUE | References Proposals         |
+| ClientId     | INT           | FK         | References ClientProfiles    |
+| ExpertId     | INT           | FK         | References ExpertProfiles    |
+| TotalAmount  | DECIMAL(18,2) |            | Total project amount         |
+| Status       | NVARCHAR(30)  |            | Project status               |
+| EscrowStatus | NVARCHAR(30)  |            | Escrow status                |
+| StartDate    | DATETIME2     | NULL       | Start date                   |
+| EndDate      | DATETIME2     | NULL       | End date                     |
+| CreatedAt    | DATETIME2     |            | Created date                 |
+
+Foreign Keys:
+
+```text
+Projects.ContractId → ProjectContracts.ContractId
+Projects.ProposalId → Proposals.ProposalId
+Projects.ClientId → ClientProfiles.ClientId
+Projects.ExpertId → ExpertProfiles.ExpertId
+```
+
+---
+
+### 6.2.16 Milestones
+
+| Attribute           | Data Type     | Key | Description                    |
+| ------------------- | ------------- | --- | ------------------------------ |
+| MilestoneId         | INT           | PK  | Unique identifier of milestone |
+| ProjectId           | INT           | FK  | References Projects            |
+| Title               | NVARCHAR(255) |     | Milestone title                |
+| Description         | NVARCHAR(MAX) |     | Milestone description          |
+| ExpectedDeliverable | NVARCHAR(MAX) |     | Expected deliverable           |
+| AcceptanceCriteria  | NVARCHAR(MAX) |     | Acceptance criteria            |
+| Amount              | DECIMAL(18,2) |     | Milestone amount               |
+| OrderIndex          | INT           |     | Milestone order                |
+| DueDate             | DATETIME2     |     | Due date                       |
+| RevisionLimit       | INT           |     | Maximum revision count         |
+| RevisionUsed        | INT           |     | Used revision count            |
+| PaymentStatus       | NVARCHAR(30)  |     | Payment status                 |
+| Status              | NVARCHAR(30)  |     | Milestone status               |
+
+Foreign Key:
+
+```text
+Milestones.ProjectId → Projects.ProjectId
+```
+
+---
+
+### 6.2.17 Escrows
+
+| Attribute   | Data Type     | Key             | Description                                     |
+| ----------- | ------------- | --------------- | ----------------------------------------------- |
+| EscrowId    | INT           | PK              | Unique identifier of escrow                     |
+| ProjectId   | INT           | FK              | References Projects                             |
+| MilestoneId | INT           | FK, UNIQUE NULL | References Milestones                           |
+| ClientId    | INT           | FK              | References ClientProfiles                       |
+| Amount      | DECIMAL(18,2) |                 | Escrow amount                                   |
+| Status      | NVARCHAR(30)  |                 | PENDING / LOCKED / RELEASED / REFUNDED / FROZEN |
+| CreatedAt   | DATETIME2     |                 | Created date                                    |
+| UpdatedAt   | DATETIME2     | NULL            | Updated date                                    |
+
+Foreign Keys:
+
+```text
+Escrows.ProjectId → Projects.ProjectId
+Escrows.MilestoneId → Milestones.MilestoneId
+Escrows.ClientId → ClientProfiles.ClientId
+```
+
+Note:
+
+```text
+Escrows does not store ExpertId directly.
+Expert is retrieved through Projects.ExpertId.
+```
+
+---
+
+### 6.2.18 Deliverables
+
+| Attribute      | Data Type     | Key  | Description                      |
+| -------------- | ------------- | ---- | -------------------------------- |
+| DeliverableId  | INT           | PK   | Unique identifier of deliverable |
+| MilestoneId    | INT           | FK   | References Milestones            |
+| ExpertId       | INT           | FK   | References ExpertProfiles        |
+| FileUrl        | NVARCHAR(500) | NULL | Submitted file URL               |
+| DemoUrl        | NVARCHAR(500) | NULL | Demo URL                         |
+| Description    | NVARCHAR(MAX) |      | Deliverable description          |
+| HandoverNotes  | NVARCHAR(MAX) | NULL | Handover notes                   |
+| TestResultUrl  | NVARCHAR(500) | NULL | Test result URL                  |
+| ClientFeedback | NVARCHAR(MAX) | NULL | Client feedback                  |
+| VersionNumber  | INT           |      | Deliverable version              |
+| Status         | NVARCHAR(30)  |      | Deliverable status               |
+| SubmittedAt    | DATETIME2     |      | Submitted date                   |
+
+Foreign Keys:
+
+```text
+Deliverables.MilestoneId → Milestones.MilestoneId
+Deliverables.ExpertId → ExpertProfiles.ExpertId
+```
+
+---
+
+### 6.2.19 PaymentTransactions
+
+| Attribute     | Data Type     | Key     | Description                                            |
+| ------------- | ------------- | ------- | ------------------------------------------------------ |
+| TransactionId | INT           | PK      | Unique identifier of transaction                       |
+| EscrowId      | INT           | FK NULL | References Escrows                                     |
+| ProjectId     | INT           | FK      | References Projects                                    |
+| MilestoneId   | INT           | FK NULL | References Milestones                                  |
+| UserId        | INT           | FK      | References Users                                       |
+| Type          | NVARCHAR(30)  |         | ESCROW_LOCK / ESCROW_RELEASE / REFUND / PARTIAL_REFUND |
+| Amount        | DECIMAL(18,2) |         | Transaction amount                                     |
+| Status        | NVARCHAR(20)  |         | PENDING / SUCCESS / FAILED                             |
+| CreatedAt     | DATETIME2     |         | Created date                                           |
+
+Foreign Keys:
+
+```text
+PaymentTransactions.EscrowId → Escrows.EscrowId
+PaymentTransactions.ProjectId → Projects.ProjectId
+PaymentTransactions.MilestoneId → Milestones.MilestoneId
+PaymentTransactions.UserId → Users.UserId
+```
+
+---
+
+### 6.2.20 Messages
+
+| Attribute   | Data Type     | Key     | Description                  |
+| ----------- | ------------- | ------- | ---------------------------- |
+| MessageId   | INT           | PK      | Unique identifier of message |
+| SenderId    | INT           | FK      | References Users             |
+| JobId       | INT           | FK NULL | References JobPostings       |
+| ProposalId  | INT           | FK NULL | References Proposals         |
+| ProjectId   | INT           | FK NULL | References Projects          |
+| MessageText | NVARCHAR(MAX) |         | Message content              |
+| SentAt      | DATETIME2     |         | Sent date                    |
+| IsRead      | BIT           |         | Read status                  |
+
+Foreign Keys:
+
+```text
+Messages.SenderId → Users.UserId
+Messages.JobId → JobPostings.JobId
+Messages.ProposalId → Proposals.ProposalId
+Messages.ProjectId → Projects.ProjectId
+```
+
+---
+
+### 6.2.21 Disputes
+
+| Attribute        | Data Type     | Key     | Description                    |
+| ---------------- | ------------- | ------- | ------------------------------ |
+| DisputeId        | INT           | PK      | Unique identifier of dispute   |
+| ProjectId        | INT           | FK      | References Projects            |
+| MilestoneId      | INT           | FK NULL | References Milestones          |
+| OpenedByUserId   | INT           | FK      | User who opened dispute        |
+| RespondentUserId | INT           | FK      | User who responds to dispute   |
+| Reason           | NVARCHAR(MAX) |         | Dispute reason                 |
+| DisputedAmount   | DECIMAL(18,2) |         | Disputed amount                |
+| Status           | NVARCHAR(30)  |         | OPEN / UNDER_REVIEW / RESOLVED |
+| ResolutionType   | NVARCHAR(30)  | NULL    | Admin resolution type          |
+| AdminDecision    | NVARCHAR(MAX) | NULL    | Admin decision                 |
+| CreatedAt        | DATETIME2     |         | Created date                   |
+| ResolvedAt       | DATETIME2     | NULL    | Resolved date                  |
+
+Foreign Keys:
+
+```text
+Disputes.ProjectId → Projects.ProjectId
+Disputes.MilestoneId → Milestones.MilestoneId
+Disputes.OpenedByUserId → Users.UserId
+Disputes.RespondentUserId → Users.UserId
+```
+
+---
+
+### 6.2.22 DisputeEvidences
+
+| Attribute        | Data Type     | Key  | Description                   |
+| ---------------- | ------------- | ---- | ----------------------------- |
+| EvidenceId       | INT           | PK   | Unique identifier of evidence |
+| DisputeId        | INT           | FK   | References Disputes           |
+| UploadedByUserId | INT           | FK   | References Users              |
+| EvidenceText     | NVARCHAR(MAX) |      | Evidence content              |
+| FileUrl          | NVARCHAR(500) | NULL | Evidence file URL             |
+| CreatedAt        | DATETIME2     |      | Created date                  |
+
+Foreign Keys:
+
+```text
+DisputeEvidences.DisputeId → Disputes.DisputeId
+DisputeEvidences.UploadedByUserId → Users.UserId
+```
+
+---
+
+### 6.2.23 Reviews
+
+| Attribute  | Data Type     | Key | Description                 |
+| ---------- | ------------- | --- | --------------------------- |
+| ReviewId   | INT           | PK  | Unique identifier of review |
+| ProjectId  | INT           | FK  | References Projects         |
+| ReviewerId | INT           | FK  | User who writes review      |
+| RevieweeId | INT           | FK  | User who receives review    |
+| Rating     | INT           |     | Rating score                |
+| Comment    | NVARCHAR(MAX) |     | Review comment              |
+| Status     | NVARCHAR(20)  |     | VISIBLE / HIDDEN            |
+| CreatedAt  | DATETIME2     |     | Created date                |
+
+Foreign Keys:
+
+```text
+Reviews.ProjectId → Projects.ProjectId
+Reviews.ReviewerId → Users.UserId
+Reviews.RevieweeId → Users.UserId
+```
+
+---
+
+### 6.2.24 Notifications
+
+| Attribute      | Data Type     | Key | Description                       |
+| -------------- | ------------- | --- | --------------------------------- |
+| NotificationId | INT           | PK  | Unique identifier of notification |
+| UserId         | INT           | FK  | References Users                  |
+| Title          | NVARCHAR(255) |     | Notification title                |
+| Content        | NVARCHAR(MAX) |     | Notification content              |
+| Type           | NVARCHAR(50)  |     | Notification type                 |
+| IsRead         | BIT           |     | Read status                       |
+| CreatedAt      | DATETIME2     |     | Created date                      |
+
+Foreign Key:
+
+```text
+Notifications.UserId → Users.UserId
+```
+
+---
+
+### 6.2.25 AuditLogs
+
+| Attribute   | Data Type     | Key     | Description                    |
+| ----------- | ------------- | ------- | ------------------------------ |
+| AuditLogId  | INT           | PK      | Unique identifier of audit log |
+| UserId      | INT           | FK NULL | References Users               |
+| Action      | NVARCHAR(100) |         | Action name                    |
+| EntityName  | NVARCHAR(100) |         | Affected entity                |
+| EntityId    | INT           | NULL    | Affected entity id             |
+| Description | NVARCHAR(MAX) |         | Action description             |
+| CreatedAt   | DATETIME2     |         | Created date                   |
+
+Foreign Key:
+
+```text
+AuditLogs.UserId → Users.UserId
+```
+
+---
+
+## 6.3 Key Constraints
+
+| Constraint                                        | Purpose                                                         |
+| ------------------------------------------------- | --------------------------------------------------------------- |
+| Users.Email UNIQUE                                | Prevent duplicate email accounts.                               |
+| Users.GoogleId UNIQUE WHERE NOT NULL              | Prevent duplicate Google login accounts.                        |
+| ClientProfiles.UserId UNIQUE                      | One user can have at most one Client profile.                   |
+| ExpertProfiles.UserId UNIQUE                      | One user can have at most one Expert profile.                   |
+| Wallets.UserId UNIQUE                             | One user can have at most one wallet.                           |
+| Services.ServiceName UNIQUE                       | Prevent duplicate service templates.                            |
+| Skills.SkillName UNIQUE                           | Prevent duplicate skill names.                                  |
+| ExpertServices(ExpertId, ServiceId) UNIQUE        | Prevent duplicate Expert-Service mapping.                       |
+| JobServices(JobId, ServiceId) UNIQUE              | Prevent duplicate Job-Service mapping.                          |
+| JobSkills(JobId, SkillId) UNIQUE                  | Prevent duplicate skill in one job.                             |
+| ExpertSkills(ExpertId, SkillId) UNIQUE            | Prevent duplicate skill in one Expert profile.                  |
+| AIRecommendations(JobId, ExpertId) UNIQUE         | Prevent duplicate recommendation result.                        |
+| Proposals(JobId, ExpertId) UNIQUE                 | One Expert can submit only one proposal for one job.            |
+| ProjectContracts.ProposalId UNIQUE                | One proposal can generate at most one contract.                 |
+| Projects.ContractId UNIQUE                        | One contract can create at most one project.                    |
+| Projects.ProposalId UNIQUE                        | One proposal can create at most one project.                    |
+| Milestones(ProjectId, OrderIndex) UNIQUE          | Milestone order must be unique within a project.                |
+| Escrows.MilestoneId UNIQUE WHERE NOT NULL         | One milestone can have at most one escrow.                      |
+| Deliverables(MilestoneId, VersionNumber) UNIQUE   | Deliverable version must be unique within a milestone.          |
+| Reviews(ProjectId, ReviewerId, RevieweeId) UNIQUE | Prevent duplicate review between the same users in one project. |
+| Reviews.ProjectId + ReviewerId UNIQUE             | One user can review only once per project.                      |
+| Reviews.Rating CHECK 1–5                          | Rating must be from 1 to 5.                                     |
+| AIRecommendations.MatchScore CHECK 0–100          | Match score must be from 0 to 100.                              |
+
+---
+
+## 6.4 ERD Mapping With System Requirements
+
+| System Requirement                    | Related Tables                                                                  |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| Register/Login and role-based profile | Users, ClientProfiles, ExpertProfiles                                           |
+| Wallet simulation                     | Wallets, PaymentTransactions                                                    |
+| Admin-created service templates       | Users, Services                                                                 |
+| Expert provides services              | ExpertProfiles, Services, ExpertServices                                        |
+| Client posts job                      | ClientProfiles, JobPostings                                                     |
+| Job belongs to service templates      | JobPostings, Services, JobServices                                              |
+| Skill management                      | Skills                                                                          |
+| Job required skills                   | JobPostings, Skills, JobSkills                                                  |
+| Expert skills                         | ExpertProfiles, Skills, ExpertSkills                                            |
+| AI Expert Recommendation              | JobPostings, ExpertProfiles, JobSkills, ExpertSkills, Skills, AIRecommendations |
+| Proposal submission                   | JobPostings, ExpertProfiles, Proposals                                          |
+| Negotiation and chat                  | Messages, Proposals, JobPostings, Projects                                      |
+| Contract confirmation                 | Proposals, ProjectContracts                                                     |
+| Project lifecycle management          | ProjectContracts, Projects, Milestones                                          |
+| Deliverable submission and revision   | Milestones, Deliverables                                                        |
+| Escrow payment simulation             | Projects, Milestones, Escrows, PaymentTransactions, Wallets                     |
+| Dispute handling                      | Projects, Milestones, Disputes, DisputeEvidences                                |
+| Review and rating                     | Projects, Reviews                                                               |
+| Notification                          | Notifications                                                                   |
+| Admin audit tracking                  | AuditLogs                                                                       |
 
 ---
 

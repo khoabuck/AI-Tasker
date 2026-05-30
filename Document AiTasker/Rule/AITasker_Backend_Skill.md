@@ -25,7 +25,7 @@ Backend phải hỗ trợ các module chính sau:
 3. Expert Profile + AI Profile Checker simulation/rule-based scoring
 4. Job Posting + AI Job Assistant simulation/API integration
 5. Expert Recommendation + MatchScore
-6. Proposal + Proposal Milestones
+6. Proposal (Price, Timeline, Approach)
 7. Negotiation / Counter Offer
 8. Project Contract Preview + Confirmation
 9. Project + Milestone Management
@@ -549,8 +549,7 @@ POST /api/proposals/{proposalId}/withdraw
 - ProposedTimelineDays > 0.
 - ExpectedOutputs required.
 - WorkingApproach required.
-- At least one ProposalMilestone required for medium/complex job.
-- Sum of ProposalMilestone.Amount should equal ProposedPrice.
+- Milestone plan is NOT required during Proposal phase (Milestones are negotiated and created directly inside the Project Contract during Flow 5/6).
 
 ---
 
@@ -779,7 +778,6 @@ EscrowLockedAmount
   - ExpertSkills(ExpertId, SkillId)
   - JobSkills(JobId, SkillId)
   - Proposals(JobId, ExpertId)
-  - ProposalMilestones(ProposalId, OrderIndex)
   - Milestones(ProjectId, OrderIndex)
   - Reviews(ProjectId, ReviewerId, RevieweeId)
 - Never delete important business records directly. Prefer status update for jobs, users, reviews.
