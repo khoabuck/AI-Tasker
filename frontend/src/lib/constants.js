@@ -1,0 +1,10 @@
+export const USER_ROLES = {
+  CLIENT: 'CLIENT',
+  EXPERT: 'EXPERT',
+  ADMIN: 'ADMIN',
+}
+
+export const CLIENT_TYPES = {
+  INDIVIDUAL: 'INDIVIDUAL',
+  BUSINESS: 'BUSINESS',
+}

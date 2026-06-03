@@ -1,9 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-
-function App() {
-  return <h1>AITasker Frontend</h1>
-}
+import App from './app/App.jsx'
+import './styles/index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
