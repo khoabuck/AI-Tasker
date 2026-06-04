@@ -1,0 +1,177 @@
+using System.Security.Claims;
+using AITasker.Application.DTOs.Requests;
+using AITasker.Application.Interfaces;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace AITasker.Api.Controllers;
+
+[ApiController]
+[Route("api/auth")]
+public class AuthController : ControllerBase
+{
+    private const string GoogleScheme = "Google";
+    private const string ExternalCookieScheme = "External";
+
+    private readonly IAuthService _authService;
+
+    public AuthController(IAuthService authService)
+    {
+        _authService = authService;
+    }
+
+    [AllowAnonymous]
+    [HttpPost("register")]
+    public async Task<IActionResult> Register(RegisterRequest request)
+    {
+        try
+        {
+            var result = await _authService.RegisterAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+        catch (DbUpdateException)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Cannot register user. Email may already exist."
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("login")]
+    public async Task<IActionResult> Login(LoginRequest request)
+    {
+        try
+        {
+            var result = await _authService.LoginAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("google-login")]
+    public IActionResult GoogleLogin()
+    {
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = Url.Action(nameof(GoogleCallback), "Auth")
+        };
+
+        return Challenge(properties, GoogleScheme);
+    }
+
+    [AllowAnonymous]
+    [HttpGet("google-callback")]
+    public async Task<IActionResult> GoogleCallback()
+    {
+        var authenticateResult = await HttpContext.AuthenticateAsync(ExternalCookieScheme);
+
+        if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Google authentication failed."
+            });
+        }
+
+        var principal = authenticateResult.Principal;
+
+        var googleId = principal.FindFirstValue(ClaimTypes.NameIdentifier);
+        var email = principal.FindFirstValue(ClaimTypes.Email);
+        var fullName = principal.FindFirstValue(ClaimTypes.Name);
+        var avatarUrl = principal.FindFirstValue("urn:google:picture");
+
+        await HttpContext.SignOutAsync(ExternalCookieScheme);
+
+        if (string.IsNullOrWhiteSpace(googleId) || string.IsNullOrWhiteSpace(email))
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = "Google account information is missing."
+            });
+        }
+
+        try
+        {
+            var result = await _authService.GoogleLoginAsync(
+                email,
+                fullName ?? email,
+                googleId,
+                avatarUrl
+            );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> Me()
+    {
+        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdText, out var userId))
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        var user = await _authService.GetCurrentUserAsync(userId);
+
+        if (user == null)
+        {
+            return NotFound(new
+            {
+                success = false,
+                message = "User not found."
+            });
+        }
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Your account is not allowed to access this resource."
+            });
+        }
+
+        return Ok(user);
+    }
+}
