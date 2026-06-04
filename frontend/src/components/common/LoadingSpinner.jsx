@@ -1,3 +1,5 @@
-export default function LoadingSpinner() {
-  return <div>Loading...</div>
+function LoadingSpinner() {
+  return <p>Loading...</p>;
 }
+
+export default LoadingSpinner;

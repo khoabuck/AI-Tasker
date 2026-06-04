@@ -1,18 +1,30 @@
-import { createBrowserRouter } from 'react-router-dom'
-import MainLayout from '../components/layout/MainLayout'
-import LoginPage from '../features/auth/LoginPage'
-import RegisterPage from '../features/auth/RegisterPage'
-import RoleSelectionPage from '../features/auth/RoleSelectionPage'
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-export const router = createBrowserRouter([
-  {
-    path: '/',
-    element: <MainLayout />,
-    children: [
-      { index: true, element: <div>AITasker Home</div> },
-      { path: 'login', element: <LoginPage /> },
-      { path: 'register', element: <RegisterPage /> },
-      { path: 'select-role', element: <RoleSelectionPage /> },
-    ],
-  },
-])
+import LoginPage from "../pages/auth/LoginPage";
+import RegisterPage from "../pages/auth/RegisterPage";
+import SelectRolePage from "../pages/auth/SelectRolePage";
+
+import ClientDashboardPage from "../pages/client/ClientDashboardPage";
+import ClientProfilePage from "../pages/client/ClientProfilePage";
+
+function Router() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/select-role" element={<SelectRolePage />} />
+        <Route
+          path="/onboarding/client-profile"
+          element={<ClientProfilePage />}
+        />
+        <Route
+          path="/client/dashboard"
+          element={<ClientDashboardPage />}
+        />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default Router;

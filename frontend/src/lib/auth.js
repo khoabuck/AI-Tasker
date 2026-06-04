@@ -1,16 +1,11 @@
-export function getToken() {
-  return localStorage.getItem('accessToken')
-}
+export const saveToken = (token) => {
+  localStorage.setItem("token", token);
+};
 
-export function setToken(token) {
-  localStorage.setItem('accessToken', token)
-}
+export const getToken = () => {
+  return localStorage.getItem("token");
+};
 
-export function clearToken() {
-  localStorage.removeItem('accessToken')
-}
-
-export function getCurrentUser() {
-  const raw = localStorage.getItem('currentUser')
-  return raw ? JSON.parse(raw) : null
-}
+export const removeToken = () => {
+  localStorage.removeItem("token");
+};
