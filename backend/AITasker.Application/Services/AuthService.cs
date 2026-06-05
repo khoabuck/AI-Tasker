@@ -1,4 +1,6 @@
 using System.Net.Mail;
+using System.Security.Cryptography;
+using System.Text;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
@@ -9,20 +11,29 @@ namespace AITasker.Application.Services;
 public class AuthService : IAuthService
 {
     private readonly IUserRepository _userRepository;
+    private readonly IEmailVerificationTokenRepository _emailVerificationTokenRepository;
+    private readonly IPasswordResetTokenRepository _passwordResetTokenRepository;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
+    private readonly IEmailSender _emailSender;
 
     public AuthService(
         IUserRepository userRepository,
+        IEmailVerificationTokenRepository emailVerificationTokenRepository,
+        IPasswordResetTokenRepository passwordResetTokenRepository,
         IPasswordHasher passwordHasher,
-        IJwtTokenService jwtTokenService)
+        IJwtTokenService jwtTokenService,
+        IEmailSender emailSender)
     {
         _userRepository = userRepository;
+        _emailVerificationTokenRepository = emailVerificationTokenRepository;
+        _passwordResetTokenRepository = passwordResetTokenRepository;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
+        _emailSender = emailSender;
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    public async Task<MessageResponse> RegisterAsync(RegisterRequest request)
     {
         var email = NormalizeEmail(request.Email);
         var password = request.Password?.Trim() ?? string.Empty;
@@ -44,18 +55,21 @@ public class AuthService : IAuthService
             FullName = fullName,
             Role = null,
             AuthProvider = "LOCAL",
-            Status = "PENDING_ROLE",
+            GoogleId = null,
+            AvatarUrl = null,
+            Status = "PENDING_EMAIL_VERIFICATION",
             CreatedAt = DateTime.UtcNow
         };
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
 
-        return new AuthResponse
+        await CreateAndSendVerificationEmailAsync(user);
+
+        return new MessageResponse
         {
-            AccessToken = _jwtTokenService.GenerateToken(user),
-            ExpiresAt = _jwtTokenService.GetExpiresAt(),
-            User = MapToUserResponse(user)
+            Success = true,
+            Message = "Registration successful. Please check your email to verify your account."
         };
     }
 
@@ -73,12 +87,21 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid email or password.");
         }
 
+        if (user.AuthProvider == "LOCAL"
+            && user.Status == "PENDING_EMAIL_VERIFICATION")
+        {
+            throw new InvalidOperationException("Please verify your email before login.");
+        }
+
         if (string.IsNullOrWhiteSpace(user.PasswordHash))
         {
             throw new InvalidOperationException("This account does not use password login.");
         }
 
-        var passwordValid = _passwordHasher.VerifyPassword(password, user.PasswordHash);
+        var passwordValid = _passwordHasher.VerifyPassword(
+            password,
+            user.PasswordHash
+        );
 
         if (!passwordValid)
         {
@@ -139,12 +162,19 @@ public class AuthService : IAuthService
                 if (!string.IsNullOrWhiteSpace(existingUserByEmail.GoogleId)
                     && existingUserByEmail.GoogleId != googleId)
                 {
-                    throw new InvalidOperationException("Email is already linked with another Google account.");
+                    throw new InvalidOperationException(
+                        "Email is already linked with another Google account."
+                    );
                 }
 
                 existingUserByEmail.GoogleId = googleId;
                 existingUserByEmail.AvatarUrl = avatarUrl;
                 existingUserByEmail.UpdatedAt = DateTime.UtcNow;
+
+                if (existingUserByEmail.Status == "PENDING_EMAIL_VERIFICATION")
+                {
+                    existingUserByEmail.Status = "PENDING_ROLE";
+                }
 
                 user = existingUserByEmail;
             }
@@ -182,6 +212,160 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<MessageResponse> VerifyEmailAsync(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException("Verification token is required.");
+        }
+
+        var tokenHash = HashToken(token);
+
+        var verificationToken = await _emailVerificationTokenRepository
+            .GetActiveByTokenHashAsync(tokenHash);
+
+        if (verificationToken == null)
+        {
+            throw new InvalidOperationException(
+                "Verification token is invalid or expired."
+            );
+        }
+
+        var user = verificationToken.User;
+
+        if (user.Status != "PENDING_EMAIL_VERIFICATION")
+        {
+            throw new InvalidOperationException("Email has already been verified.");
+        }
+
+        verificationToken.UsedAt = DateTime.UtcNow;
+        user.Status = "PENDING_ROLE";
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _emailVerificationTokenRepository.SaveChangesAsync();
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "Email verified successfully. You can now login."
+        };
+    }
+
+    public async Task<MessageResponse> ResendVerificationEmailAsync(
+        ResendVerificationEmailRequest request)
+    {
+        var email = NormalizeEmail(request.Email);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException("Email is required.");
+        }
+
+        if (!IsValidEmail(email))
+        {
+            throw new InvalidOperationException("Email format is invalid.");
+        }
+
+        var user = await _userRepository.GetByEmailAsync(email);
+
+        if (user == null || user.Status != "PENDING_EMAIL_VERIFICATION")
+        {
+            return new MessageResponse
+            {
+                Success = true,
+                Message = "If this email exists and is not verified, a verification email has been sent."
+            };
+        }
+
+        await CreateAndSendVerificationEmailAsync(user);
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "If this email exists and is not verified, a verification email has been sent."
+        };
+    }
+
+    public async Task<MessageResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
+    {
+        var email = NormalizeEmail(request.Email);
+
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            throw new InvalidOperationException("Email is required.");
+        }
+
+        if (!IsValidEmail(email))
+        {
+            throw new InvalidOperationException("Email format is invalid.");
+        }
+
+        var user = await _userRepository.GetByEmailAsync(email);
+
+        if (user != null
+            && user.AuthProvider == "LOCAL"
+            && !string.IsNullOrWhiteSpace(user.PasswordHash)
+            && user.Status != "SUSPENDED"
+            && user.Status != "BANNED")
+        {
+            await CreateAndSendPasswordResetEmailAsync(user);
+        }
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "If this email exists, a password reset link has been sent."
+        };
+    }
+
+    public async Task<MessageResponse> ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        var token = request.Token?.Trim() ?? string.Empty;
+        var newPassword = request.NewPassword?.Trim() ?? string.Empty;
+        var confirmPassword = request.ConfirmPassword?.Trim() ?? string.Empty;
+
+        ValidateResetPassword(token, newPassword, confirmPassword);
+
+        var tokenHash = HashToken(token);
+
+        var resetToken = await _passwordResetTokenRepository
+            .GetActiveByTokenHashAsync(tokenHash);
+
+        if (resetToken == null)
+        {
+            throw new InvalidOperationException("Reset token is invalid or expired.");
+        }
+
+        var user = resetToken.User;
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to reset password."
+            );
+        }
+
+        if (user.AuthProvider != "LOCAL")
+        {
+            throw new InvalidOperationException(
+                "This account does not use password login."
+            );
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        resetToken.UsedAt = DateTime.UtcNow;
+
+        await _passwordResetTokenRepository.SaveChangesAsync();
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "Password reset successfully. You can now login with your new password."
+        };
+    }
+
     public async Task<UserResponse?> GetCurrentUserAsync(int userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -189,12 +373,106 @@ public class AuthService : IAuthService
         return user == null ? null : MapToUserResponse(user);
     }
 
+    private async Task CreateAndSendVerificationEmailAsync(User user)
+    {
+        var rawToken = GenerateSecureToken();
+        var tokenHash = HashToken(rawToken);
+
+        var verificationToken = new EmailVerificationToken
+        {
+            UserId = user.UserId,
+            TokenHash = tokenHash,
+            ExpiresAt = DateTime.UtcNow.AddHours(24),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _emailVerificationTokenRepository.AddAsync(verificationToken);
+        await _emailVerificationTokenRepository.SaveChangesAsync();
+
+        var backendBaseUrl = "http://localhost:5070";
+
+        var verifyUrl =
+            $"{backendBaseUrl}/api/auth/verify-email?token={Uri.EscapeDataString(rawToken)}";
+
+        var htmlBody = $@"
+            <h2>Welcome to AITasker</h2>
+            <p>Hello {user.FullName},</p>
+            <p>Please verify your email by clicking the link below:</p>
+            <p><a href=""{verifyUrl}"">Verify your email</a></p>
+            <p>This link will expire in 24 hours.</p>
+        ";
+
+        await _emailSender.SendEmailAsync(
+            user.Email,
+            "Verify your AITasker account",
+            htmlBody
+        );
+    }
+
+    private async Task CreateAndSendPasswordResetEmailAsync(User user)
+    {
+        var rawToken = GenerateSecureToken();
+        var tokenHash = HashToken(rawToken);
+
+        var resetToken = new PasswordResetToken
+        {
+            UserId = user.UserId,
+            TokenHash = tokenHash,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(30),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _passwordResetTokenRepository.AddAsync(resetToken);
+        await _passwordResetTokenRepository.SaveChangesAsync();
+
+        var frontendBaseUrl = "http://localhost:5173";
+
+        var resetUrl =
+            $"{frontendBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
+
+        var htmlBody = $@"
+            <h2>Reset your AITasker password</h2>
+            <p>Hello {user.FullName},</p>
+            <p>We received a request to reset your password.</p>
+            <p>Click the link below to reset your password:</p>
+            <p><a href=""{resetUrl}"">Reset your password</a></p>
+            <p>This link will expire in 30 minutes.</p>
+            <p>If you did not request this, you can ignore this email.</p>
+        ";
+
+        await _emailSender.SendEmailAsync(
+            user.Email,
+            "Reset your AITasker password",
+            htmlBody
+        );
+    }
+
+    private static string GenerateSecureToken()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+
+        return Convert.ToBase64String(bytes)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+    }
+
+    private static string HashToken(string token)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+
+        return Convert.ToHexString(bytes);
+    }
+
     private static string NormalizeEmail(string? email)
     {
         return email?.Trim().ToLowerInvariant() ?? string.Empty;
     }
 
-    private static void ValidateRegister(string email, string password, string fullName)
+    private static void ValidateRegister(
+        string email,
+        string password,
+        string fullName)
     {
         if (string.IsNullOrWhiteSpace(email))
         {
@@ -260,13 +538,56 @@ public class AuthService : IAuthService
         }
     }
 
+    private static void ValidateResetPassword(
+        string token,
+        string newPassword,
+        string confirmPassword)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            throw new InvalidOperationException("Reset token is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newPassword))
+        {
+            throw new InvalidOperationException("New password is required.");
+        }
+
+        if (newPassword.Length < 6)
+        {
+            throw new InvalidOperationException(
+                "New password must be at least 6 characters."
+            );
+        }
+
+        if (newPassword.Length > 100)
+        {
+            throw new InvalidOperationException(
+                "New password must not exceed 100 characters."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(confirmPassword))
+        {
+            throw new InvalidOperationException("Confirm password is required.");
+        }
+
+        if (newPassword != confirmPassword)
+        {
+            throw new InvalidOperationException("Confirm password does not match.");
+        }
+    }
+
     private static bool IsValidEmail(string email)
     {
         try
         {
             var mailAddress = new MailAddress(email);
 
-            return mailAddress.Address.Equals(email, StringComparison.OrdinalIgnoreCase);
+            return mailAddress.Address.Equals(
+                email,
+                StringComparison.OrdinalIgnoreCase
+            );
         }
         catch
         {

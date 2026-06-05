@@ -3,6 +3,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -13,11 +14,20 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// =========================
+// Controllers
+// =========================
 builder.Services.AddControllers();
 
+// =========================
+// Swagger/OpenAPI basic
+// =========================
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// =========================
+// CORS
+// =========================
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? new[] { "http://localhost:5173" };
@@ -34,6 +44,9 @@ builder.Services.AddCors(options =>
     });
 });
 
+// =========================
+// Database
+// =========================
 builder.Services.AddDbContext<AITaskerDbContext>(options =>
 {
     options.UseSqlServer(
@@ -41,6 +54,9 @@ builder.Services.AddDbContext<AITaskerDbContext>(options =>
     );
 });
 
+// =========================
+// JWT config
+// =========================
 var jwtSecretKey = builder.Configuration["Jwt:SecretKey"];
 
 if (string.IsNullOrWhiteSpace(jwtSecretKey))
@@ -50,15 +66,21 @@ if (string.IsNullOrWhiteSpace(jwtSecretKey))
     );
 }
 
+// =========================
+// Google OAuth config
+// =========================
 var googleClientId = builder.Configuration["GoogleAuth:ClientId"];
 var googleClientSecret = builder.Configuration["GoogleAuth:ClientSecret"];
 
-if (string.IsNullOrWhiteSpace(googleClientId) ||
-    string.IsNullOrWhiteSpace(googleClientSecret))
+if (string.IsNullOrWhiteSpace(googleClientId)
+    || string.IsNullOrWhiteSpace(googleClientSecret))
 {
     Console.WriteLine("WARNING: GoogleAuth ClientId or ClientSecret is missing.");
 }
 
+// =========================
+// Authentication
+// =========================
 builder.Services
     .AddAuthentication(options =>
     {
@@ -104,16 +126,39 @@ builder.Services
         options.Scope.Add("email");
         options.SaveTokens = true;
 
-        options.ClaimActions.MapJsonKey("urn:google:picture", "picture", "url");
+        options.ClaimActions.MapJsonKey(
+            "urn:google:picture",
+            "picture",
+            "url"
+        );
     });
 
 builder.Services.AddAuthorization();
 
+// =========================
+// Dependency Injection
+// =========================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
+
+builder.Services.AddScoped<
+    IEmailVerificationTokenRepository,
+    EmailVerificationTokenRepository
+>();
+
+builder.Services.AddScoped<
+    IPasswordResetTokenRepository,
+    PasswordResetTokenRepository
+>();
+
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// =========================
+// App pipeline
+// =========================
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -122,6 +167,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Local dev tạm thời không bật HTTPS redirect.
 // app.UseHttpsRedirection();
 
 app.UseCors("FrontendPolicy");
@@ -131,6 +177,9 @@ app.UseAuthorization();
 
 app.MapControllers();
 
+// =========================
+// Test endpoints
+// =========================
 app.MapGet("/", () => Results.Ok(new
 {
     message = "AITasker API is running",
