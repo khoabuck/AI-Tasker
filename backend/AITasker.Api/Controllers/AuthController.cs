@@ -86,7 +86,9 @@ public class AuthController : ControllerBase
     [HttpGet("google-callback")]
     public async Task<IActionResult> GoogleCallback()
     {
-        var authenticateResult = await HttpContext.AuthenticateAsync(ExternalCookieScheme);
+        var authenticateResult = await HttpContext.AuthenticateAsync(
+            ExternalCookieScheme
+        );
 
         if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
         {
@@ -106,7 +108,8 @@ public class AuthController : ControllerBase
 
         await HttpContext.SignOutAsync(ExternalCookieScheme);
 
-        if (string.IsNullOrWhiteSpace(googleId) || string.IsNullOrWhiteSpace(email))
+        if (string.IsNullOrWhiteSpace(googleId)
+            || string.IsNullOrWhiteSpace(email))
         {
             return BadRequest(new
             {
@@ -123,6 +126,87 @@ public class AuthController : ControllerBase
                 googleId,
                 avatarUrl
             );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        try
+        {
+            var result = await _authService.VerifyEmailAsync(token);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("resend-verification-email")]
+    public async Task<IActionResult> ResendVerificationEmail(
+        ResendVerificationEmailRequest request)
+    {
+        try
+        {
+            var result = await _authService.ResendVerificationEmailAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
+    {
+        try
+        {
+            var result = await _authService.ForgotPasswordAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
+    {
+        try
+        {
+            var result = await _authService.ResetPasswordAsync(request);
 
             return Ok(result);
         }

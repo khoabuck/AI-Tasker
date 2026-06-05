@@ -5,7 +5,7 @@ namespace AITasker.Application.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponse> RegisterAsync(RegisterRequest request);
+    Task<MessageResponse> RegisterAsync(RegisterRequest request);
 
     Task<AuthResponse> LoginAsync(LoginRequest request);
 
@@ -15,6 +15,16 @@ public interface IAuthService
         string googleId,
         string? avatarUrl
     );
+
+    Task<MessageResponse> VerifyEmailAsync(string token);
+
+    Task<MessageResponse> ResendVerificationEmailAsync(
+        ResendVerificationEmailRequest request
+    );
+
+    Task<MessageResponse> ForgotPasswordAsync(ForgotPasswordRequest request);
+
+    Task<MessageResponse> ResetPasswordAsync(ResetPasswordRequest request);
 
     Task<UserResponse?> GetCurrentUserAsync(int userId);
 }
