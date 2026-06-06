@@ -221,6 +221,38 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("select-role")]
+    public async Task<IActionResult> SelectRole(SelectRoleRequest request)
+    {
+        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdText, out var userId))
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _authService.SelectRoleAsync(userId, request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
