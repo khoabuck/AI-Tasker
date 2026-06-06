@@ -2,15 +2,16 @@ using System.Text;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
+using AITasker.Infrastructure.BusinessVerification;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,10 +21,27 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
 // =========================
-// Swagger/OpenAPI basic
+// Swagger/OpenAPI + JWT Authorize
 // =========================
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Paste JWT token only. Do not type Bearer.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+});
 
 // =========================
 // CORS
@@ -136,7 +154,7 @@ builder.Services
 builder.Services.AddAuthorization();
 
 // =========================
-// Dependency Injection
+// Dependency Injection - Repositories
 // =========================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
@@ -150,11 +168,36 @@ builder.Services.AddScoped<
     PasswordResetTokenRepository
 >();
 
+builder.Services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
+
+builder.Services.AddScoped<
+    IBusinessVerificationRepository,
+    BusinessVerificationRepository
+>();
+
+// =========================
+// Dependency Injection - Services
+// =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
+
+builder.Services.AddScoped<
+    IBusinessVerificationService,
+    BusinessVerificationService
+>();
+
+// =========================
+// Business Verification Provider
+// VietQR + Groq AI
+// =========================
+builder.Services.AddHttpClient<
+    IBusinessVerificationProvider,
+    GroqBusinessVerificationProvider
+>();
 
 // =========================
 // App pipeline
