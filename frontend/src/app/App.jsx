@@ -8,7 +8,7 @@ import LandingPage            from "../modules/guest/pages/LandingPage";
 // Auth
 import LoginPage          from "../modules/auth/pages/LoginPage";
 import RegisterPage       from "../modules/auth/pages/RegisterPage";
-import RoleSelectionPage  from "../modules/auth/pages/RoleSelectionPage";
+
 
 // Client
 import ClientDashboard        from "../modules/client/pages/ClientDashboard";
@@ -31,8 +31,7 @@ export default function App() {
         {/* Auth */}
         <Route path="/login"                element={<LoginPage />} />
         <Route path="/register"             element={<RegisterPage />} />
-        <Route path="/role-selection"       element={<RoleSelectionPage />} />
-
+        
         {/* Client */}
         <Route path="/client/dashboard"     element={<ClientDashboard />} />
         <Route path="/client/profile-setup" element={<ClientProfileSetupPage />} />
