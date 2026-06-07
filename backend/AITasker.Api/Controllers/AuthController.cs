@@ -14,6 +14,7 @@ public class AuthController : ControllerBase
 {
     private const string GoogleScheme = "Google";
     private const string ExternalCookieScheme = "External";
+    private const string FrontendBaseUrl = "http://localhost:5173";
 
     private readonly IAuthService _authService;
 
@@ -92,11 +93,7 @@ public class AuthController : ControllerBase
 
         if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
         {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Google authentication failed."
-            });
+            return Redirect($"{FrontendBaseUrl}/login?oauth=failed");
         }
 
         var principal = authenticateResult.Principal;
@@ -111,11 +108,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(googleId)
             || string.IsNullOrWhiteSpace(email))
         {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Google account information is missing."
-            });
+            return Redirect($"{FrontendBaseUrl}/login?oauth=missing_info");
         }
 
         try
@@ -127,15 +120,21 @@ public class AuthController : ControllerBase
                 avatarUrl
             );
 
-            return Ok(result);
+            var role = result.User.Role ?? string.Empty;
+            var status = result.User.Status ?? string.Empty;
+
+            var redirectUrl =
+                $"{FrontendBaseUrl}/oauth/callback" +
+                $"?token={Uri.EscapeDataString(result.AccessToken)}" +
+                $"&status={Uri.EscapeDataString(status)}" +
+                $"&role={Uri.EscapeDataString(role)}" +
+                $"&userId={result.User.UserId}";
+
+            return Redirect(redirectUrl);
         }
-        catch (InvalidOperationException ex)
+        catch (InvalidOperationException)
         {
-            return BadRequest(new
-            {
-                success = false,
-                message = ex.Message
-            });
+            return Redirect($"{FrontendBaseUrl}/login?oauth=error");
         }
     }
 
