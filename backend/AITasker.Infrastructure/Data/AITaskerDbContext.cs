@@ -19,7 +19,13 @@ public class AITaskerDbContext : DbContext
         => Set<PasswordResetToken>();
 
     public DbSet<Wallet> Wallets => Set<Wallet>();
+    
+    public DbSet<Deliverable> Deliverables => Set<Deliverable>();
+    
+    public DbSet<Dispute> Disputes => Set<Dispute>();
+
     public DbSet<Transaction> Transactions => Set<Transaction>();
+   
     public DbSet<AiRequestLog> AiRequestLogs => Set<AiRequestLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
