@@ -20,6 +20,10 @@ import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
 import AIMatchingPage from "../../modules/client/pages/AIMatchingPage";
 import ExpertProfilePage from "../../modules/expert/pages/ExpertProfilePage";
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
+import MessagesPage from "../../modules/client/pages/MessagesPage";
+import WalletPage from "../../modules/client/pages/WalletPage";
+import TransactionsPage from "../../modules/client/pages/TransactionsPage";
+import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 
 // TODO: import khi backend làm xong
 // import RoleSelectionPage from "../../modules/auth/pages/RoleSelectionPage";
@@ -28,6 +32,8 @@ import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
 // import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import BrowseJobsPage from "../../modules/expert/pages/BrowseJobsPage";
+
+
 
 export default function AppRouter() {
   return (
@@ -50,8 +56,11 @@ export default function AppRouter() {
         <Route path="/client/profile/edit" element={<EditProfilePage />} />
         <Route path="/client/experts" element={<ExpertSearchPage />} />
         <Route path="/client/ai-matching" element={<AIMatchingPage />} />
-        <Route path="/expert/profile" element={<ExpertProfilePage />} />
-     
+        <Route path="/client/messages" element={<MessagesPage />} />
+        <Route path="/client/wallet" element={<WalletPage />} />
+        <Route path="/client/transactions" element={<TransactionsPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+
         {/* Onboarding — bật khi backend xong */}
         {/* <Route path="/select-role"    element={<RoleSelectionPage />} /> */}
         {/* <Route path="/setup-profile"  element={<SetupProfilePage />} /> */}

@@ -21,8 +21,6 @@ const NAV_ITEMS = [
     active: true,
     dropdown: [
       { icon: "list",          label: "List Projects",      to: "/client/projects" },
-      { icon: "bolt",          label: "Active Projects",    to: "/client/projects/active" },
-      { icon: "task_alt",      label: "Completed Projects", to: "/client/projects/completed" },
       { icon: "chat_bubble",   label: "Messages",           to: "/client/messages" },
     ],
   },
