@@ -30,11 +30,15 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
 
         if (!vietQrResult.Success || vietQrResult.Data == null)
         {
+            var isSystemError = IsSystemError(vietQrResult.Message);
+
             return new BusinessVerificationProviderResult
             {
-                Status = "PENDING_REVIEW",
+                Status = isSystemError ? "PENDING_REVIEW" : "NEEDS_CORRECTION",
                 ConfidenceScore = 0,
-                Note = $"VietQR lookup failed or tax code not found. Detail: {vietQrResult.Message}"
+                Note = isSystemError
+                    ? $"Verification service issue. Detail: {vietQrResult.Message}"
+                    : $"Tax code was not found or business information needs correction. Detail: {vietQrResult.Message}"
             };
         }
 
@@ -71,11 +75,21 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
             };
         }
 
+        if (groqResult.Decision == "NEEDS_CORRECTION")
+        {
+            return new BusinessVerificationProviderResult
+            {
+                Status = "NEEDS_CORRECTION",
+                ConfidenceScore = groqResult.ConfidenceScore,
+                Note = $"Business information needs correction. {groqResult.Note}"
+            };
+        }
+
         return new BusinessVerificationProviderResult
         {
             Status = "PENDING_REVIEW",
             ConfidenceScore = groqResult.ConfidenceScore,
-            Note = $"Admin review required. {groqResult.Note}"
+            Note = $"Admin review required because verification is uncertain. {groqResult.Note}"
         };
     }
 
@@ -143,6 +157,14 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
                 Data = payload.Data
             };
         }
+        catch (TaskCanceledException)
+        {
+            return new VietQrLookupResult
+            {
+                Success = false,
+                Message = "VietQR request timeout."
+            };
+        }
         catch (Exception ex)
         {
             return new VietQrLookupResult
@@ -200,7 +222,7 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
                     {
                         Role = "system",
                         Content =
-                            "You are a business verification assistant. " +
+                            "You are a Vietnamese business verification assistant. " +
                             "You must return valid JSON only. " +
                             "Do not add markdown. " +
                             "Compare user-submitted Vietnamese business information with VietQR tax lookup data."
@@ -286,6 +308,16 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
                 Note = result.Reason ?? "Groq analysis completed."
             };
         }
+        catch (TaskCanceledException)
+        {
+            return new GroqAnalysisResult
+            {
+                Success = false,
+                Decision = "PENDING_REVIEW",
+                ConfidenceScore = 0,
+                Note = "Groq request timeout."
+            };
+        }
         catch (Exception ex)
         {
             return new GroqAnalysisResult
@@ -307,15 +339,16 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
 
         Required JSON schema:
         {
-          "decision": "VERIFIED or PENDING_REVIEW",
+          "decision": "VERIFIED or NEEDS_CORRECTION or PENDING_REVIEW",
           "confidenceScore": 0.0,
           "reason": "short explanation"
         }
 
         Rules:
         - VERIFIED only if tax code exists and submitted company name/address are highly consistent with VietQR data.
-        - PENDING_REVIEW if company name or address does not clearly match.
-        - Never reject automatically. Use PENDING_REVIEW for uncertain cases.
+        - NEEDS_CORRECTION if tax code exists but submitted company name or address clearly does not match VietQR data.
+        - PENDING_REVIEW only if the information is ambiguous and cannot be confidently judged.
+        - Never reject automatically.
         - confidenceScore must be between 0 and 1.
 
         User submitted business:
@@ -343,9 +376,12 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
     {
         var value = decision?.Trim().ToUpperInvariant();
 
-        return value == "VERIFIED"
-            ? "VERIFIED"
-            : "PENDING_REVIEW";
+        return value switch
+        {
+            "VERIFIED" => "VERIFIED",
+            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+            _ => "PENDING_REVIEW"
+        };
     }
 
     private static decimal ClampConfidence(decimal confidence)
@@ -361,6 +397,16 @@ public class GroqBusinessVerificationProvider : IBusinessVerificationProvider
         }
 
         return confidence;
+    }
+
+    private static bool IsSystemError(string message)
+    {
+        return message.Contains("rate limit", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("HTTP error", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("empty", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("request", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("network", StringComparison.OrdinalIgnoreCase);
     }
 
     private static JsonSerializerOptions JsonOptions()

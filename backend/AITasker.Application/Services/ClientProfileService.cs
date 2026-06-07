@@ -125,7 +125,7 @@ public class ClientProfileService : IClientProfileService
             BusinessEmail = businessEmail,
             BusinessPhone = businessPhone,
             VerificationStatus = businessVerificationStatus,
-            VerificationNote = verificationResult.Note,
+            VerificationNote = TruncateNote(verificationResult.Note),
             VerifiedAt = businessVerificationStatus == "VERIFIED"
                 ? DateTime.UtcNow
                 : null,
@@ -147,9 +147,9 @@ public class ClientProfileService : IClientProfileService
             BusinessProfile = businessProfile
         };
 
-        user.Status = businessVerificationStatus == "VERIFIED"
-            ? "ACTIVE"
-            : "PENDING_BUSINESS_VERIFICATION";
+        user.Status = MapUserStatusFromBusinessVerification(
+            businessVerificationStatus
+        );
 
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -196,11 +196,18 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        if (user.Status != "BUSINESS_REJECTED"
-            || businessProfile.VerificationStatus != "REJECTED")
+        var canResubmitAfterCorrection =
+            user.Status == "BUSINESS_NEEDS_CORRECTION"
+            && businessProfile.VerificationStatus == "NEEDS_CORRECTION";
+
+        var canResubmitAfterAdminReject =
+            user.Status == "BUSINESS_REJECTED"
+            && businessProfile.VerificationStatus == "REJECTED";
+
+        if (!canResubmitAfterCorrection && !canResubmitAfterAdminReject)
         {
             throw new InvalidOperationException(
-                "Only rejected business profiles can be resubmitted."
+                "Only business profiles needing correction or rejected can be resubmitted."
             );
         }
 
@@ -268,15 +275,15 @@ public class ClientProfileService : IClientProfileService
         businessProfile.BusinessEmail = businessEmail;
         businessProfile.BusinessPhone = businessPhone;
         businessProfile.VerificationStatus = businessVerificationStatus;
-        businessProfile.VerificationNote = verificationResult.Note;
+        businessProfile.VerificationNote = TruncateNote(verificationResult.Note);
         businessProfile.VerifiedAt = businessVerificationStatus == "VERIFIED"
             ? DateTime.UtcNow
             : null;
         businessProfile.UpdatedAt = DateTime.UtcNow;
 
-        user.Status = businessVerificationStatus == "VERIFIED"
-            ? "ACTIVE"
-            : "PENDING_BUSINESS_VERIFICATION";
+        user.Status = MapUserStatusFromBusinessVerification(
+            businessVerificationStatus
+        );
 
         user.UpdatedAt = DateTime.UtcNow;
 
@@ -458,9 +465,23 @@ public class ClientProfileService : IClientProfileService
     {
         var value = status?.Trim().ToUpperInvariant();
 
-        return value == "VERIFIED"
-            ? "VERIFIED"
-            : "PENDING_REVIEW";
+        return value switch
+        {
+            "VERIFIED" => "VERIFIED",
+            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+            _ => "PENDING_REVIEW"
+        };
+    }
+
+    private static string MapUserStatusFromBusinessVerification(
+        string verificationStatus)
+    {
+        return verificationStatus switch
+        {
+            "VERIFIED" => "ACTIVE",
+            "NEEDS_CORRECTION" => "BUSINESS_NEEDS_CORRECTION",
+            _ => "PENDING_BUSINESS_VERIFICATION"
+        };
     }
 
     private static string? NormalizeNullableText(string? value)
@@ -470,6 +491,18 @@ public class ClientProfileService : IClientProfileService
         return string.IsNullOrWhiteSpace(text)
             ? null
             : text;
+    }
+
+    private static string? TruncateNote(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            return null;
+        }
+
+        return note.Length <= 1000
+            ? note
+            : note[..1000];
     }
 
     private static bool IsValidEmail(string email)
