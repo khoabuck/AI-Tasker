@@ -1,10 +1,6 @@
-// components/ExpertsSection.jsx
-// Hiển thị danh sách Expert nổi bật dạng card
+// components/layout/ExpertsSection.jsx
+import { useNavigate } from "react-router-dom";
 
-// ─── Dữ liệu ─────────────────────────────────────────
-// accentColor: màu chủ đạo của từng expert card
-// Tailwind không cho phép tạo class động (vd: `text-${color}`)
-// nên phải viết class đầy đủ ở đây (đây là quy tắc quan trọng!)
 const EXPERTS = [
   {
     name: "Dr. Aris Thorne",
@@ -12,7 +8,6 @@ const EXPERTS = [
     rating: "5.0",
     bio: "Architect of large-scale distributed training systems and LLMOps pipelines for enterprise AI deployment.",
     skills: ["LLMOps", "Distributed Training"],
-    // Class Tailwind phải viết đầy đủ, không được nối chuỗi
     accentText:   "text-cyan-400",
     accentBorder: "border-cyan-400",
     skillBg:      "bg-cyan-400/5 border-cyan-400/20 text-cyan-400",
@@ -45,10 +40,9 @@ const EXPERTS = [
   },
 ];
 
-// ─── Component con: 1 expert card ────────────────────
 function ExpertCard({ name, role, rating, bio, skills,
                       accentText, accentBorder, skillBg,
-                      cardHover, btnStyle }) {
+                      cardHover, btnStyle, onViewProfile }) {
   return (
     <div className={`bg-white/5 backdrop-blur-sm border border-white/10
                      ${cardHover} rounded-2xl p-8 transition-all`}>
@@ -56,26 +50,19 @@ function ExpertCard({ name, role, rating, bio, skills,
       {/* Hàng trên: avatar + tên + rating */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
-
-          {/* Avatar placeholder (icon) */}
           <div className={`w-14 h-14 rounded-full bg-white/5 border
                            ${accentBorder} flex items-center justify-center`}>
             <span className={`material-symbols-outlined text-3xl ${accentText}`}>
               account_circle
             </span>
           </div>
-
-          {/* Tên và role */}
           <div>
             <h3 className="font-bold text-lg text-white">{name}</h3>
             <p className={`text-xs font-mono tracking-wider ${accentText}`}>{role}</p>
           </div>
-
         </div>
 
-        {/* Rating badge */}
         <div className="flex items-center gap-1 bg-white/5 px-2 py-1 rounded text-xs font-bold text-white">
-          {/* FILL 1 = icon filled (ngôi sao đầy) */}
           <span className="material-symbols-outlined text-[14px] text-yellow-400"
                 style={{ fontVariationSettings: "'FILL' 1" }}>
             star
@@ -84,11 +71,8 @@ function ExpertCard({ name, role, rating, bio, skills,
         </div>
       </div>
 
-      {/* Mô tả ngắn */}
-      {/* line-clamp-3: giới hạn 3 dòng, thêm "..." nếu dài hơn */}
       <p className="text-gray-400 text-sm mb-6 line-clamp-3">{bio}</p>
 
-      {/* Skill tags */}
       <div className="flex flex-wrap gap-2 mb-8">
         {skills.map((skill) => (
           <span key={skill}
@@ -98,17 +82,19 @@ function ExpertCard({ name, role, rating, bio, skills,
         ))}
       </div>
 
-      {/* Nút xem profile */}
-      <button className={`w-full py-3 rounded-xl border font-bold transition-all ${btnStyle}`}>
+      <button
+        onClick={onViewProfile}
+        className={`w-full py-3 rounded-xl border font-bold transition-all ${btnStyle}`}
+      >
         View Full Profile
       </button>
-
     </div>
   );
 }
 
-// ─── Component cha ────────────────────────────────────
 export default function ExpertsSection() {
+  const navigate = useNavigate();
+
   return (
     <section className="px-4 md:px-12 py-24">
       <div className="max-w-7xl mx-auto">
@@ -123,16 +109,23 @@ export default function ExpertsSection() {
               Top-rated specialists vetted through our rigorous technical screening.
             </p>
           </div>
-          <a href="#" className="text-cyan-400 font-bold flex items-center gap-2 hover:underline shrink-0">
+          <button
+            onClick={() => navigate("/login")}
+            className="text-cyan-400 font-bold flex items-center gap-2 hover:underline shrink-0 bg-transparent border-none cursor-pointer"
+          >
             Browse all experts
             <span className="material-symbols-outlined">east</span>
-          </a>
+          </button>
         </div>
 
         {/* Grid cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {EXPERTS.map((expert) => (
-            <ExpertCard key={expert.name} {...expert} />
+            <ExpertCard
+              key={expert.name}
+              {...expert}
+              onViewProfile={() => navigate("/login")}
+            />
           ))}
         </div>
 
