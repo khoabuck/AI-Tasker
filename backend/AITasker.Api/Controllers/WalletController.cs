@@ -103,5 +103,58 @@ namespace AITasker.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+        
+        [HttpPost("escrow/hold")]
+        public async Task<IActionResult> HoldJobEscrow([FromQuery] string jobId, [FromQuery] decimal amount)
+        {
+            try
+            {
+                int clientId = GetCurrentUserId(); 
+                if (amount <= 0)
+                {
+                    return BadRequest(new { message = "Escrow hold amount must be greater than 0." });
+                }
+
+                if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    return BadRequest(new { message = "Job ID is required for escrow holding." });
+                }
+
+                var success = await _walletService.HoldEscrowAsync(clientId, amount, jobId);
+                if (!success)
+                {
+                    return BadRequest(new { message = "Escrow hold failed. Please check if your wallet balance is sufficient." });
+                }
+
+                return Ok(new { success = true, message = $"Successfully held {amount} VND for Job ID {jobId}." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+        [HttpPost("escrow/release")]
+        public async Task<IActionResult> ReleaseJobEscrow([FromQuery] string jobId, [FromQuery] int expertId)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(jobId))
+                {
+                    return BadRequest(new { message = "Job ID is required for escrow releasing." });
+                }
+
+                var success = await _walletService.ReleaseEscrowAsync(jobId, expertId);
+                if (!success)
+                {
+                    return BadRequest(new { message = "Escrow release failed. Job transaction might be invalid or already released." });
+                }
+
+                return Ok(new { success = true, message = $"Successfully released escrow funds for Job ID {jobId} to Expert ID {expertId}." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 }
