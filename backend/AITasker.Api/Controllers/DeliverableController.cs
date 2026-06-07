@@ -1,27 +1,32 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Api.Hubs;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Api.Controllers
 {
-    [Authorize] 
+    [Authorize]
     [ApiController]
     [Route("api/deliverables")]
     public class DeliverableController : ControllerBase
     {
         private readonly AITaskerDbContext _context;
         private readonly IWalletService _walletService;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public DeliverableController(AITaskerDbContext context, IWalletService walletService)
+        public DeliverableController(AITaskerDbContext context, IWalletService walletService, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
             _walletService = walletService;
+            _hubContext = hubContext;
         }
 
         private int GetCurrentUserId()
@@ -42,7 +47,7 @@ namespace AITasker.Api.Controllers
                 int expertId = GetCurrentUserId();
                 if (string.IsNullOrWhiteSpace(model.ProjectId) || string.IsNullOrWhiteSpace(model.FileUrl))
                 {
-                    return BadRequest(new { message = "ProjectId and FileUrl are strictly required." });
+                    return BadRequest(new { message = "ProjectId and FileUrl are required." });
                 }
 
                 var latestVersion = await _context.Deliverables
@@ -80,7 +85,7 @@ namespace AITasker.Api.Controllers
             {
                 var deliverable = await _context.Deliverables.FindAsync(id);
                 if (deliverable == null) return NotFound(new { message = "Deliverable not found." });
-                if (deliverable.Status == "APPROVED") return BadRequest(new { message = "Deliverable was already approved." });
+                if (deliverable.Status == "APPROVED") return BadRequest(new { message = "Deliverable already approved." });
 
                 deliverable.Status = "APPROVED";
                 await _context.SaveChangesAsync();
@@ -89,11 +94,24 @@ namespace AITasker.Api.Controllers
                 if (!releaseSuccess)
                 {
                     await dbTransaction.RollbackAsync();
-                    return BadRequest(new { message = "Failed to automatically release escrow funds for this deliverable." });
+                    return BadRequest(new { message = "Failed to release escrow funds." });
                 }
 
+                var notification = new Notification
+                {
+                    UserId = expertId,
+                    Title = "Deliverable Approved!",
+                    Message = $"Your product version {deliverable.Version} for Project {deliverable.ProjectId} has been approved. Funds released!",
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                await _hubContext.Clients.Group($"User_{expertId}").SendAsync("ReceiveNotification", notification.Title, notification.Message);
+
                 await dbTransaction.CommitAsync();
-                return Ok(new { success = true, message = "Deliverable approved and funds successfully released to the Expert." });
+                return Ok(new { success = true, message = "Deliverable approved, funds released, and realtime notification pushed." });
             }
             catch (Exception ex) {
                 await dbTransaction.RollbackAsync();
@@ -110,10 +128,23 @@ namespace AITasker.Api.Controllers
                 if (deliverable == null) return NotFound(new { message = "Deliverable not found." });
 
                 deliverable.Status = "REVISION_REQUESTED";
-                deliverable.Description += $" | [Revision Feedback]: {feedback}";
-                
+                deliverable.Description += $" | [Revision]: {feedback}";
                 await _context.SaveChangesAsync();
-                return Ok(new { success = true, message = "Revision requested successfully. Waiting for Expert to re-submit." });
+
+                var notification = new Notification
+                {
+                    UserId = deliverable.ExpertId,
+                    Title = "Revision Requested",
+                    Message = $"Client requested modifications for Project {deliverable.ProjectId}. Feedback: {feedback}",
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                await _hubContext.Clients.Group($"User_{deliverable.ExpertId}").SendAsync("ReceiveNotification", notification.Title, notification.Message);
+
+                return Ok(new { success = true, message = "Revision requested and expert notified via realtime pipeline." });
             }
             catch (Exception ex) {
                 return BadRequest(new { message = ex.Message });

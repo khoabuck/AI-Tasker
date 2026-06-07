@@ -1,9 +1,12 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using System;
+using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using AITasker.Infrastructure.Data;
+using AITasker.Api.Hubs;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Api.Controllers
@@ -14,10 +17,12 @@ namespace AITasker.Api.Controllers
     public class NotificationController : ControllerBase
     {
         private readonly AITaskerDbContext _context;
+        private readonly IHubContext<NotificationHub> _hubContext;
 
-        public NotificationController(AITaskerDbContext context)
+        public NotificationController(AITaskerDbContext context, IHubContext<NotificationHub> hubContext)
         {
             _context = context;
+            _hubContext = hubContext;
         }
 
         private int GetCurrentUserId()
@@ -36,14 +41,12 @@ namespace AITasker.Api.Controllers
             try
             {
                 int userId = GetCurrentUserId();
-                
-                var mockNotifications = new[]
-                {
-                    new { id = 1, userId, title = "Wallet Updated", message = "Your deposit via VNPay was processed successfully.", isRead = false, createdAt = DateTime.UtcNow.AddMinutes(-5) },
-                    new { id = 2, userId, title = "Deliverable Submitted", message = "Expert has submitted a new product version for your project.", isRead = true, createdAt = DateTime.UtcNow.AddHours(-2) }
-                };
+                var list = await _context.Notifications
+                    .Where(n => n.UserId == userId)
+                    .OrderByDescending(n => n.CreatedAt)
+                    .ToListAsync();
 
-                return Ok(mockNotifications);
+                return Ok(list);
             }
             catch (Exception ex)
             {
@@ -56,7 +59,13 @@ namespace AITasker.Api.Controllers
         {
             try
             {
-                return Ok(new { success = true, message = $"Notification ID {id} has been marked as read." });
+                var notification = await _context.Notifications.FindAsync(id);
+                if (notification == null) return NotFound(new { message = "Notification not found." });
+
+                notification.IsRead = true;
+                await _context.SaveChangesAsync();
+
+                return Ok(new { success = true, message = $"Notification ID {id} has been marked as read in database." });
             }
             catch (Exception ex)
             {
