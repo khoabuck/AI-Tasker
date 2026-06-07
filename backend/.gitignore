@@ -1,0 +1,14 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+**/appsettings.Development.json
+
+# Local config / secrets
+**/appsettings.Development.json
+bin/
+obj/
+.vs/
+*.user
+*.suo

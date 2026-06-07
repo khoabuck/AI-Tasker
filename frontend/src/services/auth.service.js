@@ -1,16 +1,16 @@
 // src/services/auth.service.js
 
-import authApi from "../api/auth.api";
+import { loginApi, loginWithGoogleApi, getMeApi } from "../api/auth.api";
 
 // ─── Mock data để test khi chưa có BE ────────────────
 const MOCK_USERS = [
-  { email: "client@test.com", password: "123456", role: "CLIENT", userId: 1, fullName: "Test Client" },
-  { email: "expert@test.com", password: "123456", role: "EXPERT", userId: 2, fullName: "Test Expert" },
-  { email: "admin@test.com",  password: "123456", role: "ADMIN",  userId: 3, fullName: "Test Admin"  },
+  { email: "client@test.com", password: "123456", role: "CLIENT", status: "ACTIVE", userId: 1, fullName: "Test Client" },
+  { email: "expert@test.com", password: "123456", role: "EXPERT", status: "ACTIVE", userId: 2, fullName: "Test Expert" },
+  { email: "admin@test.com",  password: "123456", role: "ADMIN",  status: "ACTIVE", userId: 3, fullName: "Test Admin"  },
 ];
 
 // ⚠️ Đổi thành false khi BE xong
-const USE_MOCK = true;
+const USE_MOCK = false;
 
 const authService = {
   // ─── Login thường ────────────────────────────────────
@@ -22,65 +22,57 @@ const authService = {
       );
       if (user) {
         const { password, ...userInfo } = user;
-        localStorage.setItem("token", "mock-token-" + user.role);
+        localStorage.setItem("accessToken", "mock-token-" + user.role);
         localStorage.setItem("user", JSON.stringify(userInfo));
-        return { success: true, role: user.role };
+        return { success: true, role: user.role, status: user.status };
       }
       return { success: false, message: "Invalid email or password." };
     }
 
+    // REAL MODE
     try {
-      const response = await authApi.login(credentials);
-      const { token, role, userId, fullName } = response.data;
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify({ userId, fullName, role }));
-      return { success: true, role };
+      // Bước 1: Login lấy accessToken
+      const data = await loginApi(credentials);
+      const { accessToken } = data;
+      localStorage.setItem("accessToken", accessToken);
+
+      // Bước 2: Gọi /auth/me để lấy status mới nhất
+      const user = await getMeApi();
+      localStorage.setItem("user", JSON.stringify(user));
+
+      return { success: true, role: user.role, status: user.status };
     } catch (error) {
       return { success: false, message: error.response?.data?.message || "Login failed." };
     }
   },
 
   // ─── Login với Google ─────────────────────────────────
-  // googleToken: token nhận được từ Google sau khi user đồng ý
-  loginWithGoogle: async (googleToken) => {
+  loginWithGoogle: async () => {
     if (USE_MOCK) {
-      // Mock: giả sử Google login luôn thành công với role CLIENT
       await new Promise((res) => setTimeout(res, 800));
-      const userInfo = { userId: 99, fullName: "Google User", role: "CLIENT" };
-      localStorage.setItem("token", "mock-token-google");
+      const userInfo = { userId: 99, fullName: "Google User", role: "CLIENT", status: "ACTIVE" };
+      localStorage.setItem("accessToken", "mock-token-google");
       localStorage.setItem("user", JSON.stringify(userInfo));
-      return { success: true, role: "CLIENT" };
+      return { success: true, role: "CLIENT", status: "ACTIVE" };
     }
-
-    // REAL MODE — gửi googleToken lên BE để verify
-    // BE sẽ verify với Google → tạo/tìm user → trả về JWT
-    try {
-      const response = await authApi.loginWithGoogle(googleToken);
-      const { token, role, userId, fullName } = response.data;
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify({ userId, fullName, role }));
-      return { success: true, role };
-    } catch (error) {
-      return { success: false, message: error.response?.data?.message || "Google login failed." };
-    }
+    // REAL MODE — redirect browser về backend
+    loginWithGoogleApi();
   },
 
   // ─── Logout ──────────────────────────────────────────
   logout: async () => {
-    if (!USE_MOCK) {
-      try { await authApi.logout(); } catch (e) {}
-    }
-    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
   },
 
   // ─── Helpers ─────────────────────────────────────────
-  getCurrentUser:  () => {
+  getCurrentUser: () => {
     const user = localStorage.getItem("user");
     return user ? JSON.parse(user) : null;
   },
-  isAuthenticated: () => !!localStorage.getItem("token"),
-  getRole:         () => authService.getCurrentUser()?.role || null,
+  isAuthenticated: () => !!localStorage.getItem("accessToken"),
+  getRole: () => authService.getCurrentUser()?.role || null,
+  getStatus: () => authService.getCurrentUser()?.status || null,
 };
 
 export default authService;
