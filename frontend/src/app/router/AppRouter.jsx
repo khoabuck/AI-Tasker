@@ -22,7 +22,12 @@ import MessagesPage from "../../modules/client/pages/MessagesPage";
 import WalletPage from "../../modules/client/pages/WalletPage";
 import TransactionsPage from "../../modules/client/pages/TransactionsPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
-
+import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
+import ExpertProfilePage from "../../modules/expert/pages/ExpertProfilePage";
+import BrowseJobsPage from "../../modules/expert/pages/BrowseJobsPage";
+import JobDetailPage from "../../modules/expert/pages/JobDetailPage";
+import SubmitProposalPage from "../../modules/expert/pages/SubmitProposalPage";
+import MyProposalsPage from "../../modules/expert/pages/MyProposalsPage";
 // TODO: import khi backend làm xong
 // import RoleSelectionPage from "../../modules/auth/pages/RoleSelectionPage";
 // import ClientDashboard from "../../modules/client/pages/ClientDashboard";
@@ -57,7 +62,13 @@ export default function AppRouter() {
         <Route path="/client/wallet" element={<WalletPage />} />
         <Route path="/client/transactions" element={<TransactionsPage />} />
         <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-
+        <Route path="/expert" element={<ExpertDashboard />} />
+        <Route path="/expert/dashboard" element={<ExpertDashboard />} />
+        <Route path="/expert/profile" element={<ExpertProfilePage />} />
+        <Route path="/expert/jobs" element={<BrowseJobsPage />} />
+        <Route path="/expert/jobs/:jobId" element={<JobDetailPage />} />
+        <Route path="/expert/jobs/:jobId/proposal" element={<SubmitProposalPage />} />
+        <Route path="/expert/proposals" element={<MyProposalsPage />} />
         {/* Onboarding — bật khi backend xong */}
         {/* <Route path="/select-role"    element={<RoleSelectionPage />} /> */}
         {/* <Route path="/setup-profile"  element={<SetupProfilePage />} /> */}
