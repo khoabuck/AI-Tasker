@@ -80,10 +80,11 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<bool> HoldEscrowAsync(int clientId, decimal amount, string referenceJobId)
         {
-            var success = await WithdrawAsync(clientId, amount, $"[Escrow Hold] Giam tiền cọc cho Job {referenceJobId}");
+            var success = await WithdrawAsync(clientId, amount, $"[Escrow Hold] Giam tien coc cho Job {referenceJobId}");
             if (success)
             {
-                var txn = await _context.Transactions.FirstOrDefaultAsync(t => t.UserId == clientId && t.Type == "Withdraw" && t.Description.Contains(referenceJobId));
+                var txn = await _context.Transactions
+                    .FirstOrDefaultAsync(t => t.UserId == clientId && t.Type == "Withdraw" && t.Description.Contains(referenceJobId));
                 if (txn != null)
                 {
                     txn.Type = "EscrowHold";
@@ -104,7 +105,7 @@ namespace AITasker.Infrastructure.Banking
 
             decimal escrowAmount = Math.Abs(holdTxn.Amount);
 
-            var success = await DepositAsync(expertId, escrowAmount, $"[Escrow Release] Giải ngân dự án {referenceJobId} thành công", referenceJobId);
+            var success = await DepositAsync(expertId, escrowAmount, $"[Escrow Release] Giai ngan du an {referenceJobId} thanh cong", referenceJobId);
             if (success)
             {
                 holdTxn.Type = "EscrowReleased";
