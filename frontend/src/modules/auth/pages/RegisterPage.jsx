@@ -5,8 +5,6 @@ import { getErrorMessage } from "../../../utils/auth.utils";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-<<<<<<< HEAD
-=======
 const GOOGLE_LOGIN_URL = "http://localhost:5070/api/auth/google-login";
 
 const GoogleIcon = () => (
@@ -18,7 +16,6 @@ const GoogleIcon = () => (
   </svg>
 );
 
->>>>>>> origin/fe/minh
 export default function RegisterPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirmPassword: "", terms: false });
@@ -52,15 +49,12 @@ export default function RegisterPage() {
     }
   };
 
-<<<<<<< HEAD
-=======
   // TODO (BE): Khi BE sửa GoogleCallback redirect về http://localhost:5173/oauth/callback?token=xxx
   // thì tạo thêm trang /oauth/callback để bắt token và lưu vào localStorage
   const handleGoogleLogin = () => {
     window.location.href = GOOGLE_LOGIN_URL;
   };
 
->>>>>>> origin/fe/minh
   const inputStyle = {
     background: "#232A35",
     border: "1px solid rgba(255,255,255,0.12)",
@@ -175,19 +169,6 @@ export default function RegisterPage() {
                 <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.12)" }} />
               </div>
 
-<<<<<<< HEAD
-              {/* Google — tạm ẩn, chờ BE sửa redirect */}
-              {/* TODO (BE): bật lại khi BE sửa GoogleCallback redirect về http://localhost:5173/oauth/callback?token=xxx */}
-              <div style={{ width: "100%", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 8, padding: "14px", color: "#414754", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, cursor: "not-allowed" }}>
-                <svg style={{ width: 20, height: 20, opacity: 0.4 }} viewBox="0 0 24 24">
-                  <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                  <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                  <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                  <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                </svg>
-                <span>Continue with Google (coming soon)</span>
-              </div>
-=======
               {/* Google */}
               <button type="button" onClick={handleGoogleLogin}
                 style={{ width: "100%", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px", color: "#e1e2eb", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, transition: "background 0.2s" }}
@@ -196,17 +177,12 @@ export default function RegisterPage() {
                 <GoogleIcon />
                 <span>Continue with Google</span>
               </button>
->>>>>>> origin/fe/minh
 
               {/* Login link */}
               <p style={{ textAlign: "center", fontSize: 14, color: "#8c90a0" }}>
                 Already have an account?{" "}
                 <Link to="/login" style={{ color: "#00F0FF", textDecoration: "none", fontWeight: 600 }}>Login</Link>
               </p>
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/fe/minh
             </form>
           </div>
         </div>
@@ -219,10 +195,6 @@ export default function RegisterPage() {
           <p style={{ fontSize: 14, color: "#8c90a0" }}>© 2024 AI Tasker. All rights reserved.</p>
         </div>
       </footer>
-<<<<<<< HEAD
-
-=======
->>>>>>> origin/fe/minh
     </div>
   );
 }

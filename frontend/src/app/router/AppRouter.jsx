@@ -18,8 +18,6 @@ import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
 import AIMatchingPage from "../../modules/client/pages/AIMatchingPage";
-import ExpertProfilePage from "../../modules/expert/pages/ExpertProfilePage";
-import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
 import MessagesPage from "../../modules/client/pages/MessagesPage";
 import WalletPage from "../../modules/client/pages/WalletPage";
 import TransactionsPage from "../../modules/client/pages/TransactionsPage";
@@ -31,7 +29,6 @@ import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 // import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
 // import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
-import BrowseJobsPage from "../../modules/expert/pages/BrowseJobsPage";
 
 
 
@@ -69,8 +66,6 @@ export default function AppRouter() {
         {/* <Route path="/client/*" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientLayout /></ProtectedRoute>} /> */}
 
         {/* Protected — Expert */}
-        <Route path="/expert/jobs" element={<BrowseJobsPage />} />
-        <Route path="/expert/dashboard" element={<ExpertDashboard />} />
         {/* <Route path="/expert/*" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertLayout /></ProtectedRoute>} /> */}
 
         {/* Protected — Admin */}
