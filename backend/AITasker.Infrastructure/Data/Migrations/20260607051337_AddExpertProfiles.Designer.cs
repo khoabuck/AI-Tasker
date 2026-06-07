@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260607051337_AddExpertProfiles")]
+    partial class AddExpertProfiles
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -181,46 +184,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("EmailVerificationTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
-                {
-                    b.Property<int>("ExpertCertificateId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertCertificateId"));
-
-                    b.Property<string>("CertificateIssuer")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("CertificateName")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("CertificateUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("IssuedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("ExpertCertificateId");
-
-                    b.HasIndex("ExpertProfileId", "CertificateUrl")
-                        .IsUnique();
-
-                    b.ToTable("ExpertCertificates", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
                 {
                     b.Property<int>("ExpertProfileId")
@@ -228,9 +191,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertProfileId"));
-
-                    b.Property<bool>("AvailableForWork")
-                        .HasColumnType("bit");
 
                     b.Property<string>("Bio")
                         .IsRequired()
@@ -240,57 +200,25 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<decimal>("ExpectedProjectBudgetMax")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ExpectedProjectBudgetMin")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("ExpertCategory")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("GitHubUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("Level")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                    b.Property<decimal>("HourlyRate")
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("LinkedInUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("MissingInformation")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
                     b.Property<string>("PortfolioUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("PreferredProjectDurationDays")
-                        .HasColumnType("int");
 
                     b.Property<string>("ProfessionalTitle")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("ProfileReviewNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("ProfileReviewStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<decimal>("ProfileScore")
-                        .HasColumnType("decimal(5,2)");
 
                     b.Property<string>("Skills")
                         .IsRequired()
@@ -303,8 +231,10 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("VerifiedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<int>("YearsOfExperience")
                         .HasColumnType("int");
@@ -447,17 +377,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany("Certificates")
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -483,11 +402,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
                 {
                     b.Navigation("BusinessProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
-                {
-                    b.Navigation("Certificates");
                 });
 #pragma warning restore 612, 618
         }

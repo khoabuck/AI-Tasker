@@ -6,7 +6,7 @@ using AITasker.Infrastructure.BusinessVerification;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
-using Microsoft.AspNetCore.Authentication;
+using AITasker.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -143,12 +143,6 @@ builder.Services
         options.Scope.Add("profile");
         options.Scope.Add("email");
         options.SaveTokens = true;
-
-        options.ClaimActions.MapJsonKey(
-            "urn:google:picture",
-            "picture",
-            "url"
-        );
     });
 
 builder.Services.AddAuthorization();
@@ -175,8 +169,10 @@ builder.Services.AddScoped<
     BusinessVerificationRepository
 >();
 
+builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
+
 // =========================
-// Dependency Injection - Services
+// Dependency Injection - Core Services
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
@@ -190,6 +186,8 @@ builder.Services.AddScoped<
     BusinessVerificationService
 >();
 
+builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+
 // =========================
 // Business Verification Provider
 // VietQR + Groq AI
@@ -198,6 +196,24 @@ builder.Services.AddHttpClient<
     IBusinessVerificationProvider,
     GroqBusinessVerificationProvider
 >();
+
+// =========================
+// Expert Profile AI Review Provider
+// Groq AI
+// =========================
+builder.Services.AddHttpClient<
+    IExpertProfileReviewProvider,
+    GroqExpertProfileReviewProvider
+>();
+
+// =========================
+// URL Inspection Service
+// HttpClient checks whether profile proof links exist
+// =========================
+builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 
 // =========================
 // App pipeline
