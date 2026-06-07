@@ -19,6 +19,12 @@ var builder = WebApplication.CreateBuilder(args);
 // =========================
 builder.Services.AddControllers();
 
+
+// =========================
+// SignalR
+// =========================
+builder.Services.AddSignalR();
+
 // =========================
 // Swagger/OpenAPI basic
 // =========================
@@ -181,6 +187,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// =======================================================
+// MAP SIGNALR REALTIME HUBS ENDPOINTS
+// =======================================================
+app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
+app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
 
 // =========================
 // Test endpoints
