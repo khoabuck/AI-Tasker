@@ -32,14 +32,35 @@ namespace AITasker.Api.Controllers
             return userId;
         }
 
-        [HttpGet("me/balance")]
-        public async Task<IActionResult> GetMyBalance()
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyWallet()
         {
             try
             {
                 int userId = GetCurrentUserId();
-                var balance = await _walletService.GetBalanceAsync(userId);
-                return Ok(new { userId, balance });
+                return Ok(new { userId }); 
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("top-up")]
+        public async Task<IActionResult> TopUpSimulation([FromBody] decimal amount)
+        {
+            try
+            {
+                int userId = GetCurrentUserId();
+                if (amount <= 0)
+                {
+                    return BadRequest(new { message = "Top-up amount must be greater than 0." });
+                }
+
+                var success = await _walletService.DepositAsync(userId, amount, "[Simulation] Mockup top-up wallet funds for testing", "MOCK_VNPAY_123");
+                if (!success) return BadRequest(new { message = "Top-up simulation failed." });
+
+                return Ok(new { success = true, message = $"Successfully simulated top-up of {amount} VND into your wallet." });
             }
             catch (Exception ex)
             {
@@ -53,18 +74,10 @@ namespace AITasker.Api.Controllers
             try
             {
                 int userId = GetCurrentUserId();
-                if (amount <= 0)
-                {
-                    return BadRequest(new { message = "Deposit amount must be greater than 0." });
-                }
-
-                if (string.IsNullOrWhiteSpace(returnUrl))
-                {
-                    return BadRequest(new { message = "Return URL is required for payment redirection." });
-                }
+                if (amount <= 0) return BadRequest(new { message = "Deposit amount must be greater than 0." });
+                if (string.IsNullOrWhiteSpace(returnUrl)) return BadRequest(new { message = "Return URL is required." });
 
                 string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-                
                 string paymentUrl = _vnpayService.CreatePaymentUrl(userId, amount, ipAddress, returnUrl);
 
                 return Ok(new { url = paymentUrl });
@@ -88,68 +101,12 @@ namespace AITasker.Api.Controllers
                 if (vnp_ResponseCode == "00")
                 {
                     int userId = int.Parse(vnp_TxnRef.Split('_')[0]);
-                    
                     decimal amount = decimal.Parse(vnp_Amount) / 100m;
 
-                    await _walletService.DepositAsync(userId, amount, $"[VNPay] Nạp tiền thành công. Nội dung: {vnp_OrderInfo}", vnp_TxnRef);
-
+                    await _walletService.DepositAsync(userId, amount, $"[VNPay] Deposit success. Info: {vnp_OrderInfo}", vnp_TxnRef);
                     return Ok(new { success = true, message = "Wallet balance updated successfully." });
                 }
-
-                return BadRequest(new { success = false, message = "Payment failed or cancelled by user." });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        
-        [HttpPost("escrow/hold")]
-        public async Task<IActionResult> HoldJobEscrow([FromQuery] string jobId, [FromQuery] decimal amount)
-        {
-            try
-            {
-                int clientId = GetCurrentUserId(); 
-                if (amount <= 0)
-                {
-                    return BadRequest(new { message = "Escrow hold amount must be greater than 0." });
-                }
-
-                if (string.IsNullOrWhiteSpace(jobId))
-                {
-                    return BadRequest(new { message = "Job ID is required for escrow holding." });
-                }
-
-                var success = await _walletService.HoldEscrowAsync(clientId, amount, jobId);
-                if (!success)
-                {
-                    return BadRequest(new { message = "Escrow hold failed. Please check if your wallet balance is sufficient." });
-                }
-
-                return Ok(new { success = true, message = $"Successfully held {amount} VND for Job ID {jobId}." });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-        [HttpPost("escrow/release")]
-        public async Task<IActionResult> ReleaseJobEscrow([FromQuery] string jobId, [FromQuery] int expertId)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(jobId))
-                {
-                    return BadRequest(new { message = "Job ID is required for escrow releasing." });
-                }
-
-                var success = await _walletService.ReleaseEscrowAsync(jobId, expertId);
-                if (!success)
-                {
-                    return BadRequest(new { message = "Escrow release failed. Job transaction might be invalid or already released." });
-                }
-
-                return Ok(new { success = true, message = $"Successfully released escrow funds for Job ID {jobId} to Expert ID {expertId}." });
+                return BadRequest(new { success = false, message = "Payment failed." });
             }
             catch (Exception ex)
             {
