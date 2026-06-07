@@ -18,6 +18,10 @@ public class AITaskerDbContext : DbContext
     public DbSet<PasswordResetToken> PasswordResetTokens
         => Set<PasswordResetToken>();
 
+    public DbSet<Wallet> Wallets => Set<Wallet>();
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<AiRequestLog> AiRequestLogs => Set<AiRequestLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -121,6 +125,78 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Wallet>(entity =>
+        {
+            entity.ToTable("Wallets");
+
+            entity.HasKey(x => x.WalletId);
+
+            entity.Property(x => x.Balance)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithOne()
+                .HasForeignKey<Wallet>(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Transaction>(entity =>
+        {
+            entity.ToTable("Transactions");
+
+            entity.HasKey(x => x.TransactionId);
+
+            entity.Property(x => x.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Type)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.ReferenceId)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+                
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AiRequestLog>(entity =>
+        {
+            entity.ToTable("AiRequestLogs");
+
+            entity.HasKey(x => x.Id);
+
+            entity.Property(x => x.Feature)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.RequestBody)
+                .IsRequired();
+
+            entity.Property(x => x.ResponseBody)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(20)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
         });
     }
 }
