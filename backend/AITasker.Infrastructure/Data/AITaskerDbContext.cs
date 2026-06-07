@@ -194,5 +194,31 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
         });
+
+        modelBuilder.Entity<Deliverable>(entity =>
+        {
+            entity.ToTable("Deliverables");
+    
+            entity.HasKey(d => d.Id);
+    
+            entity.Property(d => d.ProjectId).IsRequired();
+    
+            entity.Property(d => d.Status).HasMaxLength(30).HasDefaultValue("PENDING");
+    
+            entity.Property(d => d.SubmittedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
+
+        modelBuilder.Entity<Dispute>(entity =>
+        {
+            entity.ToTable("Disputes");
+    
+            entity.HasKey(d => d.Id);
+    
+            entity.Property(d => d.ProjectId).IsRequired();
+    
+            entity.Property(d => d.Status).HasMaxLength(20).HasDefaultValue("OPEN");
+    
+            entity.Property(d => d.OpenedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
     }
 }
