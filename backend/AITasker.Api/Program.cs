@@ -156,6 +156,11 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+builder.Services.AddScoped<AITasker.Application.Interfaces.IWalletService, AITasker.Infrastructure.Banking.WalletService>();
+builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
+builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
+
+builder.Services.AddHttpClient();
 // =========================
 // App pipeline
 // =========================
