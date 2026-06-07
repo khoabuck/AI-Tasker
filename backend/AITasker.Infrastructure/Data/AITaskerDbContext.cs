@@ -28,6 +28,8 @@ public class AITaskerDbContext : DbContext
    
     public DbSet<AiRequestLog> AiRequestLogs => Set<AiRequestLog>();
 
+    public DbSet<Notification> Notifications => Set<Notification>();
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -225,6 +227,19 @@ public class AITaskerDbContext : DbContext
             entity.Property(d => d.Status).HasMaxLength(20).HasDefaultValue("OPEN");
     
             entity.Property(d => d.OpenedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
+
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications");
+    
+            entity.HasKey(n => n.Id);
+    
+            entity.Property(n => n.Title).IsRequired();
+    
+            entity.Property(n => n.Message).IsRequired();
+    
+            entity.Property(n => n.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
     }
 }

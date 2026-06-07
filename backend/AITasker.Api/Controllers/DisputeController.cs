@@ -5,6 +5,7 @@ using System.Security.Claims;
 using System.Threading.Tasks;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Application.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Api.Controllers
@@ -15,10 +16,12 @@ namespace AITasker.Api.Controllers
     public class DisputeController : ControllerBase
     {
         private readonly AITaskerDbContext _context;
+        private readonly IWalletService _walletService;
 
-        public DisputeController(AITaskerDbContext context)
+        public DisputeController(AITaskerDbContext context, IWalletService walletService)
         {
             _context = context;
+            _walletService = walletService;
         }
 
         private int GetCurrentUserId()
@@ -39,7 +42,7 @@ namespace AITasker.Api.Controllers
                 int userId = GetCurrentUserId();
                 if (string.IsNullOrWhiteSpace(model.ProjectId) || string.IsNullOrWhiteSpace(model.Reason))
                 {
-                    return BadRequest(new { message = "ProjectId and Reason are required to open a dispute." });
+                    return BadRequest(new { message = "ProjectId and Reason are required." });
                 }
 
                 var dispute = new Dispute
@@ -55,7 +58,7 @@ namespace AITasker.Api.Controllers
                 _context.Disputes.Add(dispute);
                 await _context.SaveChangesAsync();
 
-                return Ok(new { success = true, message = "Dispute opened successfully. Escrow funds for this project are strictly frozen.", data = dispute });
+                return Ok(new { success = true, message = "Dispute opened. Escrow funds are strictly frozen.", data = dispute });
             }
             catch (Exception ex) {
                 return BadRequest(new { message = ex.Message });
@@ -77,6 +80,40 @@ namespace AITasker.Api.Controllers
                 return Ok(new { success = true, message = "New case evidence attached successfully." });
             }
             catch (Exception ex) {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [Authorize(Roles = "ADMIN")]
+        [HttpPut("{id}/resolve")]
+        public async Task<IActionResult> ResolveDispute(int id, [FromQuery] decimal refundClientAmount, [FromQuery] decimal releaseExpertAmount, [FromQuery] int clientId, [FromQuery] int expertId)
+        {
+            using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var dispute = await _context.Disputes.FindAsync(id);
+                if (dispute == null) return NotFound(new { message = "Dispute case not found." });
+                if (dispute.Status == "RESOLVED") return BadRequest(new { message = "Dispute has already been resolved." });
+
+                if (refundClientAmount > 0)
+                {
+                    await _walletService.DepositAsync(clientId, refundClientAmount, $"[Dispute Resolve Refund] Project ID {dispute.ProjectId}", dispute.ProjectId);
+                }
+
+                if (releaseExpertAmount > 0)
+                {
+                    await _walletService.DepositAsync(expertId, releaseExpertAmount, $"[Dispute Resolve Release] Project ID {dispute.ProjectId}", dispute.ProjectId);
+                }
+
+                dispute.Status = "RESOLVED";
+                dispute.ResolvedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+
+                await dbTransaction.CommitAsync();
+                return Ok(new { success = true, message = $"Dispute ID {id} has been resolved by Admin. Funds distributed successfully." });
+            }
+            catch (Exception ex) {
+                await dbTransaction.RollbackAsync();
                 return BadRequest(new { message = ex.Message });
             }
         }
