@@ -131,19 +131,15 @@ public class AITaskerDbContext : DbContext
         {
             entity.ToTable("Wallets");
 
-            entity.HasKey(x => x.WalletId);
+            entity.HasKey(w => w.Id);
 
-            entity.Property(x => x.Balance)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
+            entity.Property(w => w.UserId).IsRequired();
 
-            entity.Property(x => x.UpdatedAt)
-                .IsRequired();
+            entity.Property(w => w.AvailableBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
 
-            entity.HasOne(x => x.User)
-                .WithOne()
-                .HasForeignKey<Wallet>(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(w => w.LockedBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+
+            entity.Property(w => w.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
 
         modelBuilder.Entity<Transaction>(entity =>
