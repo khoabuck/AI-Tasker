@@ -77,7 +77,7 @@ export default function ClientNavbar() {
 
   const handleLogout = async () => {
     await authService.logout();
-    navigate("/login");
+    navigate("/");
   };
 
   return (

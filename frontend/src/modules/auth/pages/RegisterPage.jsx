@@ -71,7 +71,11 @@ export default function RegisterPage() {
 
       {/* Navbar */}
       <nav style={{ position: "fixed", top: 0, width: "100%", zIndex: 50, background: "rgba(18,21,27,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+        
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px", height: 80, display: "flex", alignItems: "center" }}>
+         
+
+    {/* Logo → về trang chủ guest */}
           <Link to="/" style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, textDecoration: "none", letterSpacing: "-0.02em" }}>
             <span style={{ color: "#00F0FF" }}>AI</span>{" "}
             <span style={{ color: "#e1e2eb" }}>Tasker</span>
@@ -86,6 +90,14 @@ export default function RegisterPage() {
 
             {/* Brand */}
             <div style={{ textAlign: "center", marginBottom: 40 }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+              <Link to="/"
+                  style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#8c90a0", textDecoration: "none", transition: "all 0.2s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.color = "#00F0FF"; e.currentTarget.style.borderColor = "#00F0FF"; e.currentTarget.style.boxShadow = "0 0 12px #00F0FF"; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.color = "#8c90a0"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.boxShadow = "none"; }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
+              </Link>
+            </div>
               <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 42, fontWeight: 700, letterSpacing: "-0.02em", color: "#e1e2eb", marginBottom: 8 }}>
                 Join the Neural Network
               </h1>
@@ -138,10 +150,10 @@ export default function RegisterPage() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, marginTop: 8 }}>
                 <input type="checkbox" name="terms" id="terms" checked={form.terms} onChange={handleChange} style={{ width: 20, height: 20, accentColor: "#00F0FF", marginTop: 2, cursor: "pointer", flexShrink: 0 }} />
                 <label htmlFor="terms" style={{ fontSize: 14, color: "#8c90a0", cursor: "pointer" }}>
-                  Tôi đồng ý với{" "}
-                  <a href="#" style={{ color: "#00F0FF" }}>Điều khoản dịch vụ</a>{" "}
+                  I agree with{" "}
+                  <a href="#" style={{ color: "#00F0FF" }}>Terms of Service</a>{" "}
                   và{" "}
-                  <a href="#" style={{ color: "#00F0FF" }}>Chính sách bảo mật</a>
+                  <a href="#" style={{ color: "#00F0FF" }}>Privacy Policy</a>
                 </label>
               </div>
 
@@ -156,9 +168,9 @@ export default function RegisterPage() {
               <button type="submit" disabled={!isFormValid || loading}
                 style={{ width: "100%", background: "#1772eb", color: "#fff", fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 16, padding: "16px", borderRadius: 8, border: "none", cursor: isFormValid && !loading ? "pointer" : "not-allowed", opacity: isFormValid && !loading ? 1 : 0.4, boxShadow: isFormValid ? "0 0 15px rgba(0,240,255,0.4)" : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s", marginBottom: 16 }}>
                 {loading ? (
-                  <><span className="material-symbols-outlined">progress_activity</span><span>Đang đăng ký...</span></>
+                  <><span className="material-symbols-outlined">progress_activity</span><span>Creating account...</span></>
                 ) : (
-                  <><span>Create Account</span><span className="material-symbols-outlined">bolt</span></>
+                  <><span>Create Account</span></>
                 )}
               </button>
 

@@ -69,7 +69,7 @@ export default function PostJobPage() {
     setShowExperts(false);
 
     // Chuyển sang trang list projects
-    navigate("client/projects");
+    navigate("/client/projects");
   };
 
   const inputStyle = { background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "12px 16px", color: "#e1e2eb", width: "100%", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 15, transition: "border-color 0.2s" };
@@ -88,7 +88,7 @@ export default function PostJobPage() {
           <form onSubmit={handleSubmit}>
             <div style={{ display: "flex", flexDirection: "column", gap: 32 }}>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 <div>
                   <label style={labelStyle}>Job Title</label>
                   <input type="text" name="title" value={form.title} onChange={handleChange} placeholder="e.g. Senior Machine Learning Engineer" style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
