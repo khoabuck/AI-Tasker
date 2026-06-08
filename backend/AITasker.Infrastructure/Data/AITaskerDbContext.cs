@@ -137,17 +137,18 @@ public class AITaskerDbContext : DbContext
 
         modelBuilder.Entity<Wallet>(entity =>
         {
-            entity.ToTable("Wallets");
+            entity.ToTable("Wallets", "dbo");
 
             entity.HasKey(w => w.Id);
+            entity.Property(w => w.Id).HasColumnName("WalletId");
 
             entity.Property(w => w.UserId).IsRequired();
 
             entity.Property(w => w.AvailableBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
-
             entity.Property(w => w.LockedBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+            entity.Property(w => w.TotalEarning).HasColumnType("decimal(18,2)").HasDefaultValue(0m); 
 
-            entity.Property(w => w.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(w => w.UpdatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         });
 
         modelBuilder.Entity<Transaction>(entity =>
@@ -205,41 +206,55 @@ public class AITaskerDbContext : DbContext
 
         modelBuilder.Entity<Deliverable>(entity =>
         {
-            entity.ToTable("Deliverables");
+            entity.ToTable("Deliverables", "dbo");
     
             entity.HasKey(d => d.Id);
+            entity.Property(d => d.Id).HasColumnName("DeliverableId");
     
-            entity.Property(d => d.ProjectId).IsRequired();
+            entity.Property(d => d.MilestoneId).IsRequired();
+            entity.Property(d => d.ExpertId).IsRequired();
+            entity.Property(d => d.VersionNumber).IsRequired().HasColumnName("VersionNumber");
+            
+            entity.Property(d => d.FileUrl).HasMaxLength(500);
+            entity.Property(d => d.DemoUrl).HasMaxLength(500);
+            entity.Property(d => d.TestResultUrl).HasMaxLength(500);
+            entity.Property(d => d.Description).IsRequired();
     
-            entity.Property(d => d.Status).HasMaxLength(30).HasDefaultValue("PENDING");
-    
-            entity.Property(d => d.SubmittedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(d => d.Status).HasMaxLength(30).HasDefaultValue("SUBMITTED");
+            entity.Property(d => d.SubmittedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         });
 
         modelBuilder.Entity<Dispute>(entity =>
         {
-            entity.ToTable("Disputes");
+            entity.ToTable("Disputes", "dbo");
     
             entity.HasKey(d => d.Id);
+            entity.Property(d => d.Id).HasColumnName("DisputeId");
     
             entity.Property(d => d.ProjectId).IsRequired();
+            entity.Property(d => d.OpenedByUserId).IsRequired();
+            entity.Property(d => d.RespondentUserId).IsRequired();
+            entity.Property(d => d.Reason).IsRequired();
+            entity.Property(d => d.DisputedAmount).HasColumnType("decimal(18,2)").IsRequired();
     
-            entity.Property(d => d.Status).HasMaxLength(20).HasDefaultValue("OPEN");
-    
-            entity.Property(d => d.OpenedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(d => d.Status).HasMaxLength(30).HasDefaultValue("OPEN");
+            entity.Property(d => d.ResolutionType).HasMaxLength(30);
+            entity.Property(d => d.OpenedAt).HasDefaultValueSql("SYSUTCDATETIME()"); 
         });
 
         modelBuilder.Entity<Notification>(entity =>
         {
-            entity.ToTable("Notifications");
+            entity.ToTable("Notifications", "dbo");
     
             entity.HasKey(n => n.Id);
+            entity.Property(n => n.Id).HasColumnName("NotificationId"); 
+            
+            entity.Property(n => n.UserId).IsRequired();
+            entity.Property(n => n.Title).HasMaxLength(255).IsRequired();
+            entity.Property(n => n.Content).IsRequired(); 
+            entity.Property(n => n.Type).HasMaxLength(50).IsRequired().HasDefaultValue("SYSTEM");
     
-            entity.Property(n => n.Title).IsRequired();
-    
-            entity.Property(n => n.Message).IsRequired();
-    
-            entity.Property(n => n.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(n => n.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         });
     }
 }
