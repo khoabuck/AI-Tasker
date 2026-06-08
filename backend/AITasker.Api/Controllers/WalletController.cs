@@ -38,7 +38,22 @@ namespace AITasker.Api.Controllers
             try
             {
                 int userId = GetCurrentUserId();
-                return Ok(new { userId }); 
+
+                var wallet = await _walletService.GetWalletByUserIdAsync(userId);
+
+                if (wallet == null)
+                {
+                    return NotFound(new { message = "Wallet not found for this user." });
+                }
+
+                return Ok(new 
+                {
+                    userId = wallet.UserId,
+                    availableBalance = wallet.AvailableBalance,
+                    lockedBalance = wallet.LockedBalance,
+                    totalEarning = wallet.TotalEarning,
+                    updatedAt = wallet.UpdatedAt
+                });
             }
             catch (Exception ex)
             {
