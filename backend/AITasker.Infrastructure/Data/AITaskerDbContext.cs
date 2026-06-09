@@ -30,6 +30,20 @@ public class AITaskerDbContext : DbContext
     public DbSet<ExpertCertificate> ExpertCertificates
         => Set<ExpertCertificate>();
 
+    public DbSet<Skill> Skills => Set<Skill>();
+
+    public DbSet<ExpertSkill> ExpertSkills => Set<ExpertSkill>();
+
+    public DbSet<JobPosting> JobPostings => Set<JobPosting>();
+
+    public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+
+    public DbSet<Proposal> Proposals => Set<Proposal>();
+
+    public DbSet<Project> Projects => Set<Project>();
+
+    public DbSet<Review> Reviews => Set<Review>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -309,6 +323,10 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
 
+            entity.Property(x => x.RatingAverage).HasColumnType("decimal(3,2)").IsRequired();
+            entity.Property(x => x.ReviewCount).IsRequired();
+            entity.Property(x => x.CompletedProjects).IsRequired();
+
             entity.Property(x => x.Level)
                 .HasMaxLength(20)
                 .IsRequired();
@@ -378,5 +396,159 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(x => x.ExpertProfileId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // =========================
+        // Skills
+        // =========================
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.ToTable("Skills");
+            entity.HasKey(x => x.SkillId);
+            entity.Property(x => x.SkillName).HasMaxLength(100).IsRequired();
+            entity.HasIndex(x => x.SkillName).IsUnique();
+            entity.Property(x => x.Description).HasMaxLength(500);
+            entity.Property(x => x.Category).HasMaxLength(100);
+            entity.Property(x => x.IsActive).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasData(SkillSeedData.Items);
+        });
+
+        // =========================
+        // ExpertSkills
+        // =========================
+        modelBuilder.Entity<ExpertSkill>(entity =>
+        {
+            entity.ToTable("ExpertSkills");
+            entity.HasKey(x => x.ExpertSkillId);
+            entity.HasIndex(x => new { x.ExpertProfileId, x.SkillId }).IsUnique();
+            entity.Property(x => x.SkillLevel).HasMaxLength(30).IsRequired();
+            entity.HasOne(x => x.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Skill)
+                .WithMany()
+                .HasForeignKey(x => x.SkillId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // JobPostings
+        // =========================
+        modelBuilder.Entity<JobPosting>(entity =>
+        {
+            entity.ToTable("JobPostings");
+            entity.HasKey(x => x.JobId);
+            entity.Property(x => x.Title).HasMaxLength(255).IsRequired();
+            entity.Property(x => x.Description).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.BudgetMin).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(x => x.BudgetMax).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasIndex(x => new { x.ClientProfileId, x.Status });
+            entity.HasOne(x => x.ClientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // JobSkills
+        // =========================
+        modelBuilder.Entity<JobSkill>(entity =>
+        {
+            entity.ToTable("JobSkills");
+            entity.HasKey(x => x.JobSkillId);
+            entity.HasIndex(x => new { x.JobId, x.SkillId }).IsUnique();
+            entity.Property(x => x.SkillLevelRequired).HasMaxLength(30);
+            entity.Property(x => x.IsRequired).IsRequired();
+            entity.HasOne(x => x.JobPosting)
+                .WithMany(j => j.JobSkills)
+                .HasForeignKey(x => x.JobId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Skill)
+                .WithMany()
+                .HasForeignKey(x => x.SkillId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Proposals
+        // =========================
+        modelBuilder.Entity<Proposal>(entity =>
+        {
+            entity.ToTable("Proposals");
+            entity.HasKey(x => x.ProposalId);
+            entity.HasIndex(x => new { x.JobId, x.ExpertProfileId }).IsUnique();
+            entity.HasIndex(x => new { x.JobId, x.Status });
+            entity.Property(x => x.CoverLetter).IsRequired();
+            entity.Property(x => x.ProposedPrice).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(x => x.ProposedTimelineDays).IsRequired();
+            entity.Property(x => x.ExpectedOutputs).IsRequired();
+            entity.Property(x => x.WorkingApproach).IsRequired();
+            entity.Property(x => x.CounterPrice).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasOne(x => x.JobPosting)
+                .WithMany()
+                .HasForeignKey(x => x.JobId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Projects (minimal)
+        // =========================
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("Projects");
+            entity.HasKey(x => x.ProjectId);
+            entity.Property(x => x.Status).HasMaxLength(30).IsRequired();
+            entity.Property(x => x.TotalAmount).HasColumnType("decimal(18,2)");
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasIndex(x => x.Status);
+            entity.HasOne(x => x.ClientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(x => x.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<Proposal>()
+                .WithMany()
+                .HasForeignKey(x => x.ProposalId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Reviews
+        // =========================
+        modelBuilder.Entity<Review>(entity =>
+        {
+            entity.ToTable("Reviews", t =>
+                t.HasCheckConstraint("CK_Reviews_Reviewer_Reviewee", "[ReviewerId] <> [RevieweeId]"));
+            entity.HasKey(x => x.ReviewId);
+            entity.HasIndex(x => x.ProjectId).IsUnique();
+            entity.Property(x => x.Comment).IsRequired();
+            entity.Property(x => x.Status).HasMaxLength(20).IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.ReviewerId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>()
+                .WithMany()
+                .HasForeignKey(x => x.RevieweeId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
     }
 }

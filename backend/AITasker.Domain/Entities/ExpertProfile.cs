@@ -33,6 +33,12 @@ public class ExpertProfile
 
     public decimal ProfileScore { get; set; } = 0;
 
+    public decimal RatingAverage { get; set; } = 0;
+
+    public int ReviewCount { get; set; } = 0;
+
+    public int CompletedProjects { get; set; } = 0;
+
     public string Level { get; set; } = "UNKNOWN";
 
     // PENDING_REVIEW / APPROVED / NEEDS_CORRECTION / REJECTED
