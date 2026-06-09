@@ -114,6 +114,21 @@ builder.Services
 
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddCookie("External", options =>
     {
@@ -167,6 +182,7 @@ builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
 builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
 
 builder.Services.AddHttpClient();
+
 // =========================
 // App pipeline
 // =========================
@@ -175,7 +191,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    app.UseSwaggerUI();
+    options => app.UseSwaggerUI();
 }
 
 // Local dev tạm thời không bật HTTPS redirect.
