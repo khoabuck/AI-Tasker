@@ -18,25 +18,22 @@ public class AITaskerDbContext : DbContext
     public DbSet<PasswordResetToken> PasswordResetTokens
         => Set<PasswordResetToken>();
 
-    public DbSet<ClientProfile> ClientProfiles
-        => Set<ClientProfile>();
+    public DbSet<Wallet> Wallets => Set<Wallet>();
+    
+    public DbSet<Deliverable> Deliverables => Set<Deliverable>();
+    
+    public DbSet<Dispute> Disputes => Set<Dispute>();
 
-    public DbSet<BusinessProfile> BusinessProfiles
-        => Set<BusinessProfile>();
+    public DbSet<Transaction> Transactions => Set<Transaction>();
+   
+    public DbSet<AiRequestLog> AiRequestLogs => Set<AiRequestLog>();
 
-    public DbSet<ExpertProfile> ExpertProfiles
-        => Set<ExpertProfile>();
-
-    public DbSet<ExpertCertificate> ExpertCertificates
-        => Set<ExpertCertificate>();
-
+    public DbSet<Notification> Notifications => Set<Notification>();
+    
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // =========================
-        // Users
-        // =========================
         modelBuilder.Entity<User>(entity =>
         {
             entity.ToTable("Users");
@@ -84,9 +81,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.UpdatedAt);
         });
 
-        // =========================
-        // EmailVerificationTokens
-        // =========================
         modelBuilder.Entity<EmailVerificationToken>(entity =>
         {
             entity.ToTable("EmailVerificationTokens");
@@ -114,9 +108,6 @@ public class AITaskerDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // =========================
-        // PasswordResetTokens
-        // =========================
         modelBuilder.Entity<PasswordResetToken>(entity =>
         {
             entity.ToTable("PasswordResetTokens");
@@ -144,239 +135,111 @@ public class AITaskerDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // =========================
-        // ClientProfiles
-        // =========================
-        modelBuilder.Entity<ClientProfile>(entity =>
+        modelBuilder.Entity<Wallet>(entity =>
         {
-            entity.ToTable("ClientProfiles");
+            entity.ToTable("Wallets");
 
-            entity.HasKey(x => x.ClientProfileId);
+            entity.HasKey(w => w.Id);
 
-            entity.HasIndex(x => x.UserId)
-                .IsUnique();
+            entity.Property(w => w.UserId).IsRequired();
 
-            entity.Property(x => x.ClientType)
-                .HasMaxLength(20)
+            entity.Property(w => w.AvailableBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+
+            entity.Property(w => w.LockedBalance).HasColumnType("decimal(18,2)").HasDefaultValue(0m);
+
+            entity.Property(w => w.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
+
+        modelBuilder.Entity<Transaction>(entity =>
+        {
+            entity.ToTable("Transactions");
+
+            entity.HasKey(x => x.TransactionId);
+
+            entity.Property(x => x.Amount)
+                .HasColumnType("decimal(18,2)")
                 .IsRequired();
 
-            entity.Property(x => x.PhoneNumber)
+            entity.Property(x => x.Type)
                 .HasMaxLength(30)
                 .IsRequired();
 
-            entity.Property(x => x.Address)
+            entity.Property(x => x.Description)
                 .HasMaxLength(500);
 
-            entity.Property(x => x.AiNeeds)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.MainProblems)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.ExpectedBudgetMin)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.ExpectedBudgetMax)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.PlatformFeeRate)
-                .HasColumnType("decimal(5,2)")
-                .IsRequired();
+            entity.Property(x => x.ReferenceId)
+                .HasMaxLength(100);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
-
-            entity.Property(x => x.UpdatedAt);
-
-            entity.HasOne(x => x.User)
+                
+            entity.HasOne<User>()
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // =========================
-        // BusinessProfiles
-        // =========================
-        modelBuilder.Entity<BusinessProfile>(entity =>
+        modelBuilder.Entity<AiRequestLog>(entity =>
         {
-            entity.ToTable("BusinessProfiles");
+            entity.ToTable("AiRequestLogs");
 
-            entity.HasKey(x => x.BusinessProfileId);
+            entity.HasKey(x => x.Id);
 
-            entity.HasIndex(x => x.ClientProfileId)
-                .IsUnique();
-
-            entity.Property(x => x.CompanyName)
-                .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(x => x.TaxCode)
+            entity.Property(x => x.Feature)
                 .HasMaxLength(50)
                 .IsRequired();
 
-            entity.HasIndex(x => x.TaxCode)
-                .IsUnique();
-
-            entity.Property(x => x.Industry)
-                .HasMaxLength(100)
+            entity.Property(x => x.RequestBody)
                 .IsRequired();
 
-            entity.Property(x => x.CompanyAddress)
-                .HasMaxLength(500)
+            entity.Property(x => x.ResponseBody)
                 .IsRequired();
 
-            entity.Property(x => x.BusinessEmail)
-                .HasMaxLength(255);
-
-            entity.Property(x => x.BusinessPhone)
-                .HasMaxLength(30);
-
-            entity.Property(x => x.VerificationStatus)
-                .HasMaxLength(30)
-                .IsRequired();
-
-            entity.Property(x => x.VerificationNote)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.VerifiedAt);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
-
-            entity.Property(x => x.UpdatedAt);
-
-            entity.HasOne(x => x.ClientProfile)
-                .WithOne(x => x.BusinessProfile)
-                .HasForeignKey<BusinessProfile>(x => x.ClientProfileId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // =========================
-        // ExpertProfiles
-        // =========================
-        modelBuilder.Entity<ExpertProfile>(entity =>
-        {
-            entity.ToTable("ExpertProfiles");
-
-            entity.HasKey(x => x.ExpertProfileId);
-
-            entity.HasIndex(x => x.UserId)
-                .IsUnique();
-
-            entity.Property(x => x.ProfessionalTitle)
-                .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(x => x.Bio)
-                .HasMaxLength(2000)
-                .IsRequired();
-
-            entity.Property(x => x.Skills)
-                .HasMaxLength(1000)
-                .IsRequired();
-
-            entity.Property(x => x.YearsOfExperience)
-                .IsRequired();
-
-            entity.Property(x => x.ExpectedProjectBudgetMin)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.ExpectedProjectBudgetMax)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.PreferredProjectDurationDays)
-                .IsRequired();
-
-            entity.Property(x => x.AvailableForWork)
-                .IsRequired();
-
-            entity.Property(x => x.PortfolioUrl)
-                .HasMaxLength(500);
-
-            entity.Property(x => x.LinkedInUrl)
-                .HasMaxLength(500);
-
-            entity.Property(x => x.GitHubUrl)
-                .HasMaxLength(500);
-
-            entity.Property(x => x.ExpertCategory)
-                .HasMaxLength(50)
-                .IsRequired();
-
-            entity.Property(x => x.ProfileScore)
-                .HasColumnType("decimal(5,2)")
-                .IsRequired();
-
-            entity.Property(x => x.Level)
+            entity.Property(x => x.Status)
                 .HasMaxLength(20)
                 .IsRequired();
 
-            entity.Property(x => x.ProfileReviewStatus)
-                .HasMaxLength(30)
-                .IsRequired();
-
-            entity.Property(x => x.ProfileReviewNote)
-                .HasMaxLength(2000);
-
-            entity.Property(x => x.MissingInformation)
-                .HasMaxLength(2000);
-
-            entity.Property(x => x.VerifiedAt);
-
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
-
-            entity.Property(x => x.UpdatedAt);
-
-            entity.HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasMany(x => x.Certificates)
-                .WithOne(x => x.ExpertProfile)
-                .HasForeignKey(x => x.ExpertProfileId)
-                .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // =========================
-        // ExpertCertificates
-        // =========================
-        modelBuilder.Entity<ExpertCertificate>(entity =>
+        modelBuilder.Entity<Deliverable>(entity =>
         {
-            entity.ToTable("ExpertCertificates");
+            entity.ToTable("Deliverables");
+    
+            entity.HasKey(d => d.Id);
+    
+            entity.Property(d => d.ProjectId).IsRequired();
+    
+            entity.Property(d => d.Status).HasMaxLength(30).HasDefaultValue("PENDING");
+    
+            entity.Property(d => d.SubmittedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
 
-            entity.HasKey(x => x.ExpertCertificateId);
+        modelBuilder.Entity<Dispute>(entity =>
+        {
+            entity.ToTable("Disputes");
+    
+            entity.HasKey(d => d.Id);
+    
+            entity.Property(d => d.ProjectId).IsRequired();
+    
+            entity.Property(d => d.Status).HasMaxLength(20).HasDefaultValue("OPEN");
+    
+            entity.Property(d => d.OpenedAt).HasDefaultValueSql("GETUTCDATE()");
+        });
 
-            entity.HasIndex(x => new
-            {
-                x.ExpertProfileId,
-                x.CertificateUrl
-            }).IsUnique();
-
-            entity.Property(x => x.CertificateName)
-                .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(x => x.CertificateIssuer)
-                .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(x => x.CertificateUrl)
-                .HasMaxLength(500)
-                .IsRequired();
-
-            entity.Property(x => x.IssuedAt);
-
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
-
-            entity.HasOne(x => x.ExpertProfile)
-                .WithMany(x => x.Certificates)
-                .HasForeignKey(x => x.ExpertProfileId)
-                .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications");
+    
+            entity.HasKey(n => n.Id);
+    
+            entity.Property(n => n.Title).IsRequired();
+    
+            entity.Property(n => n.Message).IsRequired();
+    
+            entity.Property(n => n.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
         });
     }
 }

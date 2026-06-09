@@ -15,10 +15,6 @@ public class AuthController : ControllerBase
     private const string GoogleScheme = "Google";
     private const string ExternalCookieScheme = "External";
 
-    // FE đang chạy port 5173.
-    // Nếu Vite tự nhảy sang 5174 thì đổi dòng này thành http://localhost:5174
-    private const string FrontendBaseUrl = "http://localhost:5173";
-
     private readonly IAuthService _authService;
 
     public AuthController(IAuthService authService)
@@ -96,7 +92,11 @@ public class AuthController : ControllerBase
 
         if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=failed");
+            return BadRequest(new
+            {
+                success = false,
+                message = "Google authentication failed."
+            });
         }
 
         var principal = authenticateResult.Principal;
@@ -111,7 +111,11 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(googleId)
             || string.IsNullOrWhiteSpace(email))
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=missing_info");
+            return BadRequest(new
+            {
+                success = false,
+                message = "Google account information is missing."
+            });
         }
 
         try
@@ -123,21 +127,15 @@ public class AuthController : ControllerBase
                 avatarUrl
             );
 
-            var role = result.User.Role ?? string.Empty;
-            var status = result.User.Status ?? string.Empty;
-
-            var redirectUrl =
-                $"{FrontendBaseUrl}/oauth/callback" +
-                $"?token={Uri.EscapeDataString(result.AccessToken)}" +
-                $"&status={Uri.EscapeDataString(status)}" +
-                $"&role={Uri.EscapeDataString(role)}" +
-                $"&userId={result.User.UserId}";
-
-            return Redirect(redirectUrl);
+            return Ok(result);
         }
-        catch (InvalidOperationException)
+        catch (InvalidOperationException ex)
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=error");
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
         }
     }
 
@@ -149,21 +147,15 @@ public class AuthController : ControllerBase
         {
             var result = await _authService.VerifyEmailAsync(token);
 
-            var redirectUrl =
-                $"{FrontendBaseUrl}/verify-email" +
-                $"?success=true" +
-                $"&message={Uri.EscapeDataString(result.Message)}";
-
-            return Redirect(redirectUrl);
+            return Ok(result);
         }
         catch (InvalidOperationException ex)
         {
-            var redirectUrl =
-                $"{FrontendBaseUrl}/verify-email" +
-                $"?success=false" +
-                $"&message={Uri.EscapeDataString(ex.Message)}";
-
-            return Redirect(redirectUrl);
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
         }
     }
 
@@ -229,46 +221,13 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
-    [HttpPost("select-role")]
-    public async Task<IActionResult> SelectRole(SelectRoleRequest request)
-    {
-        var userId = GetCurrentUserId();
-
-        if (userId == null)
-        {
-            return Unauthorized(new
-            {
-                success = false,
-                message = "Invalid token."
-            });
-        }
-
-        try
-        {
-            var result = await _authService.SelectRoleAsync(
-                userId.Value,
-                request
-            );
-
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = ex.Message
-            });
-        }
-    }
-
-    [Authorize]
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var userId = GetCurrentUserId();
+        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("userId");
 
-        if (userId == null)
+        if (!int.TryParse(userIdText, out var userId))
         {
             return Unauthorized(new
             {
@@ -277,7 +236,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        var user = await _authService.GetCurrentUserAsync(userId.Value);
+        var user = await _authService.GetCurrentUserAsync(userId);
 
         if (user == null)
         {
@@ -298,18 +257,5 @@ public class AuthController : ControllerBase
         }
 
         return Ok(user);
-    }
-
-    private int? GetCurrentUserId()
-    {
-        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("userId");
-
-        if (!int.TryParse(userIdText, out var userId))
-        {
-            return null;
-        }
-
-        return userId;
     }
 }

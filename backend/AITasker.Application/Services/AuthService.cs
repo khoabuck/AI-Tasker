@@ -366,56 +366,6 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task<UserResponse> SelectRoleAsync(int userId, SelectRoleRequest request)
-    {
-        var user = await _userRepository.GetByIdAsync(userId);
-
-        if (user == null)
-        {
-            throw new InvalidOperationException("User not found.");
-        }
-
-        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
-        {
-            throw new InvalidOperationException("Your account is not allowed to select role.");
-        }
-
-        if (user.Status == "PENDING_EMAIL_VERIFICATION")
-        {
-            throw new InvalidOperationException("Please verify your email before selecting role.");
-        }
-
-        if (user.Status != "PENDING_ROLE")
-        {
-            throw new InvalidOperationException("User is not in pending role status.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(user.Role))
-        {
-            throw new InvalidOperationException("Role has already been selected.");
-        }
-
-        var role = request.Role?.Trim().ToUpperInvariant() ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(role))
-        {
-            throw new InvalidOperationException("Role is required.");
-        }
-
-        if (role != "CLIENT" && role != "EXPERT")
-        {
-            throw new InvalidOperationException("Role must be CLIENT or EXPERT.");
-        }
-
-        user.Role = role;
-        user.Status = "PENDING_PROFILE";
-        user.UpdatedAt = DateTime.UtcNow;
-
-        await _userRepository.SaveChangesAsync();
-
-        return MapToUserResponse(user);
-    }
-
     public async Task<UserResponse?> GetCurrentUserAsync(int userId)
     {
         var user = await _userRepository.GetByIdAsync(userId);

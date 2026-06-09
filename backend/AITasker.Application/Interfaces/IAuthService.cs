@@ -26,7 +26,5 @@ public interface IAuthService
 
     Task<MessageResponse> ResetPasswordAsync(ResetPasswordRequest request);
 
-    Task<UserResponse> SelectRoleAsync(int userId, SelectRoleRequest request);
-
     Task<UserResponse?> GetCurrentUserAsync(int userId);
 }
