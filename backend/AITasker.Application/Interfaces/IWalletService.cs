@@ -1,10 +1,13 @@
 using System.Threading.Tasks;
+using AITasker.Domain.Entities; 
 
 namespace AITasker.Application.Interfaces
 {
     public interface IWalletService
     {
         Task<decimal> GetBalanceAsync(int userId);
+
+        Task<Wallet> GetWalletByUserIdAsync(int userId);
 
         Task<bool> DepositAsync(int userId, decimal amount, string description, string referenceId);
 

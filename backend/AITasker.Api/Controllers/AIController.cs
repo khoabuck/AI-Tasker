@@ -16,9 +16,9 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("job-assistant")]
-        public async Task<IActionResult> GenerateJobDescription([FromBody] string prompt)
+        public async Task<IActionResult> GenerateJobDescription([FromBody] JobAssistantRequest request)
         {
-            if (string.IsNullOrWhiteSpace(prompt))
+            if (request == null || string.IsNullOrWhiteSpace(request.Prompt))
             {
                 return BadRequest(new { message = "User prompt content cannot be empty." });
             }
@@ -27,9 +27,14 @@ namespace AITasker.Api.Controllers
                                "Please generate a well-structured and highly professional Job Description (JD) " +
                                "including sections: Job Title/Position, Technical Requirements, Benefits & Perks, and Estimated Salary Range based on the provided user inputs.";
 
-            var result = await _groqService.CallGroqAsync(systemPrompt, prompt, "JobAssistant");
+            var result = await _groqService.CallGroqAsync(systemPrompt, request.Prompt, "JobAssistant");
 
             return Ok(new { data = result });
         }
+    }
+
+    public class JobAssistantRequest
+    {
+        public string Prompt { get; set; } = string.Empty;
     }
 }

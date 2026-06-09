@@ -191,5 +191,10 @@ namespace AITasker.Infrastructure.Banking
                 return false;
             }
         }
+
+        public async Task<Wallet> GetWalletByUserIdAsync(int userId)
+        {
+            return await GetOrCreateWalletAsync(userId);
+        }
     }
 }
