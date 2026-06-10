@@ -191,7 +191,7 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
-    options => app.UseSwaggerUI();
+    app.UseSwaggerUI();
 }
 
 // Local dev tạm thời không bật HTTPS redirect.
