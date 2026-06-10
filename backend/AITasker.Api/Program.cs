@@ -3,13 +3,10 @@ using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
 using AITasker.Infrastructure.BusinessVerification;
-using AITasker.Infrastructure.JobAssistant;
-using AITasker.Infrastructure.Negotiation;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
 using AITasker.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -173,16 +170,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 
-builder.Services.AddScoped<ISkillRepository, SkillRepository>();
-
-builder.Services.AddScoped<IExpertSkillRepository, ExpertSkillRepository>();
-
-builder.Services.AddScoped<IJobRepository, JobRepository>();
-
-builder.Services.AddScoped<IProposalRepository, ProposalRepository>();
-
-builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
-
 // =========================
 // Dependency Injection - Core Services
 // =========================
@@ -200,17 +187,13 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
+// BE2 - Skills API
 builder.Services.AddScoped<ISkillService, SkillService>();
 
-builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
-
+// BE2 - Jobs API
+// Nếu bạn chưa tạo JobService.cs thì tạm comment dòng này lại.
+// Sau khi tạo JobService.cs thì mở lại.
 builder.Services.AddScoped<IJobService, JobService>();
-
-builder.Services.AddScoped<INegotiationGateway, StubNegotiationGateway>();
-
-builder.Services.AddScoped<IProposalService, ProposalService>();
-
-builder.Services.AddScoped<IReviewService, ReviewService>();
 
 // =========================
 // Business Verification Provider
@@ -229,12 +212,6 @@ builder.Services.AddHttpClient<
     IExpertProfileReviewProvider,
     GroqExpertProfileReviewProvider
 >();
-
-// =========================
-// AI Job Assistant Provider
-// Groq AI
-// =========================
-builder.Services.AddHttpClient<IAiJobAssistantProvider, GroqJobAssistantProvider>();
 
 // =========================
 // URL Inspection Service

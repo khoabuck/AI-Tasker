@@ -2,7 +2,7 @@ namespace AITasker.Domain.Entities;
 
 public class JobPosting
 {
-    public int JobId { get; set; }
+    public int JobPostingId { get; set; }
 
     public int ClientProfileId { get; set; }
 
@@ -10,20 +10,29 @@ public class JobPosting
 
     public string Description { get; set; } = string.Empty;
 
-    public string? AIgeneratedDescription { get; set; }
+    public string? AiGeneratedDescription { get; set; }
 
     public decimal BudgetMin { get; set; }
 
     public decimal BudgetMax { get; set; }
 
-    // OPENING / ACTIVE / COMPLETED / CANCEL
+    public DateTime Deadline { get; set; }
+
+    public string ProjectType { get; set; } = string.Empty;
+
+    public string Complexity { get; set; } = "MEDIUM";
+
+    public string ExpectedDeliverables { get; set; } = string.Empty;
+
     public string Status { get; set; } = "DRAFT";
+
+    public bool IsAiAssisted { get; set; } = false;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
 
-    public ClientProfile ClientProfile { get; set; } = null!;
+    public ClientProfile? ClientProfile { get; set; }
 
     public ICollection<JobSkill> JobSkills { get; set; } = new List<JobSkill>();
 }

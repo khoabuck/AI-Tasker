@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    [Migration("20260608142152_AddJobPostings")]
-    partial class AddJobPostings
+    [Migration("20260610030738_AddSkillsTable")]
+    partial class AddSkillsTable
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -240,9 +240,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
-                    b.Property<int>("CompletedProjects")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -298,12 +295,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("ProfileScore")
                         .HasColumnType("decimal(5,2)");
 
-                    b.Property<decimal>("RatingAverage")
-                        .HasColumnType("decimal(3,2)");
-
-                    b.Property<int>("ReviewCount")
-                        .HasColumnType("int");
-
                     b.Property<string>("Skills")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -327,138 +318,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ExpertProfiles", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
-                {
-                    b.Property<int>("ExpertSkillId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertSkillId"));
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SkillId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SkillLevel")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<int?>("YearsOfExperience")
-                        .HasColumnType("int");
-
-                    b.HasKey("ExpertSkillId");
-
-                    b.HasIndex("SkillId");
-
-                    b.HasIndex("ExpertProfileId", "SkillId")
-                        .IsUnique();
-
-                    b.ToTable("ExpertSkills", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.Property<int>("JobId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobId"));
-
-                    b.Property<string>("AIgeneratedDescription")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("BudgetMax")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("BudgetMin")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ClientProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Complexity")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("Deadline")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ExpectedDeliverables")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsAIAssisted")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("ProjectType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("JobId");
-
-                    b.HasIndex("ClientProfileId", "Status");
-
-                    b.HasIndex("Status", "Deadline");
-
-                    b.ToTable("JobPostings", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
-                {
-                    b.Property<int>("JobSkillId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
-
-                    b.Property<bool>("IsRequired")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("JobId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SkillId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SkillLevelRequired")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.HasKey("JobSkillId");
-
-                    b.HasIndex("SkillId");
-
-                    b.HasIndex("JobId", "SkillId")
-                        .IsUnique();
-
-                    b.ToTable("JobSkills", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
@@ -509,14 +368,18 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("SkillName")
                         .IsRequired()
@@ -529,134 +392,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Skills", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            SkillId = 1,
-                            Category = "AI Application",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế và triển khai chatbot cho website, fanpage hoặc hệ thống nội bộ.",
-                            IsActive = true,
-                            SkillName = "Chatbot"
-                        },
-                        new
-                        {
-                            SkillId = 2,
-                            Category = "AI Core",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xử lý ngôn ngữ tự nhiên, phân loại văn bản, trích xuất ý định.",
-                            IsActive = true,
-                            SkillName = "NLP"
-                        },
-                        new
-                        {
-                            SkillId = 3,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tích hợp API LLM như OpenAI vào sản phẩm.",
-                            IsActive = true,
-                            SkillName = "OpenAI API"
-                        },
-                        new
-                        {
-                            SkillId = 4,
-                            Category = "Programming",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Lập trình Python cho AI, automation và data pipeline.",
-                            IsActive = true,
-                            SkillName = "Python"
-                        },
-                        new
-                        {
-                            SkillId = 5,
-                            Category = "AI Core",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xử lý ảnh, nhận diện đối tượng, phân loại ảnh.",
-                            IsActive = true,
-                            SkillName = "Computer Vision"
-                        },
-                        new
-                        {
-                            SkillId = 6,
-                            Category = "Document AI",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Trích xuất chữ từ ảnh, PDF, hóa đơn và tài liệu scan.",
-                            IsActive = true,
-                            SkillName = "OCR"
-                        },
-                        new
-                        {
-                            SkillId = 7,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Phân tích dữ liệu, dashboard, metrics và insight.",
-                            IsActive = true,
-                            SkillName = "Data Analytics"
-                        },
-                        new
-                        {
-                            SkillId = 8,
-                            Category = "Automation",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tự động hóa quy trình nghiệp vụ và báo cáo.",
-                            IsActive = true,
-                            SkillName = "Automation"
-                        },
-                        new
-                        {
-                            SkillId = 9,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế prompt, workflow LLM và đánh giá output.",
-                            IsActive = true,
-                            SkillName = "Prompt Engineering"
-                        },
-                        new
-                        {
-                            SkillId = 10,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Retrieval-Augmented Generation cho tài liệu nội bộ.",
-                            IsActive = true,
-                            SkillName = "RAG"
-                        },
-                        new
-                        {
-                            SkillId = 11,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế truy vấn, xử lý dữ liệu và báo cáo từ database.",
-                            IsActive = true,
-                            SkillName = "SQL"
-                        },
-                        new
-                        {
-                            SkillId = 12,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tạo dashboard và báo cáo trực quan.",
-                            IsActive = true,
-                            SkillName = "Power BI"
-                        },
-                        new
-                        {
-                            SkillId = 13,
-                            Category = "Backend",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xây dựng RESTful API bằng ASP.NET Core.",
-                            IsActive = true,
-                            SkillName = "ASP.NET Core"
-                        },
-                        new
-                        {
-                            SkillId = 14,
-                            Category = "Backend",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xây dựng realtime chat và notification.",
-                            IsActive = true,
-                            SkillName = "SignalR"
-                        });
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.User", b =>
@@ -776,55 +511,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
-                        .WithMany()
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-
-                    b.Navigation("Skill");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
-                        .WithMany()
-                        .HasForeignKey("ClientProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ClientProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
-                        .WithMany("JobSkills")
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
-                        .WithMany()
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("JobPosting");
-
-                    b.Navigation("Skill");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -844,11 +530,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
                 {
                     b.Navigation("Certificates");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.Navigation("JobSkills");
                 });
 #pragma warning restore 612, 618
         }

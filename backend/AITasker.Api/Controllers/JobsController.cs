@@ -8,7 +8,6 @@ namespace AITasker.Api.Controllers;
 
 [ApiController]
 [Route("api/jobs")]
-[Authorize]
 public class JobsController : ControllerBase
 {
     private readonly IJobService _jobService;
@@ -18,121 +17,131 @@ public class JobsController : ControllerBase
         _jobService = jobService;
     }
 
-    [HttpPost("ai-suggest")]
+    [HttpPost("draft")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<IActionResult> AiSuggest([FromBody] AiJobSuggestionRequest request)
+    public async Task<IActionResult> CreateDraft([FromBody] CreateJobRequest request)
     {
         try
         {
-            var data = await _jobService.AiSuggestAsync(GetCurrentUserId(), request);
-            return Ok(new { success = true, data });
+            var userId = GetCurrentUserId();
+            var job = await _jobService.CreateDraftAsync(userId, request);
+
+            return Ok(job);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
-    [HttpPost]
+    [HttpPost("submit")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<IActionResult> Create([FromBody] CreateJobRequest request)
+    public async Task<IActionResult> SubmitJob([FromBody] CreateJobRequest request)
     {
         try
         {
-            var data = await _jobService.CreateAsync(GetCurrentUserId(), request);
-            return Ok(new { success = true, message = "Job draft created.", data });
+            var userId = GetCurrentUserId();
+            var job = await _jobService.SubmitJobAsync(userId, request);
+
+            return Ok(job);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
-    [HttpPut("{jobId:int}")]
+    [HttpGet("open")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetOpenJobs(
+        [FromQuery] string? keyword,
+        [FromQuery] int? skillId)
+    {
+        var jobs = await _jobService.GetOpenJobsAsync(keyword, skillId);
+        return Ok(jobs);
+    }
+
+    [HttpGet("my")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<IActionResult> Update(int jobId, [FromBody] UpdateJobRequest request)
+    public async Task<IActionResult> GetMyJobs()
     {
-        try
-        {
-            var data = await _jobService.UpdateDraftAsync(GetCurrentUserId(), jobId, request);
-            return Ok(new { success = true, message = "Job updated.", data });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
+        var userId = GetCurrentUserId();
+        var jobs = await _jobService.GetMyJobsAsync(userId);
+
+        return Ok(jobs);
     }
 
-    [HttpPost("{jobId:int}/submit")]
+    [HttpGet("{id:int}")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetJobById(int id)
+    {
+        var job = await _jobService.GetJobByIdAsync(id);
+
+        if (job == null)
+        {
+            return NotFound(new { message = "Job not found." });
+        }
+
+        return Ok(job);
+    }
+
+    [HttpPut("{id:int}")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<IActionResult> Submit(int jobId)
+    public async Task<IActionResult> UpdateJob(
+        int id,
+        [FromBody] UpdateJobRequest request)
     {
         try
         {
-            var data = await _jobService.SubmitAsync(GetCurrentUserId(), jobId);
-            return Ok(new { success = true, message = "Job submitted.", data });
+            var userId = GetCurrentUserId();
+            var job = await _jobService.UpdateJobAsync(userId, id, request);
+
+            if (job == null)
+            {
+                return NotFound(new { message = "Job not found." });
+            }
+
+            return Ok(job);
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { success = false, message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
-    [HttpPost("{jobId:int}/cancel")]
+    [HttpPut("{id:int}/cancel")]
     [Authorize(Roles = "CLIENT")]
-    public async Task<IActionResult> Cancel(int jobId)
+    public async Task<IActionResult> CancelJob(int id)
     {
         try
         {
-            var data = await _jobService.CancelAsync(GetCurrentUserId(), jobId);
-            return Ok(new { success = true, message = "Job cancelled.", data });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
+            var userId = GetCurrentUserId();
+            var result = await _jobService.CancelJobAsync(userId, id);
 
-    [HttpGet]
-    public async Task<IActionResult> Browse([FromQuery] JobFilterRequest filter)
-    {
-        try
-        {
-            var data = await _jobService.BrowseAsync(filter);
-            return Ok(new { success = true, data });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { success = false, message = ex.Message });
-        }
-    }
+            if (!result)
+            {
+                return NotFound(new { message = "Job not found." });
+            }
 
-    [HttpGet("{jobId:int}")]
-    public async Task<IActionResult> GetById(int jobId)
-    {
-        try
-        {
-            var data = await _jobService.GetByIdAsync(jobId);
-            return Ok(new { success = true, data });
+            return Ok(new { message = "Job cancelled successfully." });
         }
         catch (InvalidOperationException ex)
         {
-            return NotFound(new { success = false, message = ex.Message });
+            return BadRequest(new { message = ex.Message });
         }
     }
 
     private int GetCurrentUserId()
     {
         var userIdValue =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("userId")
-            ?? User.FindFirstValue("sub");
+            User.FindFirstValue("userId") ??
+            User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (!int.TryParse(userIdValue, out var userId))
+        if (string.IsNullOrWhiteSpace(userIdValue))
         {
-            throw new InvalidOperationException("Invalid user token.");
+            throw new InvalidOperationException("UserId not found in token.");
         }
 
-        return userId;
+        return int.Parse(userIdValue);
     }
 }

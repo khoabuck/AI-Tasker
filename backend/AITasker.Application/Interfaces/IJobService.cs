@@ -5,19 +5,21 @@ namespace AITasker.Application.Interfaces;
 
 public interface IJobService
 {
-    Task<AiJobSuggestionResult> AiSuggestAsync(int userId, AiJobSuggestionRequest request);
+    Task<JobResponse> CreateDraftAsync(int userId, CreateJobRequest request);
 
-    Task<JobResponse> CreateAsync(int userId, CreateJobRequest request);
+    Task<JobResponse> SubmitJobAsync(int userId, CreateJobRequest request);
 
-    Task<JobResponse> UpdateDraftAsync(int userId, int jobId, UpdateJobRequest request);
-
-    Task<JobResponse> SubmitAsync(int userId, int jobId);
-
-    Task<JobResponse> CancelAsync(int userId, int jobId);
-
-    Task<PagedResult<JobResponse>> BrowseAsync(JobFilterRequest filter);
-
-    Task<JobResponse> GetByIdAsync(int jobId);
+    Task<List<JobResponse>> GetOpenJobsAsync(string? keyword, int? skillId);
 
     Task<List<JobResponse>> GetMyJobsAsync(int userId);
+
+    Task<JobResponse?> GetJobByIdAsync(int jobPostingId);
+
+    Task<JobResponse?> UpdateJobAsync(
+        int userId,
+        int jobPostingId,
+        UpdateJobRequest request
+    );
+
+    Task<bool> CancelJobAsync(int userId, int jobPostingId);
 }

@@ -237,9 +237,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
-                    b.Property<int>("CompletedProjects")
-                        .HasColumnType("int");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -295,12 +292,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("ProfileScore")
                         .HasColumnType("decimal(5,2)");
 
-                    b.Property<decimal>("RatingAverage")
-                        .HasColumnType("decimal(3,2)");
-
-                    b.Property<int>("ReviewCount")
-                        .HasColumnType("int");
-
                     b.Property<string>("Skills")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -326,47 +317,15 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("ExpertProfiles", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
-                {
-                    b.Property<int>("ExpertSkillId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertSkillId"));
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SkillId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SkillLevel")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<int?>("YearsOfExperience")
-                        .HasColumnType("int");
-
-                    b.HasKey("ExpertSkillId");
-
-                    b.HasIndex("SkillId");
-
-                    b.HasIndex("ExpertProfileId", "SkillId")
-                        .IsUnique();
-
-                    b.ToTable("ExpertSkills", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
                 {
-                    b.Property<int>("JobId")
+                    b.Property<int>("JobPostingId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobId"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobPostingId"));
 
-                    b.Property<string>("AIgeneratedDescription")
+                    b.Property<string>("AiGeneratedDescription")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("BudgetMax")
@@ -384,7 +343,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
 
                     b.Property<DateTime>("Deadline")
                         .HasColumnType("datetime2");
@@ -397,8 +358,10 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<bool>("IsAIAssisted")
-                        .HasColumnType("bit");
+                    b.Property<bool>("IsAiAssisted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<string>("ProjectType")
                         .IsRequired()
@@ -407,8 +370,8 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -418,7 +381,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
-                    b.HasKey("JobId");
+                    b.HasKey("JobPostingId");
 
                     b.HasIndex("ClientProfileId", "Status");
 
@@ -436,9 +399,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
 
                     b.Property<bool>("IsRequired")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
-                    b.Property<int>("JobId")
+                    b.Property<int>("JobPostingId")
                         .HasColumnType("int");
 
                     b.Property<int>("SkillId")
@@ -452,7 +417,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("SkillId");
 
-                    b.HasIndex("JobId", "SkillId")
+                    b.HasIndex("JobPostingId", "SkillId")
                         .IsUnique();
 
                     b.ToTable("JobSkills", (string)null);
@@ -493,164 +458,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("PasswordResetTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
-                {
-                    b.Property<int>("ProjectId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProjectId"));
-
-                    b.Property<int>("ClientProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("EndDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<int?>("ProposalId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("StartDate")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<decimal?>("TotalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.HasKey("ProjectId");
-
-                    b.HasIndex("ClientProfileId");
-
-                    b.HasIndex("ExpertProfileId");
-
-                    b.HasIndex("ProposalId");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("Projects", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>
-                {
-                    b.Property<int>("ProposalId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalId"));
-
-                    b.Property<string>("CounterMessage")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal?>("CounterPrice")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int?>("CounterTimelineDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("CoverLetter")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ExpectedOutputs")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("JobId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PreliminaryMilestonePlan")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("ProposedPrice")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ProposedTimelineDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("WorkingApproach")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("ProposalId");
-
-                    b.HasIndex("ExpertProfileId");
-
-                    b.HasIndex("JobId", "ExpertProfileId")
-                        .IsUnique();
-
-                    b.HasIndex("JobId", "Status");
-
-                    b.ToTable("Proposals", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
-                {
-                    b.Property<int>("ReviewId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ReviewId"));
-
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RevieweeId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ReviewerId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.HasKey("ReviewId");
-
-                    b.HasIndex("ProjectId")
-                        .IsUnique();
-
-                    b.HasIndex("RevieweeId");
-
-                    b.HasIndex("ReviewerId");
-
-                    b.ToTable("Reviews", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Reviews_Reviewer_Reviewee", "[ReviewerId] <> [RevieweeId]");
-                        });
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
                 {
                     b.Property<int>("SkillId")
@@ -664,14 +471,18 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("datetime2")
+                        .HasDefaultValueSql("SYSUTCDATETIME()");
 
                     b.Property<string>("Description")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("SkillName")
                         .IsRequired()
@@ -684,134 +495,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("Skills", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            SkillId = 1,
-                            Category = "AI Application",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế và triển khai chatbot cho website, fanpage hoặc hệ thống nội bộ.",
-                            IsActive = true,
-                            SkillName = "Chatbot"
-                        },
-                        new
-                        {
-                            SkillId = 2,
-                            Category = "AI Core",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xử lý ngôn ngữ tự nhiên, phân loại văn bản, trích xuất ý định.",
-                            IsActive = true,
-                            SkillName = "NLP"
-                        },
-                        new
-                        {
-                            SkillId = 3,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tích hợp API LLM như OpenAI vào sản phẩm.",
-                            IsActive = true,
-                            SkillName = "OpenAI API"
-                        },
-                        new
-                        {
-                            SkillId = 4,
-                            Category = "Programming",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Lập trình Python cho AI, automation và data pipeline.",
-                            IsActive = true,
-                            SkillName = "Python"
-                        },
-                        new
-                        {
-                            SkillId = 5,
-                            Category = "AI Core",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xử lý ảnh, nhận diện đối tượng, phân loại ảnh.",
-                            IsActive = true,
-                            SkillName = "Computer Vision"
-                        },
-                        new
-                        {
-                            SkillId = 6,
-                            Category = "Document AI",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Trích xuất chữ từ ảnh, PDF, hóa đơn và tài liệu scan.",
-                            IsActive = true,
-                            SkillName = "OCR"
-                        },
-                        new
-                        {
-                            SkillId = 7,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Phân tích dữ liệu, dashboard, metrics và insight.",
-                            IsActive = true,
-                            SkillName = "Data Analytics"
-                        },
-                        new
-                        {
-                            SkillId = 8,
-                            Category = "Automation",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tự động hóa quy trình nghiệp vụ và báo cáo.",
-                            IsActive = true,
-                            SkillName = "Automation"
-                        },
-                        new
-                        {
-                            SkillId = 9,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế prompt, workflow LLM và đánh giá output.",
-                            IsActive = true,
-                            SkillName = "Prompt Engineering"
-                        },
-                        new
-                        {
-                            SkillId = 10,
-                            Category = "LLM",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Retrieval-Augmented Generation cho tài liệu nội bộ.",
-                            IsActive = true,
-                            SkillName = "RAG"
-                        },
-                        new
-                        {
-                            SkillId = 11,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Thiết kế truy vấn, xử lý dữ liệu và báo cáo từ database.",
-                            IsActive = true,
-                            SkillName = "SQL"
-                        },
-                        new
-                        {
-                            SkillId = 12,
-                            Category = "Data",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Tạo dashboard và báo cáo trực quan.",
-                            IsActive = true,
-                            SkillName = "Power BI"
-                        },
-                        new
-                        {
-                            SkillId = 13,
-                            Category = "Backend",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xây dựng RESTful API bằng ASP.NET Core.",
-                            IsActive = true,
-                            SkillName = "ASP.NET Core"
-                        },
-                        new
-                        {
-                            SkillId = 14,
-                            Category = "Backend",
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Description = "Xây dựng realtime chat và notification.",
-                            IsActive = true,
-                            SkillName = "SignalR"
-                        });
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.User", b =>
@@ -931,25 +614,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
-                        .WithMany()
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-
-                    b.Navigation("Skill");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
@@ -965,7 +629,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                 {
                     b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
                         .WithMany("JobSkills")
-                        .HasForeignKey("JobId")
+                        .HasForeignKey("JobPostingId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -989,72 +653,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
-                        .WithMany()
-                        .HasForeignKey("ClientProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Proposal", null)
-                        .WithMany()
-                        .HasForeignKey("ProposalId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("ClientProfile");
-
-                    b.Navigation("ExpertProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
-                        .WithMany()
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-
-                    b.Navigation("JobPosting");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RevieweeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ReviewerId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>

@@ -5,9 +5,15 @@ namespace AITasker.Application.Interfaces;
 
 public interface ISkillService
 {
-    Task<List<SkillResponse>> GetActiveAsync(string? category, string? search);
+    Task<List<SkillResponse>> GetSkillsAsync(string? keyword, string? category, bool activeOnly);
 
-    Task<SkillResponse> CreateAsync(CreateSkillRequest request);
+    Task<SkillResponse?> GetSkillByIdAsync(int id);
 
-    Task<SkillResponse> UpdateAsync(int skillId, UpdateSkillRequest request);
+    Task<SkillResponse> CreateSkillAsync(CreateSkillRequest request);
+
+    Task<SkillResponse?> UpdateSkillAsync(int id, UpdateSkillRequest request);
+
+    Task<bool> DeactivateSkillAsync(int id);
+
+    Task<bool> ActivateSkillAsync(int id);
 }
