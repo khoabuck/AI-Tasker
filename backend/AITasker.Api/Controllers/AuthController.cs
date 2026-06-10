@@ -15,6 +15,10 @@ public class AuthController : ControllerBase
     private const string GoogleScheme = "Google";
     private const string ExternalCookieScheme = "External";
 
+    // FE đang chạy port 5173.
+    // Nếu Vite tự nhảy sang 5174 thì đổi dòng này thành http://localhost:5174
+    private const string FrontendBaseUrl = "http://localhost:5173";
+
     private readonly IAuthService _authService;
 
     public AuthController(IAuthService authService)
@@ -92,11 +96,7 @@ public class AuthController : ControllerBase
 
         if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
         {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Google authentication failed."
-            });
+            return Redirect($"{FrontendBaseUrl}/login?oauth=failed");
         }
 
         var principal = authenticateResult.Principal;
@@ -111,11 +111,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(googleId)
             || string.IsNullOrWhiteSpace(email))
         {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Google account information is missing."
-            });
+            return Redirect($"{FrontendBaseUrl}/login?oauth=missing_info");
         }
 
         try
@@ -125,6 +121,133 @@ public class AuthController : ControllerBase
                 fullName ?? email,
                 googleId,
                 avatarUrl
+            );
+
+            var role = result.User.Role ?? string.Empty;
+            var status = result.User.Status ?? string.Empty;
+
+            var redirectUrl =
+                $"{FrontendBaseUrl}/oauth/callback" +
+                $"?token={Uri.EscapeDataString(result.AccessToken)}" +
+                $"&status={Uri.EscapeDataString(status)}" +
+                $"&role={Uri.EscapeDataString(role)}" +
+                $"&userId={result.User.UserId}";
+
+            return Redirect(redirectUrl);
+        }
+        catch (InvalidOperationException)
+        {
+            return Redirect($"{FrontendBaseUrl}/login?oauth=error");
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string token)
+    {
+        try
+        {
+            var result = await _authService.VerifyEmailAsync(token);
+
+            var redirectUrl =
+                $"{FrontendBaseUrl}/verify-email" +
+                $"?success=true" +
+                $"&message={Uri.EscapeDataString(result.Message)}";
+
+            return Redirect(redirectUrl);
+        }
+        catch (InvalidOperationException ex)
+        {
+            var redirectUrl =
+                $"{FrontendBaseUrl}/verify-email" +
+                $"?success=false" +
+                $"&message={Uri.EscapeDataString(ex.Message)}";
+
+            return Redirect(redirectUrl);
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("resend-verification-email")]
+    public async Task<IActionResult> ResendVerificationEmail(
+        ResendVerificationEmailRequest request)
+    {
+        try
+        {
+            var result = await _authService.ResendVerificationEmailAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request)
+    {
+        try
+        {
+            var result = await _authService.ForgotPasswordAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(ResetPasswordRequest request)
+    {
+        try
+        {
+            var result = await _authService.ResetPasswordAsync(request);
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [Authorize]
+    [HttpPost("select-role")]
+    public async Task<IActionResult> SelectRole(SelectRoleRequest request)
+    {
+        var userId = GetCurrentUserId();
+
+        if (userId == null)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _authService.SelectRoleAsync(
+                userId.Value,
+                request
             );
 
             return Ok(result);
@@ -224,10 +347,9 @@ public class AuthController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> Me()
     {
-        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("userId");
+        var userId = GetCurrentUserId();
 
-        if (!int.TryParse(userIdText, out var userId))
+        if (userId == null)
         {
             return Unauthorized(new
             {
@@ -236,7 +358,7 @@ public class AuthController : ControllerBase
             });
         }
 
-        var user = await _authService.GetCurrentUserAsync(userId);
+        var user = await _authService.GetCurrentUserAsync(userId.Value);
 
         if (user == null)
         {
@@ -257,5 +379,18 @@ public class AuthController : ControllerBase
         }
 
         return Ok(user);
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdText, out var userId))
+        {
+            return null;
+        }
+
+        return userId;
     }
 }

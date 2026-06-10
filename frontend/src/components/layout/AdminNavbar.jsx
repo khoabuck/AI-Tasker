@@ -1,0 +1,116 @@
+import { Link, NavLink, useNavigate } from "react-router-dom";
+import authService from "../../services/auth.service";
+
+export default function AdminNavbar() {
+  const navigate = useNavigate();
+  const user = authService.getCurrentUser?.();
+
+  const handleLogout = () => {
+    if (authService.logout) {
+      authService.logout();
+    }
+
+    navigate("/login");
+  };
+
+  const navLinkClass = ({ isActive }) =>
+    `flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition ${
+      isActive
+        ? "bg-cyan-400/10 text-[#00F0FF] border border-cyan-400/30"
+        : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+    }`;
+
+  return (
+    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-[#0b0f16] px-5 py-5 md:flex md:flex-col">
+      {/* Logo */}
+      <Link
+        to="/admin/dashboard"
+        className="mb-8 inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
+      >
+        <span className="text-[#00F0FF]">AI</span>
+        <span className="ml-1 text-white">Tasker</span>
+        <span className="ml-3 rounded-full border border-red-400/30 bg-red-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-300">
+          Admin
+        </span>
+      </Link>
+
+      {/* Admin info */}
+      <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-red-400/40 bg-red-400/10 text-sm font-bold text-red-300">
+            AD
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">Administrator</p>
+            <p className="truncate text-xs text-gray-500">
+              {user?.email || "admin@aitasker.com"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sidebar nav */}
+      <nav className="flex flex-1 flex-col gap-2">
+        <NavLink to="/admin/dashboard" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            dashboard
+          </span>
+          Dashboard
+        </NavLink>
+
+        <NavLink to="/admin/disputes" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            gavel
+          </span>
+          Disputes
+        </NavLink>
+
+        <NavLink to="/admin/jobs" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            work
+          </span>
+          Jobs
+        </NavLink>
+
+        <NavLink to="/admin/users" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            group
+          </span>
+          Users
+        </NavLink>
+
+        <NavLink to="/admin/transactions" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            payments
+          </span>
+          Transactions
+        </NavLink>
+      </nav>
+
+      {/* Bottom actions */}
+      <div className="mt-6 border-t border-white/10 pt-4">
+        <button
+          type="button"
+          className="mb-2 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-gray-400 transition hover:bg-white/[0.05] hover:text-cyan-300"
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            notifications
+          </span>
+          Notifications
+        </button>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold text-gray-400 transition hover:bg-red-400/10 hover:text-red-400"
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            logout
+          </span>
+          Logout
+        </button>
+      </div>
+    </aside>
+  );
+}
