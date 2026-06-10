@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
-import { createJobApi } from "../../../api/job.api";
+import axiosInstance from "../../../api/axiosInstance";
 
-// Skills từ DB — SkillId phải đúng với database
+// Skills từ DB
 const SKILL_OPTIONS = [
   { id: 1,  name: "Chatbot" },
   { id: 2,  name: "NLP" },
@@ -30,7 +30,8 @@ const MATCHED_EXPERTS = [
 
 const DEFAULT_FORM = {
   title: "", budgetMin: "", budgetMax: "",
-  description: "", aiGeneratedDescription: "", skills: [], // skills là array of { id, name }
+  projectType: "",
+  description: "", aiGeneratedDescription: "", skills: [],
 };
 
 const inputStyle = {
@@ -44,18 +45,36 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.1em", color: "#c2c6d6", marginBottom: 8,
 };
 
+// Build payload chung cho cả draft và submit
+const buildPayload = (form) => ({
+  title: form.title,
+  description: form.description,
+  aiGeneratedDescription: form.aiGeneratedDescription,
+  budgetMin: Number(form.budgetMin),
+  budgetMax: Number(form.budgetMax),
+  deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  projectType: form.projectType,          // TODO: thêm field nếu cần
+  complexity: form.complexity,           // TODO: thêm field nếu cần
+  expectedDeliverables: form.expectedDeliverables, // TODO: thêm field nếu cần
+  isAiAssisted: !!form.aiGeneratedDescription,
+  skillIds: form.skills.map((s) => s.id), // array of skillId numbers
+});
+
 export default function PostJobPage() {
   const navigate = useNavigate();
   const [form, setForm] = useState(DEFAULT_FORM);
   const [optimizing, setOptimizing] = useState(false);
   const [showExperts, setShowExperts] = useState(false);
   const [glowDesc, setGlowDesc] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [draftSaved, setDraftSaved] = useState(false);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setSubmitError("");
+    setDraftSaved(false);
   };
 
   const toggleSkill = (skill) => {
@@ -65,6 +84,7 @@ export default function PostJobPage() {
     } else {
       setForm((prev) => ({ ...prev, skills: [...prev.skills, skill] }));
     }
+    setDraftSaved(false);
   };
 
   const handleOptimize = () => {
@@ -72,12 +92,10 @@ export default function PostJobPage() {
       alert("Please enter a job description before optimizing!");
       return;
     }
-
     // ── TODO (BE): Thay mock bằng API call ───────────────────────────────────
     // const res = await aiOptimizeApi({ description: form.description });
     // setForm(prev => ({ ...prev, aiGeneratedDescription: res.data.optimizedText }));
     // ─────────────────────────────────────────────────────────────────────────
-
     setOptimizing(true);
     setShowExperts(false);
     setTimeout(() => {
@@ -106,25 +124,31 @@ COMPENSATION: $${form.budgetMin || "TBD"} — $${form.budgetMax || "TBD"} USD`;
     }, 1500);
   };
 
+  // POST /api/jobs/draft — lưu nháp
+  const handleSaveDraft = async () => {
+    if (!form.title.trim()) {
+      setSubmitError("Please enter a job title before saving draft.");
+      return;
+    }
+    setSavingDraft(true);
+    setSubmitError("");
+    try {
+      await axiosInstance.post("/jobs/draft", buildPayload(form));
+      setDraftSaved(true);
+    } catch (err) {
+      setSubmitError(err?.response?.data?.message || "Failed to save draft. Please try again.");
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  // POST /api/jobs/submit — submit chính thức
   const handleSubmit = async (e) => {
     e.preventDefault();
     setSubmitting(true);
     setSubmitError("");
-
     try {
-      // POST /api/jobs
-      await createJobApi({
-        title: form.title,
-        description: form.description,
-        aIGeneratedDescription: form.aiGeneratedDescription,
-        budgetMin: Number(form.budgetMin),
-        budgetMax: Number(form.budgetMax),
-        skills: form.skills.map((s) => ({
-          skillId: s.id,
-          
-        })),
-      });
-
+      await axiosInstance.post("/jobs/submit", buildPayload(form));
       setForm(DEFAULT_FORM);
       setShowExperts(false);
       navigate("/client/projects");
@@ -179,10 +203,38 @@ COMPENSATION: $${form.budgetMin || "TBD"} — $${form.budgetMax || "TBD"} USD`;
                 </div>
               </div>
 
+              {/* Project Type */}
+              <div>
+                <label style={labelStyle}>Project Type</label>
+                <input type="text" name="projectType" value={form.projectType} onChange={handleChange}
+                  placeholder="e.g. Web App, Mobile, API, Data Pipeline..."
+                  style={inputStyle}
+                  onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
+                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+              </div>
+
+
+              {/* Complexity */}
+              <div>
+                <label style={labelStyle}>Complexity</label>
+
+                <select
+                  name="complexity"
+                  value={form.complexity}
+                  onChange={handleChange}
+                  style={inputStyle}
+                >
+                  <option value="">Select complexity</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                </select>
+              </div>
+
               {/* Skills */}
               <div>
                 <label style={labelStyle}>Required Skills</label>
-                <p style={{ fontSize: 12, color: "#8c90a0", marginBottom: 12 }}>Click to select skills required for this job.</p>
+                <p style={{ fontSize: 12, color: "#8c90a0", marginBottom: 12 }}>Click to select skills for this job.</p>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {SKILL_OPTIONS.map((skill) => {
                     const selected = !!form.skills.find((s) => s.id === skill.id);
@@ -201,12 +253,25 @@ COMPENSATION: $${form.budgetMin || "TBD"} — $${form.budgetMax || "TBD"} USD`;
                 )}
               </div>
 
+              {/* Expected Deliverables */}
+              <div>
+                <label style={labelStyle}>Expected Deliverables</label>
+                <textarea
+                  name="expectedDeliverables"
+                  value={form.expectedDeliverables}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="e.g. Source code, API documentation, deployment guide..."
+                  style={{ ...inputStyle, resize: "vertical" }}
+                />
+              </div>
+
               {/* Description */}
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
                   <label style={{ ...labelStyle, marginBottom: 0 }}>Job Description</label>
                   <button type="button" onClick={handleOptimize} disabled={optimizing}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: optimizing ? "not-allowed" : "pointer", opacity: optimizing ? 0.6 : 1, fontFamily: "Inter, sans-serif" }}
+                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 16px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: optimizing ? "not-allowed" : "pointer", opacity: optimizing ? 0.6 : 1 }}
                     onMouseEnter={(e) => !optimizing && (e.currentTarget.style.background = "rgba(0,240,255,0.12)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,240,255,0.05)")}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>auto_awesome</span>
@@ -240,6 +305,14 @@ COMPENSATION: $${form.budgetMin || "TBD"} — $${form.budgetMax || "TBD"} USD`;
                 </div>
               )}
 
+              {/* Draft saved notice */}
+              {draftSaved && (
+                <div style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 8, padding: "12px 16px", color: "#4ade80", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>
+                  Draft saved successfully!
+                </div>
+              )}
+
               {/* Error */}
               {submitError && (
                 <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "12px 16px", color: "#f87171", fontSize: 14 }}>
@@ -254,12 +327,23 @@ COMPENSATION: $${form.budgetMin || "TBD"} — $${form.budgetMax || "TBD"} USD`;
                   Job postings are moderated by the Synthetix Trust system.
                 </div>
                 <div style={{ display: "flex", gap: 12 }}>
+                  {/* Cancel */}
                   <button type="button" onClick={() => navigate("/client/dashboard")}
-                    style={{ padding: "12px 28px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
+                    style={{ padding: "12px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
                     Cancel
                   </button>
+
+                  {/* Save Draft — POST /api/jobs/draft */}
+                  <button type="button" onClick={handleSaveDraft} disabled={savingDraft}
+                    style={{ padding: "12px 20px", borderRadius: 8, border: "1px solid rgba(173,198,255,0.3)", background: "rgba(173,198,255,0.05)", color: "#adc6ff", cursor: savingDraft ? "not-allowed" : "pointer", fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, opacity: savingDraft ? 0.6 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+                    {savingDraft && <span className="material-symbols-outlined" style={{ fontSize: 16 }}>progress_activity</span>}
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>save</span>
+                    {savingDraft ? "Saving..." : "Save Draft"}
+                  </button>
+
+                  {/* Submit — POST /api/jobs/submit */}
                   <button type="submit" disabled={submitting}
-                    style={{ padding: "12px 40px", borderRadius: 8, background: submitting ? "#1d2026" : "#00F0FF", color: submitting ? "#8c90a0" : "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, border: "none", cursor: submitting ? "not-allowed" : "pointer", boxShadow: submitting ? "none" : "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", gap: 8 }}>
+                    style={{ padding: "12px 32px", borderRadius: 8, background: submitting ? "#1d2026" : "#00F0FF", color: submitting ? "#8c90a0" : "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, border: "none", cursor: submitting ? "not-allowed" : "pointer", boxShadow: submitting ? "none" : "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", gap: 8 }}>
                     {submitting && <span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span>}
                     {submitting ? "Posting..." : "Post Job"}
                   </button>
