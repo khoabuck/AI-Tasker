@@ -11,10 +11,14 @@ namespace AITasker.Infrastructure.Deliverables
     public class DeliverableService : IDeliverableService
     {
         private readonly AITaskerDbContext _context;
+        private readonly IWalletService _walletService;
+        private readonly INotificationService _notificationService;
 
-        public DeliverableService(AITaskerDbContext context)
+        public DeliverableService(AITaskerDbContext context, IWalletService walletService, INotificationService notificationService)
         {
             _context = context;
+            _walletService = walletService;
+            _notificationService = notificationService;
         }
 
         public async Task<Deliverable?> SubmitDeliverableAsync(int milestoneId, int expertId, string description, string? fileUrl, string? demoUrl, string? testResultUrl)
@@ -48,6 +52,79 @@ namespace AITasker.Infrastructure.Deliverables
             catch (Exception)
             {
                 return null;
+            }
+        }
+
+        public async Task<bool> ApproveDeliverableAsync(int deliverableId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var deliverable = await _context.Deliverables.FindAsync(deliverableId);
+                if (deliverable == null) return false;
+
+                deliverable.Status = "APPROVED";
+                await _context.SaveChangesAsync();
+
+                // Release escrow funds (using milestoneId converted to string as required by current WalletService implementation)
+                string milestoneIdStr = deliverable.MilestoneId.ToString();
+                var releaseSuccess = await _walletService.ReleaseEscrowAsync(milestoneIdStr, deliverable.ExpertId);
+                if (!releaseSuccess)
+                {
+                    await transaction.RollbackAsync();
+                    return false;
+                }
+
+                // Create and send notification to Expert
+                await _notificationService.CreateNotificationAsync(
+                    deliverable.ExpertId,
+                    "Deliverable Approved",
+                    $"Your deliverable for Milestone ID {deliverable.MilestoneId} has been approved and funds released.",
+                    "MILESTONE"
+                );
+
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+        }
+
+        public async Task<bool> RequestRevisionAsync(int deliverableId, string feedback)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var deliverable = await _context.Deliverables.FindAsync(deliverableId);
+                if (deliverable == null) return false;
+
+                deliverable.Status = "REVISION_REQUESTED";
+                deliverable.ClientFeedback = feedback;
+                await _context.SaveChangesAsync();
+
+                // NOTE: When Milestone entity is introduced in the database/model layer,
+                // fetch and increment the milestone's revision count here:
+                // var milestone = await _context.Milestones.FindAsync(deliverable.MilestoneId);
+                // if (milestone != null) { milestone.RevisionUsed += 1; }
+
+                // Create and send notification to Expert with feedback
+                await _notificationService.CreateNotificationAsync(
+                    deliverable.ExpertId,
+                    "Revision Requested",
+                    $"Revision requested for Milestone ID {deliverable.MilestoneId}. Feedback: {feedback}",
+                    "MILESTONE"
+                );
+
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch (Exception)
+            {
+                await transaction.RollbackAsync();
+                return false;
             }
         }
     }

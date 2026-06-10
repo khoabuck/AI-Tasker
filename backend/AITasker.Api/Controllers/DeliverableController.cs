@@ -57,6 +57,43 @@ namespace AITasker.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
+
+        [HttpPost("{deliverableId}/approve")]
+        public async Task<IActionResult> ApproveDeliverable(int deliverableId)
+        {
+            try
+            {
+                var success = await _deliverableService.ApproveDeliverableAsync(deliverableId);
+                if (!success) return BadRequest(new { message = "Failed to approve deliverable or release escrow." });
+
+                return Ok(new { success = true, message = "Deliverable approved and escrow funds released successfully!" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{deliverableId}/revision")]
+        public async Task<IActionResult> RequestRevision(int deliverableId, [FromBody] RevisionRequestDto dto)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(dto.Feedback))
+                {
+                    return BadRequest(new { message = "Feedback is required when requesting a revision." });
+                }
+
+                var success = await _deliverableService.RequestRevisionAsync(deliverableId, dto.Feedback);
+                if (!success) return BadRequest(new { message = "Failed to request revision." });
+
+                return Ok(new { success = true, message = "Revision requested successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
     }
 
     public class SubmitDeliverableDto
@@ -70,5 +107,10 @@ namespace AITasker.Api.Controllers
         public string? DemoUrl { get; set; }
         
         public string? TestResultUrl { get; set; }
+    }
+
+    public class RevisionRequestDto
+    {
+        public string Feedback { get; set; } = string.Empty;
     }
 }
