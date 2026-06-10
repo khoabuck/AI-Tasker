@@ -189,6 +189,11 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
 // =========================
+// Upload Images - Cloudinary
+// =========================
+builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
+
+// =========================
 // BE2 - Skills API
 // =========================
 builder.Services.AddScoped<ISkillService, SkillService>();
