@@ -10,16 +10,19 @@ public class ExpertProfileService : IExpertProfileService
     private readonly IExpertProfileRepository _expertProfileRepository;
     private readonly IExpertProfileReviewProvider _expertProfileReviewProvider;
     private readonly IUrlInspectionService _urlInspectionService;
+    private readonly IExpertSkillService _expertSkillService;
 
     public ExpertProfileService(
         IExpertProfileRepository expertProfileRepository,
         IExpertProfileReviewProvider expertProfileReviewProvider,
-        IUrlInspectionService urlInspectionService
+        IUrlInspectionService urlInspectionService,
+        IExpertSkillService expertSkillService
     )
     {
         _expertProfileRepository = expertProfileRepository;
         _expertProfileReviewProvider = expertProfileReviewProvider;
         _urlInspectionService = urlInspectionService;
+        _expertSkillService = expertSkillService;
     }
 
     public async Task<ExpertProfileResponse> CreateAsync(
@@ -95,6 +98,12 @@ public class ExpertProfileService : IExpertProfileService
 
         await _expertProfileRepository.AddAsync(expertProfile);
         await _expertProfileRepository.SaveChangesAsync();
+
+        await _expertSkillService.SyncFromProfileSkillsAsync(
+            expertProfile.ExpertProfileId,
+            expertProfile.Skills,
+            expertProfile.YearsOfExperience
+        );
 
         expertProfile.User = user;
 
@@ -174,6 +183,12 @@ public class ExpertProfileService : IExpertProfileService
         ApplyUserStatusByReview(user, reviewResult.Status);
 
         await _expertProfileRepository.SaveChangesAsync();
+
+        await _expertSkillService.SyncFromProfileSkillsAsync(
+            expertProfile.ExpertProfileId,
+            expertProfile.Skills,
+            expertProfile.YearsOfExperience
+        );
 
         return ToResponse(expertProfile);
     }

@@ -52,4 +52,6 @@ public class ExpertProfile
 
     public ICollection<ExpertCertificate> Certificates { get; set; }
         = new List<ExpertCertificate>();
+
+    public ICollection<ExpertSkill> ExpertSkills { get; set; } = new List<ExpertSkill>();
 }
