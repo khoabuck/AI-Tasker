@@ -11,7 +11,7 @@ const MOCK_EXPERTS = [
   { id: 3, name: "Elena Kostic", role: "Generative AI Specialist", badge: "92% MATCH", badgeColor: "#00F0FF", rating: 4, skills: ["Stable Diffusion", "GANs", "AWS SageMaker"], bio: "Pioneering work in multimodal content generation and infrastructure optimization.", highlight: null },
 ];
 
-const SENIORITY_OPTIONS = ["Junior", "Senior", "Lead", "Director"];
+const SENIORITY_OPTIONS = ["Fresher", "Junior", "Senior", "Lead", "Director"];
 const AVAILABILITY_OPTIONS = ["Immediately", "In 2 Weeks", "In 1 Month"];
 
 function StarRating({ rating }) {

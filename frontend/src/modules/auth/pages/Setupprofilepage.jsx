@@ -1,11 +1,11 @@
 // src/modules/auth/pages/SetupProfilePage.jsx
 // Individual: POST /api/client-profiles/individual
 // Business:   POST /api/client-profiles/business
-// Edit mode:  PUT  /api/client-profiles/business/resubmit (business)
+// Edit mode:  PUT  /api/client-profiles/business/resubmit
 // GET data:   GET  /api/client-profiles/me
 
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
@@ -27,7 +27,7 @@ export default function SetupProfilePage() {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [error, setError] = useState("");
-  const [isEdit, setIsEdit] = useState(false); // true nếu đã có profile
+  const [isEdit, setIsEdit] = useState(false);
 
   const [individual, setIndividual] = useState({
     phoneNumber: "", address: "", aiNeeds: "", mainProblems: "",
@@ -41,18 +41,14 @@ export default function SetupProfilePage() {
     companyAddress: "", businessEmail: "", businessPhone: "",
   });
 
-  // Load data cũ nếu đã có profile
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
         const data = res.data;
         setIsEdit(true);
-
-        // Xác định loại profile
         const isBusiness = !!data.companyName;
         setClientType(isBusiness ? "business" : "individual");
-
         const commonFields = {
           phoneNumber: data.phoneNumber || "",
           address: data.address || "",
@@ -61,22 +57,12 @@ export default function SetupProfilePage() {
           expectedBudgetMin: data.expectedBudgetMin || "",
           expectedBudgetMax: data.expectedBudgetMax || "",
         };
-
         if (isBusiness) {
-          setBusiness({
-            ...commonFields,
-            companyName: data.companyName || "",
-            taxCode: data.taxCode || "",
-            industry: data.industry || "",
-            companyAddress: data.companyAddress || "",
-            businessEmail: data.businessEmail || "",
-            businessPhone: data.businessPhone || "",
-          });
+          setBusiness({ ...commonFields, companyName: data.companyName || "", taxCode: data.taxCode || "", industry: data.industry || "", companyAddress: data.companyAddress || "", businessEmail: data.businessEmail || "", businessPhone: data.businessPhone || "" });
         } else {
           setIndividual(commonFields);
         }
       } catch {
-        // Chưa có profile → tạo mới, không báo lỗi
         setIsEdit(false);
       } finally {
         setFetching(false);
@@ -85,15 +71,8 @@ export default function SetupProfilePage() {
     loadProfile();
   }, []);
 
-  const handleIndividualChange = (e) => {
-    setIndividual((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError("");
-  };
-
-  const handleBusinessChange = (e) => {
-    setBusiness((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError("");
-  };
+  const handleIndividualChange = (e) => { setIndividual((prev) => ({ ...prev, [e.target.name]: e.target.value })); setError(""); };
+  const handleBusinessChange = (e) => { setBusiness((prev) => ({ ...prev, [e.target.name]: e.target.value })); setError(""); };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -101,54 +80,42 @@ export default function SetupProfilePage() {
     setError("");
     try {
       if (clientType === "individual") {
-        // POST /api/client-profiles/individual (tạo mới)
+        // POST /api/client-profiles/individual
         // TODO (BE): nếu BE có PUT để update individual thì dùng PUT khi isEdit
         await axiosInstance.post("/client-profiles/individual", {
-          phoneNumber: individual.phoneNumber,
-          address: individual.address,
-          aiNeeds: individual.aiNeeds,
-          mainProblems: individual.mainProblems,
+          phoneNumber: individual.phoneNumber, address: individual.address,
+          aiNeeds: individual.aiNeeds, mainProblems: individual.mainProblems,
           expectedBudgetMin: Number(individual.expectedBudgetMin),
           expectedBudgetMax: Number(individual.expectedBudgetMax),
         });
       } else {
         if (isEdit) {
-          // PUT /api/client-profiles/business/resubmit (cập nhật)
+          // PUT /api/client-profiles/business/resubmit
           await axiosInstance.put("/client-profiles/business/resubmit", {
-            phoneNumber: business.phoneNumber,
-            address: business.address,
-            aiNeeds: business.aiNeeds,
-            mainProblems: business.mainProblems,
+            phoneNumber: business.phoneNumber, address: business.address,
+            aiNeeds: business.aiNeeds, mainProblems: business.mainProblems,
             expectedBudgetMin: Number(business.expectedBudgetMin),
             expectedBudgetMax: Number(business.expectedBudgetMax),
-            companyName: business.companyName,
-            taxCode: business.taxCode,
-            industry: business.industry,
-            companyAddress: business.companyAddress,
-            businessEmail: business.businessEmail,
-            businessPhone: business.businessPhone,
+            companyName: business.companyName, taxCode: business.taxCode,
+            industry: business.industry, companyAddress: business.companyAddress,
+            businessEmail: business.businessEmail, businessPhone: business.businessPhone,
           });
         } else {
-          // POST /api/client-profiles/business (tạo mới)
+          // POST /api/client-profiles/business
           await axiosInstance.post("/client-profiles/business", {
-            phoneNumber: business.phoneNumber,
-            address: business.address,
-            aiNeeds: business.aiNeeds,
-            mainProblems: business.mainProblems,
+            phoneNumber: business.phoneNumber, address: business.address,
+            aiNeeds: business.aiNeeds, mainProblems: business.mainProblems,
             expectedBudgetMin: Number(business.expectedBudgetMin),
             expectedBudgetMax: Number(business.expectedBudgetMax),
-            companyName: business.companyName,
-            taxCode: business.taxCode,
-            industry: business.industry,
-            companyAddress: business.companyAddress,
-            businessEmail: business.businessEmail,
-            businessPhone: business.businessPhone,
+            companyName: business.companyName, taxCode: business.taxCode,
+            industry: business.industry, companyAddress: business.companyAddress,
+            businessEmail: business.businessEmail, businessPhone: business.businessPhone,
           });
         }
       }
-      navigate("/client/profile");
+      navigate("/client/dashboard");
     } catch (err) {
-      setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
+      setError(err?.response?.data?.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -167,7 +134,14 @@ export default function SetupProfilePage() {
 
       {/* Navbar */}
       <nav style={{ position: "fixed", top: 0, width: "100%", zIndex: 50, background: "rgba(18,21,27,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px", height: 80, display: "flex", alignItems: "center" }}>
+        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px", height: 80, display: "flex", alignItems: "center", gap: 16 }}>
+          {/* Back arrow — quay về select-role */}
+          <Link to="/select-role"
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#8c90a0", textDecoration: "none", transition: "all 0.2s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = "#e1e2eb"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = "#8c90a0"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
+          </Link>
           <span style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
             <span style={{ color: "#00F0FF" }}>AI</span>{" "}
             <span style={{ color: "#e1e2eb" }}>Tasker</span>
@@ -182,18 +156,18 @@ export default function SetupProfilePage() {
           {/* Header */}
           <div style={{ textAlign: "center", marginBottom: 40 }}>
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 36, fontWeight: 700, color: "#e1e2eb", marginBottom: 8 }}>
-              {isEdit ? "Chỉnh sửa hồ sơ" : "Hoàn thiện hồ sơ"}
+              {isEdit ? "Edit Profile" : "Complete Your Profile"}
             </h1>
             <p style={{ color: "#c2c6d6", fontSize: 15 }}>
-              {isEdit ? "Cập nhật thông tin của bạn" : "Giúp chúng tôi hiểu hơn về nhu cầu của bạn"}
+              {isEdit ? "Update your information" : "Help us understand your needs better"}
             </p>
           </div>
 
           {/* Client Type Toggle */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 32 }}>
             {[
-              { key: "individual", icon: "person", label: "Cá nhân" },
-              { key: "business", icon: "corporate_fare", label: "Doanh nghiệp" },
+              { key: "individual", icon: "person", label: "Individual" },
+              { key: "business", icon: "corporate_fare", label: "Business" },
             ].map((t) => (
               <button key={t.key} type="button" onClick={() => setClientType(t.key)}
                 style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 8, border: `1px solid ${clientType === t.key ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: clientType === t.key ? "rgba(0,240,255,0.05)" : "rgba(29,32,38,0.5)", color: clientType === t.key ? "#00F0FF" : "#8c90a0", cursor: "pointer", transition: "all 0.2s", fontWeight: 600 }}>
@@ -211,42 +185,42 @@ export default function SetupProfilePage() {
                 {/* Common fields */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div>
-                    <label style={labelStyle}>Số điện thoại</label>
+                    <label style={labelStyle}>Phone Number</label>
                     <input type="text" name="phoneNumber"
                       value={clientType === "individual" ? individual.phoneNumber : business.phoneNumber}
                       onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="0912345678" style={inputStyle}
+                      placeholder="e.g. +84 912 345 678" style={inputStyle}
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                   </div>
                   <div>
-                    <label style={labelStyle}>Địa chỉ</label>
+                    <label style={labelStyle}>Address</label>
                     <input type="text" name="address"
                       value={clientType === "individual" ? individual.address : business.address}
                       onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="TP. Hồ Chí Minh" style={inputStyle}
+                      placeholder="e.g. Ho Chi Minh City" style={inputStyle}
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                   </div>
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Nhu cầu AI của bạn</label>
+                  <label style={labelStyle}>AI Needs</label>
                   <textarea name="aiNeeds"
                     value={clientType === "individual" ? individual.aiNeeds : business.aiNeeds}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                    placeholder="Mô tả bạn cần AI làm gì..." rows={3}
+                    placeholder="Describe what you need AI to do for you..." rows={3}
                     style={{ ...inputStyle, resize: "none" }}
                     onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                     onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                 </div>
 
                 <div>
-                  <label style={labelStyle}>Vấn đề chính cần giải quyết</label>
+                  <label style={labelStyle}>Main Problems</label>
                   <textarea name="mainProblems"
                     value={clientType === "individual" ? individual.mainProblems : business.mainProblems}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                    placeholder="Mô tả những vấn đề bạn đang gặp phải..." rows={3}
+                    placeholder="Describe the main problems you're facing..." rows={3}
                     style={{ ...inputStyle, resize: "none" }}
                     onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                     onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
@@ -254,7 +228,7 @@ export default function SetupProfilePage() {
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div>
-                    <label style={labelStyle}>Ngân sách tối thiểu (USD)</label>
+                    <label style={labelStyle}>Min Budget (USD)</label>
                     <input type="number" name="expectedBudgetMin"
                       value={clientType === "individual" ? individual.expectedBudgetMin : business.expectedBudgetMin}
                       onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -263,7 +237,7 @@ export default function SetupProfilePage() {
                       onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                   </div>
                   <div>
-                    <label style={labelStyle}>Ngân sách tối đa (USD)</label>
+                    <label style={labelStyle}>Max Budget (USD)</label>
                     <input type="number" name="expectedBudgetMax"
                       value={clientType === "individual" ? individual.expectedBudgetMax : business.expectedBudgetMax}
                       onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -277,19 +251,19 @@ export default function SetupProfilePage() {
                 {clientType === "business" && (
                   <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
                     <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#00F0FF", marginBottom: 16 }}>
-                      Thông tin doanh nghiệp
+                      Business Information
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                         <div>
-                          <label style={labelStyle}>Tên công ty</label>
+                          <label style={labelStyle}>Company Name</label>
                           <input type="text" name="companyName" value={business.companyName} onChange={handleBusinessChange}
                             placeholder="AITasker Inc." style={inputStyle}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                         </div>
                         <div>
-                          <label style={labelStyle}>Mã số thuế</label>
+                          <label style={labelStyle}>Tax Code</label>
                           <input type="text" name="taxCode" value={business.taxCode} onChange={handleBusinessChange}
                             placeholder="0123456789" style={inputStyle}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
@@ -297,31 +271,31 @@ export default function SetupProfilePage() {
                         </div>
                       </div>
                       <div>
-                        <label style={labelStyle}>Ngành nghề</label>
+                        <label style={labelStyle}>Industry</label>
                         <input type="text" name="industry" value={business.industry} onChange={handleBusinessChange}
-                          placeholder="Công nghệ thông tin..." style={inputStyle}
+                          placeholder="e.g. Information Technology, Finance..." style={inputStyle}
                           onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                           onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>
                       <div>
-                        <label style={labelStyle}>Địa chỉ công ty</label>
+                        <label style={labelStyle}>Company Address</label>
                         <input type="text" name="companyAddress" value={business.companyAddress} onChange={handleBusinessChange}
-                          placeholder="123 Nguyễn Huệ, Q.1, TP.HCM" style={inputStyle}
+                          placeholder="123 Nguyen Hue, District 1, HCMC" style={inputStyle}
                           onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                           onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                         <div>
-                          <label style={labelStyle}>Email doanh nghiệp</label>
+                          <label style={labelStyle}>Business Email</label>
                           <input type="email" name="businessEmail" value={business.businessEmail} onChange={handleBusinessChange}
                             placeholder="contact@company.com" style={inputStyle}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                         </div>
                         <div>
-                          <label style={labelStyle}>Điện thoại doanh nghiệp</label>
+                          <label style={labelStyle}>Business Phone</label>
                           <input type="text" name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange}
-                            placeholder="028 1234 5678" style={inputStyle}
+                            placeholder="+84 28 1234 5678" style={inputStyle}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                         </div>
@@ -342,17 +316,17 @@ export default function SetupProfilePage() {
                   {isEdit && (
                     <button type="button" onClick={() => navigate("/client/profile")}
                       style={{ flex: 1, padding: "16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#e1e2eb", cursor: "pointer", fontWeight: 600, fontFamily: "Inter, sans-serif", fontSize: 15 }}>
-                      Hủy
+                      Cancel
                     </button>
                   )}
                   <button type="submit" disabled={loading}
                     style={{ flex: 2, background: "#00F0FF", color: "#002022", fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 16, padding: "16px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                     {loading ? (
-                      <><span className="material-symbols-outlined">progress_activity</span><span>Đang lưu...</span></>
+                      <><span className="material-symbols-outlined">progress_activity</span><span>Saving...</span></>
                     ) : isEdit ? (
-                      <><span>Lưu thay đổi</span><span className="material-symbols-outlined">save</span></>
+                      <><span>Save Changes</span><span className="material-symbols-outlined">save</span></>
                     ) : (
-                      <><span>Hoàn tất & Vào Dashboard</span><span className="material-symbols-outlined">arrow_forward</span></>
+                      <><span>Complete & Go to Dashboard</span><span className="material-symbols-outlined">arrow_forward</span></>
                     )}
                   </button>
                 </div>

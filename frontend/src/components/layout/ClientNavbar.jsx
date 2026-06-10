@@ -10,7 +10,7 @@ const NAV_ITEMS = [
     dropdown: null,
   },
   {
-    label: "FIND JOBS",
+    label: "FIND AI EXPERT",
     dropdown: [
       { icon: "auto_awesome",  label: "AI Matching",   to: "/client/ai-matching" },
       { icon: "person_search", label: "Expert Search", to: "/client/experts" },
@@ -21,8 +21,6 @@ const NAV_ITEMS = [
     active: true,
     dropdown: [
       { icon: "list",          label: "List Projects",      to: "/client/projects" },
-      { icon: "bolt",          label: "Active Projects",    to: "/client/projects/active" },
-      { icon: "task_alt",      label: "Completed Projects", to: "/client/projects/completed" },
       { icon: "chat_bubble",   label: "Messages",           to: "/client/messages" },
     ],
   },
@@ -79,7 +77,7 @@ export default function ClientNavbar() {
 
   const handleLogout = async () => {
     await authService.logout();
-    navigate("/login");
+    navigate("/");
   };
 
   return (
