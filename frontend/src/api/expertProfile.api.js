@@ -1,12 +1,16 @@
 import axiosInstance from "./axiosInstance";
 
 const expertProfileApi = {
-  getMyProfile() {
+  getMyExpertProfile() {
     return axiosInstance.get("/expert-profiles/me");
   },
 
-  saveProfile(data) {
+  createExpertProfile(data) {
     return axiosInstance.post("/expert-profiles", data);
+  },
+
+  resubmitExpertProfile(data) {
+    return axiosInstance.put("/expert-profiles/resubmit", data);
   },
 };
 

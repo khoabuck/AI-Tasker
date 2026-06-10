@@ -1,16 +1,20 @@
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import authService from "../../services/auth.service";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ExpertNavbar() {
   const navigate = useNavigate();
-  const user = authService.getCurrentUser?.();
+  const { user, handleLogout: logoutFromContext } = useAuth();
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isPinned, setIsPinned] = useState(false);
+  const menuRef = useRef(null);
 
   const handleLogout = () => {
-    if (authService.logout) {
-      authService.logout();
-    }
-
-    navigate("/login");
+    logoutFromContext();
+    setIsMenuOpen(false);
+    setIsPinned(false);
+    navigate("/login", { replace: true });
   };
 
   const navLinkClass = ({ isActive }) =>
@@ -19,20 +23,72 @@ export default function ExpertNavbar() {
     }`;
 
   const getInitials = () => {
-    if (!user?.fullName) return "EX";
+    if (user?.fullName) {
+      return user.fullName
+        .split(" ")
+        .map((item) => item[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase();
+    }
 
-    return user.fullName
-      .split(" ")
-      .map((item) => item[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
+    if (user?.email) {
+      return user.email.slice(0, 2).toUpperCase();
+    }
+
+    return "EX";
   };
+
+  const closeMenu = () => {
+    setIsMenuOpen(false);
+    setIsPinned(false);
+  };
+
+  const handleMouseEnter = () => {
+    setIsMenuOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    if (!isPinned) {
+      setIsMenuOpen(false);
+    }
+  };
+
+  const handleAvatarClick = () => {
+    if (isPinned) {
+      setIsPinned(false);
+      setIsMenuOpen(false);
+    } else {
+      setIsPinned(true);
+      setIsMenuOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        closeMenu();
+      }
+    };
+
+    const handleEsc = (event) => {
+      if (event.key === "Escape") {
+        closeMenu();
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEsc);
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEsc);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d1117]/95 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
-        {/* Logo */}
         <Link
           to="/expert/dashboard"
           className="inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
@@ -41,7 +97,6 @@ export default function ExpertNavbar() {
           <span className="ml-1 text-white">Tasker</span>
         </Link>
 
-        {/* Navbar */}
         <nav className="hidden items-center gap-8 md:flex">
           <NavLink to="/expert/dashboard" className={navLinkClass}>
             Home
@@ -63,13 +118,11 @@ export default function ExpertNavbar() {
             Projects
           </NavLink>
 
-          {/* Thêm ví expert */}
           <NavLink to="/expert/wallet" className={navLinkClass}>
             Wallet
           </NavLink>
         </nav>
 
-        {/* Right side */}
         <div className="flex items-center gap-3">
           <button
             type="button"
@@ -80,28 +133,29 @@ export default function ExpertNavbar() {
             </span>
           </button>
 
-          <div className="group relative">
+          <div
+            ref={menuRef}
+            className="relative -my-4 px-4 py-4"
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+          >
             <button
               type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-bold text-cyan-300"
+              onClick={handleAvatarClick}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400/20"
             >
               {getInitials()}
             </button>
 
-            {/* 
-              Sửa lỗi hover:
-              - Không dùng top-12 trực tiếp nữa
-              - Dùng top-full + pt-2 để tạo vùng nối giữa avatar và dropdown
-              - Khi rê chuột xuống menu sẽ không bị mất hover
-            */}
-            <div className="invisible absolute right-0 top-full z-50 w-48 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100">
-              <div className="rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
+            {isMenuOpen && (
+              <div className="absolute right-0 top-12 z-[9999] w-56 rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
                 <p className="truncate border-b border-white/10 px-3 py-2 text-xs text-gray-400">
                   {user?.email || "expert@aitasker.com"}
                 </p>
 
                 <Link
                   to="/expert/profile"
+                  onClick={closeMenu}
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
                 >
                   <span className="material-symbols-outlined text-[18px]">
@@ -112,23 +166,13 @@ export default function ExpertNavbar() {
 
                 <Link
                   to="/expert/dashboard"
+                  onClick={closeMenu}
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
                 >
                   <span className="material-symbols-outlined text-[18px]">
                     dashboard
                   </span>
                   Dashboard
-                </Link>
-
-                {/* Thêm ví expert trong dropdown */}
-                <Link
-                  to="/expert/wallet"
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    account_balance_wallet
-                  </span>
-                  Wallet
                 </Link>
 
                 <button
@@ -142,7 +186,7 @@ export default function ExpertNavbar() {
                   Logout
                 </button>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
