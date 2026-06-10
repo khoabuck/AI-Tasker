@@ -1,8 +1,6 @@
-using AITasker.Domain.Entities;
-using AITasker.Infrastructure.Data;
+using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
@@ -14,11 +12,11 @@ namespace AITasker.Api.Controllers
     [Authorize]
     public class DisputesController : ControllerBase
     {
-        private readonly AITaskerDbContext _context;
+        private readonly IDisputeService _disputeService;
 
-        public DisputesController(AITaskerDbContext context)
+        public DisputesController(IDisputeService disputeService)
         {
-            _context = context;
+            _disputeService = disputeService;
         }
 
         private int GetCurrentUserId()
@@ -38,36 +36,21 @@ namespace AITasker.Api.Controllers
             {
                 int currentUserId = GetCurrentUserId();
 
-                var dispute = new Dispute
+                var disputeId = await _disputeService.OpenDisputeAsync(
+                    dto.ProjectId, 
+                    dto.MilestoneId, 
+                    currentUserId, 
+                    dto.RespondentUserId, 
+                    dto.DisputedAmount, 
+                    dto.Reason
+                );
+
+                if (disputeId == null)
                 {
-                    ProjectId = dto.ProjectId,
-                    MilestoneId = dto.MilestoneId,
-                    OpenedByUserId = currentUserId,
-                    RespondentUserId = dto.RespondentUserId,
-                    DisputedAmount = dto.DisputedAmount,
-                    Reason = dto.Reason,
-                    Status = "OPEN"
-                };
-
-                _context.Disputes.Add(dispute);
-
-                if (dto.MilestoneId.HasValue)
-                {
-                    string refMilestoneId = dto.MilestoneId.Value.ToString();
-
-                    var holdTxn = await _context.Transactions
-                        .FirstOrDefaultAsync(t => t.ReferenceId == refMilestoneId && t.Type == "EscrowHold");
-
-                    if (holdTxn != null)
-                    {
-                        holdTxn.Type = "EscrowFrozen";
-                        holdTxn.Description += $" | [FROZEN] Due to Dispute Open at {DateTime.UtcNow}";
-                    }
+                    return BadRequest(new { message = "Failed to open dispute. Internal server error occurred." });
                 }
 
-                await _context.SaveChangesAsync();
-
-                return Ok(new { message = "Dispute opened successfully. Escrow funds have been strictly FROZEN temporarily!", disputeId = dispute.Id });
+                return Ok(new { message = "Dispute opened successfully. Escrow funds have been strictly FROZEN temporarily!", disputeId = disputeId });
             }
             catch (Exception ex)
             {
@@ -79,9 +62,13 @@ namespace AITasker.Api.Controllers
     public class OpenDisputeDto
     {
         public int ProjectId { get; set; }
+        
         public int? MilestoneId { get; set; }
+        
         public int RespondentUserId { get; set; }
+        
         public decimal DisputedAmount { get; set; }
+        
         public string Reason { get; set; } = string.Empty;
     }
 }
