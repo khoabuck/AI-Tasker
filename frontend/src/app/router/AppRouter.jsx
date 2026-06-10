@@ -40,7 +40,6 @@ import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
 import ManageDisputesPage from "../../modules/admin/pages/ManageDisputesPage";
 import ManageJobsPage from "../../modules/admin/pages/ManageJobsPage";
 import ManageUsersPage from "../../modules/admin/pages/ManageUsersPage";
-import ManageTransactionPage from "../../modules/admin/pages/ManageTransactionsPage";
 // TODO: import khi backend làm xong
 // import RoleSelectionPage from "../../modules/auth/pages/RoleSelectionPage";
 // import ClientDashboard from "../../modules/client/pages/ClientDashboard";
@@ -53,71 +52,67 @@ import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 export default function AppRouter() {
   return (
     <Routes>
-      {/* Guest only — chặn user đã login */}
-      <Route path="/login" element={<GuestRoute><LoginPage /></GuestRoute>} />
-      <Route path="/register" element={<GuestRoute><RegisterPage /></GuestRoute>} />
-      <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
+        {/* Guest only — chặn user đã login */}
+        <Route path="/login"          element={<GuestRoute><LoginPage /></GuestRoute>} />
+        <Route path="/register"       element={<GuestRoute><RegisterPage /></GuestRoute>} />
+        <Route path="/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
 
-      {/* Public — không cần đăng nhập */}
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/verify-email" element={<VerifyEmailPage />} />
-      <Route path="/verify-email-notice" element={<VerifyEmailNoticePage />} />
-      <Route path="/client/dashboard" element={<ClientDashboard />} />
-      <Route path="/client/post-job" element={<PostJobPage />} />
-      <Route path="/client/projects" element={<ProjectsPage />} />
-      <Route path="/select-role" element={<SelectRolePage />} />
-      <Route path="/setup-profile" element={<SetupProfilePage />} />
-      <Route path="/client/profile" element={<ClientProfilePage />} />
-      <Route path="/client/profile/edit" element={<EditProfilePage />} />
-      <Route path="/client/experts" element={<ExpertSearchPage />} />
-      <Route path="/client/ai-matching" element={<AIMatchingPage />} />
-      <Route path="/client/messages" element={<MessagesPage />} />
-      <Route path="/client/wallet" element={<WalletPage />} />
-      <Route path="/client/transactions" element={<TransactionsPage />} />
-      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-      
-      <Route path="/expert" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertDashboard /></ProtectedRoute>} />
-      <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertDashboard /></ProtectedRoute>} />
-      <Route path="/expert/profile" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertProfilePage /></ProtectedRoute>} />
-      <Route path="/expert/jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><BrowseJobsPage /></ProtectedRoute>} />
-      <Route path="/expert/jobs/:jobId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><JobDetailPage /></ProtectedRoute>} />
-      <Route path="/expert/jobs/:jobId/proposal" element={<ProtectedRoute allowedRoles={["EXPERT"]}><SubmitProposalPage /></ProtectedRoute>} />
-      <Route path="/expert/proposals" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProposalsPage /></ProtectedRoute>} />
-      <Route path="/expert/projects" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProjectsPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId/deliverables" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverablesPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId/dispute" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputePage /></ProtectedRoute>} />
-      <Route path="/expert/messages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertMessagesPage /></ProtectedRoute>} />
-      <Route path="/expert/recommended-jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><RecommendedJobsPage /></ProtectedRoute>} />
-      <Route path="/expert/wallet" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertWalletPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId/milestones" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectMilestonesPage /></ProtectedRoute>} />
+        {/* Public — không cần đăng nhập */}
+        <Route path="/reset-password"       element={<ResetPasswordPage />} />
+        <Route path="/verify-email"         element={<VerifyEmailPage />} />
+        <Route path="/verify-email-notice"  element={<VerifyEmailNoticePage />} />
+        <Route path="/client/dashboard" element={<ClientDashboard />} />
+        <Route path="/client/post-job" element={<PostJobPage />} />
+        <Route path="/client/projects" element={<ProjectsPage/>}/>
+        <Route path="/select-role" element={<SelectRolePage />} />
+        <Route path="/setup-profile" element={<SetupProfilePage />} />
+        <Route path="/client/profile" element={<ClientProfilePage />} />
+        <Route path="/client/profile/edit" element={<EditProfilePage />} />
+        <Route path="/client/experts" element={<ExpertSearchPage />} />
+        <Route path="/client/ai-matching" element={<AIMatchingPage />} />
+        <Route path="/client/messages" element={<MessagesPage />} />
+        <Route path="/client/wallet" element={<WalletPage />} />
+        <Route path="/client/transactions" element={<TransactionsPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+        <Route path="/expert" element={<ExpertDashboard />} />
+        <Route path="/expert/dashboard" element={<ExpertDashboard />} />
+        <Route path="/expert/profile" element={<ExpertProfilePage />} />
+        <Route path="/expert/jobs" element={<BrowseJobsPage />} />
+        <Route path="/expert/jobs/:jobId" element={<JobDetailPage />} />
+        <Route path="/expert/jobs/:jobId/proposal" element={<SubmitProposalPage />} />
+        <Route path="/expert/proposals" element={<MyProposalsPage />} />
+        <Route path="/expert/projects" element={<MyProjectsPage />} />
+        <Route path="/expert/projects/:projectId" element={<ProjectDetailPage />} />
+        <Route path="/expert/projects/:projectId/deliverables" element={<DeliverablesPage />} />
+        <Route path="/expert/projects/:projectId/dispute" element={<DisputePage />} />
+        <Route path="/expert/messages" element={<ExpertMessagesPage />} />
+        <Route path="/expert/recommended-jobs" element={<RecommendedJobsPage />} />
+        <Route path="/expert/wallet" element={<ExpertWalletPage />} />
+        <Route path="/expert/projects/:projectId/milestones" element={<ProjectMilestonesPage />} />
+        <Route path="/admin" element={<AdminDashboard />} />
+        <Route path="/admin/dashboard" element={<AdminDashboard />} />
+        <Route path="/admin/disputes" element={<ManageDisputesPage />} />
+        <Route path="/admin/jobs" element={<ManageJobsPage />} />
+        <Route path="/admin/users" element={<ManageUsersPage />} />
+        {/* Onboarding — bật khi backend xong */}
+        {/* <Route path="/select-role"    element={<RoleSelectionPage />} /> */}
+        {/* <Route path="/setup-profile"  element={<SetupProfilePage />} /> */}
 
-      <Route path="/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminDashboard /></ProtectedRoute>} />
-      <Route path="/admin/dashboard" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminDashboard /></ProtectedRoute>} />
-      <Route path="/admin/disputes" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageDisputesPage /></ProtectedRoute>} />
-      <Route path="/admin/jobs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageJobsPage /></ProtectedRoute>} />
-      <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageUsersPage /></ProtectedRoute>} />
-      <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageTransactionPage /></ProtectedRoute>} />
+        {/* Protected — Client */}
+        {/* <Route path="/client/*" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientLayout /></ProtectedRoute>} /> */}
 
-      {/* Onboarding — bật khi backend xong */}
-      {/* <Route path="/select-role"    element={<RoleSelectionPage />} /> */}
-      {/* <Route path="/setup-profile"  element={<SetupProfilePage />} /> */}
+        {/* Protected — Expert */}
+        {/* <Route path="/expert/*" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertLayout /></ProtectedRoute>} /> */}
 
-      {/* Protected — Client */}
-      {/* <Route path="/client/*" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientLayout /></ProtectedRoute>} /> */}
+        {/* Protected — Admin */}
+        {/* <Route path="/admin/*" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminLayout /></ProtectedRoute>} /> */}
 
-      {/* Protected — Expert */}
-      {/* <Route path="/expert/*" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertLayout /></ProtectedRoute>} /> */}
-
-      {/* Protected — Admin */}
-      {/* <Route path="/admin/*" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminLayout /></ProtectedRoute>} /> */}
-
-      <Route path="/" element={<LandingPage />} />
-      <Route path="*" element={
-        <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-          404 — Trang không tồn tại
-        </div>
-      } />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={
+          <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+            404 — Trang không tồn tại
+          </div>
+        } />
     </Routes>
   );
 }
