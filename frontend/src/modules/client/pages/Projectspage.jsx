@@ -2,17 +2,29 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
-import { getJobsApi } from "../../../api/job.api";
+import axiosInstance from "../../../api/axiosInstance";
 
 const STATUS_CONFIG = {
-  PENDING:   { label: "Pending",   color: "#facc15", bg: "rgba(250,204,21,0.08)",  border: "rgba(250,204,21,0.25)"  },
-  ACTIVE:    { label: "Active",    color: "#00F0FF", bg: "rgba(0,240,255,0.08)",   border: "rgba(0,240,255,0.25)"   },
-  COMPLETED: { label: "Completed", color: "#4ade80", bg: "rgba(74,222,128,0.08)",  border: "rgba(74,222,128,0.25)"  },
-  CANCELLED: { label: "Cancelled", color: "#f87171", bg: "rgba(248,113,113,0.08)", border: "rgba(248,113,113,0.25)" },
+  DRAFT:     { label: "Draft",     color: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.25)" },
+  OPEN:      { label: "Open",      color: "#00F0FF", bg: "rgba(0,240,255,0.08)",   border: "rgba(0,240,255,0.25)"   },
+  ACTIVE:    { label: "Active",    color: "#22c55e", bg: "rgba(34,197,94,0.08)",   border: "rgba(34,197,94,0.25)"   },
+  COMPLETED: { label: "Completed", color: "#3b82f6", bg: "rgba(59,130,246,0.08)",  border: "rgba(59,130,246,0.25)"  },
+  CANCELLED: { label: "Cancelled", color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.25)"   },
+  DISPUTED:  { label: "Disputed",  color: "#f97316", bg: "rgba(249,115,22,0.08)",  border: "rgba(249,115,22,0.25)"  },
 };
 
+const FILTERS = [
+  { key: "ALL",       label: "All",       color: "#e1e2eb" },
+  { key: "DRAFT",     label: "Draft",     color: "#94a3b8" },
+  { key: "OPEN",      label: "Open",      color: "#00F0FF" },
+  { key: "ACTIVE",    label: "Active",    color: "#22c55e" },
+  { key: "COMPLETED", label: "Completed", color: "#3b82f6" },
+  { key: "CANCELLED", label: "Cancelled", color: "#ef4444" },
+  { key: "DISPUTED",  label: "Disputed",  color: "#f97316" },
+];
+
 function StatusBadge({ status }) {
-  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.PENDING;
+  const cfg = STATUS_CONFIG[status] || { label: status, color: "#8c90a0", bg: "rgba(140,144,160,0.08)", border: "rgba(140,144,160,0.25)" };
   return (
     <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}` }}>
       {cfg.label}
@@ -26,18 +38,17 @@ function JobCard({ job, onDelete }) {
   const skills = job.skills || [];
 
   return (
-    <div style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 28, display: "flex", flexDirection: "column", gap: 16, transition: "border-color 0.2s, transform 0.2s" }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; }}>
+    <div style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 28, display: "flex", flexDirection: "column", gap: 16, transition: "border-color 0.2s" }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}>
 
-      {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 18, color: "#e1e2eb" }}>
               {job.title || "Untitled Job"}
             </h3>
-            {job.isAIAssisted && (
+            {job.isAiAssisted && (
               <span style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 8px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 10, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 12 }}>auto_awesome</span>
                 AI
@@ -63,26 +74,24 @@ function JobCard({ job, onDelete }) {
         <StatusBadge status={job.status} />
       </div>
 
-      {/* Description */}
-      {(job.aIGeneratedDescription || job.description) && (
-        <div style={{ background: job.aIGeneratedDescription ? "rgba(0,240,255,0.03)" : "rgba(255,255,255,0.02)", border: `1px solid ${job.aIGeneratedDescription ? "rgba(0,240,255,0.1)" : "rgba(255,255,255,0.06)"}`, borderRadius: 8, padding: "12px 14px" }}>
-          {job.aIGeneratedDescription && (
+      {(job.aiGeneratedDescription || job.description) && (
+        <div style={{ background: job.aiGeneratedDescription ? "rgba(0,240,255,0.03)" : "rgba(255,255,255,0.02)", border: `1px solid ${job.aiGeneratedDescription ? "rgba(0,240,255,0.1)" : "rgba(255,255,255,0.06)"}`, borderRadius: 8, padding: "12px 14px" }}>
+          {job.aiGeneratedDescription && (
             <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 6 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 13, color: "#00F0FF" }}>auto_awesome</span>
               <span style={{ fontSize: 10, fontFamily: "JetBrains Mono, monospace", color: "#00F0FF", textTransform: "uppercase", letterSpacing: "0.08em" }}>AI Generated</span>
             </div>
           )}
           <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.6, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-line" }}>
-            {job.aIGeneratedDescription || job.description}
+            {job.aiGeneratedDescription || job.description}
           </p>
         </div>
       )}
 
-      {/* Skills */}
       {skills.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {skills.slice(0, 8).map((s, i) => {
-            const label = typeof s === "string" ? s : (s.skillLevelRequired || s.name || "Skill");
+            const label = typeof s === "string" ? s : (s.skillName || s.name || "Skill");
             return (
               <span key={i} style={{ padding: "4px 10px", background: "rgba(173,198,255,0.08)", border: "1px solid rgba(173,198,255,0.15)", borderRadius: 999, fontSize: 11, color: "#adc6ff", fontFamily: "JetBrains Mono, monospace" }}>
                 {label}
@@ -97,20 +106,17 @@ function JobCard({ job, onDelete }) {
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <button onClick={() => navigate(`/client/projects/${job.id}`)}
+        <button onClick={() => navigate(`/client/projects/${job.jobPostingId || job.id}`)}
           style={{ flex: 1, padding: "10px", background: "#1d2026", color: "#e1e2eb", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "#272a30"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.background = "#1d2026"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}>
           View Details
         </button>
-
-        {/* TODO (BE): deleteJobApi(job.id) khi BE làm xong */}
-        <button onClick={() => onDelete(job.id)}
-          style={{ padding: "10px 16px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 14, cursor: "pointer", transition: "all 0.2s", display: "flex", alignItems: "center" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.15)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.08)"; }}>
+        <button onClick={() => onDelete(job.jobPostingId || job.id)}
+          style={{ padding: "10px 16px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center" }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.15)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
         </button>
       </div>
@@ -125,10 +131,9 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // GET /api/jobs
   useEffect(() => {
     setLoading(true);
-    getJobsApi({ Page: 1, PageSize: 50 })
+    axiosInstance.get("/jobs/my")
       .then((res) => {
         const data = Array.isArray(res.data) ? res.data : (res.data?.data || res.data?.items || []);
         setJobs(data);
@@ -137,17 +142,11 @@ export default function ProjectsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // TODO (BE): deleteJobApi(id) khi BE làm xong
-  // const handleDelete = async (id) => {
-  //   await deleteJobApi(id);
-  //   setJobs(prev => prev.filter(j => j.id !== id));
-  // };
   const handleDelete = (id) => {
     if (!confirm("Are you sure you want to delete this job?")) return;
-    setJobs((prev) => prev.filter((j) => j.id !== id));
+    setJobs((prev) => prev.filter((j) => (j.jobPostingId || j.id) !== id));
   };
 
-  const FILTERS = ["ALL", "PENDING", "ACTIVE", "COMPLETED", "REMOVED"];
   const filtered = filter === "ALL" ? jobs : jobs.filter((j) => j.status === filter);
 
   return (
@@ -155,13 +154,15 @@ export default function ProjectsPage() {
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "48px 24px" }}>
 
         {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 40, flexWrap: "wrap", gap: 16 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
           <div>
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>
               My Projects
             </h1>
             <p style={{ color: "#8c90a0", fontSize: 14 }}>
-              {loading ? "Loading..." : `${jobs.length} job${jobs.length !== 1 ? "s" : ""} posted`}
+              {loading ? "Loading..." : filter === "ALL"
+                ? `${jobs.length} job${jobs.length !== 1 ? "s" : ""} total`
+                : `${filtered.length} job${filtered.length !== 1 ? "s" : ""} ${filter.toLowerCase()}`}
             </p>
           </div>
           <button onClick={() => navigate("/client/post-job")}
@@ -173,14 +174,40 @@ export default function ProjectsPage() {
           </button>
         </div>
 
+        {/* Status summary cards */}
+        {!loading && !error && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginBottom: 32 }}>
+            {FILTERS.filter(f => f.key !== "ALL").map((f) => {
+              const count = jobs.filter(j => j.status === f.key).length;
+              const isActive = filter === f.key;
+              return (
+                <button key={f.key} onClick={() => setFilter(f.key === filter ? "ALL" : f.key)}
+                  style={{ padding: "14px 12px", borderRadius: 12, border: `1px solid ${isActive ? f.color : f.color + "30"}`, background: isActive ? f.color + "15" : "rgba(16,19,25,0.6)", cursor: "pointer", transition: "all 0.2s", textAlign: "center" }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = f.color + "15")}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = isActive ? f.color + "15" : "rgba(16,19,25,0.6)")}>
+                  <div style={{ fontSize: 22, fontWeight: 700, color: f.color, fontFamily: "Hanken Grotesk, sans-serif" }}>{count}</div>
+                  <div style={{ fontSize: 10, color: f.color, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginTop: 4 }}>{f.label}</div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {/* Filter tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 32, flexWrap: "wrap" }}>
-          {FILTERS.map((f) => (
-            <button key={f} onClick={() => setFilter(f)}
-              style={{ padding: "8px 18px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.2s", background: filter === f ? "#00F0FF" : "rgba(255,255,255,0.04)", color: filter === f ? "#002022" : "#8c90a0", border: filter === f ? "none" : "1px solid rgba(255,255,255,0.1)" }}>
-              {f}
-            </button>
-          ))}
+        <div style={{ display: "flex", gap: 8, marginBottom: 28, flexWrap: "wrap" }}>
+          {FILTERS.map((f) => {
+            const count = f.key === "ALL" ? jobs.length : jobs.filter(j => j.status === f.key).length;
+            const isActive = filter === f.key;
+            return (
+              <button key={f.key} onClick={() => setFilter(f.key)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.06em", cursor: "pointer", transition: "all 0.2s", background: isActive ? f.color : "rgba(255,255,255,0.04)", color: isActive ? "#002022" : f.color, border: isActive ? "none" : `1px solid ${f.color}40` }}>
+                {f.label}
+                <span style={{ padding: "1px 6px", borderRadius: 999, fontSize: 10, fontWeight: 700, background: isActive ? "rgba(0,0,0,0.2)" : f.color + "20", color: isActive ? "#002022" : f.color }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
 
         {/* Loading */}
@@ -201,10 +228,10 @@ export default function ProjectsPage() {
         {/* List */}
         {!loading && !error && (
           filtered.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "80px 0" }}>
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 64, color: "#272a30", display: "block", marginBottom: 16 }}>inbox</span>
               <p style={{ color: "#8c90a0", fontSize: 15, marginBottom: 24 }}>
-                {filter === "ALL" ? "No jobs yet. Post your first job!" : `No jobs with status "${filter}".`}
+                {filter === "ALL" ? "No jobs yet. Post your first job!" : `No ${filter.toLowerCase()} jobs.`}
               </p>
               {filter === "ALL" && (
                 <button onClick={() => navigate("/client/post-job")}
@@ -216,7 +243,7 @@ export default function ProjectsPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {filtered.map((job) => (
-                <JobCard key={job.id} job={job} onDelete={handleDelete} />
+                <JobCard key={job.jobPostingId || job.id} job={job} onDelete={handleDelete} />
               ))}
             </div>
           )
