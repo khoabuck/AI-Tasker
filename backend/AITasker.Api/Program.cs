@@ -7,7 +7,6 @@ using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
 using AITasker.Infrastructure.Services;
-using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -187,6 +186,14 @@ builder.Services.AddScoped<
 >();
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+
+// BE2 - Skills API
+builder.Services.AddScoped<ISkillService, SkillService>();
+
+// BE2 - Jobs API
+// Nếu bạn chưa tạo JobService.cs thì tạm comment dòng này lại.
+// Sau khi tạo JobService.cs thì mở lại.
+builder.Services.AddScoped<IJobService, JobService>();
 
 // =========================
 // Business Verification Provider

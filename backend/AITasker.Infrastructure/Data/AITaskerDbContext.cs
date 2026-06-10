@@ -30,6 +30,18 @@ public class AITaskerDbContext : DbContext
     public DbSet<ExpertCertificate> ExpertCertificates
         => Set<ExpertCertificate>();
 
+    // =========================
+    // BE2 - Skills
+    // =========================
+    public DbSet<Skill> Skills => Set<Skill>();
+
+    // =========================
+    // BE2 - Jobs
+    // =========================
+    public DbSet<JobPosting> JobPostings => Set<JobPosting>();
+
+    public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -377,6 +389,147 @@ public class AITaskerDbContext : DbContext
                 .WithMany(x => x.Certificates)
                 .HasForeignKey(x => x.ExpertProfileId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Skills
+        // =========================
+        modelBuilder.Entity<Skill>(entity =>
+        {
+            entity.ToTable("Skills");
+
+            entity.HasKey(x => x.SkillId);
+
+            entity.Property(x => x.SkillName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(x => x.SkillName)
+                .IsUnique();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.Category)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.IsActive)
+                .IsRequired()
+                .HasDefaultValue(true);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+        });
+
+        // =========================
+        // JobPostings
+        // =========================
+        modelBuilder.Entity<JobPosting>(entity =>
+        {
+            entity.ToTable("JobPostings");
+
+            entity.HasKey(x => x.JobPostingId);
+
+            entity.Property(x => x.Title)
+                .HasMaxLength(255)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .IsRequired();
+
+            entity.Property(x => x.AiGeneratedDescription);
+
+            entity.Property(x => x.BudgetMin)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.BudgetMax)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Deadline)
+                .IsRequired();
+
+            entity.Property(x => x.ProjectType)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.Complexity)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.ExpectedDeliverables)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.IsAiAssisted)
+                .IsRequired()
+                .HasDefaultValue(false);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired()
+                .HasDefaultValueSql("SYSUTCDATETIME()");
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.ClientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(x => x.JobSkills)
+                .WithOne(x => x.JobPosting)
+                .HasForeignKey(x => x.JobPostingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(x => new
+            {
+                x.ClientProfileId,
+                x.Status
+            });
+
+            entity.HasIndex(x => new
+            {
+                x.Status,
+                x.Deadline
+            });
+        });
+
+        // =========================
+        // JobSkills
+        // =========================
+        modelBuilder.Entity<JobSkill>(entity =>
+        {
+            entity.ToTable("JobSkills");
+
+            entity.HasKey(x => x.JobSkillId);
+
+            entity.Property(x => x.SkillLevelRequired)
+                .HasMaxLength(30);
+
+            entity.Property(x => x.IsRequired)
+                .IsRequired()
+                .HasDefaultValue(true);
+
+            entity.HasOne(x => x.JobPosting)
+                .WithMany(x => x.JobSkills)
+                .HasForeignKey(x => x.JobPostingId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Skill)
+                .WithMany()
+                .HasForeignKey(x => x.SkillId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new
+            {
+                x.JobPostingId,
+                x.SkillId
+            }).IsUnique();
         });
     }
 }
