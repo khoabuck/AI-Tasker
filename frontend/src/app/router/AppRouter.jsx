@@ -40,6 +40,7 @@ import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
 import ManageDisputesPage from "../../modules/admin/pages/ManageDisputesPage";
 import ManageJobsPage from "../../modules/admin/pages/ManageJobsPage";
 import ManageUsersPage from "../../modules/admin/pages/ManageUsersPage";
+import ManageTransactionPage from "../../modules/admin/pages/ManageTransactionsPage";
 // TODO: import khi backend làm xong
 // import RoleSelectionPage from "../../modules/auth/pages/RoleSelectionPage";
 // import ClientDashboard from "../../modules/client/pages/ClientDashboard";
@@ -94,6 +95,7 @@ export default function AppRouter() {
         <Route path="/admin/disputes" element={<ManageDisputesPage />} />
         <Route path="/admin/jobs" element={<ManageJobsPage />} />
         <Route path="/admin/users" element={<ManageUsersPage />} />
+        <Route path="/admin/transactions" element={<ManageTransactionPage />} />
         {/* Onboarding — bật khi backend xong */}
         {/* <Route path="/select-role"    element={<RoleSelectionPage />} /> */}
         {/* <Route path="/setup-profile"  element={<SetupProfilePage />} /> */}

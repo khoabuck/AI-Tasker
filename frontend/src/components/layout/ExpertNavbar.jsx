@@ -62,6 +62,11 @@ export default function ExpertNavbar() {
           <NavLink to="/expert/projects" className={navLinkClass}>
             Projects
           </NavLink>
+
+          {/* Thêm ví expert */}
+          <NavLink to="/expert/wallet" className={navLinkClass}>
+            Wallet
+          </NavLink>
         </nav>
 
         {/* Right side */}
@@ -83,41 +88,60 @@ export default function ExpertNavbar() {
               {getInitials()}
             </button>
 
-            <div className="invisible absolute right-0 top-12 w-48 rounded-xl border border-white/10 bg-[#151a22] p-2 opacity-0 shadow-2xl transition group-hover:visible group-hover:opacity-100">
-              <p className="truncate border-b border-white/10 px-3 py-2 text-xs text-gray-400">
-                {user?.email || "expert@aitasker.com"}
-              </p>
+            {/* 
+              Sửa lỗi hover:
+              - Không dùng top-12 trực tiếp nữa
+              - Dùng top-full + pt-2 để tạo vùng nối giữa avatar và dropdown
+              - Khi rê chuột xuống menu sẽ không bị mất hover
+            */}
+            <div className="invisible absolute right-0 top-full z-50 w-48 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100">
+              <div className="rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
+                <p className="truncate border-b border-white/10 px-3 py-2 text-xs text-gray-400">
+                  {user?.email || "expert@aitasker.com"}
+                </p>
 
-              <Link
-                to="/expert/profile"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  person
-                </span>
-                Profile
-              </Link>
+                <Link
+                  to="/expert/profile"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    person
+                  </span>
+                  Profile
+                </Link>
 
-              <Link
-                to="/expert/dashboard"
-                className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  dashboard
-                </span>
-                Dashboard
-              </Link>
+                <Link
+                  to="/expert/dashboard"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    dashboard
+                  </span>
+                  Dashboard
+                </Link>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 hover:bg-white/[0.05] hover:text-red-400"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  logout
-                </span>
-                Logout
-              </button>
+                {/* Thêm ví expert trong dropdown */}
+                <Link
+                  to="/expert/wallet"
+                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    account_balance_wallet
+                  </span>
+                  Wallet
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={handleLogout}
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-gray-300 hover:bg-white/[0.05] hover:text-red-400"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    logout
+                  </span>
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
         </div>
