@@ -1,4 +1,4 @@
-import jobApi from "../api/job.api";
+import { createJobApi, getJobsApi } from "../api/job.api";
 
 const normalizeList = (response) => {
   if (Array.isArray(response.data)) {
