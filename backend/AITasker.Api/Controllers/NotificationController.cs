@@ -1,41 +1,48 @@
-using AITasker.Infrastructure.Data;
+using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace AITasker.Api.Controllers
 {
     [ApiController]
     [Route("api/notifications")]
     [Authorize]
-    public class NotificationsController : ControllerBase
+    public class NotificationController : ControllerBase
     {
-        private readonly AITaskerDbContext _context;
+        private readonly INotificationService _notificationService;
 
-        public NotificationsController(AITaskerDbContext context)
+        public NotificationController(INotificationService notificationService)
         {
-            _context = context;
+            _notificationService = notificationService;
         }
 
-        [HttpGet("me/{userId}")]
-        public async Task<IActionResult> GetMyNotifications(int userId)
+        private int GetCurrentUserId()
         {
-            var list = await _context.Notifications
-                .Where(n => n.UserId == userId)
-                .OrderByDescending(n => n.CreatedAt)
-                .Select(n => new {
-                    n.Id,
-                    n.Title,
-                    n.Content,
-                    n.Type,
-                    n.IsRead,
-                    n.CreatedAt
-                })
-                .ToListAsync();
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                throw new InvalidOperationException("Unauthorized or invalid user token structure.");
+            }
+            return userId;
+        }
 
-            return Ok(list);
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyNotifications()
+        {
+            try
+            {
+                int currentUserId = GetCurrentUserId();
+                
+                var list = await _notificationService.GetNotificationsByUserIdAsync(currentUserId);
+                return Ok(new { data = list });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 }
