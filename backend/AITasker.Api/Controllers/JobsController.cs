@@ -51,6 +51,28 @@ public class JobsController : ControllerBase
         }
     }
 
+    [HttpPut("{id:int}/submit")]
+    [Authorize(Roles = "CLIENT")]
+    public async Task<IActionResult> SubmitDraft(int id)
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var job = await _jobService.SubmitDraftAsync(userId, id);
+
+            if (job == null)
+            {
+                return NotFound(new { message = "Job not found." });
+            }
+
+            return Ok(job);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpGet("open")]
     [AllowAnonymous]
     public async Task<IActionResult> GetOpenJobs(
@@ -75,7 +97,10 @@ public class JobsController : ControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> GetJobById(int id)
     {
-        var job = await _jobService.GetJobByIdAsync(id);
+        var userId = TryGetCurrentUserId();
+        var role = GetCurrentUserRole();
+
+        var job = await _jobService.GetJobByIdAsync(id, userId, role);
 
         if (job == null)
         {
@@ -143,5 +168,42 @@ public class JobsController : ControllerBase
         }
 
         return int.Parse(userIdValue);
+    }
+
+    private int? TryGetCurrentUserId()
+    {
+        var userIdValue =
+            User.FindFirstValue("userId") ??
+            User.FindFirstValue(ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrWhiteSpace(userIdValue))
+        {
+            return null;
+        }
+
+        return int.TryParse(userIdValue, out var userId)
+            ? userId
+            : null;
+    }
+
+    private string? GetCurrentUserRole()
+    {
+        if (User.IsInRole("ADMIN"))
+        {
+            return "ADMIN";
+        }
+
+        if (User.IsInRole("CLIENT"))
+        {
+            return "CLIENT";
+        }
+
+        if (User.IsInRole("EXPERT"))
+        {
+            return "EXPERT";
+        }
+
+        return User.FindFirstValue(ClaimTypes.Role) ??
+               User.FindFirstValue("role");
     }
 }

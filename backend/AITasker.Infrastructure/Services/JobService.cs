@@ -9,6 +9,13 @@ namespace AITasker.Infrastructure.Services;
 
 public class JobService : IJobService
 {
+    private const string StatusDraft = "DRAFT";
+    private const string StatusOpen = "OPEN";
+    private const string StatusActive = "ACTIVE";
+    private const string StatusCompleted = "COMPLETED";
+    private const string StatusDisputed = "DISPUTED";
+    private const string StatusCancelled = "CANCELLED";
+
     private readonly AITaskerDbContext _context;
 
     public JobService(AITaskerDbContext context)
@@ -44,7 +51,7 @@ public class JobService : IJobService
             ProjectType = request.ProjectType.Trim(),
             Complexity = NormalizeComplexity(request.Complexity),
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
-            Status = "DRAFT",
+            Status = StatusDraft,
             IsAiAssisted = request.IsAiAssisted,
             CreatedAt = DateTime.UtcNow
         };
@@ -88,7 +95,7 @@ public class JobService : IJobService
             ProjectType = request.ProjectType.Trim(),
             Complexity = NormalizeComplexity(request.Complexity),
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
-            Status = "OPEN",
+            Status = StatusOpen,
             IsAiAssisted = request.IsAiAssisted,
             CreatedAt = DateTime.UtcNow
         };
@@ -104,13 +111,50 @@ public class JobService : IJobService
             ?? throw new InvalidOperationException("Failed to submit job.");
     }
 
+    public async Task<JobResponse?> SubmitDraftAsync(int userId, int jobPostingId)
+    {
+        var clientProfile = await _context.ClientProfiles
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        var job = await _context.JobPostings
+            .Include(x => x.JobSkills)
+            .FirstOrDefaultAsync(x =>
+                x.JobPostingId == jobPostingId &&
+                x.ClientProfileId == clientProfile.ClientProfileId
+            );
+
+        if (job == null)
+        {
+            return null;
+        }
+
+        if (job.Status != StatusDraft)
+        {
+            throw new InvalidOperationException("Only draft jobs can be submitted.");
+        }
+
+        ValidateDraftBeforeSubmit(job);
+
+        job.Status = StatusOpen;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return await GetJobResponseByIdAsync(job.JobPostingId);
+    }
+
     public async Task<List<JobResponse>> GetOpenJobsAsync(string? keyword, int? skillId)
     {
         var query = _context.JobPostings
             .AsNoTracking()
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
-            .Where(x => x.Status == "OPEN")
+            .Where(x => x.Status == StatusOpen)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -159,9 +203,29 @@ public class JobService : IJobService
         return jobs.Select(ToResponse).ToList();
     }
 
-    public async Task<JobResponse?> GetJobByIdAsync(int jobPostingId)
+    public async Task<JobResponse?> GetJobByIdAsync(
+        int jobPostingId,
+        int? userId,
+        string? role)
     {
-        return await GetJobResponseByIdAsync(jobPostingId);
+        var job = await _context.JobPostings
+            .AsNoTracking()
+            .Include(x => x.ClientProfile)
+            .Include(x => x.JobSkills)
+                .ThenInclude(x => x.Skill)
+            .FirstOrDefaultAsync(x => x.JobPostingId == jobPostingId);
+
+        if (job == null)
+        {
+            return null;
+        }
+
+        if (!CanViewJob(job, userId, role))
+        {
+            return null;
+        }
+
+        return ToResponse(job);
     }
 
     public async Task<JobResponse?> UpdateJobAsync(
@@ -188,12 +252,12 @@ public class JobService : IJobService
             return null;
         }
 
-        if (job.Status == "CLOSED" || job.Status == "CANCELLED")
+        if (job.Status is not (StatusDraft or StatusOpen))
         {
-            throw new InvalidOperationException("Cannot update a closed or cancelled job.");
+            throw new InvalidOperationException("Only draft or open jobs can be updated.");
         }
 
-        ValidateUpdateJobRequest(request, requireSkill: job.Status == "OPEN");
+        ValidateUpdateJobRequest(request, requireSkill: job.Status == StatusOpen);
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -241,12 +305,12 @@ public class JobService : IJobService
             return false;
         }
 
-        if (job.Status == "CLOSED")
+        if (job.Status is not (StatusDraft or StatusOpen))
         {
-            throw new InvalidOperationException("Cannot cancel a closed job.");
+            throw new InvalidOperationException("Only draft or open jobs can be cancelled.");
         }
 
-        job.Status = "CANCELLED";
+        job.Status = StatusCancelled;
         job.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -254,7 +318,7 @@ public class JobService : IJobService
         return true;
     }
 
-    private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int> skillIds)
+    private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int>? skillIds)
     {
         var oldSkills = await _context.JobSkills
             .Where(x => x.JobPostingId == jobPostingId)
@@ -262,7 +326,7 @@ public class JobService : IJobService
 
         _context.JobSkills.RemoveRange(oldSkills);
 
-        var distinctSkillIds = skillIds
+        var distinctSkillIds = (skillIds ?? new List<int>())
             .Distinct()
             .ToList();
 
@@ -333,6 +397,29 @@ public class JobService : IJobService
         };
     }
 
+    private static bool CanViewJob(JobPosting job, int? userId, string? role)
+    {
+        if (job.Status == StatusOpen)
+        {
+            return true;
+        }
+
+        if (role == "ADMIN")
+        {
+            return true;
+        }
+
+        if (role == "CLIENT" &&
+            userId.HasValue &&
+            job.ClientProfile != null &&
+            job.ClientProfile.UserId == userId.Value)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private static void ValidateJobRequest(CreateJobRequest request, bool requireSkill)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
@@ -365,7 +452,7 @@ public class JobService : IJobService
             throw new InvalidOperationException("Expected deliverables are required.");
         }
 
-        if (requireSkill && request.SkillIds.Count == 0)
+        if (requireSkill && (request.SkillIds == null || request.SkillIds.Count == 0))
         {
             throw new InvalidOperationException("At least one skill is required.");
         }
@@ -403,7 +490,45 @@ public class JobService : IJobService
             throw new InvalidOperationException("Expected deliverables are required.");
         }
 
-        if (requireSkill && request.SkillIds.Count == 0)
+        if (requireSkill && (request.SkillIds == null || request.SkillIds.Count == 0))
+        {
+            throw new InvalidOperationException("At least one skill is required.");
+        }
+    }
+
+    private static void ValidateDraftBeforeSubmit(JobPosting job)
+    {
+        if (string.IsNullOrWhiteSpace(job.Title))
+        {
+            throw new InvalidOperationException("Job title is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.Description))
+        {
+            throw new InvalidOperationException("Job description is required.");
+        }
+
+        if (job.BudgetMin < 0 || job.BudgetMax < job.BudgetMin)
+        {
+            throw new InvalidOperationException("Invalid budget range.");
+        }
+
+        if (job.Deadline <= DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("Deadline must be in the future.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.ProjectType))
+        {
+            throw new InvalidOperationException("Project type is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.ExpectedDeliverables))
+        {
+            throw new InvalidOperationException("Expected deliverables are required.");
+        }
+
+        if (job.JobSkills.Count == 0)
         {
             throw new InvalidOperationException("At least one skill is required.");
         }

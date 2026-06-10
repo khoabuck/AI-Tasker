@@ -178,6 +178,7 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 
 builder.Services.AddScoped<
@@ -187,13 +188,21 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
+// =========================
 // BE2 - Skills API
+// =========================
 builder.Services.AddScoped<ISkillService, SkillService>();
 
+// =========================
 // BE2 - Jobs API
-// Nếu bạn chưa tạo JobService.cs thì tạm comment dòng này lại.
-// Sau khi tạo JobService.cs thì mở lại.
+// =========================
 builder.Services.AddScoped<IJobService, JobService>();
+
+// =========================
+// BE2 - AI Job Assistant
+// =========================
+builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
+builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
 
 // =========================
 // Business Verification Provider
