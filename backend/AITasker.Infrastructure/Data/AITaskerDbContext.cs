@@ -12,11 +12,9 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
-    public DbSet<EmailVerificationToken> EmailVerificationTokens
-        => Set<EmailVerificationToken>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
-    public DbSet<PasswordResetToken> PasswordResetTokens
-        => Set<PasswordResetToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
     public DbSet<ClientProfile> ClientProfiles => Set<ClientProfile>();
 

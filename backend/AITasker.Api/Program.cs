@@ -142,12 +142,6 @@ builder.Services
         options.Scope.Add("profile");
         options.Scope.Add("email");
         options.SaveTokens = true;
-
-        options.ClaimActions.MapJsonKey(
-            "urn:google:picture",
-            "picture",
-            "url"
-        );
     });
 
 builder.Services.AddAuthorization();
@@ -215,6 +209,7 @@ builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
+
 
 // =========================
 // BE2 - AI Job Assistant
