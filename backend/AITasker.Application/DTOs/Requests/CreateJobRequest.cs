@@ -16,7 +16,7 @@ public class CreateJobRequest
 
     public string ProjectType { get; set; } = string.Empty;
 
-    public string Complexity { get; set; } = "MEDIUM";
+    public string? Complexity { get; set; }
 
     public string ExpectedDeliverables { get; set; } = string.Empty;
 
