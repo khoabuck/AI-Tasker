@@ -1,16 +1,17 @@
-// src/api/job.api.js
 import axiosInstance from "./axiosInstance";
 
-// POST /api/jobs/draft — lưu nháp
-export const saveJobDraftApi = (data) => axiosInstance.post("/jobs/draft", data);
+const jobApi = {
+  getOpenJobs() {
+    return axiosInstance.get("/jobs/open");
+  },
 
-// POST /api/jobs/submit — submit chính thức
-export const submitJobApi = (data) => axiosInstance.post("/jobs/submit", data);
+   getRecommendedJobs() {
+    return axiosInstance.get("/jobs/recommended");
+  },
 
-// GET /api/jobs — lấy danh sách jobs
-export const getJobsApi = (params) => axiosInstance.get("/jobs", { params });
+  getJobById(jobId) {
+    return axiosInstance.get(`/jobs/${jobId}`);
+  },
+};
 
-// TODO (BE): thêm khi BE làm xong
-// export const getJobByIdApi = (id) => axiosInstance.get(`/jobs/${id}`);
-// export const updateJobApi = (id, data) => axiosInstance.put(`/jobs/${id}`, data);
-// export const deleteJobApi = (id) => axiosInstance.delete(`/jobs/${id}`);
+export default jobApi;

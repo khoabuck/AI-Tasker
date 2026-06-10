@@ -1,5 +1,4 @@
-
-import { saveJobDraftApi, submitJobApi } from "../api/job.api";
+import jobApi from "../api/job.api";
 
 const normalizeList = (response) => {
   if (Array.isArray(response.data)) {

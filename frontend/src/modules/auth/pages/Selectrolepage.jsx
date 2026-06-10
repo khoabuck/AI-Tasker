@@ -3,6 +3,7 @@
 // Gọi sau khi verify email xong, status = PENDING_ROLE
 
 import { useState } from "react";
+import { useAuth } from "../../../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -29,25 +30,33 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleConfirm = async () => {
-    if (!selected) return;
-    setLoading(true);
-    setError("");
-    try {
-      // POST /api/auth/select-role
-      await axiosInstance.post("/auth/select-role", { role: selected });
-      // Sau khi chọn role → setup profile
-      navigate("/setup-profile");
-    } catch (err) {
-      setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
-    } finally {
-      setLoading(false);
+  if (!selected) return;
+
+  setLoading(true);
+  setError("");
+
+  try {
+    await axiosInstance.post("/auth/select-role", { role: selected });
+
+    await refreshUser();
+
+    if (selected === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
+    } else {
+      navigate("/setup-profile", { replace: true });
     }
-  };
+  } catch (err) {
+    setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div style={{ background: "#12151B", color: "#e1e2eb", minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "Inter, sans-serif" }}>
