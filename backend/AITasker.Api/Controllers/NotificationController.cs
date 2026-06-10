@@ -35,9 +35,41 @@ namespace AITasker.Api.Controllers
             try
             {
                 int currentUserId = GetCurrentUserId();
-                
                 var list = await _notificationService.GetNotificationsByUserIdAsync(currentUserId);
                 return Ok(new { data = list });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("{notificationId}/read")]
+        public async Task<IActionResult> MarkAsRead(int notificationId)
+        {
+            try
+            {
+                int currentUserId = GetCurrentUserId();
+                var success = await _notificationService.MarkAsReadAsync(notificationId, currentUserId);
+                
+                if (!success) return BadRequest(new { message = "Notification not found or access denied." });
+                return Ok(new { success = true, message = "Notification marked as read successfully." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("read-all")]
+        public async Task<IActionResult> MarkAllAsRead()
+        {
+            try
+            {
+                int currentUserId = GetCurrentUserId();
+                await _notificationService.MarkAllAsReadAsync(currentUserId);
+                
+                return Ok(new { success = true, message = "All notifications marked as read." });
             }
             catch (Exception ex)
             {

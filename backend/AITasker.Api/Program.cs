@@ -184,6 +184,7 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.IDisputeService, AITa
 builder.Services.AddScoped<AITasker.Application.Interfaces.IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
 
 builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationService, AITasker.Infrastructure.Notifications.NotificationService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
 
 builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
 builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
