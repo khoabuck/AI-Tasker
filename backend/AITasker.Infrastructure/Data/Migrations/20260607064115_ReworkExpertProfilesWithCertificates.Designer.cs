@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260607064115_ReworkExpertProfilesWithCertificates")]
+    partial class ReworkExpertProfilesWithCertificates
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -317,112 +320,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("ExpertProfiles", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.Property<int>("JobPostingId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobPostingId"));
-
-                    b.Property<string>("AiGeneratedDescription")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("BudgetMax")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("BudgetMin")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ClientProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Complexity")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("SYSUTCDATETIME()");
-
-                    b.Property<DateTime>("Deadline")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ExpectedDeliverables")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<bool>("IsAiAssisted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
-
-                    b.Property<string>("ProjectType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("JobPostingId");
-
-                    b.HasIndex("ClientProfileId", "Status");
-
-                    b.HasIndex("Status", "Deadline");
-
-                    b.ToTable("JobPostings", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
-                {
-                    b.Property<int>("JobSkillId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
-
-                    b.Property<bool>("IsRequired")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("JobPostingId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SkillId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("SkillLevelRequired")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.HasKey("JobSkillId");
-
-                    b.HasIndex("SkillId");
-
-                    b.HasIndex("JobPostingId", "SkillId")
-                        .IsUnique();
-
-                    b.ToTable("JobSkills", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.Property<int>("PasswordResetTokenId")
@@ -456,45 +353,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
-                {
-                    b.Property<int>("SkillId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SkillId"));
-
-                    b.Property<string>("Category")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("SYSUTCDATETIME()");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("SkillName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("SkillId");
-
-                    b.HasIndex("SkillName")
-                        .IsUnique();
-
-                    b.ToTable("Skills", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.User", b =>
@@ -614,36 +472,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
-                        .WithMany()
-                        .HasForeignKey("ClientProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ClientProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
-                        .WithMany("JobSkills")
-                        .HasForeignKey("JobPostingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
-                        .WithMany()
-                        .HasForeignKey("SkillId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("JobPosting");
-
-                    b.Navigation("Skill");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -663,11 +491,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
                 {
                     b.Navigation("Certificates");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
-                {
-                    b.Navigation("JobSkills");
                 });
 #pragma warning restore 612, 618
         }

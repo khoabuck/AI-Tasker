@@ -2,15 +2,15 @@ using System.Text;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
+using AITasker.Infrastructure.BusinessVerification;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Authentication.Google;
+using AITasker.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,17 +19,28 @@ var builder = WebApplication.CreateBuilder(args);
 // =========================
 builder.Services.AddControllers();
 
-
 // =========================
-// SignalR
-// =========================
-builder.Services.AddSignalR();
-
-// =========================
-// Swagger/OpenAPI basic
+// Swagger/OpenAPI + JWT Authorize
 // =========================
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Paste JWT token only. Do not type Bearer.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+});
 
 // =========================
 // CORS
@@ -131,18 +142,12 @@ builder.Services
         options.Scope.Add("profile");
         options.Scope.Add("email");
         options.SaveTokens = true;
-
-        options.ClaimActions.MapJsonKey(
-            "urn:google:picture",
-            "picture",
-            "url"
-        );
     });
 
 builder.Services.AddAuthorization();
 
 // =========================
-// Dependency Injection
+// Dependency Injection - Repositories
 // =========================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
@@ -156,17 +161,67 @@ builder.Services.AddScoped<
     PasswordResetTokenRepository
 >();
 
+builder.Services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
+
+builder.Services.AddScoped<
+    IBusinessVerificationRepository,
+    BusinessVerificationRepository
+>();
+
+builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
+
+// =========================
+// Dependency Injection - Core Services
+// =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 
-builder.Services.AddScoped<AITasker.Application.Interfaces.IWalletService, AITasker.Infrastructure.Banking.WalletService>();
-builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
-builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
+builder.Services.AddScoped<
+    IBusinessVerificationService,
+    BusinessVerificationService
+>();
 
-builder.Services.AddHttpClient();
+builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+
+// BE2 - Skills API
+builder.Services.AddScoped<ISkillService, SkillService>();
+
+// BE2 - Jobs API
+// Nếu bạn chưa tạo JobService.cs thì tạm comment dòng này lại.
+// Sau khi tạo JobService.cs thì mở lại.
+builder.Services.AddScoped<IJobService, JobService>();
+
+// =========================
+// Business Verification Provider
+// VietQR + Groq AI
+// =========================
+builder.Services.AddHttpClient<
+    IBusinessVerificationProvider,
+    GroqBusinessVerificationProvider
+>();
+
+// =========================
+// Expert Profile AI Review Provider
+// Groq AI
+// =========================
+builder.Services.AddHttpClient<
+    IExpertProfileReviewProvider,
+    GroqExpertProfileReviewProvider
+>();
+
+// =========================
+// URL Inspection Service
+// HttpClient checks whether profile proof links exist
+// =========================
+builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
+
 // =========================
 // App pipeline
 // =========================
@@ -187,12 +242,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-
-// =======================================================
-// MAP SIGNALR REALTIME HUBS ENDPOINTS
-// =======================================================
-app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
-app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
 
 // =========================
 // Test endpoints
