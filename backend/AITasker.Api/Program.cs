@@ -181,6 +181,8 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.IWalletService, AITas
 
 builder.Services.AddScoped<AITasker.Application.Interfaces.IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
 
+builder.Services.AddScoped<AITasker.Application.Interfaces.IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
+
 builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
 builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
 

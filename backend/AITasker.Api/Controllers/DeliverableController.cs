@@ -1,10 +1,9 @@
-using AITasker.Domain.Entities;
-using AITasker.Infrastructure.Data;
+using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System;
+using System.Security.Claims;
 using System.Threading.Tasks;
-using System.Linq;
 
 namespace AITasker.Api.Controllers
 {
@@ -13,45 +12,63 @@ namespace AITasker.Api.Controllers
     [Authorize]
     public class DeliverablesController : ControllerBase
     {
-        private readonly AITaskerDbContext _context;
+        private readonly IDeliverableService _deliverableService;
 
-        public DeliverablesController(AITaskerDbContext context)
+        public DeliverablesController(IDeliverableService deliverableService)
         {
-            _context = context;
+            _deliverableService = deliverableService;
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            {
+                throw new InvalidOperationException("Unauthorized or invalid user token structure.");
+            }
+            return userId;
         }
 
         [HttpPost]
         public async Task<IActionResult> SubmitDeliverable([FromBody] SubmitDeliverableDto dto)
         {
-            int latestVersion = await _context.Deliverables
-                .Where(d => d.MilestoneId == dto.MilestoneId)
-                .Select(d => (int?)d.VersionNumber)
-                .MaxAsync() ?? 0;
-
-            var deliverable = new Deliverable
+            try
             {
-                MilestoneId = dto.MilestoneId,
-                ExpertId = dto.ExpertId,
-                Description = dto.Description,
-                FileUrl = dto.FileUrl,
-                DemoUrl = dto.DemoUrl,
-                VersionNumber = latestVersion + 1,
-                Status = "SUBMITTED"
-            };
+                int currentExpertId = GetCurrentUserId();
+                
+                var result = await _deliverableService.SubmitDeliverableAsync(
+                    dto.MilestoneId,
+                    currentExpertId,
+                    dto.Description,
+                    dto.FileUrl,
+                    dto.DemoUrl,
+                    dto.TestResultUrl
+                );
 
-            _context.Deliverables.Add(deliverable);
-            await _context.SaveChangesAsync();
+                if (result == null) 
+                {
+                    return BadRequest(new { message = "Failed to submit deliverable. Internal error occurred." });
+                }
 
-            return Ok(new { message = "Deliverable submitted successfully!", versionNumber = deliverable.VersionNumber });
+                return Ok(new { message = "Deliverable submitted successfully!", deliverableId = result.Id, version = result.VersionNumber });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
     }
 
     public class SubmitDeliverableDto
     {
         public int MilestoneId { get; set; }
-        public int ExpertId { get; set; }
+        
         public string Description { get; set; } = string.Empty;
+        
         public string? FileUrl { get; set; }
+        
         public string? DemoUrl { get; set; }
+        
+        public string? TestResultUrl { get; set; }
     }
 }
