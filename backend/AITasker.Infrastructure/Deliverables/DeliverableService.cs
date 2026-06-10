@@ -66,7 +66,6 @@ namespace AITasker.Infrastructure.Deliverables
                 deliverable.Status = "APPROVED";
                 await _context.SaveChangesAsync();
 
-                // Release escrow funds (using milestoneId converted to string as required by current WalletService implementation)
                 string milestoneIdStr = deliverable.MilestoneId.ToString();
                 var releaseSuccess = await _walletService.ReleaseEscrowAsync(milestoneIdStr, deliverable.ExpertId);
                 if (!releaseSuccess)
@@ -75,7 +74,6 @@ namespace AITasker.Infrastructure.Deliverables
                     return false;
                 }
 
-                // Create and send notification to Expert
                 await _notificationService.CreateNotificationAsync(
                     deliverable.ExpertId,
                     "Deliverable Approved",
@@ -105,12 +103,6 @@ namespace AITasker.Infrastructure.Deliverables
                 deliverable.ClientFeedback = feedback;
                 await _context.SaveChangesAsync();
 
-                // NOTE: When Milestone entity is introduced in the database/model layer,
-                // fetch and increment the milestone's revision count here:
-                // var milestone = await _context.Milestones.FindAsync(deliverable.MilestoneId);
-                // if (milestone != null) { milestone.RevisionUsed += 1; }
-
-                // Create and send notification to Expert with feedback
                 await _notificationService.CreateNotificationAsync(
                     deliverable.ExpertId,
                     "Revision Requested",
