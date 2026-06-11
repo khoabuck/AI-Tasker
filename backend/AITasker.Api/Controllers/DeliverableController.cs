@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,19 +31,18 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> SubmitDeliverable([FromBody] SubmitDeliverableDto dto)
+        public async Task<IActionResult> SubmitDeliverable([FromBody] SubmitDeliverableRequest request)
         {
             try
             {
                 int currentExpertId = GetCurrentUserId();
-                
                 var result = await _deliverableService.SubmitDeliverableAsync(
-                    dto.MilestoneId,
+                    request.MilestoneId,
                     currentExpertId,
-                    dto.Description,
-                    dto.FileUrl,
-                    dto.DemoUrl,
-                    dto.TestResultUrl
+                    request.FileUrl ?? string.Empty,
+                    request.DemoUrl,
+                    request.Description ?? string.Empty,
+                    null    
                 );
 
                 if (result == null) 
@@ -50,7 +50,7 @@ namespace AITasker.Api.Controllers
                     return BadRequest(new { message = "Failed to submit deliverable. Internal error occurred." });
                 }
 
-                return Ok(new { message = "Deliverable submitted successfully!", deliverableId = result.Id, version = result.VersionNumber });
+                return Ok(new { message = "Deliverable submitted successfully!", deliverableId = result.DeliverableId, version = result.VersionNumber });
             }
             catch (Exception ex)
             {
@@ -75,16 +75,11 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("{deliverableId}/revision")]
-        public async Task<IActionResult> RequestRevision(int deliverableId, [FromBody] RevisionRequestDto dto)
+        public async Task<IActionResult> RequestRevision(int deliverableId, [FromBody] RevisionRequest request)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(dto.Feedback))
-                {
-                    return BadRequest(new { message = "Feedback is required when requesting a revision." });
-                }
-
-                var success = await _deliverableService.RequestRevisionAsync(deliverableId, dto.Feedback);
+                var success = await _deliverableService.RequestRevisionAsync(deliverableId, request.Feedback ?? string.Empty);
                 if (!success) return BadRequest(new { message = "Failed to request revision." });
 
                 return Ok(new { success = true, message = "Revision requested successfully." });
@@ -94,23 +89,5 @@ namespace AITasker.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-    }
-
-    public class SubmitDeliverableDto
-    {
-        public int MilestoneId { get; set; }
-        
-        public string Description { get; set; } = string.Empty;
-        
-        public string? FileUrl { get; set; }
-        
-        public string? DemoUrl { get; set; }
-        
-        public string? TestResultUrl { get; set; }
-    }
-
-    public class RevisionRequestDto
-    {
-        public string Feedback { get; set; } = string.Empty;
     }
 }

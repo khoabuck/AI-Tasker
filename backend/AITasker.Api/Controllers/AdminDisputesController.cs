@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -19,30 +20,15 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("{disputeId}/resolve")]
-        public async Task<IActionResult> ResolveDispute(int disputeId, [FromBody] ResolveDisputeDto dto)
+        public async Task<IActionResult> ResolveDispute(int disputeId, [FromBody] ResolveDisputeRequest request)
         {
             try
             {
-                if (dto == null)
-                {
-                    return BadRequest(new { message = "Request body is required." });
-                }
-
-                if (string.IsNullOrWhiteSpace(dto.ResolutionType))
-                {
-                    return BadRequest(new { message = "ResolutionType is required." });
-                }
-
-                if (dto.ExpertAmount < 0 || dto.ClientAmount < 0)
-                {
-                    return BadRequest(new { message = "Amounts must be non-negative." });
-                }
-
                 var success = await _disputeService.ResolveDisputeAsync(
                     disputeId,
-                    dto.ResolutionType,
-                    dto.ExpertAmount,
-                    dto.ClientAmount
+                    request.ResolutionType ?? string.Empty,
+                    request.ExpertAmount,
+                    request.ClientAmount
                 );
 
                 if (!success)
@@ -57,14 +43,5 @@ namespace AITasker.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-    }
-
-    public class ResolveDisputeDto
-    {
-        public string ResolutionType { get; set; } = string.Empty;
-        
-        public decimal ExpertAmount { get; set; }
-        
-        public decimal ClientAmount { get; set; }
     }
 }

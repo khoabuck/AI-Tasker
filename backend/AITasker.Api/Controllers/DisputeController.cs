@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,19 +31,19 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> OpenDispute([FromBody] OpenDisputeDto dto)
+        public async Task<IActionResult> OpenDispute([FromBody] OpenDisputeRequest request)
         {
             try
             {
                 int currentUserId = GetCurrentUserId();
 
                 var disputeId = await _disputeService.OpenDisputeAsync(
-                    dto.ProjectId, 
-                    dto.MilestoneId, 
+                    request.ProjectId, 
+                    request.MilestoneId, 
                     currentUserId, 
-                    dto.RespondentUserId, 
-                    dto.DisputedAmount, 
-                    dto.Reason
+                    request.RespondentUserId, 
+                    request.DisputedAmount, 
+                    request.Reason ?? string.Empty
                 );
 
                 if (disputeId == null)
@@ -57,18 +58,5 @@ namespace AITasker.Api.Controllers
                 return BadRequest(new { message = ex.Message });
             }
         }
-    }
-
-    public class OpenDisputeDto
-    {
-        public int ProjectId { get; set; }
-        
-        public int? MilestoneId { get; set; }
-        
-        public int RespondentUserId { get; set; }
-        
-        public decimal DisputedAmount { get; set; }
-        
-        public string Reason { get; set; } = string.Empty;
     }
 }
