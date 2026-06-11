@@ -30,7 +30,8 @@ namespace AITasker.Infrastructure.Disputes
                     RespondentUserId = respondentUserId,
                     DisputedAmount = disputedAmount,
                     Reason = reason,
-                    Status = "OPEN"
+                    Status = "OPEN",
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Disputes.Add(dispute);
@@ -49,7 +50,7 @@ namespace AITasker.Infrastructure.Disputes
                 }
 
                 await _context.SaveChangesAsync();
-                return dispute.Id;
+                return dispute.DisputeId;
             }
             catch (Exception)
             {
@@ -130,7 +131,8 @@ namespace AITasker.Infrastructure.Disputes
                         Amount = clientAmount,
                         Type = "Refund",
                         Description = $"[Dispute Resolve] Refunded from Dispute ID {disputeId}",
-                        ReferenceId = refMilestoneId
+                        ReferenceId = refMilestoneId,
+                        CreatedAt = DateTime.UtcNow
                     };
                     _context.Transactions.Add(clientTxn);
                 }
@@ -153,7 +155,8 @@ namespace AITasker.Infrastructure.Disputes
                         Amount = expertAmount,
                         Type = "EscrowReceived",
                         Description = $"[Dispute Resolve] Received from Dispute ID {disputeId}",
-                        ReferenceId = refMilestoneId
+                        ReferenceId = refMilestoneId,
+                        CreatedAt = DateTime.UtcNow
                     };
                     _context.Transactions.Add(expertTxn);
                 }

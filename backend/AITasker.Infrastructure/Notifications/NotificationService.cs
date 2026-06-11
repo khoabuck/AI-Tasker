@@ -47,7 +47,7 @@ namespace AITasker.Infrastructure.Notifications
 
                 await _realtimeService.SendNotificationAsync(
                     userId, 
-                    notification.Id, 
+                    notification.NotificationId, 
                     notification.Title, 
                     notification.Content, 
                     notification.Type, 
@@ -65,7 +65,7 @@ namespace AITasker.Infrastructure.Notifications
         public async Task<bool> MarkAsReadAsync(int notificationId, int userId)
         {
             var notification = await _context.Notifications
-                .FirstOrDefaultAsync(n => n.Id == notificationId && n.UserId == userId);
+                .FirstOrDefaultAsync(n => n.NotificationId == notificationId && n.UserId == userId);
             
             if (notification == null) return false;
 

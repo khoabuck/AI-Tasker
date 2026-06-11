@@ -210,7 +210,6 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationService,
 builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
 
 builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
-builder.Services.AddScoped<AITasker.Infrastructure.AI.GroqService>();
 
 builder.Services.AddHttpClient();
 
