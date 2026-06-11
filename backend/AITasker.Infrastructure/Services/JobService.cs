@@ -9,6 +9,13 @@ namespace AITasker.Infrastructure.Services;
 
 public class JobService : IJobService
 {
+    private const string StatusDraft = "DRAFT";
+    private const string StatusOpen = "OPEN";
+    private const string StatusActive = "ACTIVE";
+    private const string StatusCompleted = "COMPLETED";
+    private const string StatusDisputed = "DISPUTED";
+    private const string StatusCancelled = "CANCELLED";
+
     private readonly AITaskerDbContext _context;
 
     public JobService(AITaskerDbContext context)
@@ -28,6 +35,8 @@ public class JobService : IJobService
 
         ValidateJobRequest(request, requireSkill: false);
 
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var job = new JobPosting
         {
             ClientProfileId = clientProfile.ClientProfileId,
@@ -40,9 +49,9 @@ public class JobService : IJobService
             BudgetMax = request.BudgetMax,
             Deadline = request.Deadline,
             ProjectType = request.ProjectType.Trim(),
-            Complexity = request.Complexity.Trim().ToUpper(),
+            Complexity = NormalizeComplexity(request.Complexity),
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
-            Status = "DRAFT",
+            Status = StatusDraft,
             IsAiAssisted = request.IsAiAssisted,
             CreatedAt = DateTime.UtcNow
         };
@@ -51,6 +60,8 @@ public class JobService : IJobService
         await _context.SaveChangesAsync();
 
         await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
+
+        await transaction.CommitAsync();
 
         return await GetJobResponseByIdAsync(job.JobPostingId)
             ?? throw new InvalidOperationException("Failed to create job draft.");
@@ -68,6 +79,8 @@ public class JobService : IJobService
 
         ValidateJobRequest(request, requireSkill: true);
 
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
         var job = new JobPosting
         {
             ClientProfileId = clientProfile.ClientProfileId,
@@ -80,9 +93,9 @@ public class JobService : IJobService
             BudgetMax = request.BudgetMax,
             Deadline = request.Deadline,
             ProjectType = request.ProjectType.Trim(),
-            Complexity = request.Complexity.Trim().ToUpper(),
+            Complexity = NormalizeComplexity(request.Complexity),
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
-            Status = "OPEN",
+            Status = StatusOpen,
             IsAiAssisted = request.IsAiAssisted,
             CreatedAt = DateTime.UtcNow
         };
@@ -92,8 +105,47 @@ public class JobService : IJobService
 
         await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
 
+        await transaction.CommitAsync();
+
         return await GetJobResponseByIdAsync(job.JobPostingId)
             ?? throw new InvalidOperationException("Failed to submit job.");
+    }
+
+    public async Task<JobResponse?> SubmitDraftAsync(int userId, int jobPostingId)
+    {
+        var clientProfile = await _context.ClientProfiles
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        var job = await _context.JobPostings
+            .Include(x => x.JobSkills)
+            .FirstOrDefaultAsync(x =>
+                x.JobPostingId == jobPostingId &&
+                x.ClientProfileId == clientProfile.ClientProfileId
+            );
+
+        if (job == null)
+        {
+            return null;
+        }
+
+        if (job.Status != StatusDraft)
+        {
+            throw new InvalidOperationException("Only draft jobs can be submitted.");
+        }
+
+        ValidateDraftBeforeSubmit(job);
+
+        job.Status = StatusOpen;
+        job.UpdatedAt = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync();
+
+        return await GetJobResponseByIdAsync(job.JobPostingId);
     }
 
     public async Task<List<JobResponse>> GetOpenJobsAsync(string? keyword, int? skillId)
@@ -102,7 +154,7 @@ public class JobService : IJobService
             .AsNoTracking()
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
-            .Where(x => x.Status == "OPEN")
+            .Where(x => x.Status == StatusOpen)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -111,19 +163,22 @@ public class JobService : IJobService
 
             query = query.Where(x =>
                 x.Title.Contains(trimmedKeyword) ||
-                x.Description.Contains(trimmedKeyword));
+                x.Description.Contains(trimmedKeyword)
+            );
         }
 
         if (skillId.HasValue)
         {
             query = query.Where(x =>
-                x.JobSkills.Any(js => js.SkillId == skillId.Value));
+                x.JobSkills.Any(js => js.SkillId == skillId.Value)
+            );
         }
 
-        return await query
+        var jobs = await query
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => ToResponse(x))
             .ToListAsync();
+
+        return jobs.Select(ToResponse).ToList();
     }
 
     public async Task<List<JobResponse>> GetMyJobsAsync(int userId)
@@ -137,19 +192,40 @@ public class JobService : IJobService
             return new List<JobResponse>();
         }
 
-        return await _context.JobPostings
+        var jobs = await _context.JobPostings
             .AsNoTracking()
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
             .Where(x => x.ClientProfileId == clientProfile.ClientProfileId)
             .OrderByDescending(x => x.CreatedAt)
-            .Select(x => ToResponse(x))
             .ToListAsync();
+
+        return jobs.Select(ToResponse).ToList();
     }
 
-    public async Task<JobResponse?> GetJobByIdAsync(int jobPostingId)
+    public async Task<JobResponse?> GetJobByIdAsync(
+        int jobPostingId,
+        int? userId,
+        string? role)
     {
-        return await GetJobResponseByIdAsync(jobPostingId);
+        var job = await _context.JobPostings
+            .AsNoTracking()
+            .Include(x => x.ClientProfile)
+            .Include(x => x.JobSkills)
+                .ThenInclude(x => x.Skill)
+            .FirstOrDefaultAsync(x => x.JobPostingId == jobPostingId);
+
+        if (job == null)
+        {
+            return null;
+        }
+
+        if (!CanViewJob(job, userId, role))
+        {
+            return null;
+        }
+
+        return ToResponse(job);
     }
 
     public async Task<JobResponse?> UpdateJobAsync(
@@ -168,19 +244,22 @@ public class JobService : IJobService
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
                 x.JobPostingId == jobPostingId &&
-                x.ClientProfileId == clientProfile.ClientProfileId);
+                x.ClientProfileId == clientProfile.ClientProfileId
+            );
 
         if (job == null)
         {
             return null;
         }
 
-        if (job.Status == "CLOSED" || job.Status == "CANCELLED")
+        if (job.Status is not (StatusDraft or StatusOpen))
         {
-            throw new InvalidOperationException("Cannot update a closed or cancelled job.");
+            throw new InvalidOperationException("Only draft or open jobs can be updated.");
         }
 
-        ValidateUpdateJobRequest(request, requireSkill: job.Status == "OPEN");
+        ValidateUpdateJobRequest(request, requireSkill: job.Status == StatusOpen);
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
 
         job.Title = request.Title.Trim();
         job.Description = request.Description.Trim();
@@ -191,7 +270,7 @@ public class JobService : IJobService
         job.BudgetMax = request.BudgetMax;
         job.Deadline = request.Deadline;
         job.ProjectType = request.ProjectType.Trim();
-        job.Complexity = request.Complexity.Trim().ToUpper();
+        job.Complexity = NormalizeComplexity(request.Complexity);
         job.ExpectedDeliverables = request.ExpectedDeliverables.Trim();
         job.IsAiAssisted = request.IsAiAssisted;
         job.UpdatedAt = DateTime.UtcNow;
@@ -199,6 +278,8 @@ public class JobService : IJobService
         await _context.SaveChangesAsync();
 
         await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
+
+        await transaction.CommitAsync();
 
         return await GetJobResponseByIdAsync(job.JobPostingId);
     }
@@ -216,19 +297,20 @@ public class JobService : IJobService
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
                 x.JobPostingId == jobPostingId &&
-                x.ClientProfileId == clientProfile.ClientProfileId);
+                x.ClientProfileId == clientProfile.ClientProfileId
+            );
 
         if (job == null)
         {
             return false;
         }
 
-        if (job.Status == "CLOSED")
+        if (job.Status is not (StatusDraft or StatusOpen))
         {
-            throw new InvalidOperationException("Cannot cancel a closed job.");
+            throw new InvalidOperationException("Only draft or open jobs can be cancelled.");
         }
 
-        job.Status = "CANCELLED";
+        job.Status = StatusCancelled;
         job.UpdatedAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync();
@@ -236,7 +318,7 @@ public class JobService : IJobService
         return true;
     }
 
-    private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int> skillIds)
+    private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int>? skillIds)
     {
         var oldSkills = await _context.JobSkills
             .Where(x => x.JobPostingId == jobPostingId)
@@ -244,14 +326,17 @@ public class JobService : IJobService
 
         _context.JobSkills.RemoveRange(oldSkills);
 
-        var distinctSkillIds = skillIds
+        var distinctSkillIds = (skillIds ?? new List<int>())
             .Distinct()
             .ToList();
 
         if (distinctSkillIds.Count > 0)
         {
             var existingSkillIds = await _context.Skills
-                .Where(x => distinctSkillIds.Contains(x.SkillId) && x.IsActive)
+                .Where(x =>
+                    distinctSkillIds.Contains(x.SkillId) &&
+                    x.IsActive
+                )
                 .Select(x => x.SkillId)
                 .ToListAsync();
 
@@ -312,6 +397,29 @@ public class JobService : IJobService
         };
     }
 
+    private static bool CanViewJob(JobPosting job, int? userId, string? role)
+    {
+        if (job.Status == StatusOpen)
+        {
+            return true;
+        }
+
+        if (role == "ADMIN")
+        {
+            return true;
+        }
+
+        if (role == "CLIENT" &&
+            userId.HasValue &&
+            job.ClientProfile != null &&
+            job.ClientProfile.UserId == userId.Value)
+        {
+            return true;
+        }
+
+        return false;
+    }
+
     private static void ValidateJobRequest(CreateJobRequest request, bool requireSkill)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
@@ -339,19 +447,12 @@ public class JobService : IJobService
             throw new InvalidOperationException("Project type is required.");
         }
 
-        var complexity = request.Complexity.Trim().ToUpper();
-
-        if (complexity is not ("SIMPLE" or "MEDIUM" or "COMPLEX"))
-        {
-            throw new InvalidOperationException("Complexity must be SIMPLE, MEDIUM, or COMPLEX.");
-        }
-
         if (string.IsNullOrWhiteSpace(request.ExpectedDeliverables))
         {
             throw new InvalidOperationException("Expected deliverables are required.");
         }
 
-        if (requireSkill && request.SkillIds.Count == 0)
+        if (requireSkill && (request.SkillIds == null || request.SkillIds.Count == 0))
         {
             throw new InvalidOperationException("At least one skill is required.");
         }
@@ -384,21 +485,69 @@ public class JobService : IJobService
             throw new InvalidOperationException("Project type is required.");
         }
 
-        var complexity = request.Complexity.Trim().ToUpper();
-
-        if (complexity is not ("SIMPLE" or "MEDIUM" or "COMPLEX"))
-        {
-            throw new InvalidOperationException("Complexity must be SIMPLE, MEDIUM, or COMPLEX.");
-        }
-
         if (string.IsNullOrWhiteSpace(request.ExpectedDeliverables))
         {
             throw new InvalidOperationException("Expected deliverables are required.");
         }
 
-        if (requireSkill && request.SkillIds.Count == 0)
+        if (requireSkill && (request.SkillIds == null || request.SkillIds.Count == 0))
         {
             throw new InvalidOperationException("At least one skill is required.");
         }
+    }
+
+    private static void ValidateDraftBeforeSubmit(JobPosting job)
+    {
+        if (string.IsNullOrWhiteSpace(job.Title))
+        {
+            throw new InvalidOperationException("Job title is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.Description))
+        {
+            throw new InvalidOperationException("Job description is required.");
+        }
+
+        if (job.BudgetMin < 0 || job.BudgetMax < job.BudgetMin)
+        {
+            throw new InvalidOperationException("Invalid budget range.");
+        }
+
+        if (job.Deadline <= DateTime.UtcNow)
+        {
+            throw new InvalidOperationException("Deadline must be in the future.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.ProjectType))
+        {
+            throw new InvalidOperationException("Project type is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(job.ExpectedDeliverables))
+        {
+            throw new InvalidOperationException("Expected deliverables are required.");
+        }
+
+        if (job.JobSkills.Count == 0)
+        {
+            throw new InvalidOperationException("At least one skill is required.");
+        }
+    }
+
+    private static string NormalizeComplexity(string? complexity)
+    {
+        if (string.IsNullOrWhiteSpace(complexity))
+        {
+            return "UNKNOWN";
+        }
+
+        var normalized = complexity.Trim().ToUpper();
+
+        if (normalized is "SIMPLE" or "MEDIUM" or "COMPLEX" or "UNKNOWN")
+        {
+            return normalized;
+        }
+
+        return "UNKNOWN";
     }
 }

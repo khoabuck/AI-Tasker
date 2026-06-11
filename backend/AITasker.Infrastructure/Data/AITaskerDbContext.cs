@@ -12,32 +12,22 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
-    public DbSet<EmailVerificationToken> EmailVerificationTokens
-        => Set<EmailVerificationToken>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
-    public DbSet<PasswordResetToken> PasswordResetTokens
-        => Set<PasswordResetToken>();
+    public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
 
-    public DbSet<ClientProfile> ClientProfiles
-        => Set<ClientProfile>();
+    public DbSet<ClientProfile> ClientProfiles => Set<ClientProfile>();
 
-    public DbSet<BusinessProfile> BusinessProfiles
-        => Set<BusinessProfile>();
+    public DbSet<BusinessProfile> BusinessProfiles => Set<BusinessProfile>();
 
-    public DbSet<ExpertProfile> ExpertProfiles
-        => Set<ExpertProfile>();
+    public DbSet<ExpertProfile> ExpertProfiles => Set<ExpertProfile>();
 
-    public DbSet<ExpertCertificate> ExpertCertificates
-        => Set<ExpertCertificate>();
+    public DbSet<ExpertCertificate> ExpertCertificates => Set<ExpertCertificate>();
 
-    // =========================
-    // BE2 - Skills
-    // =========================
     public DbSet<Skill> Skills => Set<Skill>();
 
-    // =========================
-    // BE2 - Jobs
-    // =========================
+    public DbSet<ExpertSkill> ExpertSkills => Set<ExpertSkill>();
+
     public DbSet<JobPosting> JobPostings => Set<JobPosting>();
 
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
@@ -351,6 +341,11 @@ public class AITaskerDbContext : DbContext
                 .WithOne(x => x.ExpertProfile)
                 .HasForeignKey(x => x.ExpertProfileId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasMany(x => x.ExpertSkills)
+                .WithOne(x => x.ExpertProfile)
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -414,12 +409,53 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(100);
 
             entity.Property(x => x.IsActive)
-                .IsRequired()
-                .HasDefaultValue(true);
+                .HasDefaultValue(true)
+                .IsRequired();
 
             entity.Property(x => x.CreatedAt)
-                .IsRequired()
-                .HasDefaultValueSql("SYSUTCDATETIME()");
+                .IsRequired();
+        });
+
+        // =========================
+        // ExpertSkills
+        // =========================
+        modelBuilder.Entity<ExpertSkill>(entity =>
+        {
+            entity.ToTable("ExpertSkills");
+
+            entity.HasKey(x => x.ExpertSkillId);
+
+            entity.Property(x => x.SkillLevel)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.YearsOfExperience)
+                .IsRequired();
+
+            entity.Property(x => x.IsPrimary)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.ExpertProfile)
+                .WithMany(x => x.ExpertSkills)
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(x => x.Skill)
+                .WithMany()
+                .HasForeignKey(x => x.SkillId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new
+            {
+                x.ExpertProfileId,
+                x.SkillId
+            }).IsUnique();
+
+            entity.HasIndex(x => x.SkillId);
         });
 
         // =========================
@@ -436,9 +472,8 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(x => x.Description)
+                .HasMaxLength(4000)
                 .IsRequired();
-
-            entity.Property(x => x.AiGeneratedDescription);
 
             entity.Property(x => x.BudgetMin)
                 .HasColumnType("decimal(18,2)")
@@ -460,6 +495,7 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(x => x.ExpectedDeliverables)
+                .HasMaxLength(2000)
                 .IsRequired();
 
             entity.Property(x => x.Status)
@@ -467,36 +503,27 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(x => x.IsAiAssisted)
-                .IsRequired()
-                .HasDefaultValue(false);
+                .HasDefaultValue(false)
+                .IsRequired();
 
             entity.Property(x => x.CreatedAt)
-                .IsRequired()
-                .HasDefaultValueSql("SYSUTCDATETIME()");
+                .IsRequired();
 
             entity.Property(x => x.UpdatedAt);
 
             entity.HasOne(x => x.ClientProfile)
                 .WithMany()
                 .HasForeignKey(x => x.ClientProfileId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasMany(x => x.JobSkills)
                 .WithOne(x => x.JobPosting)
                 .HasForeignKey(x => x.JobPostingId)
                 .OnDelete(DeleteBehavior.Cascade);
 
-            entity.HasIndex(x => new
-            {
-                x.ClientProfileId,
-                x.Status
-            });
+            entity.HasIndex(x => x.ClientProfileId);
 
-            entity.HasIndex(x => new
-            {
-                x.Status,
-                x.Deadline
-            });
+            entity.HasIndex(x => x.Status);
         });
 
         // =========================
@@ -507,13 +534,6 @@ public class AITaskerDbContext : DbContext
             entity.ToTable("JobSkills");
 
             entity.HasKey(x => x.JobSkillId);
-
-            entity.Property(x => x.SkillLevelRequired)
-                .HasMaxLength(30);
-
-            entity.Property(x => x.IsRequired)
-                .IsRequired()
-                .HasDefaultValue(true);
 
             entity.HasOne(x => x.JobPosting)
                 .WithMany(x => x.JobSkills)
@@ -530,6 +550,8 @@ public class AITaskerDbContext : DbContext
                 x.JobPostingId,
                 x.SkillId
             }).IsUnique();
+
+            entity.HasIndex(x => x.SkillId);
         });
     }
 }
