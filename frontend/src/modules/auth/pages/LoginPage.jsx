@@ -22,11 +22,12 @@ export default function LoginPage() {
     try {
       const result = await authService.login({ email: form.email, password: form.password });
       if (result.success) {
-        // Redirect theo status trước, role sau
+        // Redirect based on account status and role
         const { status, role } = result;
+
         if (status === "PENDING_EMAIL_VERIFICATION") {
           navigate("/verify-email-notice", { state: { email: form.email } });
-        } else if (status === "PENDING_ROLE") {
+        } else if (status === "PENDING_ROLE" || !role) {
           navigate("/select-role");
         } else if (status === "PENDING_PROFILE") {
           navigate("/setup-profile");
@@ -34,19 +35,19 @@ export default function LoginPage() {
           if (role === "CLIENT") navigate("/client/dashboard");
           else if (role === "EXPERT") navigate("/expert/dashboard");
           else if (role === "ADMIN") navigate("/admin/dashboard");
-          else navigate("/");
+          else navigate("/select-role");
         } else if (status === "SUSPENDED") {
-          setError("Tài khoản đã bị tạm khóa. Vui lòng liên hệ hỗ trợ.");
+          setError("Your account has been temporarily suspended. Please contact support.");
         } else if (status === "BANNED") {
-          setError("Tài khoản đã bị cấm vĩnh viễn.");
+          setError("Your account has been permanently banned.");
         } else {
-          navigate("/");
+          navigate("/select-role");
         }
       } else {
-        setError(result.message || "Đăng nhập thất bại.");
+        setError(result.message || "Login failed.");
       }
     } catch (err) {
-      setError("Đã có lỗi xảy ra. Vui lòng thử lại.");
+      setError("An error occurred. Please try again.");
     } finally {
       setLoading(false);
     }

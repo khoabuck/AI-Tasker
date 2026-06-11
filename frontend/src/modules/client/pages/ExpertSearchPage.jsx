@@ -12,7 +12,7 @@ const MOCK_EXPERTS = [
 ];
 
 const SENIORITY_OPTIONS = ["Fresher", "Junior", "Mid-level", "Senior", "Lead"];
-const AVAILABILITY_OPTIONS = ["Immediately", "In 2 Weeks", "In 1 Month"];
+
 
 function StarRating({ rating }) {
   return (
@@ -65,8 +65,7 @@ function ExpertCard({ expert }) {
 
 export default function ExpertSearchPage() {
       const [query, setQuery] = useState("");
-      const [seniority, setSeniority] = useState([]);
-      const [availability, setAvailability] = useState("");
+      const [seniority, setSeniority] = useState("");
       const [searching, setSearching] = useState(false);
       const [experts, setExperts] = useState([]);
       const [hasSearched, setHasSearched] = useState(false);
@@ -74,8 +73,7 @@ export default function ExpertSearchPage() {
       const [minBudget, setMinBudget] = useState("");
       const [maxBudget, setMaxBudget] = useState("");
 
-      const toggleSeniority = (val) => setSeniority((prev) => prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]);
-
+      const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val));};
       const isBudgetInvalid = minBudget && maxBudget && Number(minBudget) > Number(maxBudget);
 
       const handleSearch = () => {
@@ -95,7 +93,7 @@ export default function ExpertSearchPage() {
     }, 1000);
   };
 
-  const handleReset = () => { setQuery(""); setSeniority([]); setAvailability(""); setExperts([]); setHasSearched(false); };
+  const handleReset = () => { setQuery(""); setSeniority(""); setMinBudget(""); setMaxBudget(""); setExperts([]); setHasSearched(false); };
 
   return (
     <ClientLayout>
@@ -145,10 +143,22 @@ export default function ExpertSearchPage() {
               <div style={{ marginBottom: 24 }}>
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Seniority</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {SENIORITY_OPTIONS.map((s) => (
-                    <button key={s} onClick={() => toggleSeniority(s)}
-                      style={{ padding: "8px", borderRadius: 6, border: `1px solid ${seniority.includes(s) ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: "#272a30", fontSize: 12, color: seniority.includes(s) ? "#00F0FF" : "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}>{s}</button>
-                  ))}
+                  {SENIORITY_OPTIONS.map((s) => {
+                const isSelected = seniority === s;
+
+                return (
+                  <button key={s} type="button" onClick={() => toggleSeniority(s)}
+                    className={`rounded-md px-2 py-2 text-xs transition-all
+                      ${
+                        isSelected
+                          ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                          : "border border-white/10 bg-[#272a30] text-[#c2c6d6] hover:border-cyan-400/50 hover:text-cyan-400"
+                      }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
                 </div>
               </div>
 
@@ -205,13 +215,7 @@ export default function ExpertSearchPage() {
               </div>
 
               <div>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Availability</label>
-                <select value={availability} onChange={(e) => setAvailability(e.target.value)}
-                  style={{ width: "100%", background: "#0b0e14", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 12px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
-                  <option value="">Any</option>
-                  {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-
+                
                 <button
                   type="button"
                   onClick={handleSearch}
