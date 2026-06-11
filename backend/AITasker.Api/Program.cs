@@ -237,6 +237,18 @@ builder.Services.AddHttpClient<
 >();
 
 // =========================
+// Certificate Verification Service
+// HttpClient checks and scores certificate proof links
+// =========================
+builder.Services.AddHttpClient<
+    ICertificateVerificationService,
+    CertificateVerificationService
+>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
+
+// =========================
 // URL Inspection Service
 // HttpClient checks whether profile proof links exist
 // =========================

@@ -1,0 +1,16 @@
+namespace AITasker.Application.DTOs.Requests;
+
+public class CertificateVerificationRequest
+{
+    public string CertificateName { get; set; } = string.Empty;
+
+    public string CertificateIssuer { get; set; } = string.Empty;
+
+    public string CertificateUrl { get; set; } = string.Empty;
+
+    public DateTime? IssuedAt { get; set; }
+
+    public string ExpertBio { get; set; } = string.Empty;
+
+    public string ExpertSkillsText { get; set; } = string.Empty;
+}

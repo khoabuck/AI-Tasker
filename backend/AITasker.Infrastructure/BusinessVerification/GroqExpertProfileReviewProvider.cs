@@ -57,6 +57,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                         You review whether an expert profile is credible, AI-related, and supported by URL evidence.
                         The backend has already inspected URLs using HttpClient.
                         Use the backend URL inspection evidence as the source of truth.
+                        Be strict with claimed years of experience.
                         Return JSON only. Do not return markdown. Do not add text outside JSON.
                         """
                     },
@@ -67,7 +68,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                     }
                 },
                 temperature = 0.2,
-                max_tokens = 800
+                max_tokens = 900
             };
 
             using var requestMessage = new HttpRequestMessage(
@@ -89,7 +90,9 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                 cancellationToken
             );
 
-            var responseText = await response.Content.ReadAsStringAsync(cancellationToken);
+            var responseText = await response.Content.ReadAsStringAsync(
+                cancellationToken
+            );
 
             if (!response.IsSuccessStatusCode)
             {
@@ -117,7 +120,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
             var result = ParseAiResult(content);
 
-            return NormalizeResult(result);
+            return NormalizeResult(result, request.YearsOfExperience);
         }
         catch
         {
@@ -172,7 +175,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         Skills:
         {{request.Skills}}
 
-        Years of Experience:
+        Claimed Years of Experience:
         {{request.YearsOfExperience}}
 
         Expected Project Budget:
@@ -201,21 +204,41 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         Evaluation rules:
         - Use Backend URL Inspection Evidence as the source of truth for whether links are reachable.
-        - APPROVED only if the profile is AI-related and has credible proof from reachable portfolio, GitHub, LinkedIn, or certificate URLs.
+        - The yearsOfExperience field is claimed by the expert. Do not automatically trust it.
+        - The frontend and backend require at least 2 of these 3 proof links: Portfolio URL, LinkedIn URL, GitHub URL.
+        - At least one certificate is required.
+        - APPROVED only if the profile is AI-related and has credible proof from at least 2 valid proof URLs and at least 1 relevant certificate.
+        - Do not approve based only on user-written text.
+        - Even if the URL format is valid, only approve the profile when the proof links and certificate evidence are reachable and relevant.
+        - If proof links or certificate URLs are fake, unreachable, unrelated, or cannot support the claimed experience, return NEEDS_CORRECTION or PENDING_REVIEW.
         - If a required proof URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION.
         - If an important proof URL is blocked, timed out, rate-limited, or cannot be inspected, return PENDING_REVIEW instead of APPROVED.
         - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION or PENDING_REVIEW.
-        - Do not approve based only on user-written text. At least one proof link must support the claimed AI expertise.
-        - Classify the expert into one category:
-          AI_AUTOMATION, CHATBOT_DEVELOPER, LLM_ENGINEER, DATA_ANALYST, COMPUTER_VISION, PROMPT_ENGINEER, AI_CONSULTANT, RPA_AUTOMATION, OTHER.
-        - Level must be one of: JUNIOR, MID, SENIOR, UNKNOWN.
-        - Profile score must be from 0 to 100.
+        - If the expert claims 5+ years but has weak evidence, do not approve the profile.
+        - If the expert claims 7+ years but has no strong portfolio, GitHub, LinkedIn, reachable certificate, or detailed project evidence, do not approve the profile.
+        - If claimed years are much higher than evidence, do not silently downgrade to MID_LEVEL and approve. Return NEEDS_CORRECTION.
+        - Only approve SENIOR or LEAD when strong evidence supports that level.
+        - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return REJECTED.
+
+        Profile level must be one of:
+        - FRESHER: 0-1 verified years, basic profile, little practical evidence.
+        - JUNIOR: 1-2 verified years, some practical experience.
+        - MID_LEVEL: 2-4 verified years, can handle normal projects independently.
+        - SENIOR: 5-6 verified years, strong project, portfolio, GitHub, LinkedIn, or certificate evidence.
+        - LEAD: 7+ verified years, strong evidence and ability to design or lead complex solutions.
+
+        Do not use MID, BEGINNER, INTERMEDIATE, ADVANCED, EXPERT, or UNKNOWN as profile level.
+
+        Expert category must be one of:
+        AI_AUTOMATION, CHATBOT_DEVELOPER, LLM_ENGINEER, DATA_ANALYST, COMPUTER_VISION, PROMPT_ENGINEER, AI_CONSULTANT, RPA_AUTOMATION, OTHER.
+
+        Profile score must be from 0 to 100.
 
         Return JSON only in this exact shape:
         {
-          "status": "APPROVED | NEEDS_CORRECTION | PENDING_REVIEW",
+          "status": "APPROVED | NEEDS_CORRECTION | PENDING_REVIEW | REJECTED",
           "profileScore": 0,
-          "level": "JUNIOR | MID | SENIOR | UNKNOWN",
+          "level": "FRESHER | JUNIOR | MID_LEVEL | SENIOR | LEAD",
           "expertCategory": "AI_AUTOMATION | CHATBOT_DEVELOPER | LLM_ENGINEER | DATA_ANALYST | COMPUTER_VISION | PROMPT_ENGINEER | AI_CONSULTANT | RPA_AUTOMATION | OTHER",
           "reviewNote": "short review note explaining how URL evidence supports or does not support the profile",
           "missingInformation": "what user must fix, or null"
@@ -256,22 +279,16 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
     }
 
     private static ExpertProfileReviewProviderResult NormalizeResult(
-        ExpertProfileReviewProviderResult result
+        ExpertProfileReviewProviderResult result,
+        int claimedYearsOfExperience
     )
     {
         var allowedStatuses = new HashSet<string>
         {
             "APPROVED",
             "NEEDS_CORRECTION",
-            "PENDING_REVIEW"
-        };
-
-        var allowedLevels = new HashSet<string>
-        {
-            "JUNIOR",
-            "MID",
-            "SENIOR",
-            "UNKNOWN"
+            "PENDING_REVIEW",
+            "REJECTED"
         };
 
         var allowedCategories = new HashSet<string>
@@ -287,18 +304,20 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             "OTHER"
         };
 
-        result.Status = NormalizeText(result.Status, "PENDING_REVIEW").ToUpperInvariant();
-        result.Level = NormalizeText(result.Level, "UNKNOWN").ToUpperInvariant();
-        result.ExpertCategory = NormalizeText(result.ExpertCategory, "OTHER").ToUpperInvariant();
+        result.Status = NormalizeReviewStatus(result.Status);
+        result.Level = NormalizeProfileLevel(
+            result.Level,
+            claimedYearsOfExperience
+        );
+
+        result.ExpertCategory = NormalizeText(
+            result.ExpertCategory,
+            "OTHER"
+        ).ToUpperInvariant();
 
         if (!allowedStatuses.Contains(result.Status))
         {
             result.Status = "PENDING_REVIEW";
-        }
-
-        if (!allowedLevels.Contains(result.Level))
-        {
-            result.Level = "UNKNOWN";
         }
 
         if (!allowedCategories.Contains(result.ExpertCategory))
@@ -324,6 +343,89 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         return result;
     }
 
+    private static string NormalizeReviewStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "PENDING_REVIEW";
+        }
+
+        var normalized = status.Trim()
+            .ToUpper()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized switch
+        {
+            "APPROVED" => "APPROVED",
+            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+            "PENDING_REVIEW" => "PENDING_REVIEW",
+            "REJECTED" => "REJECTED",
+            _ => "PENDING_REVIEW"
+        };
+    }
+
+    private static string NormalizeProfileLevel(
+        string? level,
+        int claimedYearsOfExperience
+    )
+    {
+        if (string.IsNullOrWhiteSpace(level))
+        {
+            return InferLevelFromYears(claimedYearsOfExperience);
+        }
+
+        var normalized = level.Trim()
+            .ToUpper()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized switch
+        {
+            "FRESHER" => "FRESHER",
+            "JUNIOR" => "JUNIOR",
+            "MID" => "MID_LEVEL",
+            "MIDLEVEL" => "MID_LEVEL",
+            "MID_LEVEL" => "MID_LEVEL",
+            "SENIOR" => "SENIOR",
+            "LEAD" => "LEAD",
+
+            // fallback từ rule cũ
+            "BEGINNER" => "FRESHER",
+            "INTERMEDIATE" => "MID_LEVEL",
+            "ADVANCED" => "SENIOR",
+            "EXPERT" => "LEAD",
+            "UNKNOWN" => InferLevelFromYears(claimedYearsOfExperience),
+
+            _ => InferLevelFromYears(claimedYearsOfExperience)
+        };
+    }
+
+    private static string InferLevelFromYears(int yearsOfExperience)
+    {
+        if (yearsOfExperience <= 1)
+        {
+            return "FRESHER";
+        }
+
+        if (yearsOfExperience <= 2)
+        {
+            return "JUNIOR";
+        }
+
+        if (yearsOfExperience <= 4)
+        {
+            return "MID_LEVEL";
+        }
+
+        if (yearsOfExperience <= 6)
+        {
+            return "SENIOR";
+        }
+
+        return "LEAD";
+    }
+
     private static string NormalizeText(string? value, string fallback)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -337,7 +439,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         {
             Status = "PENDING_REVIEW",
             ProfileScore = 0,
-            Level = "UNKNOWN",
+            Level = "FRESHER",
             ExpertCategory = "OTHER",
             ReviewNote = note,
             MissingInformation = null

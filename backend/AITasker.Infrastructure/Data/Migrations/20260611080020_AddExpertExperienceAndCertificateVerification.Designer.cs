@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611080020_AddExpertExperienceAndCertificateVerification")]
+    partial class AddExpertExperienceAndCertificateVerification
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -471,9 +474,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("JobPostingId");
 
-                    b.HasIndex("ClientProfileId", "Status");
+                    b.HasIndex("ClientProfileId");
 
-                    b.HasIndex("Status", "Deadline");
+                    b.HasIndex("Status");
 
                     b.ToTable("JobPostings", (string)null);
                 });
@@ -487,9 +490,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
 
                     b.Property<bool>("IsRequired")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
+                        .HasColumnType("bit");
 
                     b.Property<int>("JobPostingId")
                         .HasColumnType("int");
@@ -498,8 +499,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("SkillLevelRequired")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("JobSkillId");
 
