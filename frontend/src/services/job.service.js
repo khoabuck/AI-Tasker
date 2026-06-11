@@ -1,4 +1,4 @@
-import jobApi from "../api/job.api";
+import jobApi, { saveJobDraftApi, submitJobApi } from "../api/job.api";
 
 const getValue = (...values) => {
   return values.find(
@@ -252,6 +252,16 @@ const jobService = {
     return list.map(normalizeJob).filter(Boolean);
   },
 
+  async getRecommendedJobs() {
+    const response = await jobApi.getRecommendedJobs();
+
+    console.log("GET RECOMMENDED JOBS RESPONSE:", response?.data);
+
+    const list = unwrapListData(response);
+
+    return list.map(normalizeJob).filter(Boolean);
+  },
+
   async getJobById(jobId) {
     if (!jobId || jobId === "undefined" || jobId === "null") {
       throw new Error("Invalid job id.");
@@ -269,9 +279,27 @@ const jobService = {
   async getMyJobs() {
     const response = await jobApi.getMyJobs();
 
+    console.log("GET MY JOBS RESPONSE:", response?.data);
+
     const list = unwrapListData(response);
 
     return list.map(normalizeJob).filter(Boolean);
+  },
+
+  async saveJobDraft(payload) {
+    const response = await saveJobDraftApi(payload);
+
+    console.log("SAVE JOB DRAFT RESPONSE:", response?.data);
+
+    return unwrapDetailData(response);
+  },
+
+  async submitJob(payload) {
+    const response = await submitJobApi(payload);
+
+    console.log("SUBMIT JOB RESPONSE:", response?.data);
+
+    return unwrapDetailData(response);
   },
 };
 

@@ -28,7 +28,6 @@ public class ExpertProfilesController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-
             var result = await _expertProfileService.CreateAsync(userId, request);
 
             return Ok(new
@@ -59,7 +58,6 @@ public class ExpertProfilesController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-
             var result = await _expertProfileService.ResubmitAsync(userId, request);
 
             return Ok(new
@@ -88,7 +86,6 @@ public class ExpertProfilesController : ControllerBase
         try
         {
             var userId = GetCurrentUserId();
-
             var result = await _expertProfileService.GetMeAsync(userId);
 
             return Ok(new

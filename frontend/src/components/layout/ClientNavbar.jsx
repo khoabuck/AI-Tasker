@@ -10,7 +10,7 @@ const NAV_ITEMS = [
     dropdown: null,
   },
   {
-    label: "FIND JOBS",
+    label: "FIND AI EXPERT",
     dropdown: [
       { icon: "auto_awesome",  label: "AI Matching",   to: "/client/ai-matching" },
       { icon: "person_search", label: "Expert Search", to: "/client/experts" },
