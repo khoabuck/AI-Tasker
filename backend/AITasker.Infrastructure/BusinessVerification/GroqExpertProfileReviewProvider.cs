@@ -35,8 +35,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return PendingReview(
-                "Groq API key is missing. Expert profile requires support review."
+            return NeedsCorrection(
+                "Groq API key is missing. Please update the profile with valid proof URLs and certificate evidence."
             );
         }
 
@@ -58,6 +58,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                         The backend has already inspected URLs using HttpClient.
                         Use the backend URL inspection evidence as the source of truth.
                         Be strict with claimed years of experience.
+                        The system does not use PENDING_REVIEW. If evidence is weak or unclear, return NEEDS_CORRECTION.
                         Return JSON only. Do not return markdown. Do not add text outside JSON.
                         """
                     },
@@ -96,8 +97,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
             if (!response.IsSuccessStatusCode)
             {
-                return PendingReview(
-                    $"AI provider error: {(int)response.StatusCode}. Support review is required."
+                return NeedsCorrection(
+                    $"AI provider error: {(int)response.StatusCode}. Please update the profile or try again later."
                 );
             }
 
@@ -113,8 +114,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
             if (string.IsNullOrWhiteSpace(content))
             {
-                return PendingReview(
-                    "AI provider returned empty response. Support review is required."
+                return NeedsCorrection(
+                    "AI provider returned empty response. Please update the profile with stronger evidence."
                 );
             }
 
@@ -124,8 +125,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         }
         catch
         {
-            return PendingReview(
-                "AI profile review failed due to a system error. Support review is required."
+            return NeedsCorrection(
+                "AI profile review failed due to a system error. Please update the profile with valid proof URLs and certificate evidence."
             );
         }
     }
@@ -210,15 +211,15 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         - APPROVED only if the profile is AI-related and has credible proof from at least 2 valid proof URLs and at least 1 relevant certificate.
         - Do not approve based only on user-written text.
         - Even if the URL format is valid, only approve the profile when the proof links and certificate evidence are reachable and relevant.
-        - If proof links or certificate URLs are fake, unreachable, unrelated, or cannot support the claimed experience, return NEEDS_CORRECTION or PENDING_REVIEW.
+        - If proof links or certificate URLs are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION.
         - If a required proof URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION.
-        - If an important proof URL is blocked, timed out, rate-limited, or cannot be inspected, return PENDING_REVIEW instead of APPROVED.
-        - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION or PENDING_REVIEW.
+        - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION.
         - If the expert claims 5+ years but has weak evidence, do not approve the profile.
         - If the expert claims 7+ years but has no strong portfolio, GitHub, LinkedIn, reachable certificate, or detailed project evidence, do not approve the profile.
         - If claimed years are much higher than evidence, do not silently downgrade to MID_LEVEL and approve. Return NEEDS_CORRECTION.
         - Only approve SENIOR or LEAD when strong evidence supports that level.
         - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return REJECTED.
+        - The system does not use PENDING_REVIEW. Never return PENDING_REVIEW.
 
         Profile level must be one of:
         - FRESHER: 0-1 verified years, basic profile, little practical evidence.
@@ -236,7 +237,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         Return JSON only in this exact shape:
         {
-          "status": "APPROVED | NEEDS_CORRECTION | PENDING_REVIEW | REJECTED",
+          "status": "APPROVED | NEEDS_CORRECTION | REJECTED",
           "profileScore": 0,
           "level": "FRESHER | JUNIOR | MID_LEVEL | SENIOR | LEAD",
           "expertCategory": "AI_AUTOMATION | CHATBOT_DEVELOPER | LLM_ENGINEER | DATA_ANALYST | COMPUTER_VISION | PROMPT_ENGINEER | AI_CONSULTANT | RPA_AUTOMATION | OTHER",
@@ -258,8 +259,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             }
         );
 
-        return result ?? PendingReview(
-            "AI response could not be parsed. Support review is required."
+        return result ?? NeedsCorrection(
+            "AI response could not be parsed. Please update the profile with stronger evidence."
         );
     }
 
@@ -287,7 +288,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         {
             "APPROVED",
             "NEEDS_CORRECTION",
-            "PENDING_REVIEW",
             "REJECTED"
         };
 
@@ -317,7 +317,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         if (!allowedStatuses.Contains(result.Status))
         {
-            result.Status = "PENDING_REVIEW";
+            result.Status = "NEEDS_CORRECTION";
         }
 
         if (!allowedCategories.Contains(result.ExpertCategory))
@@ -340,6 +340,13 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             result.ReviewNote = "AI profile review completed.";
         }
 
+        if (result.Status == "NEEDS_CORRECTION" &&
+            string.IsNullOrWhiteSpace(result.MissingInformation))
+        {
+            result.MissingInformation =
+                "Please update your profile with valid proof URLs and certificate evidence.";
+        }
+
         return result;
     }
 
@@ -347,7 +354,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
     {
         if (string.IsNullOrWhiteSpace(status))
         {
-            return "PENDING_REVIEW";
+            return "NEEDS_CORRECTION";
         }
 
         var normalized = status.Trim()
@@ -359,9 +366,12 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         {
             "APPROVED" => "APPROVED",
             "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            "PENDING_REVIEW" => "PENDING_REVIEW",
             "REJECTED" => "REJECTED",
-            _ => "PENDING_REVIEW"
+
+            "PENDING_REVIEW" => "NEEDS_CORRECTION",
+            "PENDING_AI_REVIEW" => "NEEDS_CORRECTION",
+
+            _ => "NEEDS_CORRECTION"
         };
     }
 
@@ -390,7 +400,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             "SENIOR" => "SENIOR",
             "LEAD" => "LEAD",
 
-            // fallback từ rule cũ
             "BEGINNER" => "FRESHER",
             "INTERMEDIATE" => "MID_LEVEL",
             "ADVANCED" => "SENIOR",
@@ -433,16 +442,17 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             : value.Trim();
     }
 
-    private static ExpertProfileReviewProviderResult PendingReview(string note)
+    private static ExpertProfileReviewProviderResult NeedsCorrection(string note)
     {
         return new ExpertProfileReviewProviderResult
         {
-            Status = "PENDING_REVIEW",
+            Status = "NEEDS_CORRECTION",
             ProfileScore = 0,
             Level = "FRESHER",
             ExpertCategory = "OTHER",
             ReviewNote = note,
-            MissingInformation = null
+            MissingInformation =
+                "Please update your profile with valid proof URLs and certificate evidence."
         };
     }
 

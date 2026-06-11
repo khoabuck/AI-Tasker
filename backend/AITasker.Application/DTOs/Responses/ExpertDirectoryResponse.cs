@@ -29,9 +29,19 @@ public class ExpertDirectoryItemResponse
 
     public string Bio { get; set; } = string.Empty;
 
-    public string SkillsText { get; set; } = string.Empty;
+    public string Skills { get; set; } = string.Empty;
 
+    // Expert tự khai
     public int YearsOfExperience { get; set; }
+
+    // Backend/AI xác minh
+    public int VerifiedYearsOfExperience { get; set; }
+
+    public decimal ExperienceConfidenceScore { get; set; }
+
+    public string ExperienceVerificationStatus { get; set; } = string.Empty;
+
+    public string? ExperienceVerificationNote { get; set; }
 
     public decimal ExpectedProjectBudgetMin { get; set; }
 
@@ -58,6 +68,8 @@ public class ExpertDirectoryItemResponse
     public DateTime? VerifiedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 
     public List<ExpertDirectorySkillResponse> ExpertSkills { get; set; } = new();
 
@@ -92,4 +104,16 @@ public class ExpertDirectoryCertificateResponse
     public DateTime? IssuedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public string VerificationStatus { get; set; } = string.Empty;
+
+    public decimal VerificationScore { get; set; }
+
+    public string? VerificationNote { get; set; }
+
+    public string? DetectedIssuer { get; set; }
+
+    public string? DetectedCertificateName { get; set; }
+
+    public DateTime? CheckedAt { get; set; }
 }

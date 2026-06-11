@@ -622,7 +622,7 @@ public class ExpertProfileService : IExpertProfileService
     {
         if (string.IsNullOrWhiteSpace(status))
         {
-            return "PENDING_REVIEW";
+            return "NEEDS_CORRECTION";
         }
 
         var normalized = status.Trim()
@@ -634,9 +634,12 @@ public class ExpertProfileService : IExpertProfileService
         {
             "APPROVED" => "APPROVED",
             "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            "PENDING_REVIEW" => "PENDING_REVIEW",
             "REJECTED" => "REJECTED",
-            _ => "PENDING_REVIEW"
+
+            "PENDING_REVIEW" => "NEEDS_CORRECTION",
+            "PENDING_AI_REVIEW" => "NEEDS_CORRECTION",
+
+            _ => "NEEDS_CORRECTION"
         };
     }
 
@@ -761,9 +764,8 @@ public class ExpertProfileService : IExpertProfileService
         {
             "APPROVED" => "ACTIVE",
             "NEEDS_CORRECTION" => "PENDING_PROFILE",
-            "PENDING_REVIEW" => "PENDING_AI_REVIEW",
             "REJECTED" => "PENDING_PROFILE",
-            _ => "PENDING_AI_REVIEW"
+            _ => "PENDING_PROFILE"
         };
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -771,21 +773,11 @@ public class ExpertProfileService : IExpertProfileService
 
     private static bool CanResubmit(string userStatus, string profileReviewStatus)
     {
-        var allowedUserStatuses = new[]
-        {
-            "PENDING_PROFILE",
-            "PENDING_AI_REVIEW"
-        };
+        var normalizedUserStatus = userStatus.Trim().ToUpper();
+        var normalizedProfileStatus = profileReviewStatus.Trim().ToUpper();
 
-        var allowedProfileStatuses = new[]
-        {
-            "NEEDS_CORRECTION",
-            "PENDING_REVIEW",
-            "REJECTED"
-        };
-
-        return allowedUserStatuses.Contains(userStatus)
-            && allowedProfileStatuses.Contains(profileReviewStatus);
+        return normalizedUserStatus == "PENDING_PROFILE"
+            && normalizedProfileStatus is "NEEDS_CORRECTION" or "REJECTED";
     }
 
     private static void ValidateRequest(CreateExpertProfileRequest request)
