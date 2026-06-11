@@ -1,24 +1,16 @@
-// src/api/axiosInstance.js
-// Cấu hình axios dùng chung cho toàn bộ app
-// Mọi file api khác đều import instance này thay vì dùng axios trực tiếp
-
 import axios from "axios";
 
 const axiosInstance = axios.create({
-  // ⚠️ Khi BE xong, đổi URL này thành URL thật của BE
-  baseURL: "http://localhost:8080/api",
-  timeout: 10000, // 10 giây timeout
+  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5070/api",
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// ─── Request Interceptor ──────────────────────────────
-// Chạy trước MỌI request — tự động đính token vào header
+// Tự động gắn accessToken vào mỗi request
 axiosInstance.interceptors.request.use(
   (config) => {
-    // Lấy token từ localStorage (được lưu sau khi login)
-    const token = localStorage.getItem("token");
+    const token = localStorage.getItem("accessToken");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -27,17 +19,13 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ─── Response Interceptor ─────────────────────────────
-// Chạy sau MỌI response — xử lý lỗi tập trung
+// Xóa token khi nhận 401
 axiosInstance.interceptors.response.use(
-  (response) => response, // thành công thì trả về bình thường
-
+  (response) => response,
   (error) => {
-    // 401 = token hết hạn hoặc không hợp lệ → logout
     if (error.response?.status === 401) {
-      localStorage.removeItem("token");
+      localStorage.removeItem("accessToken");
       localStorage.removeItem("user");
-      window.location.href = "/login";
     }
     return Promise.reject(error);
   }

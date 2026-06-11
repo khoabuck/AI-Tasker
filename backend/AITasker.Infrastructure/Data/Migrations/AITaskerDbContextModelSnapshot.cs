@@ -22,122 +22,128 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
-            modelBuilder.Entity("AITasker.Domain.Entities.AiRequestLog", b =>
+            modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
-                    b.Property<Guid>("Id")
+                    b.Property<int>("BusinessProfileId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("BusinessProfileId"));
+
+                    b.Property<string>("BusinessEmail")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("BusinessPhone")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("ClientProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CompanyAddress")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("CompanyName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Feature")
+                    b.Property<string>("Industry")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("TaxCode")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("RequestBody")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
-                    b.Property<string>("ResponseBody")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<string>("VerificationNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
-                    b.Property<string>("Status")
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("BusinessProfileId");
+
+                    b.HasIndex("ClientProfileId")
+                        .IsUnique();
+
+                    b.HasIndex("TaxCode")
+                        .IsUnique();
+
+                    b.ToTable("BusinessProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
+                {
+                    b.Property<int>("ClientProfileId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ClientProfileId"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("AiNeeds")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ClientType")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
-                    b.HasKey("Id");
-
-                    b.ToTable("AiRequestLogs", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Deliverable", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ExpertId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("FileUrl")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ProjectId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("PENDING");
-
-                    b.Property<DateTime>("SubmittedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<int>("Version")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Deliverables", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("EvidenceUrl")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime>("OpenedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<int>("OpenedByUserId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("ProjectId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<DateTime?>("ResolvedAt")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("Status")
+                    b.Property<decimal?>("ExpectedBudgetMax")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal?>("ExpectedBudgetMin")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("MainProblems")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("PhoneNumber")
                         .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("OPEN");
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
 
-                    b.HasKey("Id");
+                    b.Property<decimal>("PlatformFeeRate")
+                        .HasColumnType("decimal(5,2)");
 
-                    b.ToTable("Disputes", (string)null);
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ClientProfileId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("ClientProfiles", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -175,36 +181,284 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("EmailVerificationTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Notification", b =>
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<int>("ExpertCertificateId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertCertificateId"));
+
+                    b.Property<string>("CertificateIssuer")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("CertificateName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("CertificateUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
+                        .HasColumnType("datetime2");
 
-                    b.Property<bool>("IsRead")
+                    b.Property<int>("ExpertProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("IssuedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("ExpertCertificateId");
+
+                    b.HasIndex("ExpertProfileId", "CertificateUrl")
+                        .IsUnique();
+
+                    b.ToTable("ExpertCertificates", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
+                {
+                    b.Property<int>("ExpertProfileId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertProfileId"));
+
+                    b.Property<bool>("AvailableForWork")
                         .HasColumnType("bit");
 
-                    b.Property<string>("Message")
+                    b.Property<string>("Bio")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
 
-                    b.Property<string>("Title")
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExpectedProjectBudgetMax")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExpectedProjectBudgetMin")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("ExpertCategory")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("GitHubUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Level")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("LinkedInUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("MissingInformation")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("PortfolioUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("PreferredProjectDurationDays")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ProfessionalTitle")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ProfileReviewNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ProfileReviewStatus")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<decimal>("ProfileScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<string>("Skills")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
-                    b.HasKey("Id");
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("datetime2");
 
-                    b.ToTable("Notifications", (string)null);
+                    b.Property<int>("YearsOfExperience")
+                        .HasColumnType("int");
+
+                    b.HasKey("ExpertProfileId");
+
+                    b.HasIndex("UserId")
+                        .IsUnique();
+
+                    b.ToTable("ExpertProfiles", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
+                {
+                    b.Property<int>("ExpertSkillId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertSkillId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpertProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsPrimary")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("SkillId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkillLevel")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("YearsOfExperience")
+                        .HasColumnType("int");
+
+                    b.HasKey("ExpertSkillId");
+
+                    b.HasIndex("SkillId");
+
+                    b.HasIndex("ExpertProfileId", "SkillId")
+                        .IsUnique();
+
+                    b.ToTable("ExpertSkills", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
+                {
+                    b.Property<int>("JobPostingId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobPostingId"));
+
+                    b.Property<string>("AiGeneratedDescription")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("BudgetMax")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("BudgetMin")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("ClientProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Complexity")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("Deadline")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ExpectedDeliverables")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsAiAssisted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ProjectType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("JobPostingId");
+
+                    b.HasIndex("ClientProfileId", "Status");
+
+                    b.HasIndex("Status", "Deadline");
+
+                    b.ToTable("JobPostings", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
+                {
+                    b.Property<int>("JobSkillId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("JobPostingId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("SkillId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("SkillLevelRequired")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.HasKey("JobSkillId");
+
+                    b.HasIndex("SkillId");
+
+                    b.HasIndex("JobPostingId", "SkillId")
+                        .IsUnique();
+
+                    b.ToTable("JobSkills", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
@@ -242,41 +496,41 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("PasswordResetTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Transaction", b =>
+            modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
                 {
-                    b.Property<Guid>("TransactionId")
+                    b.Property<int>("SkillId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
+                        .HasColumnType("int");
 
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("SkillId"));
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Description")
-                        .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("ReferenceId")
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("SkillName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
+                    b.HasKey("SkillId");
 
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
+                    b.HasIndex("SkillName")
+                        .IsUnique();
 
-                    b.HasKey("TransactionId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("Transactions", (string)null);
+                    b.ToTable("Skills", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.User", b =>
@@ -341,35 +595,26 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("Users", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Wallet", b =>
+            modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
+                        .WithOne("BusinessProfile")
+                        .HasForeignKey("AITasker.Domain.Entities.BusinessProfile", "ClientProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    b.Navigation("ClientProfile");
+                });
 
-                    b.Property<decimal>("AvailableBalance")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
+            modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
-                    b.Property<decimal>("LockedBalance")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("datetime2")
-                        .HasDefaultValueSql("GETUTCDATE()");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Wallets", (string)null);
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -383,6 +628,77 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
+                        .WithMany("Certificates")
+                        .HasForeignKey("ExpertProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ExpertProfile");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
+                        .WithMany()
+                        .HasForeignKey("ExpertProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ExpertProfile");
+
+                    b.Navigation("Skill");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
+                        .WithMany()
+                        .HasForeignKey("ClientProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ClientProfile");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
+                        .WithMany("JobSkills")
+                        .HasForeignKey("JobPostingId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("AITasker.Domain.Entities.Skill", "Skill")
+                        .WithMany()
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("JobPosting");
+
+                    b.Navigation("Skill");
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.PasswordResetToken", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -394,13 +710,19 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Transaction", b =>
+            modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                    b.Navigation("BusinessProfile");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>
+                {
+                    b.Navigation("Certificates");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
+                {
+                    b.Navigation("JobSkills");
                 });
 #pragma warning restore 612, 618
         }
