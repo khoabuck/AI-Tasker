@@ -20,6 +20,14 @@ public class ExpertProfileResponse
 
     public int YearsOfExperience { get; set; }
 
+    public int VerifiedYearsOfExperience { get; set; }
+
+    public decimal ExperienceConfidenceScore { get; set; }
+
+    public string ExperienceVerificationStatus { get; set; } = string.Empty;
+
+    public string? ExperienceVerificationNote { get; set; }
+
     public decimal ExpectedProjectBudgetMin { get; set; }
 
     public decimal ExpectedProjectBudgetMax { get; set; }

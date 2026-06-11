@@ -12,7 +12,17 @@ public class ExpertProfile
 
     public string Skills { get; set; } = string.Empty;
 
+    // Expert tự khai
     public int YearsOfExperience { get; set; }
+
+    // Backend/AI xác minh lại dựa trên evidence
+    public int VerifiedYearsOfExperience { get; set; }
+
+    public decimal ExperienceConfidenceScore { get; set; }
+
+    public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+
+    public string? ExperienceVerificationNote { get; set; }
 
     public decimal ExpectedProjectBudgetMin { get; set; }
 
@@ -20,7 +30,7 @@ public class ExpertProfile
 
     public int PreferredProjectDurationDays { get; set; }
 
-    public bool AvailableForWork { get; set; } = true;
+    public bool AvailableForWork { get; set; }
 
     public string? PortfolioUrl { get; set; }
 
@@ -28,15 +38,14 @@ public class ExpertProfile
 
     public string? GitHubUrl { get; set; }
 
-    // AI phân loại
-    public string ExpertCategory { get; set; } = "OTHER";
+    public string ExpertCategory { get; set; } = string.Empty;
 
-    public decimal ProfileScore { get; set; } = 0;
+    public decimal ProfileScore { get; set; }
 
-    public string Level { get; set; } = "UNKNOWN";
+    // FRESHER / JUNIOR / MID_LEVEL / SENIOR / LEAD
+    public string Level { get; set; } = string.Empty;
 
-    // PENDING_REVIEW / APPROVED / NEEDS_CORRECTION / REJECTED
-    public string ProfileReviewStatus { get; set; } = "PENDING_REVIEW";
+    public string ProfileReviewStatus { get; set; } = string.Empty;
 
     public string? ProfileReviewNote { get; set; }
 
@@ -50,8 +59,7 @@ public class ExpertProfile
 
     public User User { get; set; } = null!;
 
-    public ICollection<ExpertCertificate> Certificates { get; set; }
-        = new List<ExpertCertificate>();
+    public ICollection<ExpertCertificate> Certificates { get; set; } = new List<ExpertCertificate>();
 
     public ICollection<ExpertSkill> ExpertSkills { get; set; } = new List<ExpertSkill>();
 }

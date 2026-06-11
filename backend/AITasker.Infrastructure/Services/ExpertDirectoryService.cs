@@ -8,14 +8,14 @@ namespace AITasker.Infrastructure.Services;
 
 public class ExpertDirectoryService : IExpertDirectoryService
 {
-    private const string ActiveUserStatus = "ACTIVE";
-    private const string ApprovedProfileStatus = "APPROVED";
+    private const string UserStatusActive = "ACTIVE";
+    private const string ExpertReviewApproved = "APPROVED";
 
-    private readonly AITaskerDbContext _context;
+    private readonly AITaskerDbContext _dbContext;
 
-    public ExpertDirectoryService(AITaskerDbContext context)
+    public ExpertDirectoryService(AITaskerDbContext dbContext)
     {
-        _context = context;
+        _dbContext = dbContext;
     }
 
     public async Task<ExpertDirectoryPagedResponse> GetExpertsAsync(
@@ -27,37 +27,30 @@ public class ExpertDirectoryService : IExpertDirectoryService
         int pageSize
     )
     {
-        page = Math.Max(page, 1);
-        pageSize = Math.Clamp(pageSize, 1, 50);
+        var safePage = page <= 0 ? 1 : page;
+        var safePageSize = Math.Clamp(pageSize, 1, 50);
 
-        var query = _context.ExpertProfiles
+        var query = _dbContext.ExpertProfiles
             .AsNoTracking()
             .Include(x => x.User)
             .Include(x => x.ExpertSkills)
                 .ThenInclude(x => x.Skill)
+            .Include(x => x.Certificates)
             .Where(x =>
-                x.User.Status == ActiveUserStatus &&
-                x.ProfileReviewStatus == ApprovedProfileStatus
+                x.User.Status == UserStatusActive &&
+                x.ProfileReviewStatus == ExpertReviewApproved
             );
-
-        if (availableOnly)
-        {
-            query = query.Where(x => x.AvailableForWork);
-        }
 
         if (!string.IsNullOrWhiteSpace(keyword))
         {
-            var search = keyword.Trim();
+            var normalizedKeyword = keyword.Trim().ToLower();
 
             query = query.Where(x =>
-                EF.Functions.Like(x.User.FullName, $"%{search}%") ||
-                EF.Functions.Like(x.ProfessionalTitle, $"%{search}%") ||
-                EF.Functions.Like(x.Bio, $"%{search}%") ||
-                EF.Functions.Like(x.Skills, $"%{search}%") ||
-                x.ExpertSkills.Any(es =>
-                    es.Skill != null &&
-                    EF.Functions.Like(es.Skill.SkillName, $"%{search}%")
-                )
+                x.User.FullName.ToLower().Contains(normalizedKeyword) ||
+                x.ProfessionalTitle.ToLower().Contains(normalizedKeyword) ||
+                x.Bio.ToLower().Contains(normalizedKeyword) ||
+                x.Skills.ToLower().Contains(normalizedKeyword) ||
+                x.ExpertCategory.ToLower().Contains(normalizedKeyword)
             );
         }
 
@@ -70,38 +63,42 @@ public class ExpertDirectoryService : IExpertDirectoryService
 
         if (!string.IsNullOrWhiteSpace(level))
         {
-            var normalizedLevel = level.Trim().ToUpper();
+            var normalizedLevel = NormalizeProfileLevel(level);
 
             query = query.Where(x => x.Level == normalizedLevel);
+        }
+
+        if (availableOnly)
+        {
+            query = query.Where(x => x.AvailableForWork);
         }
 
         var totalItems = await query.CountAsync();
 
         var experts = await query
             .OrderByDescending(x => x.ProfileScore)
-            .ThenByDescending(x => x.YearsOfExperience)
+            .ThenByDescending(x => x.VerifiedYearsOfExperience)
+            .ThenByDescending(x => x.ExperienceConfidenceScore)
             .ThenBy(x => x.User.FullName)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
             .ToListAsync();
-
-        var totalPages = totalItems == 0
-            ? 0
-            : (int)Math.Ceiling(totalItems / (double)pageSize);
 
         return new ExpertDirectoryPagedResponse
         {
-            Page = page,
-            PageSize = pageSize,
+            Page = safePage,
+            PageSize = safePageSize,
             TotalItems = totalItems,
-            TotalPages = totalPages,
-            Items = experts.Select(x => ToResponse(x, includeCertificates: false)).ToList()
+            TotalPages = (int)Math.Ceiling(totalItems / (double)safePageSize),
+            Items = experts.Select(ToResponse).ToList()
         };
     }
 
-    public async Task<ExpertDirectoryItemResponse?> GetExpertByIdAsync(int expertProfileId)
+    public async Task<ExpertDirectoryItemResponse?> GetExpertByIdAsync(
+        int expertProfileId
+    )
     {
-        var expert = await _context.ExpertProfiles
+        var expert = await _dbContext.ExpertProfiles
             .AsNoTracking()
             .Include(x => x.User)
             .Include(x => x.ExpertSkills)
@@ -109,8 +106,8 @@ public class ExpertDirectoryService : IExpertDirectoryService
             .Include(x => x.Certificates)
             .FirstOrDefaultAsync(x =>
                 x.ExpertProfileId == expertProfileId &&
-                x.User.Status == ActiveUserStatus &&
-                x.ProfileReviewStatus == ApprovedProfileStatus
+                x.User.Status == UserStatusActive &&
+                x.ProfileReviewStatus == ExpertReviewApproved
             );
 
         if (expert == null)
@@ -118,13 +115,10 @@ public class ExpertDirectoryService : IExpertDirectoryService
             return null;
         }
 
-        return ToResponse(expert, includeCertificates: true);
+        return ToResponse(expert);
     }
 
-    private static ExpertDirectoryItemResponse ToResponse(
-        ExpertProfile expert,
-        bool includeCertificates
-    )
+    private static ExpertDirectoryItemResponse ToResponse(ExpertProfile expert)
     {
         return new ExpertDirectoryItemResponse
         {
@@ -133,52 +127,112 @@ public class ExpertDirectoryService : IExpertDirectoryService
             FullName = expert.User.FullName,
             Email = expert.User.Email,
             AvatarUrl = expert.User.AvatarUrl,
+
             ProfessionalTitle = expert.ProfessionalTitle,
             Bio = expert.Bio,
-            SkillsText = expert.Skills,
+            Skills = expert.Skills,
+
+            // Expert tự khai
             YearsOfExperience = expert.YearsOfExperience,
+
+            // Backend/AI xác minh
+            VerifiedYearsOfExperience = expert.VerifiedYearsOfExperience,
+            ExperienceConfidenceScore = expert.ExperienceConfidenceScore,
+            ExperienceVerificationStatus = expert.ExperienceVerificationStatus,
+            ExperienceVerificationNote = expert.ExperienceVerificationNote,
+
             ExpectedProjectBudgetMin = expert.ExpectedProjectBudgetMin,
             ExpectedProjectBudgetMax = expert.ExpectedProjectBudgetMax,
             PreferredProjectDurationDays = expert.PreferredProjectDurationDays,
             AvailableForWork = expert.AvailableForWork,
+
             PortfolioUrl = expert.PortfolioUrl,
             LinkedInUrl = expert.LinkedInUrl,
             GitHubUrl = expert.GitHubUrl,
+
             ExpertCategory = expert.ExpertCategory,
             ProfileScore = expert.ProfileScore,
             Level = expert.Level,
             ProfileReviewStatus = expert.ProfileReviewStatus,
             VerifiedAt = expert.VerifiedAt,
+
             CreatedAt = expert.CreatedAt,
+            UpdatedAt = expert.UpdatedAt,
+
             ExpertSkills = expert.ExpertSkills
-                .Where(x => x.Skill != null)
                 .OrderByDescending(x => x.IsPrimary)
                 .ThenByDescending(x => x.YearsOfExperience)
-                .ThenBy(x => x.Skill!.SkillName)
-                .Select(x => new ExpertDirectorySkillResponse
-                {
-                    SkillId = x.SkillId,
-                    SkillName = x.Skill?.SkillName ?? string.Empty,
-                    Category = x.Skill?.Category,
-                    SkillLevel = x.SkillLevel,
-                    YearsOfExperience = x.YearsOfExperience,
-                    IsPrimary = x.IsPrimary
-                })
+                .ThenBy(x => x.Skill != null ? x.Skill.SkillName : string.Empty)
+                .Select(ToSkillResponse)
                 .ToList(),
-            Certificates = includeCertificates
-                ? expert.Certificates
-                    .OrderByDescending(x => x.CreatedAt)
-                    .Select(x => new ExpertDirectoryCertificateResponse
-                    {
-                        ExpertCertificateId = x.ExpertCertificateId,
-                        CertificateName = x.CertificateName,
-                        CertificateIssuer = x.CertificateIssuer,
-                        CertificateUrl = x.CertificateUrl,
-                        IssuedAt = x.IssuedAt,
-                        CreatedAt = x.CreatedAt
-                    })
-                    .ToList()
-                : new List<ExpertDirectoryCertificateResponse>()
+
+            Certificates = expert.Certificates
+                .OrderByDescending(x => x.VerificationScore)
+                .ThenByDescending(x => x.CheckedAt)
+                .Select(ToCertificateResponse)
+                .ToList()
+        };
+    }
+
+    private static ExpertDirectorySkillResponse ToSkillResponse(
+        ExpertSkill expertSkill
+    )
+    {
+        return new ExpertDirectorySkillResponse
+        {
+            SkillId = expertSkill.SkillId,
+            SkillName = expertSkill.Skill?.SkillName ?? string.Empty,
+            Category = expertSkill.Skill?.Category,
+            SkillLevel = expertSkill.SkillLevel,
+            YearsOfExperience = expertSkill.YearsOfExperience,
+            IsPrimary = expertSkill.IsPrimary
+        };
+    }
+
+    private static ExpertDirectoryCertificateResponse ToCertificateResponse(
+        ExpertCertificate certificate
+    )
+    {
+        return new ExpertDirectoryCertificateResponse
+        {
+            ExpertCertificateId = certificate.ExpertCertificateId,
+            CertificateName = certificate.CertificateName,
+            CertificateIssuer = certificate.CertificateIssuer,
+            CertificateUrl = certificate.CertificateUrl,
+            IssuedAt = certificate.IssuedAt,
+            CreatedAt = certificate.CreatedAt,
+
+            VerificationStatus = certificate.VerificationStatus,
+            VerificationScore = certificate.VerificationScore,
+            VerificationNote = certificate.VerificationNote,
+            DetectedIssuer = certificate.DetectedIssuer,
+            DetectedCertificateName = certificate.DetectedCertificateName,
+            CheckedAt = certificate.CheckedAt
+        };
+    }
+
+    private static string NormalizeProfileLevel(string? level)
+    {
+        if (string.IsNullOrWhiteSpace(level))
+        {
+            return string.Empty;
+        }
+
+        var normalized = level.Trim()
+            .ToUpperInvariant()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized switch
+        {
+            "FRESHER" => "FRESHER",
+            "JUNIOR" => "JUNIOR",
+            "MID" => "MID_LEVEL",
+            "MIDLEVEL" => "MID_LEVEL",
+            "MID_LEVEL" => "MID_LEVEL",
+            "SENIOR" => "SENIOR",
+            "LEAD" => "LEAD",
+            _ => normalized
         };
     }
 }
