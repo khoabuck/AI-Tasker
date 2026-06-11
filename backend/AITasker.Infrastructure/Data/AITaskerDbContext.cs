@@ -32,7 +32,13 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
 
-    // add 50% here
+    public DbSet<Proposal> Proposals { get; set; }
+        
+    public DbSet<ProjectContract> ProjectContracts { get; set; }
+        
+    public DbSet<Project> Projects { get; set; }
+        
+    public DbSet<Milestone> Milestones { get; set; }
 
     public DbSet<Wallet> Wallets { get; set; }
 
@@ -660,6 +666,55 @@ public class AITaskerDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(n => n.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
-            });
+        });
+        
+        // =========================
+        // Proposal
+        // =========================
+        modelBuilder.Entity<Proposal>(entity =>
+        {
+            entity.ToTable("Proposals");
+            entity.HasKey(e => e.ProposalId);
+            entity.Property(e => e.ProposedPrice).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.CounterPrice).HasColumnType("decimal(18,2)");
+        });
+        
+        // =========================
+        // ProjectContract
+        // =========================
+        modelBuilder.Entity<ProjectContract>(entity =>
+        {
+            entity.ToTable("ProjectContracts");
+            entity.HasKey(e => e.ContractId);
+            entity.HasIndex(e => e.ProposalId).IsUnique();
+            entity.Property(e => e.FinalPrice).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.PlatformFeeRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.PlatformFeeAmount).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalClientPayment).HasColumnType("decimal(18,2)");
+        });
+
+        // === ======================
+        // Project
+        // =========================
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("Projects");
+            entity.HasKey(e => e.ProjectId);
+            entity.Property(e => e.TotalBudget).HasColumnType("decimal(18,2)");
+            entity.HasMany(e => e.Milestones)
+                  .WithOne(m => m.Project)
+                  .HasForeignKey(m => m.ProjectId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Milestone
+        // =========================
+        modelBuilder.Entity<Milestone>(entity =>
+        {
+            entity.ToTable("Milestones");
+            entity.HasKey(e => e.MilestoneId);
+            entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+        });
     }
 }

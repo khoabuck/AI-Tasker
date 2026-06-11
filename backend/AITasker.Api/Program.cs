@@ -209,6 +209,11 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.IDeliverableService, 
 builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationService, AITasker.Infrastructure.Notifications.NotificationService>();
 builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
 
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+
+
 builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
 
 builder.Services.AddHttpClient();
