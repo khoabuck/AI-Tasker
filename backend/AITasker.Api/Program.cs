@@ -189,14 +189,28 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
 // =========================
+// Upload Images - Cloudinary
+// =========================
+builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
+
+// =========================
 // BE2 - Skills API
 // =========================
 builder.Services.AddScoped<ISkillService, SkillService>();
 
 // =========================
+// BE2 - Expert Skills API
+// =========================
+builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
+builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
+builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
+
+// =========================
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
+
 
 // =========================
 // BE2 - AI Job Assistant
