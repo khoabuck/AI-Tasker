@@ -5,12 +5,12 @@ const jobApi = {
     return axiosInstance.get("/jobs/open");
   },
 
-   getRecommendedJobs() {
-    return axiosInstance.get("/jobs/recommended");
-  },
-
   getJobById(jobId) {
     return axiosInstance.get(`/jobs/${jobId}`);
+  },
+
+  getMyJobs() {
+    return axiosInstance.get("/jobs/my");
   },
 };
 
