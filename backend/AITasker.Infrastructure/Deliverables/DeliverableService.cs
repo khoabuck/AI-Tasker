@@ -42,9 +42,7 @@ namespace AITasker.Infrastructure.Deliverables
             {
                 int latestVersion = await _context.Deliverables
                     .Where(d => d.MilestoneId == milestoneId)
-                    .Select(d => d.VersionNumber)
-                    .DefaultIfEmpty(0)
-                    .MaxAsync();
+                    .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
 
                 var deliverable = new Deliverable
                 {
@@ -64,7 +62,7 @@ namespace AITasker.Infrastructure.Deliverables
 
                 return deliverable;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 return null;
             }

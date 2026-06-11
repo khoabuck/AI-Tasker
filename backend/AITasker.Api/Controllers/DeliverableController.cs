@@ -39,10 +39,10 @@ namespace AITasker.Api.Controllers
                 var result = await _deliverableService.SubmitDeliverableAsync(
                     request.MilestoneId,
                     currentExpertId,
-                    request.FileUrl ?? string.Empty,
-                    request.DemoUrl,
-                    request.Description ?? string.Empty,
-                    null    
+                    request.Description ?? string.Empty, 
+                    request.FileUrl,                      
+                    request.DemoUrl,                      
+                    request.TestResultUrl                 
                 );
 
                 if (result == null) 

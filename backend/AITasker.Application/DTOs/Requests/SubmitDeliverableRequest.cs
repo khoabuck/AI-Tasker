@@ -9,5 +9,7 @@ namespace AITasker.Application.DTOs.Requests
         public string? DemoUrl { get; set; }
         
         public string? Description { get; set; }
+
+        public string? TestResultUrl { get; set; }
     }
 }
