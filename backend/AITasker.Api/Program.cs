@@ -203,6 +203,7 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 // =========================
 builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
 
 // =========================
