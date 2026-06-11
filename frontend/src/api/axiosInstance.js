@@ -7,28 +7,24 @@ const axiosInstance = axios.create({
   },
 });
 
-// Tự động gắn accessToken vào mỗi request
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("accessToken");
+    const token =
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("token") ||
+      localStorage.getItem("authToken");
+
     if (token) {
+      config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
+
+    console.log("REQUEST URL:", config.baseURL + config.url);
+    console.log("SEND TOKEN:", Boolean(token));
+
     return config;
   },
   (error) => Promise.reject(error)
-);
-
-// Xóa token khi nhận 401
-axiosInstance.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("user");
-    }
-    return Promise.reject(error);
-  }
 );
 
 export default axiosInstance;

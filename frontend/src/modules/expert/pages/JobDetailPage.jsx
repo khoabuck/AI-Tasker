@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import axiosInstance from "../../../api/axiosInstance";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import jobService from "../../../services/job.service";
 
 export default function JobDetailPage() {
-  const { jobId } = useParams();
   const navigate = useNavigate();
+  const { jobId } = useParams();
 
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,101 +20,41 @@ export default function JobDetailPage() {
       setLoading(true);
       setError("");
 
-      console.log("CURRENT JOB ID:", jobId);
-
       if (!jobId || jobId === "undefined" || jobId === "null") {
-        setError("Invalid job ID. Please go back and choose another job.");
-        return;
+        throw new Error("Invalid job id.");
       }
 
-      const data = await jobService.getJobById(jobId);
+      const response = await axiosInstance.get(`/jobs/${jobId}`);
 
-      if (!data) {
-        setError(`Job not found. Job ID: ${jobId}`);
-        return;
+      console.log("GET JOB DETAIL RAW:", response?.data);
+
+      const data = unwrapDetailData(response);
+      const normalizedJob = normalizeJob(data);
+
+      console.log("GET JOB DETAIL NORMALIZED:", normalizedJob);
+
+      if (!normalizedJob?.id) {
+        throw new Error("Job detail does not have a valid id.");
       }
 
-      setJob(data);
+      setJob(normalizedJob);
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
-      console.error("CURRENT JOB ID:", jobId);
-
-      const status = err?.response?.status;
-      const message =
+      setError(
         err?.response?.data?.message ||
-        err?.response?.data?.title ||
-        err?.message ||
-        "";
-
-      if (status === 404) {
-        setError(`Job not found. Job ID: ${jobId}`);
-      } else if (status === 401 || status === 403) {
-        setError("You do not have permission to view this job.");
-      } else {
-        setError(message || "We could not load this job. Please try again later.");
-      }
+          err?.message ||
+          "Cannot load job detail right now."
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatMoney = (value) => {
-    const number = Number(value || 0);
-
-    if (!number) return "Negotiable";
-
-    return `$${number.toLocaleString("en-US")}`;
-  };
-
-  const formatBudgetRange = (job) => {
-    const min = Number(job?.budgetMin || 0);
-    const max = Number(job?.budgetMax || 0);
-
-    if (!min && !max) return "Negotiable";
-    if (min && !max) return `From ${formatMoney(min)}`;
-    if (!min && max) return `Up to ${formatMoney(max)}`;
-
-    return `${formatMoney(min)} - ${formatMoney(max)}`;
-  };
-
-  const formatDate = (value) => {
-    if (!value) return "No deadline";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return "No deadline";
-
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
-  };
-
-  const formatCreatedAt = (value) => {
-    if (!value) return "Recently posted";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) return "Recently posted";
-
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
   };
 
   if (loading) {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          <div className="text-center">
-            <span className="material-symbols-outlined mb-3 block text-5xl text-[#00F0FF]">
-              work
-            </span>
-            Loading job detail...
-          </div>
+          Loading job detail...
         </div>
       </ExpertLayout>
     );
@@ -125,27 +65,14 @@ export default function JobDetailPage() {
       <ExpertLayout>
         <div className="px-5 py-10 md:px-8">
           <div className="mx-auto max-w-5xl">
-            <button
-              type="button"
-              onClick={() => navigate("/expert/jobs")}
-              className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
-            >
-              <span className="material-symbols-outlined text-[18px]">
-                arrow_back
-              </span>
-              Back to jobs
-            </button>
+            <BackButton onClick={() => navigate("/expert/jobs")} />
 
-            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center">
-              <span className="material-symbols-outlined mb-3 block text-5xl text-red-300">
-                error
-              </span>
-
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center text-red-300">
               <h2 className="text-xl font-bold text-white">
                 Cannot load job detail
               </h2>
 
-              <p className="mt-2 text-sm text-red-200">{error}</p>
+              <p className="mt-2 text-sm">{error}</p>
 
               <button
                 type="button"
@@ -165,93 +92,71 @@ export default function JobDetailPage() {
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <button
-            type="button"
-            onClick={() => navigate("/expert/jobs")}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
-          >
-            <span className="material-symbols-outlined text-[18px]">
-              arrow_back
-            </span>
-            Back to jobs
-          </button>
+          <BackButton onClick={() => navigate("/expert/jobs")} />
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-                <div className="relative p-6 md:p-8">
-                  <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
-                  <div className="absolute bottom-0 left-20 h-32 w-32 rounded-full bg-blue-500/10 blur-3xl" />
+              <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+                <div className="mb-5 flex flex-wrap items-center gap-2">
+                  <Badge>{job.status || "OPEN"}</Badge>
+                  <Badge>{job.category || "General"}</Badge>
+                  {job.complexity && <Badge>{job.complexity}</Badge>}
+                </div>
 
-                  <div className="relative">
-                    <div className="mb-5 flex flex-wrap items-center gap-2">
-                      <StatusBadge status={job.status} />
+                <h1 className="text-3xl font-extrabold text-white md:text-5xl">
+                  {job.title}
+                </h1>
 
-                      <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-cyan-300">
-                        {job.category || "General"}
-                      </span>
+                <p className="mt-4 max-w-4xl whitespace-pre-line text-sm leading-7 text-gray-400 md:text-base">
+                  {job.description}
+                </p>
 
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                        Posted {formatCreatedAt(job.createdAt)}
-                      </span>
-                    </div>
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Link
+                    to={`/expert/jobs/${job.id}/proposal`}
+                    className="inline-flex items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  >
+                    Apply for this job
+                  </Link>
 
-                    <h1 className="max-w-4xl text-3xl font-extrabold leading-tight text-white md:text-5xl">
-                      {job.title}
-                    </h1>
-
-                    <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400 md:text-base">
-                      {job.description || "No description provided."}
-                    </p>
-
-                    <div className="mt-6 flex flex-wrap gap-3">
-                      <Link
-                        to={`/expert/jobs/${jobId}/proposal`}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          send
-                        </span>
-                        Apply for this job
-                      </Link>
-
-                      <button
-                        type="button"
-                        onClick={() => navigate("/expert/recommended-jobs")}
-                        className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">
-                          auto_awesome
-                        </span>
-                        View AI Jobs
-                      </button>
-                    </div>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/expert/jobs")}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+                  >
+                    Back to Jobs
+                  </button>
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <SectionHeader
-                  icon="description"
-                  title="Job Description"
-                  description="Read the client requirements carefully before applying."
-                />
+              <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                <h2 className="mb-4 text-xl font-extrabold text-white">
+                  Job Description
+                </h2>
 
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300 md:text-[15px]">
-                    {job.description || "No description provided."}
+                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                  {job.description}
+                </p>
+              </section>
+
+              {job.aiGeneratedDescription && (
+                <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6">
+                  <h2 className="mb-4 text-xl font-extrabold text-white">
+                    AI Generated Description
+                  </h2>
+
+                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                    {job.aiGeneratedDescription}
                   </p>
-                </div>
-              </section>
+                </section>
+              )}
 
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <SectionHeader
-                  icon="psychology"
-                  title="Required Skills"
-                  description="Skills the client expects for this job."
-                />
+              <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                <h2 className="mb-4 text-xl font-extrabold text-white">
+                  Required Skills
+                </h2>
 
-                {job.skills && job.skills.length > 0 ? (
+                {job.skills.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {job.skills.map((skill) => (
                       <span
@@ -263,28 +168,36 @@ export default function JobDetailPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-gray-500">
-                    No skills listed.
-                  </p>
+                  <p className="text-sm text-gray-500">No skills listed.</p>
                 )}
               </section>
+
+              {job.expectedDeliverables && (
+                <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                  <h2 className="mb-4 text-xl font-extrabold text-white">
+                    Expected Deliverables
+                  </h2>
+
+                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                    {job.expectedDeliverables}
+                  </p>
+                </section>
+              )}
             </main>
 
             <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                 <h2 className="mb-5 text-lg font-extrabold text-white">
                   Job Summary
                 </h2>
 
                 <div className="space-y-4">
                   <SummaryItem
-                    icon="payments"
                     label="Budget"
-                    value={formatBudgetRange(job)}
+                    value={formatBudget(job.budgetMin, job.budgetMax)}
                   />
 
                   <SummaryItem
-                    icon="calendar_month"
                     label="Duration"
                     value={
                       job.durationDays ? `${job.durationDays} days` : "Flexible"
@@ -292,43 +205,36 @@ export default function JobDetailPage() {
                   />
 
                   <SummaryItem
-                    icon="event"
                     label="Deadline"
                     value={formatDate(job.deadline)}
                   />
 
                   <SummaryItem
-                    icon="schedule"
-                    label="Posted Date"
-                    value={formatCreatedAt(job.createdAt)}
+                    label="Posted"
+                    value={formatDate(job.createdAt)}
                   />
+
+                  <SummaryItem label="Client" value={job.clientName} />
+
+                  <SummaryItem label="Job ID" value={job.id} />
                 </div>
               </section>
 
               <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-6">
-                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
-                  <span className="material-symbols-outlined text-[26px]">
-                    rocket_launch
-                  </span>
-                </div>
-
                 <h2 className="text-lg font-extrabold text-white">
                   Ready to apply?
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Write a clear proposal. Explain your experience, plan, price,
-                  and delivery time.
+                  Write a clear proposal and explain your plan, timeline, and
+                  price.
                 </p>
 
                 <Link
-                  to={`/expert/jobs/${jobId}/proposal`}
-                  className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  to={`/expert/jobs/${job.id}/proposal`}
+                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                 >
-                  <span className="material-symbols-outlined text-[18px]">
-                    send
-                  </span>
-                  Apply for this job
+                  Submit Proposal
                 </Link>
               </section>
             </aside>
@@ -339,61 +245,252 @@ export default function JobDetailPage() {
   );
 }
 
-function StatusBadge({ status }) {
-  const value = String(status || "OPEN").toUpperCase();
+function unwrapDetailData(response) {
+  const data = response?.data;
 
-  if (value === "OPEN" || value === "ACTIVE") {
-    return (
-      <span className="rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-green-300">
-        {value}
-      </span>
-    );
+  if (!data) return null;
+
+  if (data?.data?.job) return data.data.job;
+  if (data?.data?.item) return data.data.item;
+  if (data?.data?.result) return data.data.result;
+  if (data?.data) return data.data;
+
+  if (data?.job) return data.job;
+  if (data?.item) return data.item;
+  if (data?.result) return data.result;
+
+  return data;
+}
+
+function normalizeJob(job) {
+  if (!job) return null;
+
+  const id = getValue(
+    job.id,
+    job.Id,
+    job.ID,
+    job.jobPostingId,
+    job.JobPostingId,
+    job.jobPostingID,
+    job.JobPostingID,
+    job.jobId,
+    job.JobId,
+    job.JobID
+  );
+
+  return {
+    id,
+    jobPostingId: id,
+
+    title: getValue(
+      job.title,
+      job.Title,
+      job.jobTitle,
+      job.JobTitle,
+      job.projectTitle,
+      job.ProjectTitle,
+      job.name,
+      job.Name,
+      "Untitled job"
+    ),
+
+    description: getValue(
+      job.description,
+      job.Description,
+      job.jobDescription,
+      job.JobDescription,
+      job.requirements,
+      job.Requirements,
+      "No description provided."
+    ),
+
+    aiGeneratedDescription: getValue(
+      job.aiGeneratedDescription,
+      job.AiGeneratedDescription,
+      ""
+    ),
+
+    status: getValue(job.status, job.Status, "OPEN"),
+
+    category: getValue(
+      job.categoryName,
+      job.CategoryName,
+      job.category,
+      job.Category,
+      job.projectType,
+      job.ProjectType,
+      "General"
+    ),
+
+    complexity: getValue(job.complexity, job.Complexity, ""),
+
+    expectedDeliverables: getValue(
+      job.expectedDeliverables,
+      job.ExpectedDeliverables,
+      ""
+    ),
+
+    skills: toArray(
+      getValue(
+        job.skills,
+        job.Skills,
+        job.requiredSkills,
+        job.RequiredSkills,
+        job.skillNames,
+        job.SkillNames,
+        job.tags,
+        job.Tags,
+        ""
+      )
+    ),
+
+    budgetMin: Number(
+      getValue(
+        job.budgetMin,
+        job.BudgetMin,
+        job.expectedBudgetMin,
+        job.ExpectedBudgetMin,
+        job.minBudget,
+        job.MinBudget,
+        0
+      )
+    ),
+
+    budgetMax: Number(
+      getValue(
+        job.budgetMax,
+        job.BudgetMax,
+        job.expectedBudgetMax,
+        job.ExpectedBudgetMax,
+        job.maxBudget,
+        job.MaxBudget,
+        job.budget,
+        job.Budget,
+        0
+      )
+    ),
+
+    durationDays: Number(
+      getValue(
+        job.durationDays,
+        job.DurationDays,
+        job.projectDurationDays,
+        job.ProjectDurationDays,
+        job.preferredProjectDurationDays,
+        job.PreferredProjectDurationDays,
+        0
+      )
+    ),
+
+    deadline: getValue(job.deadline, job.Deadline, job.dueDate, job.DueDate, ""),
+
+    createdAt: getValue(
+      job.createdAt,
+      job.CreatedAt,
+      job.postedAt,
+      job.PostedAt,
+      ""
+    ),
+
+    clientName: getValue(
+      job.clientName,
+      job.ClientName,
+      job.clientFullName,
+      job.ClientFullName,
+      job.ownerName,
+      job.OwnerName,
+      "Client"
+    ),
+
+    raw: job,
+  };
+}
+
+function getValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
+}
+
+function toArray(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === "object" && item !== null) {
+          return getValue(
+            item.name,
+            item.Name,
+            item.skillName,
+            item.SkillName,
+            item.title,
+            item.Title
+          );
+        }
+
+        return item;
+      })
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
   }
 
-  if (value === "CLOSED" || value === "CANCELLED") {
-    return (
-      <span className="rounded-full border border-red-400/30 bg-red-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-red-300">
-        {value}
-      </span>
-    );
-  }
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
+function BackButton({ onClick }) {
   return (
-    <span className="rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-yellow-300">
-      {value}
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
+    >
+      ← Back to jobs
+    </button>
+  );
+}
+
+function Badge({ children }) {
+  return (
+    <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
+      {children}
     </span>
   );
 }
 
-function SectionHeader({ icon, title, description }) {
+function SummaryItem({ label, value }) {
   return (
-    <div className="mb-5 flex items-start gap-3">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined">{icon}</span>
-      </div>
-
-      <div>
-        <h2 className="text-lg font-extrabold text-white">{title}</h2>
-        <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
-      </div>
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 font-bold text-white">{value || "N/A"}</p>
     </div>
   );
 }
 
-function SummaryItem({ icon, label, value }) {
-  return (
-    <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <span className="material-symbols-outlined mt-[2px] text-[20px] text-cyan-300">
-        {icon}
-      </span>
+function formatBudget(min, max) {
+  const minValue = Number(min || 0);
+  const maxValue = Number(max || 0);
 
-      <div>
-        <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
-          {label}
-        </p>
+  if (!minValue && !maxValue) return "Negotiable";
+  if (minValue && !maxValue) return `From $${minValue}`;
+  if (!minValue && maxValue) return `Up to $${maxValue}`;
 
-        <p className="mt-1 text-sm font-bold text-white">{value}</p>
-      </div>
-    </div>
-  );
+  return `$${minValue} - $${maxValue}`;
+}
+
+function formatDate(value) {
+  if (!value) return "N/A";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "N/A";
+
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  });
 }

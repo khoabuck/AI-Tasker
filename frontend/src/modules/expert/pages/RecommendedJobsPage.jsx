@@ -24,18 +24,29 @@ export default function RecommendedJobsPage() {
       setLoading(true);
       setError("");
 
-      const [profileData, openJobs] = await Promise.all([
+      const [profileResult, jobsResult] = await Promise.allSettled([
         expertProfileService.getMyExpertProfile(),
         jobService.getOpenJobs(),
       ]);
 
-      setProfile(profileData);
-      setJobs(openJobs);
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+      } else {
+        console.error(
+          "LOAD PROFILE ERROR:",
+          profileResult.reason?.response?.data || profileResult.reason
+        );
+        setProfile(null);
+      }
+
+      if (jobsResult.status === "fulfilled") {
+        setJobs(jobsResult.value || []);
+      } else {
+        throw jobsResult.reason;
+      }
     } catch (err) {
       console.error("LOAD RECOMMENDED JOBS ERROR:", err?.response?.data || err);
-      setError(
-        "We could not load recommended jobs right now. Please try again."
-      );
+      setError("We could not load recommended jobs right now. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -62,14 +73,14 @@ export default function RecommendedJobsPage() {
       result = result.filter((item) => item.matchScore < 40);
     }
 
-    result = sortRecommendedJobs(result, sortBy);
-
-    return result;
+    return sortRecommendedJobs(result, sortBy);
   }, [jobs, profile, expertSkills, matchFilter, sortBy]);
 
   const formatMoney = (value) => {
     const number = Number(value || 0);
+
     if (!number) return "Negotiable";
+
     return `$${number.toLocaleString("en-US")}`;
   };
 
@@ -137,112 +148,106 @@ export default function RecommendedJobsPage() {
             </div>
           )}
 
-          {!error && (
-            <>
-              <section className="mb-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
-                <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <h2 className="text-lg font-bold text-white">
-                      Your matching profile
-                    </h2>
+          <section className="mb-6 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">
+                  Your matching profile
+                </h2>
 
-                    <p className="mt-2 text-sm leading-6 text-gray-400">
-                      Skills used for matching:{" "}
-                      {expertSkills.length > 0
-                        ? expertSkills.join(", ")
-                        : "No skills found in your profile."}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => navigate("/expert/profile/edit")}
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
-                  >
-                    Update Profile
-                  </button>
-                </div>
-              </section>
-
-              <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-                <StatCard
-                  icon="auto_awesome"
-                  label="Recommended"
-                  value={recommendedJobs.length}
-                  description="Matched jobs"
-                />
-
-                <StatCard
-                  icon="star"
-                  label="Strong Match"
-                  value={
-                    recommendedJobs.filter((job) => job.matchScore >= 70).length
-                  }
-                  description="70% match or higher"
-                />
-
-                <StatCard
-                  icon="psychology"
-                  label="Your Skills"
-                  value={expertSkills.length}
-                  description="Skills in your profile"
-                />
+                <p className="mt-2 text-sm leading-6 text-gray-400">
+                  Skills used for matching:{" "}
+                  {expertSkills.length > 0
+                    ? expertSkills.join(", ")
+                    : "No skills found in your profile."}
+                </p>
               </div>
 
-              <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <select
-                    value={matchFilter}
-                    onChange={(event) => setMatchFilter(event.target.value)}
-                    className="rounded-xl border border-white/10 bg-[#10151d] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
-                  >
-                    <option value="all">All matches</option>
-                    <option value="strong">Strong match: 70%+</option>
-                    <option value="medium">Medium match: 40% - 69%</option>
-                    <option value="low">Low match: below 40%</option>
-                  </select>
+              <button
+                type="button"
+                onClick={() => navigate("/expert/profile/edit")}
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+              >
+                Update Profile
+              </button>
+            </div>
+          </section>
 
-                  <select
-                    value={sortBy}
-                    onChange={(event) => setSortBy(event.target.value)}
-                    className="rounded-xl border border-white/10 bg-[#10151d] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
-                  >
-                    <option value="match-high">Best match first</option>
-                    <option value="budget-high">Budget high to low</option>
-                    <option value="duration-short">Shortest duration</option>
-                    <option value="newest">Newest first</option>
-                  </select>
-                </div>
-              </div>
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+            <StatCard
+              icon="auto_awesome"
+              label="Recommended"
+              value={recommendedJobs.length}
+              description="Matched jobs"
+            />
 
-              {recommendedJobs.length === 0 ? (
-                <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 px-6 py-14 text-center shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                  <span className="material-symbols-outlined mb-4 block text-6xl text-gray-600">
-                    search_off
-                  </span>
+            <StatCard
+              icon="star"
+              label="Strong Match"
+              value={recommendedJobs.filter((job) => job.matchScore >= 70).length}
+              description="70% match or higher"
+            />
 
-                  <h2 className="text-xl font-bold text-white">
-                    No recommended jobs found
-                  </h2>
+            <StatCard
+              icon="psychology"
+              label="Your Skills"
+              value={expertSkills.length}
+              description="Skills in your profile"
+            />
+          </div>
 
-                  <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
-                    Try updating your expert profile skills or changing the
-                    match filter.
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                  {recommendedJobs.map((job) => (
-                    <RecommendedJobCard
-                      key={job.id}
-                      job={job}
-                      formatBudgetRange={formatBudgetRange}
-                      onViewDetail={() => navigate(`/expert/jobs/${job.id}`)}
-                    />
-                  ))}
-                </div>
-              )}
-            </>
+          <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <select
+                value={matchFilter}
+                onChange={(event) => setMatchFilter(event.target.value)}
+                className="rounded-xl border border-white/10 bg-[#10151d] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
+              >
+                <option value="all">All matches</option>
+                <option value="strong">Strong match: 70%+</option>
+                <option value="medium">Medium match: 40% - 69%</option>
+                <option value="low">Low match: below 40%</option>
+              </select>
+
+              <select
+                value={sortBy}
+                onChange={(event) => setSortBy(event.target.value)}
+                className="rounded-xl border border-white/10 bg-[#10151d] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
+              >
+                <option value="match-high">Best match first</option>
+                <option value="budget-high">Budget high to low</option>
+                <option value="duration-short">Shortest duration</option>
+                <option value="newest">Newest first</option>
+              </select>
+            </div>
+          </div>
+
+          {recommendedJobs.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 px-6 py-14 text-center shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <span className="material-symbols-outlined mb-4 block text-6xl text-gray-600">
+                search_off
+              </span>
+
+              <h2 className="text-xl font-bold text-white">
+                No recommended jobs found
+              </h2>
+
+              <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-500">
+                Try updating your expert profile skills or changing the match
+                filter.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+              {recommendedJobs.map((job, index) => (
+                <RecommendedJobCard
+                  key={job.id || `${job.title}-${index}`}
+                  job={job}
+                  formatBudgetRange={formatBudgetRange}
+                  onViewDetail={() => navigate(`/expert/jobs/${job.id}`)}
+                />
+              ))}
+            </div>
           )}
         </div>
       </div>
@@ -280,6 +285,7 @@ function calculateMatch(job, profile, expertSkills) {
     budgetScore = 10;
   } else {
     const jobBudget = budgetMax || budgetMin;
+
     if (jobBudget >= expertMin && (!expertMax || jobBudget <= expertMax)) {
       budgetScore = 15;
     }
@@ -339,6 +345,7 @@ function sortRecommendedJobs(jobs, sortBy) {
     return result.sort((a, b) => {
       const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+
       return bTime - aTime;
     });
   }
@@ -409,7 +416,11 @@ function RecommendedJobCard({ job, formatBudgetRange, onViewDetail }) {
       </p>
 
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <SmallInfo icon="payments" label="Budget" value={formatBudgetRange(job)} />
+        <SmallInfo
+          icon="payments"
+          label="Budget"
+          value={formatBudgetRange(job)}
+        />
 
         <SmallInfo
           icon="calendar_month"

@@ -3,7 +3,6 @@ import uploadApi from "../api/upload.api";
 
 const getApiOrigin = () => {
   const baseUrl = axiosInstance.defaults.baseURL || "";
-
   return baseUrl.replace(/\/api\/?$/i, "").replace(/\/$/, "");
 };
 
@@ -53,7 +52,6 @@ const extractImageUrl = (response) => {
 const uploadService = {
   async uploadImage(file, purpose = "avatar") {
     const response = await uploadApi.uploadImage(file, purpose);
-
     const imageUrl = extractImageUrl(response);
 
     if (!imageUrl) {

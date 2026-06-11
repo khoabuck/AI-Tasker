@@ -11,13 +11,8 @@ const MOCK_EXPERTS = [
   { id: 3, name: "Elena Kostic", role: "Generative AI Specialist", badge: "92% MATCH", badgeColor: "#00F0FF", rating: 4, skills: ["Stable Diffusion", "GANs", "AWS SageMaker"], bio: "Pioneering work in multimodal content generation and infrastructure optimization.", highlight: null },
 ];
 
-<<<<<<< HEAD
-const SENIORITY_OPTIONS = ["Junior", "Senior", "Lead", "Director"];
-const AVAILABILITY_OPTIONS = ["Immediately", "In 2 Weeks", "In 1 Month"];
-=======
 const SENIORITY_OPTIONS = ["Fresher", "Junior", "Mid-level", "Senior", "Lead"];
 
->>>>>>> origin/develop
 
 function StarRating({ rating }) {
   return (
@@ -69,23 +64,6 @@ function ExpertCard({ expert }) {
 }
 
 export default function ExpertSearchPage() {
-<<<<<<< HEAD
-  const [query, setQuery] = useState("");
-  const [seniority, setSeniority] = useState([]);
-  const [availability, setAvailability] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [experts, setExperts] = useState([]);
-  const [hasSearched, setHasSearched] = useState(false);
-
-  const toggleSeniority = (val) => setSeniority((prev) => prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]);
-
-  const handleSearch = () => {
-    setSearching(true);
-    // ── TODO (BE): swap mock bằng API ──────────────────────────────────
-    // const res = await axiosInstance.get("/experts", { params: { keyword: query, seniority: seniority.join(","), availability } });
-    // setExperts(res.data);
-    // ───────────────────────────────────────────────────────────────────
-=======
       const [query, setQuery] = useState("");
       const [seniority, setSeniority] = useState("");
       const [searching, setSearching] = useState(false);
@@ -105,7 +83,6 @@ export default function ExpertSearchPage() {
       }
 
       setSearching(true);
->>>>>>> origin/develop
     setTimeout(() => {
       const filtered = MOCK_EXPERTS.filter((e) =>
         !query.trim() || e.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -116,11 +93,7 @@ export default function ExpertSearchPage() {
     }, 1000);
   };
 
-<<<<<<< HEAD
-  const handleReset = () => { setQuery(""); setSeniority([]); setAvailability(""); setExperts([]); setHasSearched(false); };
-=======
   const handleReset = () => { setQuery(""); setSeniority(""); setMinBudget(""); setMaxBudget(""); setExperts([]); setHasSearched(false); };
->>>>>>> origin/develop
 
   return (
     <ClientLayout>
@@ -153,19 +126,7 @@ export default function ExpertSearchPage() {
               </button>
             </div>
           </div>
-<<<<<<< HEAD
-          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Recent:</span>
-            {["React Developer", "Data Scientist", "UX Designer"].map((tag) => (
-              <button key={tag} onClick={() => setQuery(tag)}
-                style={{ background: "#272a30", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, padding: "4px 12px", fontSize: 12, color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#c2c6d6")}>{tag}</button>
-            ))}
-          </div>
-=======
           
->>>>>>> origin/develop
         </section>
 
         <div style={{ display: "flex", gap: 24, maxWidth: 1400, margin: "0 auto" }}>
@@ -182,28 +143,6 @@ export default function ExpertSearchPage() {
               <div style={{ marginBottom: 24 }}>
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Seniority</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-<<<<<<< HEAD
-                  {SENIORITY_OPTIONS.map((s) => (
-                    <button key={s} onClick={() => toggleSeniority(s)}
-                      style={{ padding: "8px", borderRadius: 6, border: `1px solid ${seniority.includes(s) ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: "#272a30", fontSize: 12, color: seniority.includes(s) ? "#00F0FF" : "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}>{s}</button>
-                  ))}
-                </div>
-              </div>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Hourly Rate ($)</label>
-                <input type="range" min={50} max={500} style={{ width: "100%", accentColor: "#00F0FF" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                  <span>$50</span><span>$500+</span>
-                </div>
-              </div>
-              <div>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Availability</label>
-                <select value={availability} onChange={(e) => setAvailability(e.target.value)}
-                  style={{ width: "100%", background: "#0b0e14", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 12px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
-                  <option value="">Any</option>
-                  {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
-=======
                   {SENIORITY_OPTIONS.map((s) => {
                 const isSelected = seniority === s;
 
@@ -285,7 +224,6 @@ export default function ExpertSearchPage() {
                 >
                   {searching ? "Applying..." : "Apply"}
                 </button>
->>>>>>> origin/develop
               </div>
             </div>
           </aside>

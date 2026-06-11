@@ -18,7 +18,11 @@ const getNestedValue = (...values) => {
       value.fullName,
       value.FullName,
       value.email,
-      value.Email
+      value.Email,
+      value.skillName,
+      value.SkillName,
+      value.category,
+      value.Category
     );
   }
 
@@ -38,7 +42,9 @@ const toArray = (value) => {
             item.skillName,
             item.SkillName,
             item.title,
-            item.Title
+            item.Title,
+            item.category,
+            item.Category
           );
         }
 
@@ -94,6 +100,10 @@ const normalizeJob = (job) => {
     job.id,
     job.Id,
     job.ID,
+    job.jobPostingId,
+    job.JobPostingId,
+    job.jobPostingID,
+    job.JobPostingID,
     job.jobId,
     job.JobId,
     job.jobID,
@@ -106,6 +116,9 @@ const normalizeJob = (job) => {
 
   return {
     id,
+    jobPostingId: id,
+    clientProfileId: getValue(job.clientProfileId, job.ClientProfileId, 0),
+
     title: getValue(
       job.title,
       job.Title,
@@ -117,6 +130,7 @@ const normalizeJob = (job) => {
       job.Name,
       "Untitled job"
     ),
+
     description: getValue(
       job.description,
       job.Description,
@@ -130,6 +144,13 @@ const normalizeJob = (job) => {
       job.Summary,
       "No description provided."
     ),
+
+    aiGeneratedDescription: getValue(
+      job.aiGeneratedDescription,
+      job.AiGeneratedDescription,
+      ""
+    ),
+
     status: getValue(
       job.status,
       job.Status,
@@ -137,6 +158,7 @@ const normalizeJob = (job) => {
       job.JobStatus,
       "OPEN"
     ),
+
     category: getNestedValue(
       job.category,
       job.Category,
@@ -146,8 +168,20 @@ const normalizeJob = (job) => {
       job.SkillCategory,
       job.projectCategory,
       job.ProjectCategory,
+      job.projectType,
+      job.ProjectType,
       "General"
     ),
+
+    projectType: getValue(job.projectType, job.ProjectType, ""),
+    complexity: getValue(job.complexity, job.Complexity, ""),
+    expectedDeliverables: getValue(
+      job.expectedDeliverables,
+      job.ExpectedDeliverables,
+      ""
+    ),
+    isAiAssisted: Boolean(getValue(job.isAiAssisted, job.IsAiAssisted, false)),
+
     skills: toArray(
       getValue(
         job.skills,
@@ -161,6 +195,7 @@ const normalizeJob = (job) => {
         ""
       )
     ),
+
     budgetMin: getValue(
       job.budgetMin,
       job.BudgetMin,
@@ -174,6 +209,7 @@ const normalizeJob = (job) => {
       job.BudgetFrom,
       0
     ),
+
     budgetMax: getValue(
       job.budgetMax,
       job.BudgetMax,
@@ -189,6 +225,7 @@ const normalizeJob = (job) => {
       job.Budget,
       0
     ),
+
     durationDays: getValue(
       job.durationDays,
       job.DurationDays,
@@ -202,6 +239,7 @@ const normalizeJob = (job) => {
       job.Duration,
       0
     ),
+
     deadline: getValue(
       job.deadline,
       job.Deadline,
@@ -213,6 +251,7 @@ const normalizeJob = (job) => {
       job.ApplicationDeadline,
       ""
     ),
+
     createdAt: getValue(
       job.createdAt,
       job.CreatedAt,
@@ -222,6 +261,9 @@ const normalizeJob = (job) => {
       job.CreatedDate,
       ""
     ),
+
+    updatedAt: getValue(job.updatedAt, job.UpdatedAt, ""),
+
     clientName: getNestedValue(
       job.client,
       job.Client,
@@ -237,13 +279,14 @@ const normalizeJob = (job) => {
       job.CustomerName,
       "Client"
     ),
+
     raw: job,
   };
 };
 
 const jobService = {
-  async getOpenJobs() {
-    const response = await jobApi.getOpenJobs();
+  async getOpenJobs(params = {}) {
+    const response = await jobApi.getOpenJobs(params);
 
     console.log("GET OPEN JOBS RESPONSE:", response?.data);
 

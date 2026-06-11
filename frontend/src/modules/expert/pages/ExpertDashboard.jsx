@@ -264,24 +264,25 @@ export default function ExpertDashboard() {
                   />
                 ) : (
                   <div className="space-y-4">
-                    {recommendedJobs.map((job) => (
-                      <RecommendedJobItem key={job.id} job={job} />
+                    {recommendedJobs.map((job, index) => (
+                      <RecommendedJobItem
+                        key={job.id || `${job.title}-${index}`}
+                        job={job}
+                      />
                     ))}
                   </div>
                 )}
               </section>
 
               <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-xl font-extrabold text-white">
-                      Quick Actions
-                    </h2>
+                <div className="mb-5">
+                  <h2 className="text-xl font-extrabold text-white">
+                    Quick Actions
+                  </h2>
 
-                    <p className="mt-2 text-sm leading-6 text-gray-500">
-                      Common actions for your expert workflow.
-                    </p>
-                  </div>
+                  <p className="mt-2 text-sm leading-6 text-gray-500">
+                    Common actions for your expert workflow.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -340,27 +341,19 @@ export default function ExpertDashboard() {
                     done={Boolean(profile?.avatarUrl)}
                     text="Profile avatar"
                   />
-
                   <ChecklistItem
                     done={Boolean(profile?.professionalTitle)}
                     text="Professional title"
                   />
-
                   <ChecklistItem
                     done={Boolean(profile?.bio)}
                     text="Bio introduction"
                   />
-
-                  <ChecklistItem
-                    done={expertSkills.length > 0}
-                    text="Skills"
-                  />
-
+                  <ChecklistItem done={expertSkills.length > 0} text="Skills" />
                   <ChecklistItem
                     done={hasAnyPublicLink(profile)}
                     text="Public profile link"
                   />
-
                   <ChecklistItem
                     done={(profile?.certificates || []).length > 0}
                     text="Certificates"
@@ -595,8 +588,14 @@ function calculateProfileCompletion(profile) {
     Boolean(profile.bio),
     Boolean(profile.skills),
     Boolean(profile.yearsOfExperience || profile.yearsOfExperience === 0),
-    Boolean(profile.expectedProjectBudgetMin || profile.expectedProjectBudgetMin === 0),
-    Boolean(profile.expectedProjectBudgetMax || profile.expectedProjectBudgetMax === 0),
+    Boolean(
+      profile.expectedProjectBudgetMin ||
+        profile.expectedProjectBudgetMin === 0
+    ),
+    Boolean(
+      profile.expectedProjectBudgetMax ||
+        profile.expectedProjectBudgetMax === 0
+    ),
     Boolean(profile.preferredProjectDurationDays),
     hasAnyPublicLink(profile),
     Boolean((profile.certificates || []).length),
@@ -608,7 +607,9 @@ function calculateProfileCompletion(profile) {
 }
 
 function hasAnyPublicLink(profile) {
-  return Boolean(profile?.portfolioUrl || profile?.linkedInUrl || profile?.gitHubUrl);
+  return Boolean(
+    profile?.portfolioUrl || profile?.linkedInUrl || profile?.gitHubUrl
+  );
 }
 
 function calculateMatchScore(job, profile, expertSkills) {

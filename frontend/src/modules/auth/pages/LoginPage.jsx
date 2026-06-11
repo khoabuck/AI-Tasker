@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { refreshUser } = useAuth();
   const [form, setForm] = useState({ email: "", password: "", remember: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,15 +29,19 @@ export default function LoginPage() {
       });
 
       if (result.success) {
-        // Redirect based on account status and role
-        const { status, role } = result;
+        await refreshUser();
+
+        const status = String(result.status || "").toUpperCase();
+        const role = String(result.role || "").toUpperCase();
 
         if (status === "PENDING_EMAIL_VERIFICATION") {
           navigate("/verify-email-notice", { state: { email: form.email } });
         } else if (status === "PENDING_ROLE" || !role) {
           navigate("/select-role");
         } else if (status === "PENDING_PROFILE") {
-          navigate("/setup-profile");
+          if (role === "EXPERT") navigate("/expert/setup-profile");
+          else if (role === "CLIENT") navigate("/setup-profile");
+          else navigate("/select-role");
         } else if (status === "ACTIVE") {
           if (role === "CLIENT") navigate("/client/dashboard");
           else if (role === "EXPERT") navigate("/expert/dashboard");
