@@ -1,15 +1,10 @@
 using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
 
 namespace AITasker.Domain.Entities
 {
-    [Table("Notifications", Schema = "dbo")]
     public class Notification
     {
-        [Key]
-        [Column("NotificationId")]
-        public int Id { get; set; }
+        public int NotificationId { get; set; }
         
         public int UserId { get; set; }
         
@@ -17,10 +12,12 @@ namespace AITasker.Domain.Entities
         
         public string Content { get; set; } = string.Empty; 
         
-        public string Type { get; set; } = "SYSTEM"; 
+        public string Type { get; set; } = string.Empty; 
         
-        public bool IsRead { get; set; } = false;
+        public bool IsRead { get; set; }
         
-        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public DateTime CreatedAt { get; set; }
+
+        public virtual User User { get; set; } = null!;
     }
 }
