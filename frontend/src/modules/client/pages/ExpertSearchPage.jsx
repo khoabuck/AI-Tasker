@@ -11,8 +11,8 @@ const MOCK_EXPERTS = [
   { id: 3, name: "Elena Kostic", role: "Generative AI Specialist", badge: "92% MATCH", badgeColor: "#00F0FF", rating: 4, skills: ["Stable Diffusion", "GANs", "AWS SageMaker"], bio: "Pioneering work in multimodal content generation and infrastructure optimization.", highlight: null },
 ];
 
-const SENIORITY_OPTIONS = ["Junior", "Senior", "Lead", "Director"];
-const AVAILABILITY_OPTIONS = ["Immediately", "In 2 Weeks", "In 1 Month"];
+const SENIORITY_OPTIONS = ["Fresher", "Junior", "Mid-level", "Senior", "Lead"];
+
 
 function StarRating({ rating }) {
   return (
@@ -64,21 +64,25 @@ function ExpertCard({ expert }) {
 }
 
 export default function ExpertSearchPage() {
-  const [query, setQuery] = useState("");
-  const [seniority, setSeniority] = useState([]);
-  const [availability, setAvailability] = useState("");
-  const [searching, setSearching] = useState(false);
-  const [experts, setExperts] = useState([]);
-  const [hasSearched, setHasSearched] = useState(false);
+      const [query, setQuery] = useState("");
+      const [seniority, setSeniority] = useState("");
+      const [searching, setSearching] = useState(false);
+      const [experts, setExperts] = useState([]);
+      const [hasSearched, setHasSearched] = useState(false);
 
-  const toggleSeniority = (val) => setSeniority((prev) => prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]);
+      const [minBudget, setMinBudget] = useState("");
+      const [maxBudget, setMaxBudget] = useState("");
 
-  const handleSearch = () => {
-    setSearching(true);
-    // ── TODO (BE): swap mock bằng API ──────────────────────────────────
-    // const res = await axiosInstance.get("/experts", { params: { keyword: query, seniority: seniority.join(","), availability } });
-    // setExperts(res.data);
-    // ───────────────────────────────────────────────────────────────────
+      const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val));};
+      const isBudgetInvalid = minBudget && maxBudget && Number(minBudget) > Number(maxBudget);
+
+      const handleSearch = () => {
+      if (isBudgetInvalid) {
+        alert("Budget Min must be less than Budget Max");
+        return;
+      }
+
+      setSearching(true);
     setTimeout(() => {
       const filtered = MOCK_EXPERTS.filter((e) =>
         !query.trim() || e.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -89,7 +93,7 @@ export default function ExpertSearchPage() {
     }, 1000);
   };
 
-  const handleReset = () => { setQuery(""); setSeniority([]); setAvailability(""); setExperts([]); setHasSearched(false); };
+  const handleReset = () => { setQuery(""); setSeniority(""); setMinBudget(""); setMaxBudget(""); setExperts([]); setHasSearched(false); };
 
   return (
     <ClientLayout>
@@ -122,15 +126,7 @@ export default function ExpertSearchPage() {
               </button>
             </div>
           </div>
-          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Recent:</span>
-            {["React Developer", "Data Scientist", "UX Designer"].map((tag) => (
-              <button key={tag} onClick={() => setQuery(tag)}
-                style={{ background: "#272a30", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, padding: "4px 12px", fontSize: 12, color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#c2c6d6")}>{tag}</button>
-            ))}
-          </div>
+          
         </section>
 
         <div style={{ display: "flex", gap: 24, maxWidth: 1400, margin: "0 auto" }}>
@@ -147,26 +143,87 @@ export default function ExpertSearchPage() {
               <div style={{ marginBottom: 24 }}>
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Seniority</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {SENIORITY_OPTIONS.map((s) => (
-                    <button key={s} onClick={() => toggleSeniority(s)}
-                      style={{ padding: "8px", borderRadius: 6, border: `1px solid ${seniority.includes(s) ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: "#272a30", fontSize: 12, color: seniority.includes(s) ? "#00F0FF" : "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}>{s}</button>
-                  ))}
+                  {SENIORITY_OPTIONS.map((s) => {
+                const isSelected = seniority === s;
+
+                return (
+                  <button key={s} type="button" onClick={() => toggleSeniority(s)}
+                    className={`rounded-md px-2 py-2 text-xs transition-all
+                      ${
+                        isSelected
+                          ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                          : "border border-white/10 bg-[#272a30] text-[#c2c6d6] hover:border-cyan-400/50 hover:text-cyan-400"
+                      }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
                 </div>
               </div>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Hourly Rate ($)</label>
-                <input type="range" min={50} max={500} style={{ width: "100%", accentColor: "#00F0FF" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                  <span>$50</span><span>$500+</span>
+
+                  {/* Budget MIN */}
+              <div className="mb-6">
+                <label className="mb-3 block font-mono text-[10px] uppercase tracking-[0.15em] text-gray-400">
+                  Project Budget
+                </label>
+
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs text-gray-400">
+                    Budget Min ($)
+                  </label>
+
+                  <input
+                      type="number" min="0" value={minBudget} 
+                      onChange={(e) => {
+                          const value = e.target.value;
+
+                          if (value === "" || Number(value) >= 0) {
+                            setMinBudget(value);
+                          }
+                        }}
+                      placeholder="e.g. money"
+                      className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none
+                      ${
+                        isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"
+                      }`}
+                    />
+                </div>
+
+                  {/* Budget Max */}
+                <div>
+                  <label className="mb-1 block text-xs text-gray-400">
+                    Budget Max ($)
+                  </label>
+
+                  <input
+                      type="number" min="0" value={maxBudget} 
+                      onChange={(e) => {
+                        const value = e.target.value;
+
+                        if (value === "" || Number(value) >= 0) {
+                          setMaxBudget(value);
+                        }
+                      }}
+                      placeholder="e.g. money"
+                      className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none
+                      ${
+                        isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"
+                      }`}
+                    />
                 </div>
               </div>
+
               <div>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Availability</label>
-                <select value={availability} onChange={(e) => setAvailability(e.target.value)}
-                  style={{ width: "100%", background: "#0b0e14", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 12px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
-                  <option value="">Any</option>
-                  {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
+                
+                <button
+                  type="button"
+                  onClick={handleSearch}
+                  disabled={searching}
+                  className="mt-4 w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-bold text-[#101319] shadow-[0_0_15px_rgba(0,240,255,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {searching ? "Applying..." : "Apply"}
+                </button>
               </div>
             </div>
           </aside>
