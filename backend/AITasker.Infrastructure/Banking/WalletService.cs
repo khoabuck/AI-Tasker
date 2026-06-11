@@ -44,6 +44,9 @@ namespace AITasker.Infrastructure.Banking
         {
             if (amount <= 0) return false;
 
+            var userExists = await _context.Users.AnyAsync(u => u.UserId == userId);
+            if (!userExists) return false;
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -80,8 +83,8 @@ namespace AITasker.Infrastructure.Banking
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var wallet = await GetOrCreateWalletAsync(userId);
-                if (wallet.AvailableBalance < amount) return false;
+                var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
+                if (wallet == null || wallet.AvailableBalance < amount) return false;
 
                 wallet.AvailableBalance -= amount;
                 wallet.UpdatedAt = DateTime.UtcNow;
@@ -115,8 +118,8 @@ namespace AITasker.Infrastructure.Banking
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var wallet = await GetOrCreateWalletAsync(clientId);
-                if (wallet.AvailableBalance < amount) return false;
+                var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == clientId);
+                if (wallet == null || wallet.AvailableBalance < amount) return false;
 
                 wallet.AvailableBalance -= amount;
                 wallet.LockedBalance += amount;
@@ -146,6 +149,9 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<bool> ReleaseEscrowAsync(string referenceJobId, int expertId)
         {
+            var expertExists = await _context.Users.AnyAsync(u => u.UserId == expertId);
+            if (!expertExists) return false;
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
@@ -157,10 +163,10 @@ namespace AITasker.Infrastructure.Banking
                 int clientId = holdTxn.UserId;
                 decimal escrowAmount = Math.Abs(holdTxn.Amount);
 
-                var clientWallet = await GetOrCreateWalletAsync(clientId);
+                var clientWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == clientId);
                 var expertWallet = await GetOrCreateWalletAsync(expertId);
 
-                if (clientWallet.LockedBalance < escrowAmount) return false;
+                if (clientWallet == null || clientWallet.LockedBalance < escrowAmount) return false;
 
                 clientWallet.LockedBalance -= escrowAmount;
                 expertWallet.AvailableBalance += escrowAmount;
@@ -180,6 +186,49 @@ namespace AITasker.Infrastructure.Banking
                 };
 
                 _context.Transactions.Add(expertTxn);
+                await _context.SaveChangesAsync();
+
+                await transaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                return false;
+            }
+        }
+
+        public async Task<bool> RefundEscrowAsync(string referenceJobId, int clientId)
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var holdTxn = await _context.Transactions
+                    .FirstOrDefaultAsync(t => t.ReferenceId == referenceJobId && t.Type == "EscrowHold");
+
+                if (holdTxn == null || holdTxn.UserId != clientId) return false;
+
+                decimal escrowAmount = Math.Abs(holdTxn.Amount);
+                var clientWallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == clientId);
+                
+                if (clientWallet == null || clientWallet.LockedBalance < escrowAmount) return false;
+
+                clientWallet.LockedBalance -= escrowAmount;
+                clientWallet.AvailableBalance += escrowAmount;
+                clientWallet.UpdatedAt = DateTime.UtcNow;
+
+                holdTxn.Type = "EscrowRefunded";
+
+                var refundTxn = new Transaction
+                {
+                    UserId = clientId,
+                    Amount = escrowAmount,
+                    Type = "EscrowRefunded",
+                    Description = $"[Escrow Refund] Refunded funds for Job ID {referenceJobId}",
+                    ReferenceId = referenceJobId
+                };
+
+                _context.Transactions.Add(refundTxn);
                 await _context.SaveChangesAsync();
 
                 await transaction.CommitAsync();

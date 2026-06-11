@@ -19,6 +19,7 @@ namespace AITasker.Infrastructure.Proposals
 
         public async Task<bool> SubmitProposalAsync(int expertId, SubmitProposalRequest request)
         {
+            // ─── VALIDATION ───
             if (request.ProposedPrice <= 0)
                 throw new ArgumentException("Proposed price must be greater than 0.");
 
@@ -29,6 +30,13 @@ namespace AITasker.Infrastructure.Proposals
             if (job.ClientProfileId == expertId)
                 throw new InvalidOperationException("Experts cannot submit proposals to their own posted jobs.");
 
+            // Deep check: Prevent duplicate proposals from the same expert for this job
+            var alreadySubmitted = await _context.Proposals
+                .AnyAsync(p => p.JobId == request.JobId && p.ExpertId == expertId && p.Status != "REJECTED");
+            if (alreadySubmitted)
+                throw new InvalidOperationException("You have already submitted an active proposal for this job posting.");
+
+            // ─── EXECUTION ───
             var proposal = new Proposal
             {
                 JobId = request.JobId,
@@ -39,12 +47,13 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = request.ExpectedOutputs,
                 WorkingApproach = request.WorkingApproach,
                 PreliminaryMilestonePlan = request.PreliminaryMilestonePlan,
-                Status = "SUBMITTED"
+                Status = "SUBMITTED",
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.Proposals.Add(proposal);
-            await _context.SaveChangesAsync();
-            return true;
+            var affectedRows = await _context.SaveChangesAsync();
+            return affectedRows > 0;
         }
 
         public async Task<bool> CounterOfferAsync(int proposalId, CounterOfferRequest request)
@@ -56,13 +65,17 @@ namespace AITasker.Infrastructure.Proposals
             if (proposal == null)
                 throw new InvalidOperationException("Target proposal does not exist.");
 
+            if (proposal.Status == "ACCEPTED" || proposal.Status == "REJECTED")
+                throw new InvalidOperationException("Cannot counter an offer that has already been finalized.");
+
+            // ─── EXECUTION ───
             proposal.CounterPrice = request.CounterPrice;
             proposal.CounterTimelineDays = request.CounterTimelineDays;
             proposal.CounterMessage = request.CounterMessage;
             proposal.Status = "COUNTER_OFFER";
 
-            await _context.SaveChangesAsync();
-            return true;
+            var affectedRows = await _context.SaveChangesAsync();
+            return affectedRows > 0;
         }
 
         public async Task<bool> ProcessProposalStatusAsync(int proposalId, string decision)
@@ -71,9 +84,11 @@ namespace AITasker.Infrastructure.Proposals
             if (proposal == null)
                 throw new InvalidOperationException("Target proposal does not exist.");
 
-            proposal.Status = decision == "ACCEPT" ? "ACCEPTED" : "REJECTED";
-            await _context.SaveChangesAsync();
-            return true;
+            // ─── EXECUTION ───
+            proposal.Status = decision.ToUpper() == "ACCEPT" ? "ACCEPTED" : "REJECTED";
+            
+            var affectedRows = await _context.SaveChangesAsync();
+            return affectedRows > 0;
         }
     }
 }

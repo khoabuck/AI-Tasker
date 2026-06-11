@@ -23,6 +23,21 @@ namespace AITasker.Infrastructure.Deliverables
 
         public async Task<Deliverable?> SubmitDeliverableAsync(int milestoneId, int expertId, string description, string? fileUrl, string? demoUrl, string? testResultUrl)
         {
+            if (string.IsNullOrWhiteSpace(fileUrl)) return null;
+
+            var milestone = await _context.Milestones.FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
+            if (milestone == null) return null;
+
+            if (milestone.Status == "RELEASED" || milestone.Status == "DISPUTED") return null;
+
+            var project = await _context.Projects.FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
+            if (project == null) return null;
+
+            var isAssignedExpert = await _context.ProjectContracts
+                .AnyAsync(c => c.ContractId == project.ContractId && c.ExpertId == expertId);
+                
+            if (!isAssignedExpert) return null;
+
             try
             {
                 int latestVersion = await _context.Deliverables
@@ -93,6 +108,8 @@ namespace AITasker.Infrastructure.Deliverables
 
         public async Task<bool> RequestRevisionAsync(int deliverableId, string feedback)
         {
+            if (string.IsNullOrWhiteSpace(feedback)) return false;
+
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {

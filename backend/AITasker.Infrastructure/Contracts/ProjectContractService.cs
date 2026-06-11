@@ -20,20 +20,21 @@ namespace AITasker.Infrastructure.Contracts
         public async Task<bool> CreateDraftContractAsync(CreateContractRequest request)
         {
             var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.ProposalId == request.ProposalId);
-            if (proposal == null)
-                throw new InvalidOperationException("Reference proposal could not be found.");
+            if (proposal == null || proposal.Status != "ACCEPTED")
+                throw new InvalidOperationException("A contract can only be drafted from an ACCEPTED proposal.");
 
             var job = await _context.JobPostings.FirstOrDefaultAsync(j => j.JobPostingId == proposal.JobId);
             if (job == null)
                 throw new InvalidOperationException("Reference job metadata is unavailable.");
 
-            // Determine client profile type tier dynamically
+            // ─── BUSINESS CALCULATION ───
             var clientProfile = await _context.ClientProfiles.FirstOrDefaultAsync(c => c.ClientProfileId == job.ClientProfileId);
             decimal rate = (clientProfile?.ClientType == "BUSINESS") ? 10.00m : 5.00m;
 
             decimal feeAmount = request.FinalPrice * (rate / 100m);
             decimal totalPayment = request.FinalPrice + feeAmount;
 
+            // ─── EXECUTION ───
             var contract = new ProjectContract
             {
                 ProposalId = request.ProposalId,
@@ -50,12 +51,13 @@ namespace AITasker.Infrastructure.Contracts
                 RevisionLimit = request.RevisionLimit,
                 PaymentTerms = request.PaymentTerms,
                 ContractSource = "PROPOSAL",
-                Status = "DRAFT"
+                Status = "DRAFT",
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.ProjectContracts.Add(contract);
-            await _context.SaveChangesAsync();
-            return true;
+            var affectedRows = await _context.SaveChangesAsync();
+            return affectedRows > 0;
         }
 
         public async Task<bool> ConfirmContractAsync(int contractId, int userId, string userRole)
@@ -64,9 +66,16 @@ namespace AITasker.Infrastructure.Contracts
             if (contract == null)
                 throw new InvalidOperationException("Contract was not found.");
 
-            if (userRole == "CLIENT" && contract.ClientId == userId) contract.ClientConfirmed = true;
-            else if (userRole == "EXPERT" && contract.ExpertId == userId) contract.ExpertConfirmed = true;
-            else throw new UnauthorizedAccessException("User validation context mismatch against contract entities.");
+            if (contract.Status != "DRAFT")
+                throw new InvalidOperationException("This contract cannot be modified as it is no longer in DRAFT status.");
+
+            // ─── SIGNING LOGIC ───
+            if (userRole.ToUpper() == "CLIENT" && contract.ClientId == userId) 
+                contract.ClientConfirmed = true;
+            else if (userRole.ToUpper() == "EXPERT" && contract.ExpertId == userId) 
+                contract.ExpertConfirmed = true;
+            else 
+                throw new UnauthorizedAccessException("User identification context mismatch against contract signees.");
 
             if (contract.ClientConfirmed && contract.ExpertConfirmed)
             {
@@ -74,8 +83,8 @@ namespace AITasker.Infrastructure.Contracts
                 contract.ConfirmedAt = DateTime.UtcNow;
             }
 
-            await _context.SaveChangesAsync();
-            return true;
+            var affectedRows = await _context.SaveChangesAsync();
+            return affectedRows > 0;
         }
     }
 }
