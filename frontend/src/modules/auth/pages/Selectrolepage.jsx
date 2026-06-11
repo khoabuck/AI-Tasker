@@ -38,9 +38,13 @@ export default function SelectRolePage() {
     setLoading(true);
     setError("");
     try {
-      // POST /api/auth/select-role
-      await axiosInstance.post("/auth/select-role", { role: selected });
-      // Sau khi chọn role → setup profile
+      const res = await axiosInstance.post("/auth/select-role", { role: selected });
+      
+      // Lưu token mới vào localStorage
+      if (res.data.accessToken) {
+        localStorage.setItem("accessToken", res.data.accessToken);
+      }
+
       navigate("/setup-profile");
     } catch (err) {
       setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
