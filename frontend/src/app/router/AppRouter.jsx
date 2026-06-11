@@ -25,6 +25,8 @@ import AIMatchingPage from "../../modules/client/pages/AIMatchingPage";
 import MessagesPage from "../../modules/client/pages/MessagesPage";
 import WalletPage from "../../modules/client/pages/WalletPage";
 import TransactionsPage from "../../modules/client/pages/TransactionsPage";
+import ClientJobDetailPage from "../../modules/client/pages/ClientJobDetailPage";
+import ClientJobRecommendationPage from "../../modules/client/pages/ClientJobRecommendationPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -87,6 +89,8 @@ export default function AppRouter() {
       <Route path="/client/messages"     element={<RequireAuth><MessagesPage /></RequireAuth>} />
       <Route path="/client/wallet"       element={<RequireAuth><WalletPage /></RequireAuth>} />
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
+      <Route path="/client/projects/:id" element={<RequireAuth><ClientJobDetailPage /></RequireAuth>} />
+      <Route path="/client/projects/:id/recommendations" element={<RequireAuth><ClientJobRecommendationPage /></RequireAuth>} />
 
       {/* ── Expert routes ── */}
       <Route path="/expert"                                        element={<RequireAuth><ExpertDashboard /></RequireAuth>} />

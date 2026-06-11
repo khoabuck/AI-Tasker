@@ -108,13 +108,20 @@ function JobCard({ job, onDelete }) {
 
       <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
         <button onClick={() => navigate(`/client/projects/${job.jobPostingId || job.id}`)}
-          style={{ flex: 1, padding: "10px", background: "#1d2026", color: "#e1e2eb", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#272a30"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.2)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "#1d2026"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}>
+          style={{ flex: 1, padding: "10px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 14px rgba(0,240,255,0.2)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}>
           View Details
         </button>
+        <button onClick={() => navigate(`/client/projects/${job.jobPostingId || job.id}/recommendations`)}
+          style={{ flex: 1, padding: "10px", background: "rgba(192,193,255,0.05)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 14px rgba(192,193,255,0.2)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 15 }}>auto_awesome</span>
+          AI Recommendation
+        </button>
         <button onClick={() => onDelete(job.jobPostingId || job.id)}
-          style={{ padding: "10px 16px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center" }}
+          style={{ padding: "10px 14px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", transition: "all 0.2s" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.15)")}
           onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
