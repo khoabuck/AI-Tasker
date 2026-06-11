@@ -13,4 +13,16 @@ public class ExpertCertificateResponse
     public DateTime? IssuedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
+
+    public string VerificationStatus { get; set; } = string.Empty;
+
+    public decimal VerificationScore { get; set; }
+
+    public string? VerificationNote { get; set; }
+
+    public string? DetectedIssuer { get; set; }
+
+    public string? DetectedCertificateName { get; set; }
+
+    public DateTime? CheckedAt { get; set; }
 }

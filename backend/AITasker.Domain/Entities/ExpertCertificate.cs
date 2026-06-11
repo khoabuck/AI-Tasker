@@ -16,5 +16,18 @@ public class ExpertCertificate
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
+    // UNVERIFIED / VERIFIED / NEEDS_REVIEW / SUSPICIOUS / INVALID
+    public string VerificationStatus { get; set; } = "UNVERIFIED";
+
+    public decimal VerificationScore { get; set; }
+
+    public string? VerificationNote { get; set; }
+
+    public string? DetectedIssuer { get; set; }
+
+    public string? DetectedCertificateName { get; set; }
+
+    public DateTime? CheckedAt { get; set; }
+
     public ExpertProfile ExpertProfile { get; set; } = null!;
 }
