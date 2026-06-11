@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
+import { useAuth } from "../../../context/AuthContext";
 
 export default function ExpertProfilePage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -20,10 +22,9 @@ export default function ExpertProfilePage() {
       setError("");
 
       const data = await expertProfileService.getMyExpertProfile();
-
       setProfile(data);
     } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data);
+      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
 
       const message =
         err?.response?.data?.message ||
@@ -38,7 +39,9 @@ export default function ExpertProfilePage() {
         return;
       }
 
-      setError(message);
+      setError(
+        "We could not load your profile right now. Please try again later."
+      );
     } finally {
       setLoading(false);
     }
@@ -46,7 +49,6 @@ export default function ExpertProfilePage() {
 
   const formatMoney = (value) => {
     const number = Number(value || 0);
-
     return `$${number.toLocaleString("en-US")}`;
   };
 
@@ -54,10 +56,7 @@ export default function ExpertProfilePage() {
     if (!value) return "No date";
 
     const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "No date";
-    }
+    if (Number.isNaN(date.getTime())) return "No date";
 
     return date.toLocaleDateString("en-US", {
       year: "numeric",
@@ -75,20 +74,23 @@ export default function ExpertProfilePage() {
       .filter(Boolean);
   };
 
-  const getAvatarText = () => {
-    const title = profile?.professionalTitle || "AI Expert";
-
-    return title
-      .split(" ")
-      .map((item) => item[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
+  const getDisplayName = () => {
+    return (
+      profile?.fullName ||
+      profile?.displayName ||
+      profile?.userFullName ||
+      profile?.expertName ||
+      profile?.name ||
+      user?.fullName ||
+      user?.displayName ||
+      user?.name ||
+      user?.userName ||
+      user?.email ||
+      "Expert User"
+    );
   };
 
-  const certificates = Array.isArray(profile?.certificates)
-    ? profile.certificates
-    : [];
+  const certificates = profile?.certificates || [];
 
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
@@ -104,8 +106,7 @@ export default function ExpertProfilePage() {
             <span className="material-symbols-outlined mb-3 block text-5xl text-[#00F0FF]">
               hourglass_empty
             </span>
-
-            <p>Loading expert profile...</p>
+            Loading expert profile...
           </div>
         </div>
       </ExpertLayout>
@@ -123,39 +124,26 @@ export default function ExpertProfilePage() {
               </p>
 
               <h1 className="text-3xl font-bold text-white md:text-4xl">
-                View your expert profile
+                Profile Overview
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                This is your Expert profile. Clients can see your title, bio,
-                skills, experience, portfolio links and certificates.
+                This is how your expert profile appears to clients. Keep your
+                information clear, professional, and up to date.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/expert/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  dashboard
-                </span>
-                Dashboard
-              </Link>
-
-              <Link to="/expert/profile/edit" className={actionButton}>
-                <span className="material-symbols-outlined text-[18px]">
-                  edit
-                </span>
-                Edit Profile
-              </Link>
-            </div>
+            <Link to="/expert/profile/edit" className={actionButton}>
+              <span className="material-symbols-outlined text-[18px]">
+                edit
+              </span>
+              Edit Profile
+            </Link>
           </div>
 
           {error && (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              <p className="font-bold">Cannot load profile</p>
-              <p className="mt-1">{error}</p>
+              {error}
             </div>
           )}
 
@@ -163,7 +151,7 @@ export default function ExpertProfilePage() {
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
               <aside className={cardStyle}>
                 <div className="flex flex-col items-center text-center">
-                  <div className="mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                  <div className="mb-5 h-36 w-36 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10 shadow-[0_0_30px_rgba(0,240,255,0.12)]">
                     {profile.avatarUrl ? (
                       <img
                         src={profile.avatarUrl}
@@ -171,18 +159,20 @@ export default function ExpertProfilePage() {
                         className="h-full w-full object-cover"
                       />
                     ) : (
-                      <span className="text-4xl font-black text-cyan-300">
-                        {getAvatarText()}
-                      </span>
+                      <div className="flex h-full w-full items-center justify-center">
+                        <span className="material-symbols-outlined text-6xl text-cyan-300">
+                          person
+                        </span>
+                      </div>
                     )}
                   </div>
 
-                  <h2 className="text-2xl font-bold text-white">
-                    {profile.professionalTitle || "AI Expert"}
+                  <h2 className="max-w-full break-words text-3xl font-extrabold leading-tight text-white">
+                    {getDisplayName()}
                   </h2>
 
-                  <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {profile.bio || "No bio yet."}
+                  <p className="mt-2 max-w-full break-words text-sm font-semibold leading-6 text-cyan-300">
+                    {profile.professionalTitle || "Expert"}
                   </p>
 
                   <div
@@ -200,7 +190,7 @@ export default function ExpertProfilePage() {
 
                 <div className="my-6 border-t border-white/10" />
 
-                <div className="space-y-5">
+                <div className="space-y-4">
                   <InfoItem
                     icon="work_history"
                     label="Experience"
@@ -209,15 +199,15 @@ export default function ExpertProfilePage() {
 
                   <InfoItem
                     icon="payments"
-                    label="Expected Budget"
+                    label="Budget"
                     value={`${formatMoney(
                       profile.expectedProjectBudgetMin
                     )} - ${formatMoney(profile.expectedProjectBudgetMax)}`}
                   />
 
                   <InfoItem
-                    icon="schedule"
-                    label="Preferred Duration"
+                    icon="calendar_month"
+                    label="Preferred duration"
                     value={`${profile.preferredProjectDurationDays || 0} days`}
                   />
                 </div>
@@ -225,12 +215,43 @@ export default function ExpertProfilePage() {
 
               <main className="space-y-6">
                 <section className={cardStyle}>
-                  <div className="mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#00F0FF]">
-                      psychology
-                    </span>
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+                      <span className="material-symbols-outlined">
+                        account_circle
+                      </span>
+                    </div>
 
-                    <h3 className="text-lg font-bold text-white">Skills</h3>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">
+                        About Me
+                      </h3>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        A short introduction about your background and work
+                        style.
+                      </p>
+                    </div>
+                  </div>
+
+                  <BioBlock bio={profile.bio} />
+                </section>
+
+                <section className={cardStyle}>
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+                      <span className="material-symbols-outlined">
+                        psychology
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-lg font-bold text-white">Skills</h3>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        Main skills and technologies you can work with.
+                      </p>
+                    </div>
                   </div>
 
                   {getSkills().length === 0 ? (
@@ -250,14 +271,20 @@ export default function ExpertProfilePage() {
                 </section>
 
                 <section className={cardStyle}>
-                  <div className="mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#00F0FF]">
-                      link
-                    </span>
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+                      <span className="material-symbols-outlined">link</span>
+                    </div>
 
-                    <h3 className="text-lg font-bold text-white">
-                      Portfolio Links
-                    </h3>
+                    <div>
+                      <h3 className="text-lg font-bold text-white">
+                        Public Links
+                      </h3>
+
+                      <p className="mt-1 text-sm text-gray-500">
+                        Portfolio, LinkedIn, or GitHub links clients can open.
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -282,20 +309,20 @@ export default function ExpertProfilePage() {
                 </section>
 
                 <section className={cardStyle}>
-                  <div className="mb-5 flex items-start justify-between gap-4">
+                  <div className="mb-5 flex items-center gap-3">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-400/10 text-cyan-300">
+                      <span className="material-symbols-outlined">
+                        workspace_premium
+                      </span>
+                    </div>
+
                     <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[#00F0FF]">
-                          workspace_premium
-                        </span>
+                      <h3 className="text-lg font-bold text-white">
+                        Certificates
+                      </h3>
 
-                        <h3 className="text-lg font-bold text-white">
-                          Certificates
-                        </h3>
-                      </div>
-
-                      <p className="text-sm text-gray-500">
-                        Certificate links submitted in your Expert profile.
+                      <p className="mt-1 text-sm text-gray-500">
+                        Certificates submitted with your expert profile.
                       </p>
                     </div>
                   </div>
@@ -311,7 +338,7 @@ export default function ExpertProfilePage() {
                       </h4>
 
                       <p className="mt-2 text-sm text-gray-500">
-                        You can add certificates when editing your profile.
+                        Add certificates in edit profile.
                       </p>
                     </div>
                   ) : (
@@ -319,7 +346,7 @@ export default function ExpertProfilePage() {
                       {certificates.map((certificate, index) => (
                         <div
                           key={index}
-                          className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 md:flex-row md:items-center md:justify-between"
+                          className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-cyan-400/30 hover:bg-white/[0.06] md:flex-row md:items-center md:justify-between"
                         >
                           <div>
                             <p className="font-bold text-white">
@@ -327,7 +354,7 @@ export default function ExpertProfilePage() {
                                 `Certificate ${index + 1}`}
                             </p>
 
-                            <p className="mt-1 text-sm text-gray-500">
+                            <p className="mt-1 text-sm text-gray-400">
                               {certificate.certificateIssuer || "No issuer"}
                             </p>
 
@@ -343,6 +370,9 @@ export default function ExpertProfilePage() {
                               rel="noreferrer"
                               className={actionButton}
                             >
+                              <span className="material-symbols-outlined text-[18px]">
+                                open_in_new
+                              </span>
                               Open Certificate
                             </a>
                           ) : (
@@ -366,10 +396,10 @@ export default function ExpertProfilePage() {
 
 function InfoItem({ icon, label, value }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined text-[20px]">{icon}</span>
-      </div>
+    <div className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <span className="material-symbols-outlined mt-[2px] text-[20px] text-cyan-300">
+        {icon}
+      </span>
 
       <div>
         <p className="text-xs uppercase tracking-wider text-gray-500">
@@ -382,12 +412,43 @@ function InfoItem({ icon, label, value }) {
   );
 }
 
+function BioBlock({ bio }) {
+  const content = String(bio || "").trim();
+
+  if (!content) {
+    return (
+      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+        <p className="text-sm text-gray-500">No bio yet.</p>
+      </div>
+    );
+  }
+
+  const paragraphs = content
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="space-y-4">
+        {paragraphs.map((paragraph, index) => (
+          <p
+            key={index}
+            className="text-sm leading-7 text-gray-300 md:text-[15px]"
+          >
+            {paragraph}
+          </p>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ProfileLink({ label, value, icon }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-cyan-400/30 hover:bg-white/[0.06]">
       <div className="mb-3 flex items-center gap-2 text-gray-400">
         <span className="material-symbols-outlined text-[18px]">{icon}</span>
-
         <span className="text-xs font-bold uppercase tracking-wider">
           {label}
         </span>

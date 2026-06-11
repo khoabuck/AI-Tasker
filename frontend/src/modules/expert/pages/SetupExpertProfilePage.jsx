@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import expertProfileService from "../../../services/expertProfile.service";
+import uploadService from "../../../services/upload.service";
 import { useAuth } from "../../../context/AuthContext";
+
+const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
+const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 
 const createEmptyCertificate = () => ({
   certificateName: "",
@@ -19,6 +23,79 @@ const numberFields = [
 
 const integerFields = ["yearsOfExperience", "preferredProjectDurationDays"];
 
+const extractMessageFromData = (data) => {
+  if (!data) return "";
+
+  if (typeof data === "string") return data;
+
+  if (data.message) return data.message;
+  if (data.title) return data.title;
+  if (data.reviewMessage) return data.reviewMessage;
+  if (data.aiMessage) return data.aiMessage;
+  if (data.certificateMessage) return data.certificateMessage;
+
+  if (data.errors) {
+    const allErrors = Object.values(data.errors).flat();
+    if (allErrors.length > 0) return allErrors.join(" ");
+  }
+
+  return "";
+};
+
+const isTechnicalMessage = (message) => {
+  const text = String(message || "").toLowerCase();
+
+  return (
+    text.includes("sqlexception") ||
+    text.includes("invalid object name") ||
+    text.includes("system.") ||
+    text.includes("stack trace") ||
+    text.includes("at aitasker") ||
+    text.includes("at microsoft") ||
+    text.includes("exception") ||
+    text.includes("object reference") ||
+    text.includes("inner exception")
+  );
+};
+
+const cleanMessage = (message, fallback) => {
+  if (!message) return fallback;
+
+  const text = String(message).trim();
+
+  if (!text) return fallback;
+  if (isTechnicalMessage(text)) return fallback;
+  if (text.length > 280) return fallback;
+
+  return text;
+};
+
+const normalizeSuggestionList = (value, fallback = []) => {
+  if (!value) return fallback;
+
+  if (Array.isArray(value)) {
+    const result = value
+      .flat()
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+
+    return result.length > 0 ? result : fallback;
+  }
+
+  if (typeof value === "object") {
+    const result = Object.values(value)
+      .flat()
+      .map((item) => String(item || "").trim())
+      .filter(Boolean);
+
+    return result.length > 0 ? result : fallback;
+  }
+
+  const text = String(value || "").trim();
+
+  return text ? [text] : fallback;
+};
+
 export default function SetupExpertProfilePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -26,6 +103,7 @@ export default function SetupExpertProfilePage() {
   const { refreshUser, handleLogout } = useAuth();
 
   const isEditPage = location.pathname === "/expert/profile/edit";
+  const currentDraftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
 
   const [formData, setFormData] = useState({
     avatarUrl: "",
@@ -44,73 +122,29 @@ export default function SetupExpertProfilePage() {
   });
 
   const [avatarPreview, setAvatarPreview] = useState("");
+  const [imageUploading, setImageUploading] = useState(false);
   const [fetching, setFetching] = useState(isEditPage);
   const [loading, setLoading] = useState(false);
   const [generalError, setGeneralError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [notice, setNotice] = useState("");
   const [submitResult, setSubmitResult] = useState(null);
+  const [correctionModal, setCorrectionModal] = useState(null);
 
   useEffect(() => {
     if (isEditPage) {
       loadExistingProfile();
     } else {
+      loadDraft(SETUP_DRAFT_KEY);
       setFetching(false);
     }
   }, [isEditPage]);
 
-  const handleSignOut = () => {
-    handleLogout();
-    navigate("/login", { replace: true });
-  };
+  useEffect(() => {
+    if (fetching) return;
 
-  const loadExistingProfile = async () => {
-    try {
-      setFetching(true);
-      setGeneralError("");
-
-      const data = await expertProfileService.getMyExpertProfile();
-
-      setFormData({
-        avatarUrl: data.avatarUrl || "",
-        professionalTitle: data.professionalTitle || "",
-        bio: data.bio || "",
-        skills: data.skills || "",
-        yearsOfExperience: data.yearsOfExperience ?? "",
-        expectedProjectBudgetMin: data.expectedProjectBudgetMin ?? "",
-        expectedProjectBudgetMax: data.expectedProjectBudgetMax ?? "",
-        preferredProjectDurationDays: data.preferredProjectDurationDays ?? "",
-        availableForWork: Boolean(data.availableForWork),
-        portfolioUrl: data.portfolioUrl || "",
-        linkedInUrl: data.linkedInUrl || "",
-        gitHubUrl: data.gitHubUrl || "",
-        certificates:
-          data.certificates && data.certificates.length > 0
-            ? data.certificates.map((item) => ({
-                certificateName: item.certificateName || "",
-                certificateIssuer: item.certificateIssuer || "",
-                certificateUrl: item.certificateUrl || "",
-                issuedAt: item.issuedAt
-                  ? String(item.issuedAt).slice(0, 10)
-                  : "",
-              }))
-            : [createEmptyCertificate()],
-      });
-
-      setAvatarPreview(data.avatarUrl || "");
-    } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data);
-
-      const message =
-        err?.response?.data?.message ||
-        err?.response?.data?.title ||
-        "Cannot load expert profile.";
-
-      setGeneralError(message);
-    } finally {
-      setFetching(false);
-    }
-  };
+    localStorage.setItem(currentDraftKey, JSON.stringify(formData));
+  }, [formData, fetching, currentDraftKey]);
 
   const inputStyle =
     "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
@@ -120,6 +154,101 @@ export default function SetupExpertProfilePage() {
 
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8";
+
+  const getSavedDraft = (key) => {
+    const savedDraft = localStorage.getItem(key);
+
+    if (!savedDraft) return null;
+
+    try {
+      return JSON.parse(savedDraft);
+    } catch {
+      localStorage.removeItem(key);
+      return null;
+    }
+  };
+
+  const loadDraft = (key) => {
+    const parsedDraft = getSavedDraft(key);
+
+    if (!parsedDraft) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      ...parsedDraft,
+      certificates:
+        parsedDraft.certificates && parsedDraft.certificates.length > 0
+          ? parsedDraft.certificates
+          : [createEmptyCertificate()],
+    }));
+
+    setAvatarPreview(parsedDraft.avatarUrl || "");
+  };
+
+  const mapProfileToForm = (data) => ({
+    avatarUrl: data.avatarUrl || "",
+    professionalTitle: data.professionalTitle || "",
+    bio: data.bio || "",
+    skills: data.skills || "",
+    yearsOfExperience: data.yearsOfExperience ?? "",
+    expectedProjectBudgetMin: data.expectedProjectBudgetMin ?? "",
+    expectedProjectBudgetMax: data.expectedProjectBudgetMax ?? "",
+    preferredProjectDurationDays: data.preferredProjectDurationDays ?? "",
+    availableForWork: Boolean(data.availableForWork),
+    portfolioUrl: data.portfolioUrl || "",
+    linkedInUrl: data.linkedInUrl || "",
+    gitHubUrl: data.gitHubUrl || "",
+    certificates:
+      data.certificates && data.certificates.length > 0
+        ? data.certificates.map((item) => ({
+          certificateName: item.certificateName || "",
+          certificateIssuer: item.certificateIssuer || "",
+          certificateUrl: item.certificateUrl || "",
+          issuedAt: item.issuedAt ? String(item.issuedAt).slice(0, 10) : "",
+        }))
+        : [createEmptyCertificate()],
+  });
+
+  const handleSignOut = () => {
+    handleLogout();
+    localStorage.removeItem(SETUP_DRAFT_KEY);
+    localStorage.removeItem(EDIT_DRAFT_KEY);
+    navigate("/login", { replace: true });
+  };
+
+  const loadExistingProfile = async () => {
+    try {
+      setFetching(true);
+      setGeneralError("");
+
+      const data = await expertProfileService.getMyExpertProfile();
+      const serverForm = mapProfileToForm(data);
+      const editDraft = getSavedDraft(EDIT_DRAFT_KEY);
+
+      const nextForm = editDraft
+        ? {
+          ...serverForm,
+          ...editDraft,
+          certificates:
+            editDraft.certificates && editDraft.certificates.length > 0
+              ? editDraft.certificates
+              : serverForm.certificates,
+        }
+        : serverForm;
+
+      setFormData(nextForm);
+      setAvatarPreview(nextForm.avatarUrl || "");
+    } catch (err) {
+      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data);
+
+      setGeneralError(
+        getFriendlyBackendError(err).message ||
+        "We could not load your expert profile. Please try again."
+      );
+    } finally {
+      setFetching(false);
+    }
+  };
 
   const clearFieldError = (name) => {
     setFieldErrors((prev) => {
@@ -137,7 +266,7 @@ export default function SetupExpertProfilePage() {
   };
 
   const isValidHttpUrl = (value) => {
-    if (!value) return true;
+    if (!value) return false;
 
     try {
       const url = new URL(value);
@@ -161,18 +290,23 @@ export default function SetupExpertProfilePage() {
     return fieldErrors[name] ? inputErrorStyle : inputStyle;
   };
 
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
-
+  const resetMessagesOnEdit = () => {
     setSubmitResult(null);
     setGeneralError("");
     setNotice("");
+    setCorrectionModal(null);
+  };
+
+  const handleChange = (event) => {
+    const { name, value, type, checked } = event.target;
+
+    resetMessagesOnEdit();
 
     if (numberFields.includes(name)) {
       if (integerFields.includes(name) && !isIntegerText(value)) {
-        setFieldError(name, "Chỉ được nhập số nguyên. Không nhập chữ.");
+        setFieldError(name, "Please enter a whole number.");
       } else if (!integerFields.includes(name) && !isNumberText(value)) {
-        setFieldError(name, "Chỉ được nhập số. Không nhập chữ.");
+        setFieldError(name, "Please enter a valid number.");
       } else {
         clearFieldError(name);
       }
@@ -189,9 +323,7 @@ export default function SetupExpertProfilePage() {
   const handleCertificateChange = (index, event) => {
     const { name, value } = event.target;
 
-    setSubmitResult(null);
-    setGeneralError("");
-    setNotice("");
+    resetMessagesOnEdit();
 
     setFormData((prev) => {
       const newCertificates = [...prev.certificates];
@@ -218,43 +350,61 @@ export default function SetupExpertProfilePage() {
     avatarInputRef.current?.click();
   };
 
-  const handleAvatarFileChange = (event) => {
+  const handleAvatarFileChange = async (event) => {
     const file = event.target.files?.[0];
 
     if (!file) return;
 
-    setSubmitResult(null);
-    setGeneralError("");
+    resetMessagesOnEdit();
 
     if (!file.type.startsWith("image/")) {
-      setFieldError("avatarUrl", "File phải là ảnh.");
+      setFieldError("avatarUrl", "Please select an image file.");
       return;
     }
 
     if (file.size > 2 * 1024 * 1024) {
-      setFieldError("avatarUrl", "Ảnh không được lớn hơn 2MB.");
+      setFieldError("avatarUrl", "Image size must be less than 2MB.");
       return;
     }
 
-    const reader = new FileReader();
+    const localPreviewUrl = URL.createObjectURL(file);
+    setAvatarPreview(localPreviewUrl);
 
-    reader.onload = () => {
-      const imageDataUrl = String(reader.result || "");
+    try {
+      setImageUploading(true);
+      setFieldError("avatarUrl", "Uploading avatar...");
 
-      setAvatarPreview(imageDataUrl);
+      const imageUrl = await uploadService.uploadImage(file, "avatar");
+
+      setFormData((prev) => ({
+        ...prev,
+        avatarUrl: imageUrl,
+      }));
+
+      setAvatarPreview(imageUrl);
+      clearFieldError("avatarUrl");
+      setNotice("Avatar uploaded successfully.");
+    } catch (err) {
+      console.error("UPLOAD AVATAR ERROR:", err?.response?.data || err);
 
       setFormData((prev) => ({
         ...prev,
         avatarUrl: "",
       }));
 
-      clearFieldError("avatarUrl");
-    };
-
-    reader.readAsDataURL(file);
+      setFieldError(
+        "avatarUrl",
+        getFriendlyBackendError(err).message ||
+        "We could not upload your avatar. Please try another image."
+      );
+    } finally {
+      setImageUploading(false);
+    }
   };
 
   const handleRemoveAvatar = () => {
+    resetMessagesOnEdit();
+
     setAvatarPreview("");
 
     setFormData((prev) => ({
@@ -270,6 +420,8 @@ export default function SetupExpertProfilePage() {
   };
 
   const addCertificate = () => {
+    resetMessagesOnEdit();
+
     setFormData((prev) => ({
       ...prev,
       certificates: [...prev.certificates, createEmptyCertificate()],
@@ -277,6 +429,8 @@ export default function SetupExpertProfilePage() {
   };
 
   const removeCertificate = (index) => {
+    resetMessagesOnEdit();
+
     setFormData((prev) => {
       const newCertificates = prev.certificates.filter(
         (_, certIndex) => certIndex !== index
@@ -295,36 +449,46 @@ export default function SetupExpertProfilePage() {
   const validateForm = () => {
     const errors = {};
 
+    if (imageUploading) {
+      errors.avatarUrl = "Your avatar is still uploading. Please wait.";
+    }
+
+    if (!formData.avatarUrl) {
+      errors.avatarUrl = "Please upload your avatar.";
+    } else if (!isValidHttpUrl(formData.avatarUrl)) {
+      errors.avatarUrl = "Please upload your avatar again.";
+    }
+
     if (!formData.professionalTitle.trim()) {
-      errors.professionalTitle = "Professional title là bắt buộc.";
+      errors.professionalTitle = "Please enter your professional title.";
     }
 
     if (!formData.bio.trim()) {
-      errors.bio = "Bio là bắt buộc.";
+      errors.bio = "Please write a short bio about your experience.";
     }
 
     if (!formData.skills.trim()) {
-      errors.skills = "Skills là bắt buộc.";
+      errors.skills = "Please enter at least one skill.";
     }
 
     if (!formData.yearsOfExperience) {
-      errors.yearsOfExperience = "Years of experience là bắt buộc.";
+      errors.yearsOfExperience = "Please enter your years of experience.";
     } else if (!isIntegerText(formData.yearsOfExperience)) {
-      errors.yearsOfExperience = "Years of experience chỉ được nhập số nguyên.";
+      errors.yearsOfExperience = "Years of experience must be a whole number.";
     } else if (Number(formData.yearsOfExperience) < 0) {
-      errors.yearsOfExperience = "Years of experience không được nhỏ hơn 0.";
+      errors.yearsOfExperience = "Years of experience cannot be negative.";
     }
 
     if (!formData.expectedProjectBudgetMin) {
-      errors.expectedProjectBudgetMin = "Budget min là bắt buộc.";
+      errors.expectedProjectBudgetMin = "Please enter your minimum budget.";
     } else if (!isNumberText(formData.expectedProjectBudgetMin)) {
-      errors.expectedProjectBudgetMin = "Budget min chỉ được nhập số.";
+      errors.expectedProjectBudgetMin = "Minimum budget must be a valid number.";
     }
 
     if (!formData.expectedProjectBudgetMax) {
-      errors.expectedProjectBudgetMax = "Budget max là bắt buộc.";
+      errors.expectedProjectBudgetMax = "Please enter your maximum budget.";
     } else if (!isNumberText(formData.expectedProjectBudgetMax)) {
-      errors.expectedProjectBudgetMax = "Budget max chỉ được nhập số.";
+      errors.expectedProjectBudgetMax = "Maximum budget must be a valid number.";
     }
 
     if (
@@ -333,137 +497,235 @@ export default function SetupExpertProfilePage() {
       formData.expectedProjectBudgetMin &&
       formData.expectedProjectBudgetMax &&
       Number(formData.expectedProjectBudgetMin) >
-        Number(formData.expectedProjectBudgetMax)
+      Number(formData.expectedProjectBudgetMax)
     ) {
       errors.expectedProjectBudgetMax =
-        "Budget max phải lớn hơn hoặc bằng budget min.";
+        "Maximum budget must be greater than or equal to minimum budget.";
     }
 
     if (!formData.preferredProjectDurationDays) {
       errors.preferredProjectDurationDays =
-        "Preferred duration days là bắt buộc.";
+        "Please enter your preferred project duration.";
     } else if (!isIntegerText(formData.preferredProjectDurationDays)) {
       errors.preferredProjectDurationDays =
-        "Preferred duration days chỉ được nhập số nguyên.";
+        "Preferred duration must be a whole number.";
     } else if (Number(formData.preferredProjectDurationDays) <= 0) {
       errors.preferredProjectDurationDays =
-        "Preferred duration days phải lớn hơn 0.";
+        "Preferred duration must be greater than 0.";
     }
 
-    if (formData.portfolioUrl && !isValidHttpUrl(formData.portfolioUrl)) {
-      errors.portfolioUrl = "Portfolio URL không hợp lệ.";
+    const portfolioUrl = formData.portfolioUrl.trim();
+    const linkedInUrl = formData.linkedInUrl.trim();
+    const gitHubUrl = formData.gitHubUrl.trim();
+
+    const hasAtLeastOneProfileLink = portfolioUrl || linkedInUrl || gitHubUrl;
+
+    if (!hasAtLeastOneProfileLink) {
+      const message =
+        "Please provide at least one public link: Portfolio, LinkedIn, or GitHub.";
+
+      errors.portfolioUrl = message;
+      errors.linkedInUrl = message;
+      errors.gitHubUrl = message;
     }
 
-    if (formData.linkedInUrl && !isValidHttpUrl(formData.linkedInUrl)) {
-      errors.linkedInUrl = "LinkedIn URL không hợp lệ.";
+    if (portfolioUrl && !isValidHttpUrl(portfolioUrl)) {
+      errors.portfolioUrl =
+        "Please enter a valid Portfolio URL starting with http:// or https://.";
     }
 
-    if (formData.gitHubUrl && !isValidHttpUrl(formData.gitHubUrl)) {
-      errors.gitHubUrl = "GitHub URL không hợp lệ.";
+    if (linkedInUrl && !isValidHttpUrl(linkedInUrl)) {
+      errors.linkedInUrl =
+        "Please enter a valid LinkedIn URL starting with http:// or https://.";
+    }
+
+    if (gitHubUrl && !isValidHttpUrl(gitHubUrl)) {
+      errors.gitHubUrl =
+        "Please enter a valid GitHub URL starting with http:// or https://.";
     }
 
     formData.certificates.forEach((certificate, index) => {
       const certificateName = String(certificate.certificateName || "").trim();
+      const certificateIssuer = String(
+        certificate.certificateIssuer || ""
+      ).trim();
       const certificateUrl = String(certificate.certificateUrl || "").trim();
+      const issuedAt = String(certificate.issuedAt || "").trim();
 
-      if (certificateName && !certificateUrl) {
-        errors[`certificate-${index}-certificateUrl`] =
-          "Nhập tên chứng chỉ thì phải nhập link chứng chỉ.";
-      }
-
-      if (certificateUrl && !certificateName) {
+      if (!certificateName) {
         errors[`certificate-${index}-certificateName`] =
-          "Nhập link chứng chỉ thì phải nhập tên chứng chỉ.";
+          "Please enter the certificate name.";
       }
 
-      if (certificateUrl && !isValidHttpUrl(certificateUrl)) {
+      if (!certificateIssuer) {
+        errors[`certificate-${index}-certificateIssuer`] =
+          "Please enter the certificate issuer.";
+      }
+
+      if (!certificateUrl) {
         errors[`certificate-${index}-certificateUrl`] =
-          "Certificate URL không hợp lệ. Link phải bắt đầu bằng http hoặc https.";
+          "Please enter a public certificate URL.";
+      } else if (!isValidHttpUrl(certificateUrl)) {
+        errors[`certificate-${index}-certificateUrl`] =
+          "Certificate URL must start with http:// or https://.";
+      }
+
+      if (!issuedAt) {
+        errors[`certificate-${index}-issuedAt`] =
+          "Please select the issued date.";
       }
     });
 
     setFieldErrors(errors);
 
     if (Object.keys(errors).length > 0) {
-      setGeneralError("Vui lòng kiểm tra lại các ô bị lỗi trước khi gửi.");
+      const hasUrlError = Object.values(errors).some((message) =>
+        String(message).toLowerCase().includes("url")
+      );
+
+      setGeneralError(
+        hasUrlError
+          ? "Some links are not valid. Please check the highlighted URL fields."
+          : "Please complete the highlighted fields before submitting."
+      );
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+
       return false;
     }
 
+    setGeneralError("");
     return true;
   };
 
-  const getBackendErrorMessage = (err) => {
+  const getFriendlyBackendError = (err) => {
+    const statusCode = err?.response?.status;
     const data = err?.response?.data;
+    const rawMessage = extractMessageFromData(data);
+    const lowerMessage = String(rawMessage || "").toLowerCase();
 
-    if (!data) {
-      return "Không thể gửi profile. Vui lòng kiểm tra backend API.";
+    if (!err?.response) {
+      return {
+        message:
+          "We could not connect to the server. Please check your internet connection and try again.",
+        isAlreadyExists: false,
+      };
     }
 
-    if (typeof data === "string") {
-      return data;
+    if (statusCode === 401) {
+      return {
+        message: "Your session has expired. Please sign in again.",
+        isAlreadyExists: false,
+      };
     }
 
-    if (data.message) {
-      return data.message;
+    if (statusCode === 403) {
+      return {
+        message: "You do not have permission to perform this action.",
+        isAlreadyExists: false,
+      };
     }
 
-    if (data.title) {
-      return data.title;
+    if (statusCode === 404) {
+      return {
+        message:
+          "We could not find your expert profile. Please create your profile first.",
+        isAlreadyExists: false,
+      };
     }
 
-    if (data.errors) {
-      const allErrors = Object.values(data.errors).flat();
-
-      if (allErrors.length > 0) {
-        return allErrors.join(" ");
-      }
+    if (
+      statusCode === 409 ||
+      lowerMessage.includes("already") ||
+      lowerMessage.includes("exists")
+    ) {
+      return {
+        message:
+          "Your expert profile already exists. Please edit and resubmit your current profile instead.",
+        isAlreadyExists: true,
+      };
     }
 
-    return "Profile hoặc certificate link không hợp lệ.";
+    if (
+      statusCode >= 500 ||
+      isTechnicalMessage(rawMessage) ||
+      lowerMessage.includes("database")
+    ) {
+      return {
+        message:
+          "Something went wrong while saving your profile. Please try again later or contact support.",
+        isAlreadyExists: false,
+      };
+    }
+
+    return {
+      message: cleanMessage(
+        rawMessage,
+        "We could not submit your profile. Please check your information and try again."
+      ),
+      isAlreadyExists: false,
+    };
   };
 
   const buildSubmitResult = (responseData) => {
-    const rawText = JSON.stringify(responseData || {}).toLowerCase();
+    const payload = responseData?.data || responseData || {};
+    const rawText = JSON.stringify(payload).toLowerCase();
 
     const backendMessage =
-      responseData?.message ||
-      responseData?.title ||
-      responseData?.reviewMessage ||
-      responseData?.aiMessage ||
-      responseData?.certificateMessage ||
+      payload?.message ||
+      payload?.title ||
+      payload?.reviewMessage ||
+      payload?.aiMessage ||
+      payload?.certificateMessage ||
       "";
 
     const backendStatus =
-      responseData?.status ||
-      responseData?.profileStatus ||
-      responseData?.reviewStatus ||
-      responseData?.verificationStatus ||
-      responseData?.certificateStatus ||
+      payload?.status ||
+      payload?.profileStatus ||
+      payload?.reviewStatus ||
+      payload?.verificationStatus ||
+      payload?.certificateStatus ||
       "";
 
     const suggestions =
-      responseData?.suggestions ||
-      responseData?.reasons ||
-      responseData?.issues ||
-      responseData?.errors ||
+      payload?.suggestions ||
+      payload?.reasons ||
+      payload?.issues ||
+      payload?.errors ||
       [];
 
-    if (
-      rawText.includes("need") ||
-      rawText.includes("correction") ||
-      rawText.includes("reject") ||
-      rawText.includes("invalid") ||
-      rawText.includes("fail")
-    ) {
+    const normalizedStatus = String(backendStatus || "").toUpperCase();
+
+    const isNeedsCorrection =
+      normalizedStatus === "NEEDS_CORRECTION" ||
+      rawText.includes("needs_correction") ||
+      rawText.includes("need correction") ||
+      rawText.includes("needs correction") ||
+      rawText.includes("correction required") ||
+      rawText.includes("rejected");
+
+    if (isNeedsCorrection) {
       return {
-        type: "error",
-        title: "Profile cần chỉnh sửa",
-        message:
-          backendMessage ||
-          "AI/check chứng chỉ phát hiện hồ sơ chưa hợp lệ. Bạn cần kiểm tra lại nội dung profile và link chứng chỉ.",
-        status: backendStatus || "NEEDS_CORRECTION",
-        suggestions,
+        type: "warning",
+        title: "Your profile needs a few changes",
+        message: cleanMessage(
+          backendMessage,
+          "Your profile was saved, but it needs a few changes before it can be approved."
+        ),
+        status: "NEEDS_CORRECTION",
+        suggestions: normalizeSuggestionList(suggestions, [
+          "Review your profile information.",
+          "Make sure your certificate link is public and can be opened.",
+          "Make sure your public profile links are correct.",
+          "After fixing the issues, submit your profile again.",
+        ]),
         shouldRedirect: false,
+        showModal: true,
+        primaryLabel: isEditPage ? "Continue Editing" : "Fix and Resubmit",
+        actionPath: isEditPage ? "" : "/expert/profile/edit",
       };
     }
 
@@ -476,38 +738,44 @@ export default function SetupExpertProfilePage() {
     ) {
       return {
         type: "success",
-        title: "Profile đã gửi thành công",
-        message:
-          backendMessage ||
-          "AI/check chứng chỉ đã xử lý xong. Profile của bạn đã được gửi thành công.",
-        status: backendStatus || "SUBMITTED",
-        suggestions,
+        title: "Profile submitted successfully",
+        message: cleanMessage(
+          backendMessage,
+          "Your expert profile has been submitted successfully."
+        ),
+        status: normalizedStatus || "SUBMITTED",
+        suggestions: normalizeSuggestionList(suggestions, []),
         shouldRedirect: true,
+        showModal: false,
       };
     }
 
     if (rawText.includes("pending") || rawText.includes("review")) {
       return {
         type: "warning",
-        title: "Profile đang chờ duyệt",
-        message:
-          backendMessage ||
-          "Profile của bạn đã được gửi và đang chờ hệ thống hoặc admin duyệt.",
-        status: backendStatus || "PENDING_REVIEW",
-        suggestions,
+        title: "Profile is under review",
+        message: cleanMessage(
+          backendMessage,
+          "Your profile has been submitted and is waiting for review."
+        ),
+        status: normalizedStatus || "PENDING_REVIEW",
+        suggestions: normalizeSuggestionList(suggestions, []),
         shouldRedirect: true,
+        showModal: false,
       };
     }
 
     return {
       type: "success",
-      title: "Gửi profile thành công",
-      message:
-        backendMessage ||
-        "Profile của bạn đã được gửi. Bạn sẽ được chuyển về Expert Dashboard.",
-      status: backendStatus || "SUBMITTED",
-      suggestions,
+      title: "Profile submitted",
+      message: cleanMessage(
+        backendMessage,
+        "Your profile has been submitted successfully."
+      ),
+      status: normalizedStatus || "SUBMITTED",
+      suggestions: normalizeSuggestionList(suggestions, []),
       shouldRedirect: true,
+      showModal: false,
     };
   };
 
@@ -515,6 +783,7 @@ export default function SetupExpertProfilePage() {
     event.preventDefault();
 
     setSubmitResult(null);
+    setCorrectionModal(null);
 
     const isValid = validateForm();
 
@@ -523,7 +792,7 @@ export default function SetupExpertProfilePage() {
     try {
       setLoading(true);
       setGeneralError("");
-      setNotice("Đang gửi profile và kiểm tra link chứng chỉ...");
+      setNotice("Submitting your profile for review...");
 
       const responseData = isEditPage
         ? await expertProfileService.resubmitExpertProfile(formData)
@@ -536,35 +805,64 @@ export default function SetupExpertProfilePage() {
       setNotice("");
       setSubmitResult(result);
 
+      if (result.showModal) {
+        setCorrectionModal(result);
+      }
+
+      if (result.status !== "NEEDS_CORRECTION") {
+        localStorage.removeItem(currentDraftKey);
+      }
+
       if (result.shouldRedirect) {
         setTimeout(() => {
           navigate("/expert/dashboard", { replace: true });
-        }, 2500);
+        }, 1800);
       }
     } catch (err) {
       console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data);
 
-      const message = getBackendErrorMessage(err);
+      const friendlyError = getFriendlyBackendError(err);
 
       setNotice("");
+
       setSubmitResult({
         type: "error",
-        title: "Gửi profile thất bại",
-        message,
-        status: "FAILED",
-        suggestions: [
-          "Kiểm tra lại các ô bắt buộc.",
-          "Kiểm tra certificate URL có mở được hay không.",
-          "Certificate URL nên bắt đầu bằng https://",
-          "Nếu profile đã tồn tại, hãy vào Profile → Edit Profile để cập nhật.",
-        ],
+        title: friendlyError.isAlreadyExists
+          ? "Profile already exists"
+          : "Profile submission failed",
+        message: friendlyError.message,
+        status: friendlyError.isAlreadyExists ? "PROFILE_EXISTS" : "FAILED",
+        suggestions: friendlyError.isAlreadyExists
+          ? [
+            "Open your existing profile.",
+            "Review the information.",
+            "Submit again using the resubmit flow.",
+          ]
+          : [
+            "Check all highlighted fields.",
+            "Make sure every link is public.",
+            "Make sure every URL starts with http:// or https://.",
+            "Try again after checking your information.",
+          ],
         shouldRedirect: false,
+        showModal: false,
+        primaryLabel: friendlyError.isAlreadyExists ? "Go to Edit Profile" : "",
+        actionPath: friendlyError.isAlreadyExists ? "/expert/profile/edit" : "",
       });
 
-      setGeneralError(message);
+      setGeneralError(friendlyError.message);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCorrectionPrimaryAction = () => {
+    if (correctionModal?.actionPath) {
+      navigate(correctionModal.actionPath, { replace: true });
+      return;
+    }
+
+    setCorrectionModal(null);
   };
 
   if (fetching) {
@@ -575,7 +873,7 @@ export default function SetupExpertProfilePage() {
             <span className="material-symbols-outlined mb-3 block text-5xl text-[#00F0FF]">
               hourglass_empty
             </span>
-            Loading expert profile form...
+            Loading profile form...
           </div>
         </div>
       </SetupOnlyLayout>
@@ -598,9 +896,10 @@ export default function SetupExpertProfilePage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Các ô có dấu <span className="font-bold text-red-400">*</span> là
-              bắt buộc. Link chứng chỉ nên là link public, mở được, bắt đầu bằng
-              https://
+              Fields marked with{" "}
+              <span className="font-bold text-red-400">*</span> are required.
+              For profile links, please provide at least one public link.
+              Your draft is saved automatically.
             </p>
           </div>
 
@@ -608,27 +907,32 @@ export default function SetupExpertProfilePage() {
             {isEditPage && (
               <AlertBox
                 type="warning"
-                title="Bạn đang sửa Expert Profile"
-                message="Khi lưu lại, hệ thống sẽ gọi API resubmit và kiểm tra lại chứng chỉ."
+                title="Editing mode"
+                message="Update your information and submit again for review."
               />
             )}
 
             {notice && (
-              <AlertBox type="info" title="Đang xử lý" message={notice} />
+              <AlertBox type="info" title="Processing" message={notice} />
             )}
 
-            {submitResult && <SubmitResultBox result={submitResult} />}
+            {submitResult && (
+              <SubmitResultBox
+                result={submitResult}
+                onAction={(path) => navigate(path, { replace: true })}
+              />
+            )}
 
             {generalError && !submitResult && (
               <AlertBox
                 type="error"
-                title="Có lỗi trong form"
+                title="Please review your form"
                 message={generalError}
               />
             )}
 
             <div className="mb-8">
-              <RequiredLabel text="Avatar" required={false} />
+              <RequiredLabel text="Avatar" required />
 
               <input
                 ref={avatarInputRef}
@@ -642,7 +946,8 @@ export default function SetupExpertProfilePage() {
                 <button
                   type="button"
                   onClick={handleAvatarClick}
-                  className="group flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10 transition hover:border-cyan-300 hover:bg-cyan-400/20"
+                  disabled={imageUploading}
+                  className="group flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10 transition hover:border-cyan-300 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {avatarPreview ? (
                     <img
@@ -662,20 +967,28 @@ export default function SetupExpertProfilePage() {
                   )}
                 </button>
 
-                {avatarPreview && (
-                  <button
-                    type="button"
-                    onClick={handleRemoveAvatar}
-                    className="w-fit rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white"
-                  >
-                    Remove Image
-                  </button>
-                )}
+                <div className="flex flex-col gap-3">
+                  {imageUploading && (
+                    <p className="text-sm font-semibold text-cyan-300">
+                      Uploading avatar...
+                    </p>
+                  )}
+
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveAvatar}
+                      disabled={imageUploading}
+                      className="w-fit rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Remove Image
+                    </button>
+                  )}
+                </div>
               </div>
 
               <p className="mt-2 text-xs text-gray-500">
-                Không bắt buộc. Ảnh chỉ dùng để xem trước trên giao diện, không
-                gửi lên backend.
+                Upload a clear profile image. Maximum size: 2MB.
               </p>
 
               <FieldError message={fieldErrors.avatarUrl} />
@@ -702,7 +1015,7 @@ export default function SetupExpertProfilePage() {
                   value={formData.bio}
                   onChange={handleChange}
                   rows="5"
-                  placeholder="Introduce your experience, skills, and what you can help clients build..."
+                  placeholder="Introduce your experience, skills, and what you can help clients build."
                   className={`${getInputClass("bio")} resize-none`}
                 />
                 <FieldError message={fieldErrors.bio} />
@@ -814,6 +1127,11 @@ export default function SetupExpertProfilePage() {
                   className={getInputClass("gitHubUrl")}
                 />
                 <FieldError message={fieldErrors.gitHubUrl} />
+
+                <p className="mt-2 text-xs text-gray-500">
+                  Please provide at least one public link: Portfolio, LinkedIn,
+                  or GitHub.
+                </p>
               </div>
 
               <div className="md:col-span-2">
@@ -843,8 +1161,7 @@ export default function SetupExpertProfilePage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Không bắt buộc. Nhưng nếu nhập certificate name thì phải có
-                    certificate URL hợp lệ.
+                    Add at least one public certificate link for review.
                   </p>
                 </div>
 
@@ -879,10 +1196,7 @@ export default function SetupExpertProfilePage() {
 
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                       <div>
-                        <RequiredLabel
-                          text="Certificate Name"
-                          required={false}
-                        />
+                        <RequiredLabel text="Certificate Name" required />
                         <input
                           type="text"
                           name="certificateName"
@@ -890,7 +1204,7 @@ export default function SetupExpertProfilePage() {
                           onChange={(event) =>
                             handleCertificateChange(index, event)
                           }
-                          placeholder="Java Servlet Development: From Basics to Real-World Projects"
+                          placeholder="Java Servlet Development"
                           className={getInputClass(
                             `certificate-${index}-certificateName`
                           )}
@@ -903,7 +1217,7 @@ export default function SetupExpertProfilePage() {
                       </div>
 
                       <div>
-                        <RequiredLabel text="Issuer" required={false} />
+                        <RequiredLabel text="Issuer" required />
                         <input
                           type="text"
                           name="certificateIssuer"
@@ -912,15 +1226,21 @@ export default function SetupExpertProfilePage() {
                             handleCertificateChange(index, event)
                           }
                           placeholder="Coursera"
-                          className={inputStyle}
+                          className={getInputClass(
+                            `certificate-${index}-certificateIssuer`
+                          )}
+                        />
+                        <FieldError
+                          message={
+                            fieldErrors[
+                            `certificate-${index}-certificateIssuer`
+                            ]
+                          }
                         />
                       </div>
 
                       <div>
-                        <RequiredLabel
-                          text="Certificate URL"
-                          required={false}
-                        />
+                        <RequiredLabel text="Certificate URL" required />
                         <input
                           type="text"
                           name="certificateUrl"
@@ -941,7 +1261,7 @@ export default function SetupExpertProfilePage() {
                       </div>
 
                       <div>
-                        <RequiredLabel text="Issued At" required={false} />
+                        <RequiredLabel text="Issued At" required />
                         <input
                           type="date"
                           name="issuedAt"
@@ -949,7 +1269,12 @@ export default function SetupExpertProfilePage() {
                           onChange={(event) =>
                             handleCertificateChange(index, event)
                           }
-                          className={inputStyle}
+                          className={getInputClass(
+                            `certificate-${index}-issuedAt`
+                          )}
+                        />
+                        <FieldError
+                          message={fieldErrors[`certificate-${index}-issuedAt`]}
                         />
                       </div>
                     </div>
@@ -971,19 +1296,30 @@ export default function SetupExpertProfilePage() {
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || imageUploading}
                 className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 shadow-[0_0_20px_rgba(0,240,255,0.15)] transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading
-                  ? "Checking certificate links..."
-                  : isEditPage
-                  ? "Resubmit Profile"
-                  : "Complete Profile"}
+                  ? "Submitting profile..."
+                  : imageUploading
+                    ? "Uploading avatar..."
+                    : isEditPage
+                      ? "Resubmit Profile"
+                      : "Complete Profile"}
               </button>
             </div>
           </form>
         </div>
       </div>
+
+      {correctionModal && (
+        <CorrectionModal
+          result={correctionModal}
+          isEditPage={isEditPage}
+          onClose={() => setCorrectionModal(null)}
+          onPrimary={handleCorrectionPrimaryAction}
+        />
+      )}
     </SetupOnlyLayout>
   );
 }
@@ -1053,9 +1389,8 @@ function AlertBox({ type, title, message }) {
 
   return (
     <div
-      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${
-        styleMap[type] || styleMap.info
-      }`}
+      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${styleMap[type] || styleMap.info
+        }`}
     >
       <div className="flex gap-3">
         <span className="material-symbols-outlined text-[22px]">
@@ -1071,7 +1406,7 @@ function AlertBox({ type, title, message }) {
   );
 }
 
-function SubmitResultBox({ result }) {
+function SubmitResultBox({ result, onAction }) {
   const type = result?.type || "info";
 
   const styleMap = {
@@ -1094,9 +1429,8 @@ function SubmitResultBox({ result }) {
 
   return (
     <div
-      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${
-        styleMap[type] || styleMap.info
-      }`}
+      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${styleMap[type] || styleMap.info
+        }`}
     >
       <div className="flex gap-3">
         <span className="material-symbols-outlined text-[24px]">
@@ -1116,7 +1450,7 @@ function SubmitResultBox({ result }) {
 
           {suggestions.length > 0 && (
             <div className="mt-4 rounded-lg bg-black/20 p-3">
-              <p className="mb-2 font-bold">Bạn nên làm gì?</p>
+              <p className="mb-2 font-bold">Suggested actions</p>
 
               <ul className="list-disc space-y-1 pl-5">
                 {suggestions.map((item, index) => (
@@ -1126,11 +1460,119 @@ function SubmitResultBox({ result }) {
             </div>
           )}
 
+          {result.actionPath && result.primaryLabel && (
+            <button
+              type="button"
+              onClick={() => onAction(result.actionPath)}
+              className="mt-4 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+            >
+              {result.primaryLabel}
+            </button>
+          )}
+
           {result.shouldRedirect && (
             <p className="mt-3 text-xs font-semibold opacity-80">
-              Đang chuyển về Expert Dashboard...
+              Redirecting to Expert Dashboard...
             </p>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CorrectionModal({ result, isEditPage, onClose, onPrimary }) {
+  const suggestions = Array.isArray(result.suggestions)
+    ? result.suggestions
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-yellow-400/30 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div className="flex gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yellow-400/10 text-yellow-300">
+              <span className="material-symbols-outlined text-3xl">
+                rule
+              </span>
+            </div>
+
+            <div>
+              <p className="text-lg font-extrabold text-white">
+                Profile needs revision
+              </p>
+
+              <p className="mt-1 text-sm leading-6 text-gray-400">
+                {isEditPage
+                  ? "Your updated profile still needs a few changes before review."
+                  : "Your profile was saved, but it needs a few changes before it can be approved."}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl p-2 text-gray-500 transition hover:bg-white/10 hover:text-white"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+          <p className="text-sm font-bold text-yellow-200">
+            What happened?
+          </p>
+
+          <p className="mt-2 text-sm leading-6 text-gray-300">
+            {result.message}
+          </p>
+
+          {result.status && (
+            <p className="mt-3 text-xs font-bold uppercase tracking-wider text-yellow-300/80">
+              Status: {result.status}
+            </p>
+          )}
+        </div>
+
+        {suggestions.length > 0 && (
+          <div className="mt-5">
+            <p className="mb-3 text-sm font-bold text-white">
+              Please check these items:
+            </p>
+
+            <ul className="space-y-2">
+              {suggestions.map((item, index) => (
+                <li
+                  key={index}
+                  className="flex gap-2 rounded-xl bg-black/20 px-3 py-2 text-sm text-gray-300"
+                >
+                  <span className="material-symbols-outlined mt-[1px] text-[18px] text-yellow-300">
+                    check_circle
+                  </span>
+                  <span>{String(item)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
+          >
+            Stay here
+          </button>
+
+          <button
+            type="button"
+            onClick={onPrimary}
+            className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          >
+            {result.primaryLabel || "Continue Editing"}
+          </button>
         </div>
       </div>
     </div>
