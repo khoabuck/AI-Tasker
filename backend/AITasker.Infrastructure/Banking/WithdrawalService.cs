@@ -10,10 +10,14 @@ namespace AITasker.Infrastructure.Banking
     public class WithdrawalService : IWithdrawalService
     {
         private readonly AITaskerDbContext _context;
+        private readonly INotificationService _notificationService;
 
-        public WithdrawalService(AITaskerDbContext context)
+        public WithdrawalService(
+            AITaskerDbContext context,
+            INotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         public async Task<WithdrawalResponse> CreateWithdrawalRequestAsync(
@@ -62,6 +66,13 @@ namespace AITasker.Infrastructure.Banking
 
             _context.WithdrawalRequests.Add(withdrawalRequest);
             await _context.SaveChangesAsync();
+
+            await _notificationService.CreateNotificationAsync(
+                userId,
+                "Withdrawal request submitted",
+                $"Your withdrawal request of {request.Amount:N0} VND has been submitted and is waiting for admin approval.",
+                "WITHDRAWAL_REQUESTED"
+            );
 
             return await BuildResponseAsync(withdrawalRequest.WithdrawalRequestId);
         }
@@ -176,6 +187,13 @@ namespace AITasker.Infrastructure.Banking
 
                 await dbTransaction.CommitAsync();
 
+                await _notificationService.CreateNotificationAsync(
+                    withdrawalRequest.UserId,
+                    "Withdrawal approved",
+                    $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been approved.",
+                    "WITHDRAWAL_APPROVED"
+                );
+
                 return await BuildResponseAsync(withdrawalRequestId);
             }
             catch
@@ -207,6 +225,15 @@ namespace AITasker.Infrastructure.Banking
             withdrawalRequest.ProcessedByAdminId = adminId;
 
             await _context.SaveChangesAsync();
+
+            await _notificationService.CreateNotificationAsync(
+                withdrawalRequest.UserId,
+                "Withdrawal rejected",
+                string.IsNullOrWhiteSpace(withdrawalRequest.AdminNote)
+                    ? $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been rejected."
+                    : $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been rejected. Reason: {withdrawalRequest.AdminNote}",
+                "WITHDRAWAL_REJECTED"
+            );
 
             return await BuildResponseAsync(withdrawalRequestId);
         }
