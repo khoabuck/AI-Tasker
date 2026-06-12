@@ -214,8 +214,7 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.IProposalService, AIT
 builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 
-
-builder.Services.AddSingleton<AITasker.Infrastructure.Banking.VNPayService>();
+builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
 
 builder.Services.AddHttpClient();
 
