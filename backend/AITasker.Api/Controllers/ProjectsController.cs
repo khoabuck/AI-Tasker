@@ -30,29 +30,34 @@ namespace AITasker.Api.Controllers
             {
                 var currentUserId = GetCurrentUserId();
 
-                var result = await _projectService.InitializeProjectWithMilestonesAsync(contractId, milestones);
+                var result =
+                    await _projectService.InitializeProjectWithMilestonesAsync(
+                        currentUserId,
+                        contractId,
+                        milestones
+                    );
 
-                return Ok(new 
-                { 
-                    Success = true,
-                    Message = "Project and milestones initialized successfully with Escrow configuration.",
-                    Data = result 
+                return Ok(new
+                {
+                    success = true,
+                    message = "Project and milestones initialized successfully.",
+                    data = result
                 });
             }
             catch (InvalidOperationException ex)
             {
-                return BadRequest(new 
-                { 
-                    Success = false, 
-                    Message = ex.Message 
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (Exception)
             {
-                return StatusCode(500, new 
-                { 
-                    Success = false, 
-                    Message = "An internal error occurred while processing your project initialization request." 
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An internal error occurred while initializing project."
                 });
             }
         }
@@ -65,7 +70,9 @@ namespace AITasker.Api.Controllers
 
             if (!int.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException("Authorization failed: Invalid or missing user token.");
+                throw new InvalidOperationException(
+                    "Authorization failed: Invalid or missing user token."
+                );
             }
 
             return userId;

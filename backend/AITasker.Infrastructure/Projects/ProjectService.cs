@@ -19,51 +19,58 @@ namespace AITasker.Infrastructure.Projects
             _context = context;
         }
 
-        public async Task<bool> InitializeProjectWithMilestonesAsync(int contractId, List<CreateMilestoneRequest> requests)
+        public async Task<bool> InitializeProjectWithMilestonesAsync(
+            int currentUserId,
+            int contractId,
+            List<CreateMilestoneRequest> requests)
         {
             if (requests == null || !requests.Any())
-            {
-                throw new InvalidOperationException("Initialization aborted: At least one milestone is required to start a project.");
-            }
+                throw new InvalidOperationException("Initialization aborted: At least one milestone is required.");
 
             foreach (var r in requests)
             {
                 if (string.IsNullOrWhiteSpace(r.Title))
-                {
-                    throw new InvalidOperationException("Milestone validation failed: Title cannot be left blank.");
-                }
+                    throw new InvalidOperationException("Milestone title cannot be blank.");
 
                 if (r.Amount <= 0)
-                {
-                    throw new InvalidOperationException($"Milestone validation failed: Amount for '{r.Title}' must be greater than 0.");
-                }
+                    throw new InvalidOperationException($"Milestone amount for '{r.Title}' must be greater than 0.");
             }
 
-            var contract = await _context.ProjectContracts.FirstOrDefaultAsync(c => c.ContractId == contractId);
+            var contract = await _context.ProjectContracts
+                .FirstOrDefaultAsync(c => c.ContractId == contractId);
+
             if (contract == null || contract.Status != "CONFIRMED")
-            {
-                throw new InvalidOperationException("Project generation requires a successfully signed and confirmed baseline contract.");
-            }
+                throw new InvalidOperationException("Project generation requires a confirmed contract.");
 
-            var projectExists = await _context.Projects.AnyAsync(p => p.ContractId == contractId);
+            var clientProfile = await _context.ClientProfiles
+                .FirstOrDefaultAsync(c =>
+                    c.ClientProfileId == contract.ClientId &&
+                    c.UserId == currentUserId);
+
+            if (clientProfile == null)
+                throw new InvalidOperationException("Only the contract client can initialize this project.");
+
+            var projectExists = await _context.Projects
+                .AnyAsync(p => p.ContractId == contractId);
+
             if (projectExists)
-            {
-                throw new InvalidOperationException($"A project has already been initialized for Contract Reference #{contractId}.");
-            }
+                throw new InvalidOperationException("Project already exists for this contract.");
 
-            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == contract.ClientId);
+            var wallet = await _context.Wallets
+                .FirstOrDefaultAsync(w => w.UserId == clientProfile.UserId);
+
             if (wallet == null || wallet.LockedBalance < contract.TotalClientPayment)
-            {
-                throw new InvalidOperationException("Initialization aborted: Client milestone funds have not been locked inside the Escrow wallet system.");
-            }
+                throw new InvalidOperationException("Client milestone funds have not been locked in escrow.");
 
-            decimal totalMilestonesAmount = requests.Sum(r => r.Amount);
+            var totalMilestonesAmount = requests.Sum(r => r.Amount);
+
             if (totalMilestonesAmount != contract.FinalPrice)
-            {
-                throw new InvalidOperationException($"Budget mismatch: The sum of milestone amounts (${totalMilestonesAmount}) must exactly equal the contract final price (${contract.FinalPrice}).");
-            }
+                throw new InvalidOperationException(
+                    $"Budget mismatch: milestone total ({totalMilestonesAmount}) must equal contract final price ({contract.FinalPrice})."
+                );
 
             using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
             try
             {
                 var project = new Project
@@ -93,17 +100,19 @@ namespace AITasker.Infrastructure.Projects
                         Status = "LOCKED",
                         CreatedAt = DateTime.UtcNow
                     };
+
                     _context.Milestones.Add(milestone);
                 }
 
                 contract.Status = "ACTIVE";
-                
+
                 var affectedRows = await _context.SaveChangesAsync();
+
                 await dbTransaction.CommitAsync();
 
                 return affectedRows > 0;
             }
-            catch (Exception)
+            catch
             {
                 await dbTransaction.RollbackAsync();
                 throw;
