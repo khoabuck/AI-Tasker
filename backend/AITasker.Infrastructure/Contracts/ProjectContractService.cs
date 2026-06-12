@@ -12,79 +12,223 @@ namespace AITasker.Infrastructure.Contracts
     {
         private readonly AITaskerDbContext _context;
 
-        public ProjectContractService(AITaskerDbContext context)
+        public ProjectContractService(
+            AITaskerDbContext context)
         {
             _context = context;
         }
 
-        public async Task<bool> CreateDraftContractAsync(CreateContractRequest request)
+        public async Task<bool> CreateDraftContractAsync(
+            CreateContractRequest request)
         {
-            var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.ProposalId == request.ProposalId);
-            if (proposal == null || proposal.Status != "ACCEPTED")
-                throw new InvalidOperationException("A contract can only be drafted from an ACCEPTED proposal.");
+            ValidateCreateRequest(request);
 
-            var job = await _context.JobPostings.FirstOrDefaultAsync(j => j.JobPostingId == proposal.JobId);
+            var proposal = await _context.Proposals
+                .FirstOrDefaultAsync(
+                    p => p.ProposalId == request.ProposalId);
+
+            if (proposal == null)
+            {
+                throw new InvalidOperationException(
+                    "Proposal not found.");
+            }
+
+            if (proposal.Status != "ACCEPTED")
+            {
+                throw new InvalidOperationException(
+                    "Only ACCEPTED proposals can create contracts.");
+            }
+
+            var existingContract =
+                await _context.ProjectContracts
+                    .AnyAsync(
+                        c => c.ProposalId == request.ProposalId);
+
+            if (existingContract)
+            {
+                throw new InvalidOperationException(
+                    "Contract already exists for this proposal.");
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(
+                    j => j.JobPostingId == proposal.JobId);
+
             if (job == null)
-                throw new InvalidOperationException("Reference job metadata is unavailable.");
+            {
+                throw new InvalidOperationException(
+                    "Job posting not found.");
+            }
 
-            // ─── BUSINESS CALCULATION ───
-            var clientProfile = await _context.ClientProfiles.FirstOrDefaultAsync(c => c.ClientProfileId == job.ClientProfileId);
-            decimal rate = (clientProfile?.ClientType == "BUSINESS") ? 10.00m : 5.00m;
+            var clientProfile = await _context.ClientProfiles
+                .FirstOrDefaultAsync(
+                    c => c.ClientProfileId == job.ClientProfileId);
 
-            decimal feeAmount = request.FinalPrice * (rate / 100m);
-            decimal totalPayment = request.FinalPrice + feeAmount;
+            decimal rate = 5m;
 
-            // ─── EXECUTION ───
+            if (clientProfile != null
+                && clientProfile.ClientType == "BUSINESS")
+            {
+                rate = 10m;
+            }
+
+            decimal feeAmount =
+                request.FinalPrice * rate / 100m;
+
+            decimal totalPayment =
+                request.FinalPrice + feeAmount;
+
             var contract = new ProjectContract
             {
-                ProposalId = request.ProposalId,
+                ProposalId = proposal.ProposalId,
                 ClientId = job.ClientProfileId,
                 ExpertId = proposal.ExpertId,
+
                 ProjectScope = request.ProjectScope,
+
                 FinalPrice = request.FinalPrice,
+
                 PlatformFeeRate = rate,
+
                 PlatformFeeAmount = feeAmount,
+
                 TotalClientPayment = totalPayment,
-                FinalTimelineDays = request.FinalTimelineDays,
-                Deliverables = request.Deliverables,
-                AcceptanceCriteria = request.AcceptanceCriteria,
-                RevisionLimit = request.RevisionLimit,
-                PaymentTerms = request.PaymentTerms,
+
+                FinalTimelineDays =
+                    request.FinalTimelineDays,
+
+                Deliverables =
+                    request.Deliverables,
+
+                AcceptanceCriteria =
+                    request.AcceptanceCriteria,
+
+                RevisionLimit =
+                    request.RevisionLimit,
+
+                PaymentTerms =
+                    request.PaymentTerms,
+
                 ContractSource = "PROPOSAL",
+
                 Status = "DRAFT",
+
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.ProjectContracts.Add(contract);
-            var affectedRows = await _context.SaveChangesAsync();
+
+            var affectedRows =
+                await _context.SaveChangesAsync();
+
             return affectedRows > 0;
         }
 
-        public async Task<bool> ConfirmContractAsync(int contractId, int userId, string userRole)
+        public async Task<bool> ConfirmContractAsync(
+            int contractId,
+            int userId,
+            string userRole)
         {
-            var contract = await _context.ProjectContracts.FirstOrDefaultAsync(c => c.ContractId == contractId);
+            var contract =
+                await _context.ProjectContracts
+                    .FirstOrDefaultAsync(
+                        c => c.ContractId == contractId);
+
             if (contract == null)
-                throw new InvalidOperationException("Contract was not found.");
+            {
+                throw new InvalidOperationException(
+                    "Contract not found.");
+            }
 
             if (contract.Status != "DRAFT")
-                throw new InvalidOperationException("This contract cannot be modified as it is no longer in DRAFT status.");
+            {
+                throw new InvalidOperationException(
+                    "Contract is no longer editable.");
+            }
 
-            // ─── SIGNING LOGIC ───
-            if (userRole.ToUpper() == "CLIENT" && contract.ClientId == userId) 
+            userRole = userRole.ToUpper();
+
+            if (userRole == "CLIENT")
+            {
                 contract.ClientConfirmed = true;
-            else if (userRole.ToUpper() == "EXPERT" && contract.ExpertId == userId) 
+            }
+            else if (userRole == "EXPERT")
+            {
                 contract.ExpertConfirmed = true;
-            else 
-                throw new UnauthorizedAccessException("User identification context mismatch against contract signees.");
+            }
+            else
+            {
+                throw new UnauthorizedAccessException(
+                    "Invalid role.");
+            }
 
-            if (contract.ClientConfirmed && contract.ExpertConfirmed)
+            if (contract.ClientConfirmed
+                && contract.ExpertConfirmed)
             {
                 contract.Status = "CONFIRMED";
                 contract.ConfirmedAt = DateTime.UtcNow;
             }
 
-            var affectedRows = await _context.SaveChangesAsync();
+            var affectedRows =
+                await _context.SaveChangesAsync();
+
             return affectedRows > 0;
+        }
+
+        private static void ValidateCreateRequest(
+            CreateContractRequest request)
+        {
+            if (request.ProposalId <= 0)
+            {
+                throw new InvalidOperationException(
+                    "ProposalId is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    request.ProjectScope))
+            {
+                throw new InvalidOperationException(
+                    "Project scope is required.");
+            }
+
+            if (request.FinalPrice <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Final price must be greater than 0.");
+            }
+
+            if (request.FinalTimelineDays <= 0)
+            {
+                throw new InvalidOperationException(
+                    "Timeline must be greater than 0.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    request.Deliverables))
+            {
+                throw new InvalidOperationException(
+                    "Deliverables are required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    request.AcceptanceCriteria))
+            {
+                throw new InvalidOperationException(
+                    "Acceptance criteria are required.");
+            }
+
+            if (request.RevisionLimit < 0)
+            {
+                throw new InvalidOperationException(
+                    "Revision limit cannot be negative.");
+            }
+
+            if (string.IsNullOrWhiteSpace(
+                    request.PaymentTerms))
+            {
+                throw new InvalidOperationException(
+                    "Payment terms are required.");
+            }
         }
     }
 }
