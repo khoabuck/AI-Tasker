@@ -87,7 +87,7 @@ namespace AITasker.Infrastructure.Banking
                 var txn = new Transaction
                 {
                     UserId = userId,
-                    ProjectId = 0,
+                    ProjectId = null,
                     MilestoneId = null,
                     Amount = amount,
                     Type = "Deposit",
@@ -130,7 +130,7 @@ namespace AITasker.Infrastructure.Banking
                 var txn = new Transaction
                 {
                     UserId = userId,
-                    ProjectId = 0,
+                    ProjectId = null,
                     MilestoneId = null,
                     Amount = -amount,
                     Type = "Withdraw",

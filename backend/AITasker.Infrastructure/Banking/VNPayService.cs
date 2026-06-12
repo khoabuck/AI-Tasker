@@ -192,7 +192,7 @@ namespace AITasker.Infrastructure.Banking
                 var transaction = new Transaction
                 {
                     UserId = userId,
-                    ProjectId = 0,
+                    ProjectId = null,
                     Amount = amount,
                     Type = "Deposit",
                     Status = "SUCCESS",

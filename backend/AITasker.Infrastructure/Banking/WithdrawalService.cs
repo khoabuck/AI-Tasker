@@ -161,7 +161,7 @@ namespace AITasker.Infrastructure.Banking
                 var transaction = new Transaction
                 {
                     UserId = withdrawalRequest.UserId,
-                    ProjectId = 0,
+                    ProjectId = null,
                     MilestoneId = null,
                     Amount = -withdrawalRequest.Amount,
                     Type = "Withdraw",
