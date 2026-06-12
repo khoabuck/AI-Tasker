@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
+using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
@@ -13,11 +14,16 @@ namespace AITasker.Infrastructure.Banking
     {
         private readonly IConfiguration _configuration;
         private readonly AITaskerDbContext _context;
+        private readonly INotificationService _notificationService;
 
-        public VNPayService(IConfiguration configuration, AITaskerDbContext context)
+        public VNPayService(
+            IConfiguration configuration,
+            AITaskerDbContext context,
+            INotificationService notificationService)
         {
             _configuration = configuration;
             _context = context;
+            _notificationService = notificationService;
         }
 
         public string CreatePaymentUrl(int userId, decimal amount, string ipAddress, string returnUrl)
@@ -90,8 +96,8 @@ namespace AITasker.Infrastructure.Banking
             var transactionStatus = query["vnp_TransactionStatus"].ToString();
             var txnRef = query["vnp_TxnRef"].ToString();
             var amountRaw = query["vnp_Amount"].ToString();
-            var bankTranNo = query["vnp_BankTranNo"].ToString();
-            var transactionNo = query["vnp_TransactionNo"].ToString();
+            var bankTranNo = query.ContainsKey("vnp_BankTranNo") ? query["vnp_BankTranNo"].ToString() : string.Empty;
+            var transactionNo = query.ContainsKey("vnp_TransactionNo") ? query["vnp_TransactionNo"].ToString() : string.Empty;
 
             if (string.IsNullOrWhiteSpace(txnRef))
             {
@@ -193,6 +199,7 @@ namespace AITasker.Infrastructure.Banking
                 {
                     UserId = userId,
                     ProjectId = null,
+                    MilestoneId = null,
                     Amount = amount,
                     Type = "Deposit",
                     Status = "SUCCESS",
@@ -205,6 +212,13 @@ namespace AITasker.Infrastructure.Banking
                 await _context.SaveChangesAsync();
 
                 await dbTransaction.CommitAsync();
+
+                await _notificationService.CreateNotificationAsync(
+                    userId,
+                    "Deposit successful",
+                    $"Your VNPay deposit of {amount:N0} VND was successful.",
+                    "DEPOSIT_SUCCESS"
+                );
 
                 return new VNPayDepositResult
                 {
@@ -234,9 +248,7 @@ namespace AITasker.Infrastructure.Banking
         {
             string hashSecret = _configuration["VNPay:HashSecret"] ?? "SECRET_KEY_VNPAY_DEMO";
 
-            var receivedHash = query["vnp_SecureHash"].ToString();
-
-            if (string.IsNullOrWhiteSpace(receivedHash))
+            if (!query.TryGetValue("vnp_SecureHash", out var receivedHash) || string.IsNullOrWhiteSpace(receivedHash))
                 return false;
 
             var sortedParams = new SortedDictionary<string, string>(StringComparer.Ordinal);
@@ -244,7 +256,7 @@ namespace AITasker.Infrastructure.Banking
             foreach (var item in query)
             {
                 var key = item.Key;
-                var value = item.Value.ToString();
+                var value = item.Value;
 
                 if (
                     string.IsNullOrWhiteSpace(value) ||

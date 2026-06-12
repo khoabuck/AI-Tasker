@@ -10,10 +10,14 @@ namespace AITasker.Infrastructure.Reviews
     public class ReviewService : IReviewService
     {
         private readonly AITaskerDbContext _context;
+        private readonly INotificationService _notificationService;
 
-        public ReviewService(AITaskerDbContext context)
+        public ReviewService(
+            AITaskerDbContext context,
+            INotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         public async Task<ReviewResponse> CreateProjectReviewAsync(
@@ -67,6 +71,13 @@ namespace AITasker.Infrastructure.Reviews
 
             _context.Reviews.Add(review);
             await _context.SaveChangesAsync();
+
+            await _notificationService.CreateNotificationAsync(
+                contract.ExpertId,
+                "New review received",
+                $"You received a {request.Rating}-star review for project #{project.ProjectId}.",
+                "REVIEW_RECEIVED"
+            );
 
             return await BuildReviewResponseAsync(review.ReviewId);
         }
