@@ -1,10 +1,10 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace AITasker.Infrastructure.Deliverables
 {
@@ -26,7 +26,7 @@ namespace AITasker.Infrastructure.Deliverables
 
         public async Task<Deliverable?> SubmitDeliverableAsync(
             int milestoneId,
-            int expertId,
+            int expertUserId,
             string description,
             string? fileUrl,
             string? demoUrl,
@@ -34,7 +34,7 @@ namespace AITasker.Infrastructure.Deliverables
         {
             if (string.IsNullOrWhiteSpace(fileUrl))
             {
-                return null;
+                throw new InvalidOperationException("Deliverable file URL is required.");
             }
 
             var milestone = await _context.Milestones
@@ -42,12 +42,15 @@ namespace AITasker.Infrastructure.Deliverables
 
             if (milestone == null)
             {
-                return null;
+                throw new InvalidOperationException("Milestone not found.");
             }
 
-            if (milestone.Status == "RELEASED" || milestone.Status == "DISPUTED")
+            if (milestone.Status != "LOCKED" &&
+                milestone.Status != "REVISION_REQUESTED")
             {
-                return null;
+                throw new InvalidOperationException(
+                    "Deliverable can only be submitted for locked or revision-requested milestones."
+                );
             }
 
             var project = await _context.Projects
@@ -55,15 +58,15 @@ namespace AITasker.Infrastructure.Deliverables
 
             if (project == null)
             {
-                return null;
+                throw new InvalidOperationException("Project not found.");
             }
 
             var expertProfile = await _context.ExpertProfiles
-                .FirstOrDefaultAsync(e => e.UserId == expertId);
+                .FirstOrDefaultAsync(e => e.UserId == expertUserId);
 
             if (expertProfile == null)
             {
-                return null;
+                throw new InvalidOperationException("Expert profile not found.");
             }
 
             var isAssignedExpert = await _context.ProjectContracts
@@ -73,42 +76,40 @@ namespace AITasker.Infrastructure.Deliverables
 
             if (!isAssignedExpert)
             {
-                return null;
+                throw new InvalidOperationException(
+                    "Only the assigned expert can submit deliverables for this milestone."
+                );
             }
 
-            try
+            var latestVersion = await _context.Deliverables
+                .Where(d => d.MilestoneId == milestoneId)
+                .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
+
+            var deliverable = new Deliverable
             {
-                var latestVersion =
-                    await _context.Deliverables
-                        .Where(d => d.MilestoneId == milestoneId)
-                        .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
+                MilestoneId = milestoneId,
+                ExpertId = expertProfile.ExpertProfileId,
+                VersionNumber = latestVersion + 1,
+                Description = description,
+                FileUrl = fileUrl,
+                DemoUrl = demoUrl,
+                TestResultUrl = testResultUrl,
+                Status = "SUBMITTED",
+                SubmittedAt = DateTime.UtcNow
+            };
 
-                var deliverable = new Deliverable
-                {
-                    MilestoneId = milestoneId,
-                    ExpertId = expertProfile.ExpertProfileId,
-                    VersionNumber = latestVersion + 1,
-                    Description = description,
-                    FileUrl = fileUrl,
-                    DemoUrl = demoUrl,
-                    TestResultUrl = testResultUrl,
-                    Status = "SUBMITTED",
-                    SubmittedAt = DateTime.UtcNow
-                };
+            milestone.Status = "SUBMITTED";
 
-                _context.Deliverables.Add(deliverable);
+            _context.Deliverables.Add(deliverable);
 
-                await _context.SaveChangesAsync();
+            await _context.SaveChangesAsync();
 
-                return deliverable;
-            }
-            catch
-            {
-                return null;
-            }
+            return deliverable;
         }
 
-        public async Task<bool> ApproveDeliverableAsync(int deliverableId)
+        public async Task<bool> ApproveDeliverableAsync(
+            int deliverableId,
+            int clientUserId)
         {
             using var transaction =
                 await _context.Database.BeginTransactionAsync();
@@ -120,12 +121,51 @@ namespace AITasker.Infrastructure.Deliverables
 
                 if (deliverable == null)
                 {
-                    return false;
+                    throw new InvalidOperationException("Deliverable not found.");
                 }
 
                 if (deliverable.Status != "SUBMITTED")
                 {
-                    return false;
+                    throw new InvalidOperationException(
+                        "Only submitted deliverables can be approved."
+                    );
+                }
+
+                var milestone = await _context.Milestones
+                    .FirstOrDefaultAsync(m =>
+                        m.MilestoneId == deliverable.MilestoneId);
+
+                if (milestone == null)
+                {
+                    throw new InvalidOperationException("Milestone not found.");
+                }
+
+                var project = await _context.Projects
+                    .FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
+
+                if (project == null)
+                {
+                    throw new InvalidOperationException("Project not found.");
+                }
+
+                var contract = await _context.ProjectContracts
+                    .FirstOrDefaultAsync(c => c.ContractId == project.ContractId);
+
+                if (contract == null)
+                {
+                    throw new InvalidOperationException("Related contract not found.");
+                }
+
+                var clientProfile = await _context.ClientProfiles
+                    .FirstOrDefaultAsync(c =>
+                        c.ClientProfileId == contract.ClientId &&
+                        c.UserId == clientUserId);
+
+                if (clientProfile == null)
+                {
+                    throw new InvalidOperationException(
+                        "Only the contract client can approve this deliverable."
+                    );
                 }
 
                 var expertProfile = await _context.ExpertProfiles
@@ -134,10 +174,11 @@ namespace AITasker.Infrastructure.Deliverables
 
                 if (expertProfile == null)
                 {
-                    return false;
+                    throw new InvalidOperationException("Expert profile not found.");
                 }
 
                 deliverable.Status = "APPROVED";
+                milestone.Status = "RELEASED";
 
                 var releaseSuccess =
                     await _walletService.ReleaseEscrowAsync(
@@ -147,8 +188,9 @@ namespace AITasker.Infrastructure.Deliverables
 
                 if (!releaseSuccess)
                 {
-                    await transaction.RollbackAsync();
-                    return false;
+                    throw new InvalidOperationException(
+                        "Failed to release escrow funds."
+                    );
                 }
 
                 await _notificationService.CreateNotificationAsync(
@@ -167,17 +209,18 @@ namespace AITasker.Infrastructure.Deliverables
             catch
             {
                 await transaction.RollbackAsync();
-                return false;
+                throw;
             }
         }
 
         public async Task<bool> RequestRevisionAsync(
             int deliverableId,
+            int clientUserId,
             string feedback)
         {
             if (string.IsNullOrWhiteSpace(feedback))
             {
-                return false;
+                throw new InvalidOperationException("Revision feedback is required.");
             }
 
             using var transaction =
@@ -190,12 +233,51 @@ namespace AITasker.Infrastructure.Deliverables
 
                 if (deliverable == null)
                 {
-                    return false;
+                    throw new InvalidOperationException("Deliverable not found.");
                 }
 
                 if (deliverable.Status != "SUBMITTED")
                 {
-                    return false;
+                    throw new InvalidOperationException(
+                        "Only submitted deliverables can be sent back for revision."
+                    );
+                }
+
+                var milestone = await _context.Milestones
+                    .FirstOrDefaultAsync(m =>
+                        m.MilestoneId == deliverable.MilestoneId);
+
+                if (milestone == null)
+                {
+                    throw new InvalidOperationException("Milestone not found.");
+                }
+
+                var project = await _context.Projects
+                    .FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
+
+                if (project == null)
+                {
+                    throw new InvalidOperationException("Project not found.");
+                }
+
+                var contract = await _context.ProjectContracts
+                    .FirstOrDefaultAsync(c => c.ContractId == project.ContractId);
+
+                if (contract == null)
+                {
+                    throw new InvalidOperationException("Related contract not found.");
+                }
+
+                var clientProfile = await _context.ClientProfiles
+                    .FirstOrDefaultAsync(c =>
+                        c.ClientProfileId == contract.ClientId &&
+                        c.UserId == clientUserId);
+
+                if (clientProfile == null)
+                {
+                    throw new InvalidOperationException(
+                        "Only the contract client can request revision."
+                    );
                 }
 
                 var expertProfile = await _context.ExpertProfiles
@@ -204,11 +286,12 @@ namespace AITasker.Infrastructure.Deliverables
 
                 if (expertProfile == null)
                 {
-                    return false;
+                    throw new InvalidOperationException("Expert profile not found.");
                 }
 
                 deliverable.Status = "REVISION_REQUESTED";
                 deliverable.ClientFeedback = feedback;
+                milestone.Status = "REVISION_REQUESTED";
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
@@ -226,7 +309,7 @@ namespace AITasker.Infrastructure.Deliverables
             catch
             {
                 await transaction.RollbackAsync();
-                return false;
+                throw;
             }
         }
     }
