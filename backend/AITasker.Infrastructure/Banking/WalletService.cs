@@ -37,7 +37,6 @@ namespace AITasker.Infrastructure.Banking
                     UserId = userId,
                     AvailableBalance = 0m,
                     LockedBalance = 0m,
-                    CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow
                 };
 

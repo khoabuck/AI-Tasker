@@ -1,15 +1,15 @@
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using AITasker.Application.Interfaces;
 
 namespace AITasker.Api.Controllers
 {
-    [Authorize]
     [ApiController]
-    [Route("api/escrows")]
+    [Route("api/escrow")]
+    [Authorize]
     public class EscrowController : ControllerBase
     {
         private readonly IWalletService _walletService;
@@ -19,83 +19,133 @@ namespace AITasker.Api.Controllers
             _walletService = walletService;
         }
 
+        [HttpPost("hold")]
+        public async Task<IActionResult> HoldEscrow(
+            [FromQuery] int clientId,
+            [FromQuery] int milestoneId,
+            [FromQuery] decimal amount)
+        {
+            try
+            {
+                var result = await _walletService.HoldEscrowAsync(
+                    clientId,
+                    milestoneId,
+                    amount
+                );
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Escrow funds held successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An internal error occurred while holding escrow funds."
+                });
+            }
+        }
+
+        [HttpPost("release")]
+        public async Task<IActionResult> ReleaseEscrow(
+            [FromQuery] int milestoneId)
+        {
+            try
+            {
+                var expertUserId = GetCurrentUserId();
+
+                var result = await _walletService.ReleaseEscrowAsync(
+                    milestoneId,
+                    expertUserId
+                );
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Escrow funds released successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An internal error occurred while releasing escrow funds."
+                });
+            }
+        }
+
+        [HttpPost("refund")]
+        public async Task<IActionResult> RefundEscrow(
+            [FromQuery] int milestoneId)
+        {
+            try
+            {
+                var result = await _walletService.RefundEscrowAsync(
+                    milestoneId
+                );
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Escrow funds refunded successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (Exception)
+            {
+                return StatusCode(500, new
+                {
+                    success = false,
+                    message = "An internal error occurred while refunding escrow funds."
+                });
+            }
+        }
+
         private int GetCurrentUserId()
         {
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+            var userIdValue =
+                User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("userId")
+                ?? User.FindFirstValue("sub");
+
+            if (!int.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException("Unauthorized or invalid user token structure.");
+                throw new InvalidOperationException(
+                    "Authorization failed: Invalid token."
+                );
             }
+
             return userId;
-        }
-
-        [HttpPost("milestones/{milestoneId}/lock")]
-        public async Task<IActionResult> LockFunds(string milestoneId, [FromQuery] decimal amount)
-        {
-            try
-            {
-                int clientId = GetCurrentUserId();
-                if (amount <= 0) return BadRequest(new { message = "Lock amount must be greater than 0." });
-                if (string.IsNullOrEmpty(milestoneId)) return BadRequest(new { message = "Milestone ID is required." });
-
-                var success = await _walletService.HoldEscrowAsync(clientId, amount, milestoneId);
-                if (!success) return BadRequest(new { message = "Failed to lock escrow funds. Check wallet balance." });
-
-                return Ok(new { success = true, message = $"Successfully locked {amount} VND for Milestone ID {milestoneId}." });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("milestones/{milestoneId}/release")]
-        public async Task<IActionResult> ReleaseFunds(string milestoneId, [FromQuery] int expertId)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(milestoneId)) return BadRequest(new { message = "Milestone ID is required." });
-
-                var success = await _walletService.ReleaseEscrowAsync(milestoneId, expertId);
-                if (!success) return BadRequest(new { message = "Failed to release escrow funds. Invalid reference or already processed." });
-
-                return Ok(new { success = true, message = $"Successfully released escrow funds for Milestone ID {milestoneId} to Expert ID {expertId}." });
-            }
-            catch (Exception ex) {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("milestones/{milestoneId}/refund")]
-        public async Task<IActionResult> RefundFunds(string milestoneId, [FromQuery] decimal amount)
-        {
-            try
-            {
-                int clientId = GetCurrentUserId();
-                if (amount <= 0) return BadRequest(new { message = "Refund amount must be greater than 0." });
-
-                var success = await _walletService.DepositAsync(clientId, amount, $"[Escrow Refund] Returned funds from cancelled Milestone ID {milestoneId}", milestoneId);
-                if (!success) return BadRequest(new { message = "Failed to process escrow refund." });
-
-                return Ok(new { success = true, message = $"Successfully refunded {amount} VND for Milestone ID {milestoneId} back to your wallet." });
-            }
-            catch (Exception ex) {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("milestones/{milestoneId}/freeze")]
-        public async Task<IActionResult> FreezeFunds(string milestoneId)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(milestoneId)) return BadRequest(new { message = "Milestone ID is required." });
-                
-                return Ok(new { success = true, message = $"Escrow funds for Milestone ID {milestoneId} have been strictly FROZEN due to an open dispute." });
-            }
-            catch (Exception ex) {
-                return BadRequest(new { message = ex.Message });
-            }
         }
     }
 }
