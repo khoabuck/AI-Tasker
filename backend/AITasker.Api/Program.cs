@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using AITasker.Infrastructure.Reviews;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -282,6 +283,8 @@ builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(clie
 {
     client.Timeout = TimeSpan.FromSeconds(12);
 });
+
+builder.Services.AddScoped<IReviewService, ReviewService>();
 
 // =========================
 // App pipeline

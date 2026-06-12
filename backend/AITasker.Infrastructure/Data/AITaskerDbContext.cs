@@ -48,6 +48,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<Dispute> Disputes { get; set; }
 
+    public DbSet<Review> Reviews { get; set; }
+
     public DbSet<Notification> Notifications { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -715,6 +717,38 @@ public class AITaskerDbContext : DbContext
             entity.ToTable("Milestones");
             entity.HasKey(e => e.MilestoneId);
             entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+        });
+
+        // =========================
+        // Review
+        // =========================
+        modelBuilder.Entity<Review>(entity =>
+        {
+            entity.ToTable("Reviews");
+            entity.HasKey(r => r.ReviewId);
+
+            entity.Property(r => r.Rating).IsRequired();
+            entity.Property(r => r.Comment).HasMaxLength(1000);
+            entity.Property(r => r.CreatedAt).IsRequired();
+
+            entity.HasIndex(r => r.ProjectId).IsUnique();
+            entity.HasIndex(r => r.ExpertId);
+            entity.HasIndex(r => r.ClientId);
+
+            entity.HasOne(r => r.Project)
+                .WithMany()
+                .HasForeignKey(r => r.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Client)
+                .WithMany()
+                .HasForeignKey(r => r.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Expert)
+                .WithMany()
+                .HasForeignKey(r => r.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }
