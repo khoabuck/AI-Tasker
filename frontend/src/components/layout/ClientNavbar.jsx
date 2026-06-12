@@ -2,8 +2,15 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../services/auth.service";
+import NotificationDropdown from "./NotificationDropdown";
 
 const NAV_ITEMS = [
+
+  {
+    label: "HOME",
+    to: "/client/dashboard",
+    dropdown: null,
+  },
   {
     label: "POST JOB",
     to: "/client/post-job",
@@ -17,10 +24,9 @@ const NAV_ITEMS = [
     ],
   },
   {
-    label: "PROJECTS",
-    active: true,
+    label: "JOB",
     dropdown: [
-      { icon: "list",          label: "List Projects",      to: "/client/projects" },
+      { icon: "list",          label: "List Jobs",      to: "/client/projects" },
       { icon: "chat_bubble",   label: "Messages",           to: "/client/messages" },
     ],
   },
@@ -39,7 +45,20 @@ function NavItem({ label, to, dropdown, active }) {
   if (!dropdown) {
     return (
       <li>
-        <Link to={to} className="flex items-center gap-2 h-full text-xs font-mono tracking-widest text-gray-400 hover:text-cyan-400 transition-colors">
+        <Link
+          to={to}
+          className=" relative flex items-center gap-2 h-full 
+                      text-xs font-mono tracking-widest
+                      text-gray-400 hover:text-cyan-400
+                      transition-all duration-300
+                      after:absolute after:-bottom-4 after:left-0
+                      after:h-[2px] after:w-0
+                      after:bg-cyan-400
+                      after:shadow-[0_0_10px_#00F0FF]
+                      after:transition-all after:duration-300
+                      hover:after:w-full
+                "
+        >
           {label}
         </Link>
       </li>
@@ -48,17 +67,54 @@ function NavItem({ label, to, dropdown, active }) {
 
   return (
     <li className="relative h-full" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button className={`flex items-center gap-2 h-full text-xs font-mono tracking-widest transition-colors ${active ? "text-white border-b-2 border-cyan-400" : "text-gray-400 hover:text-cyan-400"}`}>
+      <button
+            className={`
+              relative flex items-center gap-2 h-full
+              text-xs font-mono tracking-widest
+              transition-all duration-300
+              ${
+                active
+                  ? "text-cyan-400"
+                  : "text-gray-400 hover:text-cyan-400"
+              }
+              after:absolute after:-bottom-4 after:left-0
+              after:h-[2px]
+              after:bg-cyan-400
+              after:shadow-[0_0_12px_#00F0FF]
+              after:transition-all after:duration-300
+              ${
+                active
+                  ? "after:w-full"
+                  : "after:w-0 hover:after:w-full"
+              }
+            `}
+          >
         {label}
         <span className="material-symbols-outlined text-sm">expand_more</span>
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 w-52 bg-[#232A35] border border-white/10 rounded-b-xl shadow-2xl py-2 z-50">
+        <div className="absolute left-0 top-full z-50 mt-3 w-64 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#151922]/95 p-2 shadow-2xl shadow-cyan-400/10 backdrop-blur-xl">
+          <div className="absolute left-6 top-[-6px] h-3 w-3 rotate-45 border-l border-t border-cyan-400/20 bg-[#151922]" />
+
           {dropdown.map((item) => (
-            <Link key={item.label} to={item.to} className="flex items-center gap-3 px-4 py-2 text-sm text-white hover:bg-white/10 hover:text-cyan-400 transition-colors">
-              <span className="material-symbols-outlined text-sm">{item.icon}</span>
-              {item.label}
+            <Link
+              key={item.label}
+              to={item.to}
+              className="group flex items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-300 transition-all duration-200 hover:bg-cyan-400/10 hover:text-cyan-400 hover:shadow-[0_0_14px_rgba(0,240,255,0.12)]"
+            >
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-gray-400 transition-all group-hover:border-cyan-400/40 group-hover:bg-cyan-400/10 group-hover:text-cyan-400">
+                <span className="material-symbols-outlined text-[18px]">
+                  {item.icon}
+                </span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="font-medium">{item.label}</span>
+                <span className="text-[11px] text-gray-500 group-hover:text-cyan-300/70">
+                  Open {item.label}
+                </span>
+              </div>
             </Link>
           ))}
         </div>
@@ -70,6 +126,7 @@ function NavItem({ label, to, dropdown, active }) {
 export default function ClientNavbar() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
+  const [avatarOpen, setAvatarOpen] = useState(false);
 
   const initials = user?.fullName
     ? user.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
@@ -84,12 +141,16 @@ export default function ClientNavbar() {
     <header className="sticky top-0 z-50 bg-[#101319]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center w-full px-4 md:px-12 py-4">
 
       {/* Logo */}
-      <div className="flex items-center gap-6">
-        <Link to="/client/dashboard">
-          <h1 className="text-xl font-bold text-blue-400 tracking-tight">AI Tasker</h1>
-        </Link>
-        <div className="h-8 w-px bg-white/10 mx-2 hidden md:block" />
-      </div>
+      <Link to="/client/dashboard">
+        <h1 className="text-xl font-bold tracking-tight">
+          <span className="text-cyan-400 drop-shadow-[0_0_10px_#00F0FF]">
+            AI
+          </span>
+          <span className="ml-1 text-white">
+            Tasker
+          </span>
+        </h1>
+      </Link>
 
       {/* Nav items */}
       <ul className="hidden lg:flex items-center gap-8 h-full justify-center mx-auto">
@@ -103,42 +164,60 @@ export default function ClientNavbar() {
         <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block" />
 
         {/* Notification bell */}
-        <button className="p-2 bg-white/5 rounded-lg border border-white/10 text-gray-400 hover:text-cyan-400 transition-all">
-          <span className="material-symbols-outlined">notifications</span>
-        </button>
+        <NotificationDropdown />
 
         {/* Avatar + dropdown */}
-        <div className="relative group">
-          <div className="w-8 h-8 rounded-full bg-blue-400 flex items-center justify-center text-gray-900 font-bold text-sm cursor-pointer">
-            {initials}
-          </div>
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setAvatarOpen((prev) => !prev)}
+            className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 transition-all hover:border-cyan-400/40 hover:shadow-[0_0_14px_rgba(0,240,255,0.2)]"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-gray-900">
+              {initials}
+            </div>
 
-          {/* Dropdown */}
-          <div className="absolute right-0 top-full mt-2 w-44 bg-[#232A35] border border-white/10 rounded-xl shadow-2xl py-2 z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
-            
-            {/* Tên user */}
-            <p className="px-4 py-2 text-xs text-gray-400 border-b border-white/10 truncate">
-              {user?.fullName}
-            </p>
-
-            {/* Profile */}
-            <Link
-              to="/client/profile"
-              className="w-full flex items-center gap-2 px-4 py-2 text-sm text-white hover:bg-white/10 hover:text-cyan-400 transition-colors"
+            <span
+              className={`material-symbols-outlined text-[18px] text-gray-400 transition-transform duration-200 ${
+                avatarOpen ? "rotate-180 text-cyan-400" : ""
+              }`}
             >
-              <span className="material-symbols-outlined text-sm">person</span>
-              Profile
-            </Link>
+              expand_more
+            </span>
+          </button>
 
-            {/* Logout */}
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2 text-left px-4 py-2 text-sm text-white hover:bg-white/10 hover:text-red-400 transition-colors"
-            >
-              <span className="material-symbols-outlined text-sm">logout</span>
-              Logout
-            </button>
-          </div>
+          {avatarOpen && (
+            <div className="absolute right-0 top-full z-50 mt-3 w-52 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#151922]/95 p-2 shadow-2xl shadow-cyan-400/10 backdrop-blur-xl">
+              <div className="absolute right-6 top-[-6px] h-3 w-3 rotate-45 border-l border-t border-cyan-400/20 bg-[#151922]" />
+
+              <div className="border-b border-white/10 px-3 py-3">
+                <p className="truncate text-sm font-semibold text-white">
+                  {user?.fullName || "Client"}
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Client Account
+                </p>
+              </div>
+
+              <Link
+                to="/client/profile"
+                onClick={() => setAvatarOpen(false)}
+                className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-300 transition-all hover:bg-cyan-400/10 hover:text-cyan-400"
+              >
+                <span className="material-symbols-outlined text-[18px]">person</span>
+                Profile
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-gray-300 transition-all hover:bg-red-500/10 hover:text-red-400"
+              >
+                <span className="material-symbols-outlined text-[18px]">logout</span>
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </header>

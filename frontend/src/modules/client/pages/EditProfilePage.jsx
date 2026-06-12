@@ -146,17 +146,17 @@ export default function EditProfilePage() {
           </button>
           <div>
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 28, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>
-              Chỉnh sửa hồ sơ
+              Edit profile
             </h1>
-            <p style={{ color: "#8c90a0", fontSize: 14 }}>Cập nhật thông tin của bạn</p>
+            <p style={{ color: "#8c90a0", fontSize: 14 }}>Update your information</p>
           </div>
         </div>
 
         {/* Client Type Toggle */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 24 }}>
           {[
-            { key: "individual", icon: "person", label: "Cá nhân" },
-            { key: "business", icon: "corporate_fare", label: "Doanh nghiệp" },
+            { key: "individual", icon: "person", label: "Individual" },
+            { key: "business", icon: "corporate_fare", label: "Business" },
           ].map((t) => (
             <button key={t.key} type="button" onClick={() => setClientType(t.key)}
               style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 8, border: `1px solid ${clientType === t.key ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: clientType === t.key ? "rgba(0,240,255,0.05)" : "rgba(29,32,38,0.5)", color: clientType === t.key ? "#00F0FF" : "#8c90a0", cursor: "pointer", transition: "all 0.2s", fontWeight: 600 }}>
@@ -174,7 +174,7 @@ export default function EditProfilePage() {
               {/* Common */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <label style={labelStyle}>Số điện thoại</label>
+                  <label style={labelStyle}>Phone Number</label>
                   <input type="text" name="phoneNumber"
                     value={clientType === "individual" ? individual.phoneNumber : business.phoneNumber}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -183,7 +183,7 @@ export default function EditProfilePage() {
                     onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Địa chỉ</label>
+                  <label style={labelStyle}>Address</label>
                   <input type="text" name="address"
                     value={clientType === "individual" ? individual.address : business.address}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -194,7 +194,7 @@ export default function EditProfilePage() {
               </div>
 
               <div>
-                <label style={labelStyle}>Nhu cầu AI</label>
+                <label style={labelStyle}>The need for AI</label>
                 <textarea name="aiNeeds"
                   value={clientType === "individual" ? individual.aiNeeds : business.aiNeeds}
                   onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -204,7 +204,7 @@ export default function EditProfilePage() {
               </div>
 
               <div>
-                <label style={labelStyle}>Vấn đề chính</label>
+                <label style={labelStyle}>Main Problems</label>
                 <textarea name="mainProblems"
                   value={clientType === "individual" ? individual.mainProblems : business.mainProblems}
                   onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -215,7 +215,7 @@ export default function EditProfilePage() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <label style={labelStyle}>Ngân sách tối thiểu (USD)</label>
+                  <label style={labelStyle}>Minimum Budget (USD)</label>
                   <input type="number" name="expectedBudgetMin"
                     value={clientType === "individual" ? individual.expectedBudgetMin : business.expectedBudgetMin}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -224,7 +224,7 @@ export default function EditProfilePage() {
                     onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                 </div>
                 <div>
-                  <label style={labelStyle}>Ngân sách tối đa (USD)</label>
+                  <label style={labelStyle}>Maximum Budget (USD)</label>
                   <input type="number" name="expectedBudgetMax"
                     value={clientType === "individual" ? individual.expectedBudgetMax : business.expectedBudgetMax}
                     onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
@@ -238,39 +238,39 @@ export default function EditProfilePage() {
               {clientType === "business" && (
                 <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
                   <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#00F0FF", marginBottom: 16 }}>
-                    Thông tin doanh nghiệp
+                    Business Information
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                       <div>
-                        <label style={labelStyle}>Tên công ty</label>
+                        <label style={labelStyle}>Company Name</label>
                         <input type="text" name="companyName" value={business.companyName} onChange={handleBusinessChange}
                           style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>
                       <div>
-                        <label style={labelStyle}>Mã số thuế</label>
+                        <label style={labelStyle}>Tax Code</label>
                         <input type="text" name="taxCode" value={business.taxCode} onChange={handleBusinessChange}
                           style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>
                     </div>
                     <div>
-                      <label style={labelStyle}>Ngành nghề</label>
+                      <label style={labelStyle}>Industry</label>
                       <input type="text" name="industry" value={business.industry} onChange={handleBusinessChange}
                         style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                     </div>
                     <div>
-                      <label style={labelStyle}>Địa chỉ công ty</label>
+                      <label style={labelStyle}>Company Address</label>
                       <input type="text" name="companyAddress" value={business.companyAddress} onChange={handleBusinessChange}
                         style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                       <div>
-                        <label style={labelStyle}>Email doanh nghiệp</label>
+                        <label style={labelStyle}>Business Email</label>
                         <input type="email" name="businessEmail" value={business.businessEmail} onChange={handleBusinessChange}
                           style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>
                       <div>
-                        <label style={labelStyle}>Điện thoại doanh nghiệp</label>
+                        <label style={labelStyle}>Business Phone</label>
                         <input type="text" name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange}
                           style={inputStyle} onFocus={(e) => (e.target.style.borderColor = "#00F0FF")} onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
                       </div>

@@ -2,92 +2,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
-
-// ── MOCK DATA ─────────────────────────────────────────────────────────
-const MOCK_EXPERTS = [
-  {
-    expertProfileId: 1,
-    fullName: "Dr. Aria Chen",
-    professionalTitle: "Senior NLP Engineer",
-    avatarUrl: "https://i.pravatar.cc/100?img=5",
-    level: "SENIOR",
-    yearsOfExperience: 7,
-    matchScore: 94.5,
-    matchReason: "Matched 4/4 required skills: Chatbot, NLP, Python, OpenAI API. Expert has strong background in conversational AI.",
-    riskNote: null,
-    availableForWork: true,
-    expectedProjectBudgetMin: 800,
-    expectedProjectBudgetMax: 3000,
-    profileScore: 92,
-    matchedSkills: [
-      { skillId: 1, skillName: "Chatbot" },
-      { skillId: 2, skillName: "NLP" },
-      { skillId: 4, skillName: "Python" },
-      { skillId: 3, skillName: "OpenAI API" },
-    ],
-  },
-  {
-    expertProfileId: 2,
-    fullName: "Marcus Vane",
-    professionalTitle: "AI Automation Engineer",
-    avatarUrl: "https://i.pravatar.cc/100?img=12",
-    level: "MID",
-    yearsOfExperience: 3,
-    matchScore: 72.3,
-    matchReason: "Matched 3/4 required skills: NLP, Python, OpenAI API. Missing Chatbot-specific experience.",
-    riskNote: "Some required skills are missing.",
-    availableForWork: true,
-    expectedProjectBudgetMin: 300,
-    expectedProjectBudgetMax: 1500,
-    profileScore: 80,
-    matchedSkills: [
-      { skillId: 2, skillName: "NLP" },
-      { skillId: 4, skillName: "Python" },
-      { skillId: 3, skillName: "OpenAI API" },
-    ],
-  },
-  {
-    expertProfileId: 3,
-    fullName: "Elena Kostic",
-    professionalTitle: "LLM Specialist",
-    avatarUrl: "https://i.pravatar.cc/100?img=9",
-    level: "SENIOR",
-    yearsOfExperience: 5,
-    matchScore: 68.1,
-    matchReason: "Matched 2/4 required skills: Python, OpenAI API. Strong LLM background but limited chatbot deployment experience.",
-    riskNote: "Limited chatbot-specific experience.",
-    availableForWork: false,
-    expectedProjectBudgetMin: 1000,
-    expectedProjectBudgetMax: 4000,
-    profileScore: 88,
-    matchedSkills: [
-      { skillId: 4, skillName: "Python" },
-      { skillId: 3, skillName: "OpenAI API" },
-    ],
-  },
-  {
-    expertProfileId: 4,
-    fullName: "James Okafor",
-    professionalTitle: "Full-Stack AI Developer",
-    avatarUrl: "https://i.pravatar.cc/100?img=15",
-    level: "MID",
-    yearsOfExperience: 4,
-    matchScore: 58.7,
-    matchReason: "Matched 2/4 required skills: Chatbot, Python. Has hands-on experience with customer support chatbots.",
-    riskNote: "Missing NLP and OpenAI API experience.",
-    availableForWork: true,
-    expectedProjectBudgetMin: 400,
-    expectedProjectBudgetMax: 1800,
-    profileScore: 74,
-    matchedSkills: [
-      { skillId: 1, skillName: "Chatbot" },
-      { skillId: 4, skillName: "Python" },
-    ],
-  },
-];
-
-const MOCK_JOB_TITLE = "Build an AI Chatbot for Customer Support";
-// ─────────────────────────────────────────────────────────────────────
+import axiosInstance from "../../../api/axiosInstance"; // ← adjust path nếu khác
 
 const LEVEL_CONFIG = {
   JUNIOR: { label: "Junior", color: "#94a3b8" },
@@ -116,21 +31,33 @@ function MessageModal({ expert, onClose }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState("");
 
   const handleSend = async () => {
     if (!message.trim()) return;
     setSending(true);
-    // TODO (BE): POST /api/messages { recipientId: expert.expertProfileId, content: message }
-    setTimeout(() => {
-      setSending(false);
+    setSendError("");
+    try {
+      await axiosInstance.post("/messages", {
+        recipientId: expert.expertProfileId,
+        content: message,
+      });
       setSent(true);
       setTimeout(() => { setSent(false); setMessage(""); onClose(); }, 1500);
-    }, 800);
+    } catch (err) {
+      setSendError(
+        err?.response?.data?.message || "Gửi tin nhắn thất bại. Vui lòng thử lại."
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
 
         {/* Header */}
@@ -161,9 +88,17 @@ function MessageModal({ expert, onClose }) {
             rows={5}
             style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(192,193,255,0.2)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box", transition: "border-color 0.2s", lineHeight: 1.6 }}
             onFocus={(e) => (e.target.style.borderColor = "#c0c1ff")}
-            onBlur={(e) => (e.target.style.borderColor = "rgba(192,193,255,0.2)")} />
+            onBlur={(e) => (e.target.style.borderColor = "rgba(192,193,255,0.2)")}
+          />
           <p style={{ fontSize: 11, color: "#8c90a0", marginTop: 6 }}>{message.length}/500 characters</p>
         </div>
+
+        {/* Send error */}
+        {sendError && (
+          <p style={{ fontSize: 12, color: "#f87171", marginBottom: 12, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "8px 12px" }}>
+            {sendError}
+          </p>
+        )}
 
         {/* Quick templates */}
         <div style={{ marginBottom: 16 }}>
@@ -203,9 +138,11 @@ function MessageModal({ expert, onClose }) {
   );
 }
 
+// ── Main Page ─────────────────────────────────────────────────────────
 export default function ClientJobRecommendationPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+
   const [experts, setExperts] = useState([]);
   const [jobTitle, setJobTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -213,25 +150,69 @@ export default function ClientJobRecommendationPage() {
   const [messagingExpert, setMessagingExpert] = useState(null);
 
   useEffect(() => {
-    setLoading(true);
-    // TODO (BE): thay mock bằng API thật
-    // axiosInstance.get(`/recommendations/jobs/${id}/experts`)
-    setTimeout(() => {
-      setExperts(MOCK_EXPERTS);
-      setJobTitle(MOCK_JOB_TITLE);
-      setLoading(false);
-    }, 700);
+    if (!id) return;
+    const controller = new AbortController();
+
+    const fetchData = async () => {
+      setLoading(true);
+      setError("");
+      try {
+        // Gọi song song: recommendations + job title
+        const [recRes, jobRes] = await Promise.all([
+          axiosInstance.get(`/recommendations/jobs/${id}/experts`, {
+            signal: controller.signal,
+          }),
+          axiosInstance.get(`/jobs/${id}`, {
+            signal: controller.signal,
+          }),
+        ]);
+
+        // BE có thể trả về array trực tiếp hoặc bọc trong data/items/experts
+        const raw = recRes.data;
+        setExperts(Array.isArray(raw) ? raw : raw.experts ?? raw.items ?? raw.data ?? []);
+
+        // Lấy title từ job detail
+        const job = jobRes.data;
+        setJobTitle(job.title ?? job.jobTitle ?? "");
+      } catch (err) {
+        if (err?.code === "ERR_CANCELED") return; // unmount, bỏ qua
+        const msg =
+          err?.response?.status === 404
+            ? "Không tìm thấy dữ liệu gợi ý cho job này."
+            : err?.response?.status === 403
+            ? "Bạn không có quyền xem trang này."
+            : err?.response?.data?.message || "Đã có lỗi xảy ra. Vui lòng thử lại.";
+        setError(msg);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+    return () => controller.abort(); // cleanup khi unmount
   }, [id]);
+
+  // ── Retry handler ──────────────────────────────────────────────────
+  const handleRetry = () => {
+    setExperts([]);
+    setError("");
+    setLoading(true);
+    // trigger lại useEffect bằng cách force re-mount hoặc dùng key state
+    // Cách đơn giản: duplicate logic hoặc dùng callback ref. Ở đây reload page là đủ:
+    window.location.reload();
+  };
 
   return (
     <ClientLayout>
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* Back */}
-        <button onClick={() => navigate(`/client/projects/${id}`)}
+        <button
+          onClick={() => navigate(`/client/projects/${id}`)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
+          onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}
+        >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
           Back to Job Details
         </button>
@@ -261,13 +242,28 @@ export default function ClientJobRecommendationPage() {
 
         {/* Error */}
         {!loading && error && (
-          <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "14px 18px", color: "#f87171", fontSize: 14 }}>
-            {error}
+          <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "20px 24px", textAlign: "center" }}>
+            <p style={{ color: "#f87171", fontSize: 14, marginBottom: 14 }}>{error}</p>
+            <button
+              onClick={handleRetry}
+              style={{ padding: "8px 20px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontSize: 13, cursor: "pointer" }}
+            >
+              Thử lại
+            </button>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!loading && !error && experts.length === 0 && (
+          <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#3d4050" }}>person_search</span>
+            <p style={{ fontSize: 15, marginBottom: 6 }}>Chưa có gợi ý nào cho job này.</p>
+            <p style={{ fontSize: 13 }}>Hãy thử lại sau khi job được AI phân tích.</p>
           </div>
         )}
 
         {/* Expert list */}
-        {!loading && !error && (
+        {!loading && !error && experts.length > 0 && (
           <>
             <p style={{ color: "#8c90a0", fontSize: 13, marginBottom: 20 }}>
               Found <span style={{ color: "#c0c1ff", fontWeight: 700 }}>{experts.length}</span> experts ranked by AI match score
@@ -276,11 +272,12 @@ export default function ClientJobRecommendationPage() {
               {experts.map((expert, index) => {
                 const level = LEVEL_CONFIG[expert.level] || { label: expert.level, color: "#8c90a0" };
                 return (
-                  <div key={expert.expertProfileId}
+                  <div
+                    key={expert.expertProfileId}
                     style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(192,193,255,0.12)", borderRadius: 16, padding: 24, transition: "all 0.2s", position: "relative", overflow: "hidden" }}
                     onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(192,193,255,0.35)"; e.currentTarget.style.boxShadow = "0 0 20px rgba(192,193,255,0.06)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(192,193,255,0.12)"; e.currentTarget.style.boxShadow = "none"; }}>
-
+                    onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(192,193,255,0.12)"; e.currentTarget.style.boxShadow = "none"; }}
+                  >
                     {/* Rank badge */}
                     <div style={{ position: "absolute", top: 16, right: 16, width: 28, height: 28, borderRadius: "50%", background: index === 0 ? "rgba(192,193,255,0.15)" : "rgba(255,255,255,0.05)", border: `1px solid ${index === 0 ? "rgba(192,193,255,0.4)" : "rgba(255,255,255,0.1)"}`, display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, fontWeight: 700, color: index === 0 ? "#c0c1ff" : "#8c90a0" }}>#{index + 1}</span>
@@ -289,9 +286,11 @@ export default function ClientJobRecommendationPage() {
                     <div style={{ display: "flex", alignItems: "flex-start", gap: 16, paddingRight: 40 }}>
                       {/* Avatar */}
                       <div style={{ position: "relative", flexShrink: 0 }}>
-                        <img src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId}`}
+                        <img
+                          src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId}`}
                           alt={expert.fullName}
-                          style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(192,193,255,0.25)" }} />
+                          style={{ width: 56, height: 56, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(192,193,255,0.25)" }}
+                        />
                         {expert.availableForWork && (
                           <span style={{ position: "absolute", bottom: 2, right: 2, width: 12, height: 12, borderRadius: "50%", background: "#22c55e", border: "2px solid #101319" }} />
                         )}
@@ -345,26 +344,32 @@ export default function ClientJobRecommendationPage() {
                         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                           {/* View Profile — cyan */}
                           <button
+                            onClick={() => navigate(`/expert/${expert.expertProfileId}`)}
                             style={{ flex: 1, padding: "9px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(0,240,255,0.2)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}>
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}
+                          >
                             View Profile
                           </button>
 
                           {/* Message — purple */}
-                          <button onClick={() => setMessagingExpert(expert)}
+                          <button
+                            onClick={() => setMessagingExpert(expert)}
                             style={{ flex: 1, padding: "9px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(192,193,255,0.2)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}>
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}
+                          >
                             <span className="material-symbols-outlined" style={{ fontSize: 15 }}>chat</span>
                             Message
                           </button>
 
                           {/* Invite — green */}
                           <button
+                            onClick={() => handleInvite(expert.expertProfileId)}
                             style={{ flex: 1, padding: "9px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(34,197,94,0.2)"; e.currentTarget.style.borderColor = "#22c55e"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(34,197,94,0.25)"; }}>
+                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(34,197,94,0.25)"; }}
+                          >
                             <span className="material-symbols-outlined" style={{ fontSize: 15 }}>send</span>
                             Invite
                           </button>
@@ -387,4 +392,15 @@ export default function ClientJobRecommendationPage() {
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
   );
+
+  // ── Invite handler ─────────────────────────────────────────────────
+  async function handleInvite(expertProfileId) {
+    try {
+      await axiosInstance.post(`/jobs/${id}/invite`, { expertProfileId });
+      alert("Đã gửi lời mời thành công!");
+      // TODO: thay alert bằng toast notification nếu có
+    } catch (err) {
+      alert(err?.response?.data?.message || "Gửi lời mời thất bại.");
+    }
+  }
 }
