@@ -1,8 +1,6 @@
-using AITasker.Application.Interfaces;
 using AITasker.Api.Hubs;
+using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.SignalR;
-using System;
-using System.Threading.Tasks;
 
 namespace AITasker.Api.Realtime
 {
@@ -15,16 +13,27 @@ namespace AITasker.Api.Realtime
             _hubContext = hubContext;
         }
 
-        public async Task SendNotificationAsync(int userId, int notificationId, string title, string content, string type, DateTime createdAt)
+        public async Task SendNotificationAsync(
+            int userId,
+            int notificationId,
+            string title,
+            string content,
+            string type,
+            DateTime createdAt)
         {
-            await _hubContext.Clients.Group($"User_{userId}").SendAsync("ReceiveNotification", new
-            {
-                id = notificationId,
-                title = title,
-                content = content,
-                type = type,
-                createdAt = createdAt
-            });
+            await _hubContext
+                .Clients
+                .Group($"User_{userId}")
+                .SendAsync("ReceiveNotification", new
+                {
+                    notificationId,
+                    userId,
+                    title,
+                    content,
+                    type,
+                    isRead = false,
+                    createdAt
+                });
         }
     }
 }

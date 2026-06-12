@@ -1,8 +1,6 @@
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Authorization;
-using System;
+using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using System.Threading.Tasks;
 
 namespace AITasker.Api.Hubs
 {
@@ -11,38 +9,70 @@ namespace AITasker.Api.Hubs
     {
         public async Task JoinConversation(int conversationId)
         {
-            await Groups.AddToGroupAsync(Context.ConnectionId, conversationId.ToString());
+            var currentUserId = GetCurrentUserId();
+
+            await Groups.AddToGroupAsync(
+                Context.ConnectionId,
+                GetConversationGroupName(conversationId)
+            );
+
+            await Clients.Caller.SendAsync("JoinedConversation", new
+            {
+                conversationId,
+                userId = currentUserId
+            });
         }
 
         public async Task LeaveConversation(int conversationId)
         {
-            await Groups.RemoveFromGroupAsync(Context.ConnectionId, conversationId.ToString());
+            await Groups.RemoveFromGroupAsync(
+                Context.ConnectionId,
+                GetConversationGroupName(conversationId)
+            );
+
+            await Clients.Caller.SendAsync("LeftConversation", new
+            {
+                conversationId
+            });
         }
 
         public async Task SendMessage(int conversationId, string message)
         {
-            if (string.IsNullOrWhiteSpace(message)) return;
+            if (conversationId <= 0)
+                throw new HubException("Invalid conversation id.");
 
-            var nameIdentifier = Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (string.IsNullOrEmpty(nameIdentifier) || !int.TryParse(nameIdentifier, out int currentUserId))
-            {
-                throw new HubException("Unauthorized: Cannot detect authenticated user identity.");
-            }
+            if (string.IsNullOrWhiteSpace(message))
+                throw new HubException("Message cannot be empty.");
 
-            try
-            {
-                await Clients.Group(conversationId.ToString()).SendAsync("ReceiveMessage", new
+            var currentUserId = GetCurrentUserId();
+
+            await Clients
+                .Group(GetConversationGroupName(conversationId))
+                .SendAsync("ReceiveMessage", new
                 {
-                    conversationId = conversationId,
-                    senderId = currentUserId, 
-                    content = message,
+                    conversationId,
+                    senderId = currentUserId,
+                    content = message.Trim(),
                     createdAt = DateTime.UtcNow
                 });
-            }
-            catch (Exception ex)
-            {
-                throw new HubException($"Failed to broadcast realtime message: {ex.Message}");
-            }
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdValue =
+                Context.User?.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? Context.User?.FindFirstValue("userId")
+                ?? Context.User?.FindFirstValue("sub");
+
+            if (!int.TryParse(userIdValue, out var userId))
+                throw new HubException("Unauthorized: Cannot detect authenticated user identity.");
+
+            return userId;
+        }
+
+        private static string GetConversationGroupName(int conversationId)
+        {
+            return $"Conversation_{conversationId}";
         }
     }
 }
