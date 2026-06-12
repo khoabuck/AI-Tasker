@@ -8,11 +8,29 @@ export default function GuestRoute({ children }) {
   if (loading) return null;
 
   if (isAuthenticated) {
-    if (user?.status === "PENDING_ROLE") return <Navigate to="/select-role" replace />;
-    if (user?.status === "PENDING_PROFILE") return <Navigate to="/setup-profile" replace />;
-    if (user?.role === "CLIENT") return <Navigate to="/client/dashboard" replace />;
-    if (user?.role === "EXPERT") return <Navigate to="/expert/dashboard" replace />;
-    if (user?.role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
+    const role = String(user?.role || "").toUpperCase();
+    const status = String(user?.status || "").toUpperCase();
+
+    if (status === "PENDING_ROLE" || !role) {
+      return <Navigate to="/select-role" replace />;
+    }
+
+    if (status === "PENDING_PROFILE") {
+      if (role === "EXPERT") {
+        return <Navigate to="/expert/setup-profile" replace />;
+      }
+
+      if (role === "CLIENT") {
+        return <Navigate to="/setup-profile" replace />;
+      }
+
+      return <Navigate to="/select-role" replace />;
+    }
+
+    if (role === "CLIENT") return <Navigate to="/client/dashboard" replace />;
+    if (role === "EXPERT") return <Navigate to="/expert/dashboard" replace />;
+    if (role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
+
     return <Navigate to="/" replace />;
   }
 

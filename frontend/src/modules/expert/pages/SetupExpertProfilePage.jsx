@@ -1,1333 +1,748 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
-import { useAuth } from "../../../context/AuthContext";
 
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
+const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
 
-const createEmptyCertificate = () => ({
-  certificateName: "",
-  certificateIssuer: "",
-  certificateUrl: "",
-  issuedAt: "",
-});
-
-const numberFields = [
-  "yearsOfExperience",
-  "expectedProjectBudgetMin",
-  "expectedProjectBudgetMax",
-  "preferredProjectDurationDays",
-];
-
-const integerFields = ["yearsOfExperience", "preferredProjectDurationDays"];
-
-const extractMessageFromData = (data) => {
-  if (!data) return "";
-
-  if (typeof data === "string") return data;
-
-  if (data.message) return data.message;
-  if (data.title) return data.title;
-  if (data.reviewMessage) return data.reviewMessage;
-  if (data.aiMessage) return data.aiMessage;
-  if (data.certificateMessage) return data.certificateMessage;
-
-  if (data.errors) {
-    const allErrors = Object.values(data.errors).flat();
-    if (allErrors.length > 0) return allErrors.join(" ");
-  }
-
-  return "";
-};
-
-const isTechnicalMessage = (message) => {
-  const text = String(message || "").toLowerCase();
-
-  return (
-    text.includes("sqlexception") ||
-    text.includes("invalid object name") ||
-    text.includes("system.") ||
-    text.includes("stack trace") ||
-    text.includes("at aitasker") ||
-    text.includes("at microsoft") ||
-    text.includes("exception") ||
-    text.includes("object reference") ||
-    text.includes("inner exception")
-  );
-};
-
-const cleanMessage = (message, fallback) => {
-  if (!message) return fallback;
-
-  const text = String(message).trim();
-
-  if (!text) return fallback;
-  if (isTechnicalMessage(text)) return fallback;
-  if (text.length > 280) return fallback;
-
-  return text;
-};
-
-const normalizeSuggestionList = (value, fallback = []) => {
-  if (!value) return fallback;
-
-  if (Array.isArray(value)) {
-    const result = value
-      .flat()
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-
-    return result.length > 0 ? result : fallback;
-  }
-
-  if (typeof value === "object") {
-    const result = Object.values(value)
-      .flat()
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-
-    return result.length > 0 ? result : fallback;
-  }
-
-  const text = String(value || "").trim();
-
-  return text ? [text] : fallback;
+const emptyForm = {
+  avatarUrl: "",
+  professionalTitle: "",
+  bio: "",
+  skills: "",
+  yearsOfExperience: "",
+  expectedProjectBudgetMin: "",
+  expectedProjectBudgetMax: "",
+  preferredProjectDurationDays: "",
+  availableForWork: true,
+  portfolioUrl: "",
+  linkedInUrl: "",
+  gitHubUrl: "",
+  certificates: [
+    {
+      certificateName: "",
+      certificateIssuer: "",
+      certificateUrl: "",
+      issuedAt: "",
+    },
+  ],
 };
 
 export default function SetupExpertProfilePage() {
-  const navigate = useNavigate();
   const location = useLocation();
-  const avatarInputRef = useRef(null);
-  const { refreshUser, handleLogout } = useAuth();
+  const navigate = useNavigate();
 
   const isEditPage = location.pathname === "/expert/profile/edit";
-  const currentDraftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
+  const draftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
 
-  const [formData, setFormData] = useState({
-    avatarUrl: "",
-    professionalTitle: "",
-    bio: "",
-    skills: "",
-    yearsOfExperience: "",
-    expectedProjectBudgetMin: "",
-    expectedProjectBudgetMax: "",
-    preferredProjectDurationDays: "",
-    availableForWork: true,
-    portfolioUrl: "",
-    linkedInUrl: "",
-    gitHubUrl: "",
-    certificates: [createEmptyCertificate()],
-  });
+  const [formData, setFormData] = useState(emptyForm);
+  const [loading, setLoading] = useState(isEditPage);
+  const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
-  const [avatarPreview, setAvatarPreview] = useState("");
-  const [imageUploading, setImageUploading] = useState(false);
-  const [fetching, setFetching] = useState(isEditPage);
-  const [loading, setLoading] = useState(false);
-  const [generalError, setGeneralError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-  const [notice, setNotice] = useState("");
-  const [submitResult, setSubmitResult] = useState(null);
-  const [correctionModal, setCorrectionModal] = useState(null);
+  const [submitted, setSubmitted] = useState(false);
+  const [touched, setTouched] = useState({});
+
+  const [error, setError] = useState("");
+  const [modal, setModal] = useState(null);
+
+  const formErrors = useMemo(() => validateForm(formData), [formData]);
 
   useEffect(() => {
-    if (isEditPage) {
-      loadExistingProfile();
-    } else {
-      loadDraft(SETUP_DRAFT_KEY);
-      setFetching(false);
-    }
+    loadInitialData();
   }, [isEditPage]);
 
   useEffect(() => {
-    if (fetching) return;
+    localStorage.setItem(draftKey, JSON.stringify(formData));
+  }, [formData, draftKey]);
 
-    localStorage.setItem(currentDraftKey, JSON.stringify(formData));
-  }, [formData, fetching, currentDraftKey]);
-
-  const inputStyle =
-    "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
-
-  const inputErrorStyle =
-    "w-full rounded-xl border border-red-400/50 bg-red-500/10 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-400";
-
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8";
-
-  const getSavedDraft = (key) => {
-    const savedDraft = localStorage.getItem(key);
-
-    if (!savedDraft) return null;
-
-    try {
-      return JSON.parse(savedDraft);
-    } catch {
-      localStorage.removeItem(key);
-      return null;
-    }
-  };
-
-  const loadDraft = (key) => {
-    const parsedDraft = getSavedDraft(key);
-
-    if (!parsedDraft) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      ...parsedDraft,
-      certificates:
-        parsedDraft.certificates && parsedDraft.certificates.length > 0
-          ? parsedDraft.certificates
-          : [createEmptyCertificate()],
-    }));
-
-    setAvatarPreview(parsedDraft.avatarUrl || "");
-  };
-
-  const mapProfileToForm = (data) => ({
-    avatarUrl: data.avatarUrl || "",
-    professionalTitle: data.professionalTitle || "",
-    bio: data.bio || "",
-    skills: data.skills || "",
-    yearsOfExperience: data.yearsOfExperience ?? "",
-    expectedProjectBudgetMin: data.expectedProjectBudgetMin ?? "",
-    expectedProjectBudgetMax: data.expectedProjectBudgetMax ?? "",
-    preferredProjectDurationDays: data.preferredProjectDurationDays ?? "",
-    availableForWork: Boolean(data.availableForWork),
-    portfolioUrl: data.portfolioUrl || "",
-    linkedInUrl: data.linkedInUrl || "",
-    gitHubUrl: data.gitHubUrl || "",
-    certificates:
-      data.certificates && data.certificates.length > 0
-        ? data.certificates.map((item) => ({
-          certificateName: item.certificateName || "",
-          certificateIssuer: item.certificateIssuer || "",
-          certificateUrl: item.certificateUrl || "",
-          issuedAt: item.issuedAt ? String(item.issuedAt).slice(0, 10) : "",
-        }))
-        : [createEmptyCertificate()],
-  });
-
-  const handleSignOut = () => {
-    handleLogout();
-    localStorage.removeItem(SETUP_DRAFT_KEY);
-    localStorage.removeItem(EDIT_DRAFT_KEY);
-    navigate("/login", { replace: true });
-  };
-
-  const loadExistingProfile = async () => {
-    try {
-      setFetching(true);
-      setGeneralError("");
-
-      const data = await expertProfileService.getMyExpertProfile();
-      const serverForm = mapProfileToForm(data);
-      const editDraft = getSavedDraft(EDIT_DRAFT_KEY);
-
-      const nextForm = editDraft
-        ? {
-          ...serverForm,
-          ...editDraft,
-          certificates:
-            editDraft.certificates && editDraft.certificates.length > 0
-              ? editDraft.certificates
-              : serverForm.certificates,
-        }
-        : serverForm;
-
-      setFormData(nextForm);
-      setAvatarPreview(nextForm.avatarUrl || "");
-    } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data);
-
-      setGeneralError(
-        getFriendlyBackendError(err).message ||
-        "We could not load your expert profile. Please try again."
-      );
-    } finally {
-      setFetching(false);
-    }
-  };
-
-  const clearFieldError = (name) => {
-    setFieldErrors((prev) => {
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-  };
-
-  const setFieldError = (name, message) => {
-    setFieldErrors((prev) => ({
-      ...prev,
-      [name]: message,
-    }));
-  };
-
-  const isValidHttpUrl = (value) => {
-    if (!value) return false;
-
-    try {
-      const url = new URL(value);
-      return url.protocol === "http:" || url.protocol === "https:";
-    } catch {
-      return false;
-    }
-  };
-
-  const isNumberText = (value) => {
-    if (value === "") return true;
-    return /^\d+(\.\d+)?$/.test(String(value));
-  };
-
-  const isIntegerText = (value) => {
-    if (value === "") return true;
-    return /^\d+$/.test(String(value));
-  };
-
-  const getInputClass = (name) => {
-    return fieldErrors[name] ? inputErrorStyle : inputStyle;
-  };
-
-  const resetMessagesOnEdit = () => {
-    setSubmitResult(null);
-    setGeneralError("");
-    setNotice("");
-    setCorrectionModal(null);
-  };
-
-  const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
-
-    resetMessagesOnEdit();
-
-    if (numberFields.includes(name)) {
-      if (integerFields.includes(name) && !isIntegerText(value)) {
-        setFieldError(name, "Please enter a whole number.");
-      } else if (!integerFields.includes(name) && !isNumberText(value)) {
-        setFieldError(name, "Please enter a valid number.");
-      } else {
-        clearFieldError(name);
-      }
-    } else {
-      clearFieldError(name);
-    }
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
-  const handleCertificateChange = (index, event) => {
-    const { name, value } = event.target;
-
-    resetMessagesOnEdit();
-
-    setFormData((prev) => {
-      const newCertificates = [...prev.certificates];
-
-      newCertificates[index] = {
-        ...newCertificates[index],
-        [name]: value,
-      };
-
-      return {
-        ...prev,
-        certificates: newCertificates,
-      };
-    });
-
-    setFieldErrors((prev) => {
-      const next = { ...prev };
-      delete next[`certificate-${index}-${name}`];
-      return next;
-    });
-  };
-
-  const handleAvatarClick = () => {
-    avatarInputRef.current?.click();
-  };
-
-  const handleAvatarFileChange = async (event) => {
-    const file = event.target.files?.[0];
-
-    if (!file) return;
-
-    resetMessagesOnEdit();
-
-    if (!file.type.startsWith("image/")) {
-      setFieldError("avatarUrl", "Please select an image file.");
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      setFieldError("avatarUrl", "Image size must be less than 2MB.");
-      return;
-    }
-
-    const localPreviewUrl = URL.createObjectURL(file);
-    setAvatarPreview(localPreviewUrl);
-
-    try {
-      setImageUploading(true);
-      setFieldError("avatarUrl", "Uploading avatar...");
-
-      const imageUrl = await uploadService.uploadImage(file, "avatar");
-
-      setFormData((prev) => ({
-        ...prev,
-        avatarUrl: imageUrl,
-      }));
-
-      setAvatarPreview(imageUrl);
-      clearFieldError("avatarUrl");
-      setNotice("Avatar uploaded successfully.");
-    } catch (err) {
-      console.error("UPLOAD AVATAR ERROR:", err?.response?.data || err);
-
-      setFormData((prev) => ({
-        ...prev,
-        avatarUrl: "",
-      }));
-
-      setFieldError(
-        "avatarUrl",
-        getFriendlyBackendError(err).message ||
-        "We could not upload your avatar. Please try another image."
-      );
-    } finally {
-      setImageUploading(false);
-    }
-  };
-
-  const handleRemoveAvatar = () => {
-    resetMessagesOnEdit();
-
-    setAvatarPreview("");
-
-    setFormData((prev) => ({
-      ...prev,
-      avatarUrl: "",
-    }));
-
-    if (avatarInputRef.current) {
-      avatarInputRef.current.value = "";
-    }
-
-    clearFieldError("avatarUrl");
-  };
-
-  const addCertificate = () => {
-    resetMessagesOnEdit();
-
-    setFormData((prev) => ({
-      ...prev,
-      certificates: [...prev.certificates, createEmptyCertificate()],
-    }));
-  };
-
-  const removeCertificate = (index) => {
-    resetMessagesOnEdit();
-
-    setFormData((prev) => {
-      const newCertificates = prev.certificates.filter(
-        (_, certIndex) => certIndex !== index
-      );
-
-      return {
-        ...prev,
-        certificates:
-          newCertificates.length > 0
-            ? newCertificates
-            : [createEmptyCertificate()],
-      };
-    });
-  };
-
-  const validateForm = () => {
-    const errors = {};
-
-    if (imageUploading) {
-      errors.avatarUrl = "Your avatar is still uploading. Please wait.";
-    }
-
-    if (!formData.avatarUrl) {
-      errors.avatarUrl = "Please upload your avatar.";
-    } else if (!isValidHttpUrl(formData.avatarUrl)) {
-      errors.avatarUrl = "Please upload your avatar again.";
-    }
-
-    if (!formData.professionalTitle.trim()) {
-      errors.professionalTitle = "Please enter your professional title.";
-    }
-
-    if (!formData.bio.trim()) {
-      errors.bio = "Please write a short bio about your experience.";
-    }
-
-    if (!formData.skills.trim()) {
-      errors.skills = "Please enter at least one skill.";
-    }
-
-    if (!formData.yearsOfExperience) {
-      errors.yearsOfExperience = "Please enter your years of experience.";
-    } else if (!isIntegerText(formData.yearsOfExperience)) {
-      errors.yearsOfExperience = "Years of experience must be a whole number.";
-    } else if (Number(formData.yearsOfExperience) < 0) {
-      errors.yearsOfExperience = "Years of experience cannot be negative.";
-    }
-
-    if (!formData.expectedProjectBudgetMin) {
-      errors.expectedProjectBudgetMin = "Please enter your minimum budget.";
-    } else if (!isNumberText(formData.expectedProjectBudgetMin)) {
-      errors.expectedProjectBudgetMin = "Minimum budget must be a valid number.";
-    }
-
-    if (!formData.expectedProjectBudgetMax) {
-      errors.expectedProjectBudgetMax = "Please enter your maximum budget.";
-    } else if (!isNumberText(formData.expectedProjectBudgetMax)) {
-      errors.expectedProjectBudgetMax = "Maximum budget must be a valid number.";
-    }
-
-    if (
-      isNumberText(formData.expectedProjectBudgetMin) &&
-      isNumberText(formData.expectedProjectBudgetMax) &&
-      formData.expectedProjectBudgetMin &&
-      formData.expectedProjectBudgetMax &&
-      Number(formData.expectedProjectBudgetMin) >
-      Number(formData.expectedProjectBudgetMax)
-    ) {
-      errors.expectedProjectBudgetMax =
-        "Maximum budget must be greater than or equal to minimum budget.";
-    }
-
-    if (!formData.preferredProjectDurationDays) {
-      errors.preferredProjectDurationDays =
-        "Please enter your preferred project duration.";
-    } else if (!isIntegerText(formData.preferredProjectDurationDays)) {
-      errors.preferredProjectDurationDays =
-        "Preferred duration must be a whole number.";
-    } else if (Number(formData.preferredProjectDurationDays) <= 0) {
-      errors.preferredProjectDurationDays =
-        "Preferred duration must be greater than 0.";
-    }
-
-    const portfolioUrl = formData.portfolioUrl.trim();
-    const linkedInUrl = formData.linkedInUrl.trim();
-    const gitHubUrl = formData.gitHubUrl.trim();
-
-    const hasAtLeastOneProfileLink = portfolioUrl || linkedInUrl || gitHubUrl;
-
-    if (!hasAtLeastOneProfileLink) {
-      const message =
-        "Please provide at least one public link: Portfolio, LinkedIn, or GitHub.";
-
-      errors.portfolioUrl = message;
-      errors.linkedInUrl = message;
-      errors.gitHubUrl = message;
-    }
-
-    if (portfolioUrl && !isValidHttpUrl(portfolioUrl)) {
-      errors.portfolioUrl =
-        "Please enter a valid Portfolio URL starting with http:// or https://.";
-    }
-
-    if (linkedInUrl && !isValidHttpUrl(linkedInUrl)) {
-      errors.linkedInUrl =
-        "Please enter a valid LinkedIn URL starting with http:// or https://.";
-    }
-
-    if (gitHubUrl && !isValidHttpUrl(gitHubUrl)) {
-      errors.gitHubUrl =
-        "Please enter a valid GitHub URL starting with http:// or https://.";
-    }
-
-    formData.certificates.forEach((certificate, index) => {
-      const certificateName = String(certificate.certificateName || "").trim();
-      const certificateIssuer = String(
-        certificate.certificateIssuer || ""
-      ).trim();
-      const certificateUrl = String(certificate.certificateUrl || "").trim();
-      const issuedAt = String(certificate.issuedAt || "").trim();
-
-      if (!certificateName) {
-        errors[`certificate-${index}-certificateName`] =
-          "Please enter the certificate name.";
-      }
-
-      if (!certificateIssuer) {
-        errors[`certificate-${index}-certificateIssuer`] =
-          "Please enter the certificate issuer.";
-      }
-
-      if (!certificateUrl) {
-        errors[`certificate-${index}-certificateUrl`] =
-          "Please enter a public certificate URL.";
-      } else if (!isValidHttpUrl(certificateUrl)) {
-        errors[`certificate-${index}-certificateUrl`] =
-          "Certificate URL must start with http:// or https://.";
-      }
-
-      if (!issuedAt) {
-        errors[`certificate-${index}-issuedAt`] =
-          "Please select the issued date.";
-      }
-    });
-
-    setFieldErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      const hasUrlError = Object.values(errors).some((message) =>
-        String(message).toLowerCase().includes("url")
-      );
-
-      setGeneralError(
-        hasUrlError
-          ? "Some links are not valid. Please check the highlighted URL fields."
-          : "Please complete the highlighted fields before submitting."
-      );
-
-      window.scrollTo({
-        top: 0,
-        behavior: "smooth",
-      });
-
-      return false;
-    }
-
-    setGeneralError("");
-    return true;
-  };
-
-  const getFriendlyBackendError = (err) => {
-    const statusCode = err?.response?.status;
-    const data = err?.response?.data;
-    const rawMessage = extractMessageFromData(data);
-    const lowerMessage = String(rawMessage || "").toLowerCase();
-
-    if (!err?.response) {
-      return {
-        message:
-          "We could not connect to the server. Please check your internet connection and try again.",
-        isAlreadyExists: false,
-      };
-    }
-
-    if (statusCode === 401) {
-      return {
-        message: "Your session has expired. Please sign in again.",
-        isAlreadyExists: false,
-      };
-    }
-
-    if (statusCode === 403) {
-      return {
-        message: "You do not have permission to perform this action.",
-        isAlreadyExists: false,
-      };
-    }
-
-    if (statusCode === 404) {
-      return {
-        message:
-          "We could not find your expert profile. Please create your profile first.",
-        isAlreadyExists: false,
-      };
-    }
-
-    if (
-      statusCode === 409 ||
-      lowerMessage.includes("already") ||
-      lowerMessage.includes("exists")
-    ) {
-      return {
-        message:
-          "Your expert profile already exists. Please edit and resubmit your current profile instead.",
-        isAlreadyExists: true,
-      };
-    }
-
-    if (
-      statusCode >= 500 ||
-      isTechnicalMessage(rawMessage) ||
-      lowerMessage.includes("database")
-    ) {
-      return {
-        message:
-          "Something went wrong while saving your profile. Please try again later or contact support.",
-        isAlreadyExists: false,
-      };
-    }
-
-    return {
-      message: cleanMessage(
-        rawMessage,
-        "We could not submit your profile. Please check your information and try again."
-      ),
-      isAlreadyExists: false,
-    };
-  };
-
-  const buildSubmitResult = (responseData) => {
-    const payload = responseData?.data || responseData || {};
-    const rawText = JSON.stringify(payload).toLowerCase();
-
-    const backendMessage =
-      payload?.message ||
-      payload?.title ||
-      payload?.reviewMessage ||
-      payload?.aiMessage ||
-      payload?.certificateMessage ||
-      "";
-
-    const backendStatus =
-      payload?.status ||
-      payload?.profileStatus ||
-      payload?.reviewStatus ||
-      payload?.verificationStatus ||
-      payload?.certificateStatus ||
-      "";
-
-    const suggestions =
-      payload?.suggestions ||
-      payload?.reasons ||
-      payload?.issues ||
-      payload?.errors ||
-      [];
-
-    const normalizedStatus = String(backendStatus || "").toUpperCase();
-
-    const isNeedsCorrection =
-      normalizedStatus === "NEEDS_CORRECTION" ||
-      rawText.includes("needs_correction") ||
-      rawText.includes("need correction") ||
-      rawText.includes("needs correction") ||
-      rawText.includes("correction required") ||
-      rawText.includes("rejected");
-
-    if (isNeedsCorrection) {
-      return {
-        type: "warning",
-        title: "Your profile needs a few changes",
-        message: cleanMessage(
-          backendMessage,
-          "Your profile was saved, but it needs a few changes before it can be approved."
-        ),
-        status: "NEEDS_CORRECTION",
-        suggestions: normalizeSuggestionList(suggestions, [
-          "Review your profile information.",
-          "Make sure your certificate link is public and can be opened.",
-          "Make sure your public profile links are correct.",
-          "After fixing the issues, submit your profile again.",
-        ]),
-        shouldRedirect: false,
-        showModal: true,
-        primaryLabel: isEditPage ? "Continue Editing" : "Fix and Resubmit",
-        actionPath: isEditPage ? "" : "/expert/profile/edit",
-      };
-    }
-
-    if (
-      rawText.includes("approve") ||
-      rawText.includes("active") ||
-      rawText.includes("verified") ||
-      rawText.includes("success") ||
-      rawText.includes("pass")
-    ) {
-      return {
-        type: "success",
-        title: "Profile submitted successfully",
-        message: cleanMessage(
-          backendMessage,
-          "Your expert profile has been submitted successfully."
-        ),
-        status: normalizedStatus || "SUBMITTED",
-        suggestions: normalizeSuggestionList(suggestions, []),
-        shouldRedirect: true,
-        showModal: false,
-      };
-    }
-
-    if (rawText.includes("pending") || rawText.includes("review")) {
-      return {
-        type: "warning",
-        title: "Profile is under review",
-        message: cleanMessage(
-          backendMessage,
-          "Your profile has been submitted and is waiting for review."
-        ),
-        status: normalizedStatus || "PENDING_REVIEW",
-        suggestions: normalizeSuggestionList(suggestions, []),
-        shouldRedirect: true,
-        showModal: false,
-      };
-    }
-
-    return {
-      type: "success",
-      title: "Profile submitted",
-      message: cleanMessage(
-        backendMessage,
-        "Your profile has been submitted successfully."
-      ),
-      status: normalizedStatus || "SUBMITTED",
-      suggestions: normalizeSuggestionList(suggestions, []),
-      shouldRedirect: true,
-      showModal: false,
-    };
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setSubmitResult(null);
-    setCorrectionModal(null);
-
-    const isValid = validateForm();
-
-    if (!isValid) return;
-
+  const loadInitialData = async () => {
     try {
       setLoading(true);
-      setGeneralError("");
-      setNotice("Submitting your profile for review...");
+      setError("");
 
-      const responseData = isEditPage
-        ? await expertProfileService.resubmitExpertProfile(formData)
-        : await expertProfileService.createExpertProfile(formData);
+      const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
+      const normalDraft = readJson(draftKey);
 
-      await refreshUser();
-
-      const result = buildSubmitResult(responseData);
-
-      setNotice("");
-      setSubmitResult(result);
-
-      if (result.showModal) {
-        setCorrectionModal(result);
+      if (correctionDraft) {
+        setFormData({
+          ...emptyForm,
+          ...correctionDraft,
+          certificates:
+            Array.isArray(correctionDraft.certificates) &&
+            correctionDraft.certificates.length > 0
+              ? correctionDraft.certificates
+              : emptyForm.certificates,
+        });
+        return;
       }
 
-      if (result.status !== "NEEDS_CORRECTION") {
-        localStorage.removeItem(currentDraftKey);
+      if (normalDraft) {
+        setFormData({
+          ...emptyForm,
+          ...normalDraft,
+          certificates:
+            Array.isArray(normalDraft.certificates) &&
+            normalDraft.certificates.length > 0
+              ? normalDraft.certificates
+              : emptyForm.certificates,
+        });
+        return;
       }
 
-      if (result.shouldRedirect) {
-        setTimeout(() => {
-          navigate("/expert/dashboard", { replace: true });
-        }, 1800);
+      if (isEditPage) {
+        const profile = await expertProfileService.getMyExpertProfile();
+
+        setFormData({
+          avatarUrl: profile?.avatarUrl || "",
+          professionalTitle: profile?.professionalTitle || "",
+          bio: profile?.bio || "",
+          skills: profile?.skills || "",
+          yearsOfExperience: profile?.yearsOfExperience ?? "",
+          expectedProjectBudgetMin: profile?.expectedProjectBudgetMin ?? "",
+          expectedProjectBudgetMax: profile?.expectedProjectBudgetMax ?? "",
+          preferredProjectDurationDays:
+            profile?.preferredProjectDurationDays ?? "",
+          availableForWork:
+            profile?.availableForWork === undefined
+              ? true
+              : Boolean(profile.availableForWork),
+          portfolioUrl: profile?.portfolioUrl || "",
+          linkedInUrl: profile?.linkedInUrl || "",
+          gitHubUrl: profile?.gitHubUrl || "",
+          certificates:
+            Array.isArray(profile?.certificates) &&
+            profile.certificates.length > 0
+              ? profile.certificates.map((item) => ({
+                  certificateName: item.certificateName || "",
+                  certificateIssuer: item.certificateIssuer || "",
+                  certificateUrl: item.certificateUrl || "",
+                  issuedAt: item.issuedAt
+                    ? String(item.issuedAt).slice(0, 10)
+                    : "",
+                }))
+              : emptyForm.certificates,
+        });
       }
     } catch (err) {
-      console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data);
-
-      const friendlyError = getFriendlyBackendError(err);
-
-      setNotice("");
-
-      setSubmitResult({
-        type: "error",
-        title: friendlyError.isAlreadyExists
-          ? "Profile already exists"
-          : "Profile submission failed",
-        message: friendlyError.message,
-        status: friendlyError.isAlreadyExists ? "PROFILE_EXISTS" : "FAILED",
-        suggestions: friendlyError.isAlreadyExists
-          ? [
-            "Open your existing profile.",
-            "Review the information.",
-            "Submit again using the resubmit flow.",
-          ]
-          : [
-            "Check all highlighted fields.",
-            "Make sure every link is public.",
-            "Make sure every URL starts with http:// or https://.",
-            "Try again after checking your information.",
-          ],
-        shouldRedirect: false,
-        showModal: false,
-        primaryLabel: friendlyError.isAlreadyExists ? "Go to Edit Profile" : "",
-        actionPath: friendlyError.isAlreadyExists ? "/expert/profile/edit" : "",
-      });
-
-      setGeneralError(friendlyError.message);
+      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCorrectionPrimaryAction = () => {
-    if (correctionModal?.actionPath) {
-      navigate(correctionModal.actionPath, { replace: true });
+  const markTouched = (name) => {
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }));
+  };
+
+  const getFieldError = (name) => {
+    if (!submitted && !touched[name]) return "";
+    return formErrors[name] || "";
+  };
+
+  const getGroupError = (name, fieldNames = []) => {
+    const groupTouched = fieldNames.some((fieldName) => touched[fieldName]);
+
+    if (!submitted && !groupTouched) return "";
+
+    return formErrors[name] || "";
+  };
+
+  const updateField = (name, value) => {
+    setError("");
+    setModal(null);
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const updateCertificate = (index, name, value) => {
+    setError("");
+    setModal(null);
+
+    setFormData((prev) => {
+      const nextCertificates = [...prev.certificates];
+
+      nextCertificates[index] = {
+        ...nextCertificates[index],
+        [name]: value,
+      };
+
+      return {
+        ...prev,
+        certificates: nextCertificates,
+      };
+    });
+  };
+
+  const addCertificate = () => {
+    setFormData((prev) => ({
+      ...prev,
+      certificates: [
+        ...prev.certificates,
+        {
+          certificateName: "",
+          certificateIssuer: "",
+          certificateUrl: "",
+          issuedAt: "",
+        },
+      ],
+    }));
+  };
+
+  const removeCertificate = (index) => {
+    setFormData((prev) => {
+      const nextCertificates = prev.certificates.filter((_, i) => i !== index);
+
+      return {
+        ...prev,
+        certificates:
+          nextCertificates.length > 0
+            ? nextCertificates
+            : emptyForm.certificates,
+      };
+    });
+  };
+
+  const handleAvatarUpload = async (event) => {
+    const file = event.target.files?.[0];
+
+    if (!file) return;
+
+    try {
+      setUploadingAvatar(true);
+      setError("");
+      setModal(null);
+
+      const imageUrl = await uploadService.uploadImage(file, "avatar");
+
+      updateField("avatarUrl", imageUrl);
+    } catch (err) {
+      console.error("AVATAR UPLOAD ERROR:", err?.response?.data || err);
+
+      setModal({
+        type: "danger",
+        title: "Upload failed",
+        message: getFriendlyError(err),
+        detail: "",
+        showResubmit: false,
+        showClose: true,
+      });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+
+    setSubmitted(true);
+    setError("");
+    setModal(null);
+
+    const errors = validateForm(formData);
+
+    if (Object.keys(errors).length > 0) {
+      setError("Please check the highlighted fields before submitting.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
-    setCorrectionModal(null);
+    try {
+      setSaving(true);
+
+      const result = isEditPage
+        ? await expertProfileService.resubmitExpertProfile(formData)
+        : await expertProfileService.createExpertProfile(formData);
+
+      console.log("EXPERT PROFILE SUBMIT SUCCESS:", result);
+
+      const reviewStatus = getReviewStatus(result);
+      const userStatus = getUserStatus(result);
+      const reviewNote = getReviewNote(result);
+      const missingInformation = getMissingInformation(result);
+
+      if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
+        clearExpertProfileDrafts();
+        updateLocalUserStatus("ACTIVE");
+
+        setModal({
+          type: "success",
+          title: "Setup profile successfully",
+          message: "Your expert profile has been approved.",
+          detail: "Redirecting to dashboard...",
+          showResubmit: false,
+          showClose: false,
+        });
+
+        setTimeout(() => {
+          window.location.replace("/expert/dashboard");
+        }, 900);
+
+        return;
+      }
+
+      if (reviewStatus === "NEEDS_CORRECTION") {
+        saveCorrectionDraft(formData);
+        updateLocalUserStatus("PENDING_PROFILE");
+
+        setModal({
+          type: "warning",
+          title: "Profile needs correction",
+          message:
+            reviewNote ||
+            "Your profile was submitted, but it needs some corrections before approval.",
+          detail:
+            missingInformation ||
+            "Please review your bio, skills, public links, and certificates.",
+          showResubmit: true,
+          showClose: true,
+        });
+
+        return;
+      }
+
+      if (reviewStatus === "REJECTED") {
+        saveCorrectionDraft(formData);
+        updateLocalUserStatus("PENDING_PROFILE");
+
+        setModal({
+          type: "danger",
+          title: "Profile was rejected",
+          message:
+            reviewNote ||
+            "Your expert profile was rejected. Please update your information and submit again.",
+          detail:
+            missingInformation ||
+            "Please check your profile information, public links, and certificates.",
+          showResubmit: true,
+          showClose: true,
+        });
+
+        return;
+      }
+
+      saveCorrectionDraft(formData);
+
+      setModal({
+        type: "info",
+        title: "Profile submitted",
+        message:
+          "Your expert profile has been submitted. Please check your profile status later.",
+        detail: "",
+        showResubmit: false,
+        showClose: true,
+      });
+    } catch (err) {
+      console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data || err);
+
+      saveCorrectionDraft(formData);
+
+      setModal({
+        type: "danger",
+        title: "Submit failed",
+        message: getFriendlyError(err),
+        detail:
+          "Your form data has been saved. You can go to resubmit page and try again.",
+        showResubmit: true,
+        showClose: true,
+      });
+    } finally {
+      setSaving(false);
+    }
   };
 
-  if (fetching) {
+  const handleGoResubmit = () => {
+    saveCorrectionDraft(formData);
+    setModal(null);
+    navigate("/expert/profile/edit", { replace: true });
+  };
+
+  const handleClearDraft = () => {
+    clearExpertProfileDrafts();
+    setFormData(emptyForm);
+    setTouched({});
+    setSubmitted(false);
+    setModal(null);
+    setError("");
+  };
+
+  const handleLogout = async () => {
+    await authService.logout();
+    navigate("/login", { replace: true });
+  };
+
+  if (loading) {
     return (
-      <SetupOnlyLayout onSignOut={handleSignOut}>
+      <SetupShell onLogout={handleLogout}>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          <div className="text-center">
-            <span className="material-symbols-outlined mb-3 block text-5xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading profile form...
-          </div>
+          Loading expert profile form...
         </div>
-      </SetupOnlyLayout>
+      </SetupShell>
     );
   }
 
   return (
-    <SetupOnlyLayout onSignOut={handleSignOut}>
+    <SetupShell onLogout={handleLogout}>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Expert Profile
+              {isEditPage ? "Resubmit Expert Profile" : "Setup Expert Profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Edit your expert profile"
-                : "Complete your expert profile"}
+                ? "Update and resubmit your expert profile"
+                : "Create your expert profile"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fields marked with{" "}
-              <span className="font-bold text-red-400">*</span> are required.
-              For profile links, please provide at least one public link.
-              Your draft is saved automatically.
+              Complete your profile so clients can understand your skills,
+              experience, budget, and public work links.
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className={cardStyle}>
-            {isEditPage && (
-              <AlertBox
-                type="warning"
-                title="Editing mode"
-                message="Update your information and submit again for review."
-              />
-            )}
+          {error && (
+            <Alert type="danger" title="Please check your form" message={error} />
+          )}
 
-            {notice && (
-              <AlertBox type="info" title="Processing" message={notice} />
-            )}
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+          >
+            <section>
+              <h2 className="mb-4 text-lg font-bold text-white">
+                Basic Information
+              </h2>
 
-            {submitResult && (
-              <SubmitResultBox
-                result={submitResult}
-                onAction={(path) => navigate(path, { replace: true })}
-              />
-            )}
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_1fr]">
+                <div>
+                  <div className="mb-3 h-36 w-36 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                    {formData.avatarUrl ? (
+                      <img
+                        src={formData.avatarUrl}
+                        alt="Avatar"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-cyan-300">
+                        <span className="material-symbols-outlined text-6xl">
+                          person
+                        </span>
+                      </div>
+                    )}
+                  </div>
 
-            {generalError && !submitResult && (
-              <AlertBox
-                type="error"
-                title="Please review your form"
-                message={generalError}
-              />
-            )}
+                  <label className="inline-flex cursor-pointer rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
+                    {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
 
-            <div className="mb-8">
-              <RequiredLabel text="Avatar" required />
-
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarFileChange}
-                className="hidden"
-              />
-
-              <div className="mt-2 flex flex-col gap-4 sm:flex-row sm:items-end">
-                <button
-                  type="button"
-                  onClick={handleAvatarClick}
-                  disabled={imageUploading}
-                  className="group flex h-36 w-36 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10 transition hover:border-cyan-300 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {avatarPreview ? (
-                    <img
-                      src={avatarPreview}
-                      alt="Avatar preview"
-                      className="h-full w-full object-cover"
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
                     />
-                  ) : (
-                    <div className="text-center">
-                      <span className="material-symbols-outlined block text-5xl text-cyan-300">
-                        add_a_photo
-                      </span>
-                      <span className="mt-2 block text-xs font-bold text-cyan-300">
-                        Choose image
-                      </span>
-                    </div>
-                  )}
-                </button>
-
-                <div className="flex flex-col gap-3">
-                  {imageUploading && (
-                    <p className="text-sm font-semibold text-cyan-300">
-                      Uploading avatar...
-                    </p>
-                  )}
-
-                  {avatarPreview && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveAvatar}
-                      disabled={imageUploading}
-                      className="w-fit rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Remove Image
-                    </button>
-                  )}
+                  </label>
                 </div>
-              </div>
 
-              <p className="mt-2 text-xs text-gray-500">
-                Upload a clear profile image. Maximum size: 2MB.
-              </p>
-
-              <FieldError message={fieldErrors.avatarUrl} />
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <RequiredLabel text="Professional Title" required />
-                <input
-                  type="text"
-                  name="professionalTitle"
-                  value={formData.professionalTitle}
-                  onChange={handleChange}
-                  placeholder="AI Chatbot & Java Backend Developer"
-                  className={getInputClass("professionalTitle")}
-                />
-                <FieldError message={fieldErrors.professionalTitle} />
-              </div>
-
-              <div className="md:col-span-2">
-                <RequiredLabel text="Bio" required />
-                <textarea
-                  name="bio"
-                  value={formData.bio}
-                  onChange={handleChange}
-                  rows="5"
-                  placeholder="Introduce your experience, skills, and what you can help clients build."
-                  className={`${getInputClass("bio")} resize-none`}
-                />
-                <FieldError message={fieldErrors.bio} />
-              </div>
-
-              <div className="md:col-span-2">
-                <RequiredLabel text="Skills" required />
-                <input
-                  type="text"
-                  name="skills"
-                  value={formData.skills}
-                  onChange={handleChange}
-                  placeholder="Java, Java Servlet, SQL Server, API Integration, AI API Integration"
-                  className={getInputClass("skills")}
-                />
-                <FieldError message={fieldErrors.skills} />
-              </div>
-
-              <div>
-                <RequiredLabel text="Years Of Experience" required />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  name="yearsOfExperience"
-                  value={formData.yearsOfExperience}
-                  onChange={handleChange}
-                  placeholder="1"
-                  className={getInputClass("yearsOfExperience")}
-                />
-                <FieldError message={fieldErrors.yearsOfExperience} />
-              </div>
-
-              <div>
-                <RequiredLabel text="Preferred Duration Days" required />
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  name="preferredProjectDurationDays"
-                  value={formData.preferredProjectDurationDays}
-                  onChange={handleChange}
-                  placeholder="14"
-                  className={getInputClass("preferredProjectDurationDays")}
-                />
-                <FieldError message={fieldErrors.preferredProjectDurationDays} />
-              </div>
-
-              <div>
-                <RequiredLabel text="Budget Min" required />
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  name="expectedProjectBudgetMin"
-                  value={formData.expectedProjectBudgetMin}
-                  onChange={handleChange}
-                  placeholder="100"
-                  className={getInputClass("expectedProjectBudgetMin")}
-                />
-                <FieldError message={fieldErrors.expectedProjectBudgetMin} />
-              </div>
-
-              <div>
-                <RequiredLabel text="Budget Max" required />
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  name="expectedProjectBudgetMax"
-                  value={formData.expectedProjectBudgetMax}
-                  onChange={handleChange}
-                  placeholder="500"
-                  className={getInputClass("expectedProjectBudgetMax")}
-                />
-                <FieldError message={fieldErrors.expectedProjectBudgetMax} />
-              </div>
-
-              <div>
-                <RequiredLabel text="Portfolio URL" required={false} />
-                <input
-                  type="text"
-                  name="portfolioUrl"
-                  value={formData.portfolioUrl}
-                  onChange={handleChange}
-                  placeholder="https://your-portfolio.com"
-                  className={getInputClass("portfolioUrl")}
-                />
-                <FieldError message={fieldErrors.portfolioUrl} />
-              </div>
-
-              <div>
-                <RequiredLabel text="LinkedIn URL" required={false} />
-                <input
-                  type="text"
-                  name="linkedInUrl"
-                  value={formData.linkedInUrl}
-                  onChange={handleChange}
-                  placeholder="https://linkedin.com/in/your-name"
-                  className={getInputClass("linkedInUrl")}
-                />
-                <FieldError message={fieldErrors.linkedInUrl} />
-              </div>
-
-              <div className="md:col-span-2">
-                <RequiredLabel text="GitHub URL" required={false} />
-                <input
-                  type="text"
-                  name="gitHubUrl"
-                  value={formData.gitHubUrl}
-                  onChange={handleChange}
-                  placeholder="https://github.com/your-name"
-                  className={getInputClass("gitHubUrl")}
-                />
-                <FieldError message={fieldErrors.gitHubUrl} />
-
-                <p className="mt-2 text-xs text-gray-500">
-                  Please provide at least one public link: Portfolio, LinkedIn,
-                  or GitHub.
-                </p>
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                  <input
-                    type="checkbox"
-                    name="availableForWork"
-                    checked={formData.availableForWork}
-                    onChange={handleChange}
-                    className="h-4 w-4 accent-cyan-400"
+                <div className="space-y-4">
+                  <TextInput
+                    label="Professional Title"
+                    required
+                    value={formData.professionalTitle}
+                    onChange={(value) =>
+                      updateField("professionalTitle", value)
+                    }
+                    onBlur={() => markTouched("professionalTitle")}
+                    error={getFieldError("professionalTitle")}
+                    placeholder="Example: Full-stack React Developer"
                   />
 
-                  <span className="text-sm font-semibold text-gray-300">
-                    Available for work
-                  </span>
-                </label>
-              </div>
-            </div>
+                  <TextArea
+                    label="Bio"
+                    required
+                    value={formData.bio}
+                    onChange={(value) => updateField("bio", value)}
+                    onBlur={() => markTouched("bio")}
+                    error={getFieldError("bio")}
+                    placeholder="At least 50 characters."
+                  />
 
-            <div className="my-8 border-t border-white/10" />
-
-            <div>
-              <div className="mb-5 flex items-center justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    Certificates
-                  </h2>
-
-                  <p className="mt-1 text-sm text-gray-500">
-                    Add at least one public certificate link for review.
-                  </p>
+                  <TextInput
+                    label="Skills"
+                    required
+                    value={formData.skills}
+                    onChange={(value) => updateField("skills", value)}
+                    onBlur={() => markTouched("skills")}
+                    error={getFieldError("skills")}
+                    placeholder="React, JavaScript, C#, SQL"
+                  />
                 </div>
+              </div>
+            </section>
+
+            <section className="border-t border-white/10 pt-6">
+              <h2 className="mb-4 text-lg font-bold text-white">
+                Work Preferences
+              </h2>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <NumberInput
+                  label="Years of Experience"
+                  required
+                  value={formData.yearsOfExperience}
+                  onChange={(value) => updateField("yearsOfExperience", value)}
+                  onBlur={() => markTouched("yearsOfExperience")}
+                  error={getFieldError("yearsOfExperience")}
+                  placeholder="Example: 2"
+                />
+
+                <NumberInput
+                  label="Preferred Duration Days"
+                  required
+                  value={formData.preferredProjectDurationDays}
+                  onChange={(value) =>
+                    updateField("preferredProjectDurationDays", value)
+                  }
+                  onBlur={() => markTouched("preferredProjectDurationDays")}
+                  error={getFieldError("preferredProjectDurationDays")}
+                  placeholder="Example: 14"
+                />
+
+                <NumberInput
+                  label="Minimum Budget"
+                  required
+                  value={formData.expectedProjectBudgetMin}
+                  onChange={(value) =>
+                    updateField("expectedProjectBudgetMin", value)
+                  }
+                  onBlur={() => markTouched("expectedProjectBudgetMin")}
+                  error={getFieldError("expectedProjectBudgetMin")}
+                  placeholder="Example: 100"
+                />
+
+                <NumberInput
+                  label="Maximum Budget"
+                  required
+                  value={formData.expectedProjectBudgetMax}
+                  onChange={(value) =>
+                    updateField("expectedProjectBudgetMax", value)
+                  }
+                  onBlur={() => markTouched("expectedProjectBudgetMax")}
+                  error={getFieldError("expectedProjectBudgetMax")}
+                  placeholder="Example: 1000"
+                />
+              </div>
+
+              <label className="mt-4 flex items-center gap-3 text-sm text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={formData.availableForWork}
+                  onChange={(event) =>
+                    updateField("availableForWork", event.target.checked)
+                  }
+                  className="h-4 w-4"
+                />
+                Available for work
+              </label>
+            </section>
+
+            <section className="border-t border-white/10 pt-6">
+              <h2 className="mb-4 text-lg font-bold text-white">
+                Public Links
+              </h2>
+
+              <p className="mb-4 text-sm text-gray-500">
+                Add at least 2 public links.
+              </p>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <TextInput
+                  label="Portfolio URL"
+                  value={formData.portfolioUrl}
+                  onChange={(value) => updateField("portfolioUrl", value)}
+                  onBlur={() => markTouched("portfolioUrl")}
+                  error={getFieldError("portfolioUrl")}
+                  placeholder="https://your-portfolio.com"
+                />
+
+                <TextInput
+                  label="LinkedIn URL"
+                  value={formData.linkedInUrl}
+                  onChange={(value) => updateField("linkedInUrl", value)}
+                  onBlur={() => markTouched("linkedInUrl")}
+                  error={getFieldError("linkedInUrl")}
+                  placeholder="https://linkedin.com/in/you"
+                />
+
+                <TextInput
+                  label="GitHub URL"
+                  value={formData.gitHubUrl}
+                  onChange={(value) => updateField("gitHubUrl", value)}
+                  onBlur={() => markTouched("gitHubUrl")}
+                  error={getFieldError("gitHubUrl")}
+                  placeholder="https://github.com/you"
+                />
+              </div>
+
+              <FieldError
+                message={getGroupError("publicLinks", [
+                  "portfolioUrl",
+                  "linkedInUrl",
+                  "gitHubUrl",
+                ])}
+              />
+            </section>
+
+            <section className="border-t border-white/10 pt-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-bold text-white">Certificates</h2>
 
                 <button
                   type="button"
                   onClick={addCertificate}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                 >
-                  Add
+                  Add Certificate
                 </button>
               </div>
 
-              <div className="space-y-5">
+              <FieldError message={submitted ? formErrors.certificates : ""} />
+              <FieldError
+                message={submitted ? formErrors.duplicateCertificates : ""}
+              />
+
+              <div className="space-y-4">
                 {formData.certificates.map((certificate, index) => (
                   <div
                     key={index}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+                    className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
                   >
                     <div className="mb-4 flex items-center justify-between">
-                      <p className="text-sm font-bold text-white">
+                      <p className="font-bold text-white">
                         Certificate {index + 1}
                       </p>
 
                       <button
                         type="button"
                         onClick={() => removeCertificate(index)}
-                        className="text-sm font-bold text-red-400 transition hover:text-red-300"
+                        className="text-sm font-bold text-red-300 hover:text-red-200"
                       >
                         Remove
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <div>
-                        <RequiredLabel text="Certificate Name" required />
-                        <input
-                          type="text"
-                          name="certificateName"
-                          value={certificate.certificateName}
-                          onChange={(event) =>
-                            handleCertificateChange(index, event)
-                          }
-                          placeholder="Java Servlet Development"
-                          className={getInputClass(
-                            `certificate-${index}-certificateName`
-                          )}
-                        />
-                        <FieldError
-                          message={
-                            fieldErrors[`certificate-${index}-certificateName`]
-                          }
-                        />
-                      </div>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <TextInput
+                        label="Certificate Name"
+                        required
+                        value={certificate.certificateName}
+                        onChange={(value) =>
+                          updateCertificate(index, "certificateName", value)
+                        }
+                        onBlur={() => markTouched(`certificateName_${index}`)}
+                        error={getFieldError(`certificateName_${index}`)}
+                        placeholder="Example: React Developer Certificate"
+                      />
+
+                      <TextInput
+                        label="Issuer"
+                        required
+                        value={certificate.certificateIssuer}
+                        onChange={(value) =>
+                          updateCertificate(index, "certificateIssuer", value)
+                        }
+                        onBlur={() => markTouched(`certificateIssuer_${index}`)}
+                        error={getFieldError(`certificateIssuer_${index}`)}
+                        placeholder="Example: Coursera"
+                      />
+
+                      <TextInput
+                        label="Certificate URL"
+                        required
+                        value={certificate.certificateUrl}
+                        onChange={(value) =>
+                          updateCertificate(index, "certificateUrl", value)
+                        }
+                        onBlur={() => markTouched(`certificateUrl_${index}`)}
+                        error={getFieldError(`certificateUrl_${index}`)}
+                        placeholder="https://certificate-link.com"
+                      />
 
                       <div>
-                        <RequiredLabel text="Issuer" required />
-                        <input
-                          type="text"
-                          name="certificateIssuer"
-                          value={certificate.certificateIssuer}
-                          onChange={(event) =>
-                            handleCertificateChange(index, event)
-                          }
-                          placeholder="Coursera"
-                          className={getInputClass(
-                            `certificate-${index}-certificateIssuer`
-                          )}
-                        />
-                        <FieldError
-                          message={
-                            fieldErrors[
-                            `certificate-${index}-certificateIssuer`
-                            ]
-                          }
-                        />
-                      </div>
+                        <label className="mb-2 block text-sm font-bold text-gray-300">
+                          Issued At
+                        </label>
 
-                      <div>
-                        <RequiredLabel text="Certificate URL" required />
-                        <input
-                          type="text"
-                          name="certificateUrl"
-                          value={certificate.certificateUrl}
-                          onChange={(event) =>
-                            handleCertificateChange(index, event)
-                          }
-                          placeholder="https://coursera.org/share/..."
-                          className={getInputClass(
-                            `certificate-${index}-certificateUrl`
-                          )}
-                        />
-                        <FieldError
-                          message={
-                            fieldErrors[`certificate-${index}-certificateUrl`]
-                          }
-                        />
-                      </div>
-
-                      <div>
-                        <RequiredLabel text="Issued At" required />
                         <input
                           type="date"
-                          name="issuedAt"
                           value={certificate.issuedAt}
                           onChange={(event) =>
-                            handleCertificateChange(index, event)
+                            updateCertificate(
+                              index,
+                              "issuedAt",
+                              event.target.value
+                            )
                           }
-                          className={getInputClass(
-                            `certificate-${index}-issuedAt`
-                          )}
-                        />
-                        <FieldError
-                          message={fieldErrors[`certificate-${index}-issuedAt`]}
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
                         />
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
 
-            <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-end">
+            <div className="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() =>
-                  navigate(isEditPage ? "/expert/profile" : "/expert/dashboard")
-                }
-                className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+                onClick={handleClearDraft}
+                className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
               >
-                Cancel
+                Clear Draft
               </button>
 
               <button
                 type="submit"
-                disabled={loading || imageUploading}
-                className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 shadow-[0_0_20px_rgba(0,240,255,0.15)] transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={saving || uploadingAvatar}
+                className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {loading
-                  ? "Submitting profile..."
-                  : imageUploading
-                    ? "Uploading avatar..."
-                    : isEditPage
-                      ? "Resubmit Profile"
-                      : "Complete Profile"}
+                {saving
+                  ? "Submitting..."
+                  : isEditPage
+                  ? "Resubmit Profile"
+                  : "Submit Profile"}
               </button>
             </div>
           </form>
         </div>
       </div>
 
-      {correctionModal && (
-        <CorrectionModal
-          result={correctionModal}
-          isEditPage={isEditPage}
-          onClose={() => setCorrectionModal(null)}
-          onPrimary={handleCorrectionPrimaryAction}
+      {modal && (
+        <ResultModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          onGoResubmit={handleGoResubmit}
         />
       )}
-    </SetupOnlyLayout>
+    </SetupShell>
   );
 }
 
-function SetupOnlyLayout({ children, onSignOut }) {
+function SetupShell({ children, onLogout }) {
   return (
-    <div className="min-h-screen bg-[#0d1117] text-white">
-      <header className="border-b border-white/10 bg-[#0d1117]/95">
+    <div className="min-h-screen bg-[#0d1117] text-[#e1e2eb]">
+      <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d1117]/95 backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
           <div className="inline-flex items-center text-xl font-extrabold tracking-tight">
             <span className="text-[#00F0FF]">AI</span>
@@ -1336,13 +751,13 @@ function SetupOnlyLayout({ children, onSignOut }) {
 
           <button
             type="button"
-            onClick={onSignOut}
-            className="inline-flex items-center gap-2 rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500 hover:text-white"
+            onClick={onLogout}
+            className="inline-flex items-center gap-2 rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
           >
             <span className="material-symbols-outlined text-[18px]">
               logout
             </span>
-            Sign out
+            Logout
           </button>
         </div>
       </header>
@@ -1352,229 +767,405 @@ function SetupOnlyLayout({ children, onSignOut }) {
   );
 }
 
-function RequiredLabel({ text, required }) {
+function ResultModal({ modal, onClose, onGoResubmit }) {
+  const icon =
+    modal.type === "success"
+      ? "check_circle"
+      : modal.type === "warning"
+      ? "warning"
+      : modal.type === "danger"
+      ? "error"
+      : "info";
+
+  const color =
+    modal.type === "success"
+      ? "text-green-300"
+      : modal.type === "warning"
+      ? "text-yellow-300"
+      : modal.type === "danger"
+      ? "text-red-300"
+      : "text-cyan-300";
+
+  const buttonColor =
+    modal.type === "success"
+      ? "border-green-300/50 bg-green-300/10 text-green-200 hover:bg-green-300 hover:text-black"
+      : modal.type === "warning"
+      ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-200 hover:bg-yellow-300 hover:text-black"
+      : "border-red-300/50 bg-red-300/10 text-red-200 hover:bg-red-300 hover:text-black";
+
   return (
-    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-      {text}
-      {required && <span className="ml-1 text-red-400">*</span>}
-    </label>
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="mb-5 flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+            <span className={`material-symbols-outlined text-3xl ${color}`}>
+              {icon}
+            </span>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-extrabold text-white">{modal.title}</h3>
+
+            <p className="mt-2 text-sm leading-6 text-gray-300">
+              {modal.message}
+            </p>
+          </div>
+        </div>
+
+        {modal.detail && (
+          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
+            {modal.detail}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          {modal.showClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+            >
+              Close
+            </button>
+          )}
+
+          {modal.showResubmit && (
+            <button
+              type="button"
+              onClick={onGoResubmit}
+              className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${buttonColor}`}
+            >
+              Go to Resubmit
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Alert({ type, title, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
+
+  return (
+    <div className={`mb-6 rounded-xl border px-5 py-4 text-sm ${style}`}>
+      <p className="font-bold">{title}</p>
+      <p className="mt-1">{message}</p>
+    </div>
+  );
+}
+
+function validateForm(data) {
+  const errors = {};
+
+  if (isEmpty(data.professionalTitle)) {
+    errors.professionalTitle = "Professional title is required.";
+  }
+
+  if (isEmpty(data.bio)) {
+    errors.bio = "Bio is required.";
+  } else if (String(data.bio).trim().length < 50) {
+    errors.bio = "Bio must be at least 50 characters.";
+  }
+
+  if (isEmpty(data.skills)) {
+    errors.skills = "Skills are required.";
+  } else if (String(data.skills).trim().length < 10) {
+    errors.skills = "Skills must be more specific.";
+  }
+
+  if (isEmpty(data.yearsOfExperience)) {
+    errors.yearsOfExperience = "Years of experience is required.";
+  }
+
+  if (isEmpty(data.expectedProjectBudgetMin)) {
+    errors.expectedProjectBudgetMin = "Minimum budget is required.";
+  }
+
+  if (isEmpty(data.expectedProjectBudgetMax)) {
+    errors.expectedProjectBudgetMax = "Maximum budget is required.";
+  }
+
+  if (isEmpty(data.preferredProjectDurationDays)) {
+    errors.preferredProjectDurationDays = "Preferred duration is required.";
+  }
+
+  const minBudget = Number(data.expectedProjectBudgetMin || 0);
+  const maxBudget = Number(data.expectedProjectBudgetMax || 0);
+
+  if (minBudget < 0) {
+    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
+  }
+
+  if (maxBudget < 0) {
+    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
+  }
+
+  if (minBudget && maxBudget && minBudget > maxBudget) {
+    errors.expectedProjectBudgetMax =
+      "Maximum budget must be greater than minimum budget.";
+  }
+
+  const duration = Number(data.preferredProjectDurationDays || 0);
+
+  if (duration <= 0) {
+    errors.preferredProjectDurationDays =
+      "Preferred duration must be greater than 0.";
+  }
+
+  const publicLinks = [
+    data.portfolioUrl,
+    data.linkedInUrl,
+    data.gitHubUrl,
+  ].filter((item) => !isEmpty(item));
+
+  if (publicLinks.length < 2) {
+    errors.publicLinks =
+      "Please add at least 2 links: Portfolio, LinkedIn, or GitHub.";
+  }
+
+  ["portfolioUrl", "linkedInUrl", "gitHubUrl"].forEach((field) => {
+    if (!isEmpty(data[field]) && !isValidUrl(data[field])) {
+      errors[field] = "URL must start with http:// or https://";
+    }
+  });
+
+  const certificateUrls = [];
+  const certificates = data.certificates || [];
+
+  const validCertificates = certificates.filter(
+    (item) =>
+      !isEmpty(item.certificateName) ||
+      !isEmpty(item.certificateIssuer) ||
+      !isEmpty(item.certificateUrl)
+  );
+
+  if (validCertificates.length === 0) {
+    errors.certificates = "At least one certificate is required.";
+  }
+
+  certificates.forEach((item, index) => {
+    const hasAnyValue =
+      !isEmpty(item.certificateName) ||
+      !isEmpty(item.certificateIssuer) ||
+      !isEmpty(item.certificateUrl) ||
+      !isEmpty(item.issuedAt);
+
+    if (!hasAnyValue) return;
+
+    if (isEmpty(item.certificateName)) {
+      errors[`certificateName_${index}`] = "Certificate name is required.";
+    }
+
+    if (isEmpty(item.certificateIssuer)) {
+      errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
+    }
+
+    if (isEmpty(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] = "Certificate URL is required.";
+    }
+
+    if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] =
+        "Certificate URL must start with http:// or https://";
+    }
+
+    if (!isEmpty(item.certificateUrl)) {
+      certificateUrls.push(String(item.certificateUrl).trim().toLowerCase());
+    }
+  });
+
+  if (certificateUrls.length !== new Set(certificateUrls).size) {
+    errors.duplicateCertificates = "Certificate URLs must not be duplicated.";
+  }
+
+  return errors;
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function NumberInput(props) {
+  return (
+    <TextInput
+      {...props}
+      onChange={(nextValue) => {
+        if (/^\d*$/.test(nextValue)) props.onChange(nextValue);
+      }}
+    />
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        rows={5}
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+      />
+
+      <FieldError message={error} />
+    </div>
   );
 }
 
 function FieldError({ message }) {
   if (!message) return null;
 
+  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
+}
+
+function getReviewStatus(result) {
+  return String(
+    result?.profileReviewStatus ||
+      result?.ProfileReviewStatus ||
+      result?.reviewStatus ||
+      result?.ReviewStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function getUserStatus(result) {
+  return String(result?.userStatus || result?.UserStatus || "")
+    .trim()
+    .toUpperCase();
+}
+
+function getReviewNote(result) {
   return (
-    <p className="mt-2 flex items-center gap-1 text-xs font-semibold text-red-300">
-      <span className="material-symbols-outlined text-[16px]">error</span>
-      {message}
-    </p>
+    result?.profileReviewNote ||
+    result?.ProfileReviewNote ||
+    result?.reviewNote ||
+    result?.ReviewNote ||
+    result?.aiReviewNote ||
+    result?.AiReviewNote ||
+    ""
   );
 }
 
-function AlertBox({ type, title, message }) {
-  const styleMap = {
-    info: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
-    warning: "border-yellow-400/30 bg-yellow-400/10 text-yellow-200",
-    error: "border-red-500/30 bg-red-500/10 text-red-300",
-    success: "border-green-400/30 bg-green-400/10 text-green-300",
-  };
+function getMissingInformation(result) {
+  const value =
+    result?.missingInformation ||
+    result?.MissingInformation ||
+    result?.missingInfo ||
+    result?.MissingInfo ||
+    "";
 
-  const iconMap = {
-    info: "info",
-    warning: "warning",
-    error: "error",
-    success: "check_circle",
-  };
+  if (Array.isArray(value)) return value.join(", ");
 
-  return (
-    <div
-      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${styleMap[type] || styleMap.info
-        }`}
-    >
-      <div className="flex gap-3">
-        <span className="material-symbols-outlined text-[22px]">
-          {iconMap[type] || iconMap.info}
-        </span>
-
-        <div>
-          <p className="font-bold">{title}</p>
-          <p className="mt-1 leading-6">{message}</p>
-        </div>
-      </div>
-    </div>
-  );
+  return String(value || "");
 }
 
-function SubmitResultBox({ result, onAction }) {
-  const type = result?.type || "info";
-
-  const styleMap = {
-    success: "border-green-400/30 bg-green-400/10 text-green-300",
-    warning: "border-yellow-400/30 bg-yellow-400/10 text-yellow-200",
-    error: "border-red-500/30 bg-red-500/10 text-red-300",
-    info: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
-  };
-
-  const iconMap = {
-    success: "check_circle",
-    warning: "pending",
-    error: "error",
-    info: "info",
-  };
-
-  const suggestions = Array.isArray(result.suggestions)
-    ? result.suggestions
-    : [];
-
-  return (
-    <div
-      className={`mb-6 rounded-xl border px-5 py-4 text-sm ${styleMap[type] || styleMap.info
-        }`}
-    >
-      <div className="flex gap-3">
-        <span className="material-symbols-outlined text-[24px]">
-          {iconMap[type] || iconMap.info}
-        </span>
-
-        <div className="flex-1">
-          <p className="font-bold">{result.title}</p>
-
-          <p className="mt-1 leading-6">{result.message}</p>
-
-          {result.status && (
-            <p className="mt-2 text-xs font-bold uppercase tracking-wider opacity-80">
-              Status: {result.status}
-            </p>
-          )}
-
-          {suggestions.length > 0 && (
-            <div className="mt-4 rounded-lg bg-black/20 p-3">
-              <p className="mb-2 font-bold">Suggested actions</p>
-
-              <ul className="list-disc space-y-1 pl-5">
-                {suggestions.map((item, index) => (
-                  <li key={index}>{String(item)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {result.actionPath && result.primaryLabel && (
-            <button
-              type="button"
-              onClick={() => onAction(result.actionPath)}
-              className="mt-4 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-            >
-              {result.primaryLabel}
-            </button>
-          )}
-
-          {result.shouldRedirect && (
-            <p className="mt-3 text-xs font-semibold opacity-80">
-              Redirecting to Expert Dashboard...
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+function saveCorrectionDraft(data) {
+  localStorage.setItem(CORRECTION_DRAFT_KEY, JSON.stringify(data));
+  localStorage.setItem(EDIT_DRAFT_KEY, JSON.stringify(data));
+  localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(data));
 }
 
-function CorrectionModal({ result, isEditPage, onClose, onPrimary }) {
-  const suggestions = Array.isArray(result.suggestions)
-    ? result.suggestions
-    : [];
+function clearExpertProfileDrafts() {
+  localStorage.removeItem(SETUP_DRAFT_KEY);
+  localStorage.removeItem(EDIT_DRAFT_KEY);
+  localStorage.removeItem(CORRECTION_DRAFT_KEY);
+}
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-5 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-3xl border border-yellow-400/30 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div className="flex gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-yellow-400/10 text-yellow-300">
-              <span className="material-symbols-outlined text-3xl">
-                rule
-              </span>
-            </div>
+function updateLocalUserStatus(status) {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-            <div>
-              <p className="text-lg font-extrabold text-white">
-                Profile needs revision
-              </p>
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        ...user,
+        role: "EXPERT",
+        status,
+      })
+    );
+  } catch (error) {
+    console.error("UPDATE LOCAL USER STATUS ERROR:", error);
+  }
+}
 
-              <p className="mt-1 text-sm leading-6 text-gray-400">
-                {isEditPage
-                  ? "Your updated profile still needs a few changes before review."
-                  : "Your profile was saved, but it needs a few changes before it can be approved."}
-              </p>
-            </div>
-          </div>
+function readJson(key) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl p-2 text-gray-500 transition hover:bg-white/10 hover:text-white"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
+function isEmpty(value) {
+  return String(value || "").trim() === "";
+}
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-          <p className="text-sm font-bold text-yellow-200">
-            What happened?
-          </p>
+function isValidUrl(value) {
+  return /^https?:\/\//i.test(String(value || ""));
+}
 
-          <p className="mt-2 text-sm leading-6 text-gray-300">
-            {result.message}
-          </p>
+function getFriendlyError(err) {
+  const status = err?.response?.status;
 
-          {result.status && (
-            <p className="mt-3 text-xs font-bold uppercase tracking-wider text-yellow-300/80">
-              Status: {result.status}
-            </p>
-          )}
-        </div>
+  if (status === 401) {
+    return "Your session has expired. Please login again.";
+  }
 
-        {suggestions.length > 0 && (
-          <div className="mt-5">
-            <p className="mb-3 text-sm font-bold text-white">
-              Please check these items:
-            </p>
+  if (status === 403) {
+    return "Backend blocked this request because the current token does not have EXPERT permission.";
+  }
 
-            <ul className="space-y-2">
-              {suggestions.map((item, index) => (
-                <li
-                  key={index}
-                  className="flex gap-2 rounded-xl bg-black/20 px-3 py-2 text-sm text-gray-300"
-                >
-                  <span className="material-symbols-outlined mt-[1px] text-[18px] text-yellow-300">
-                    check_circle
-                  </span>
-                  <span>{String(item)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+  const rawMessage =
+    err?.response?.data?.message ||
+    err?.response?.data?.title ||
+    err?.response?.data ||
+    err?.message ||
+    "";
 
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
-          >
-            Stay here
-          </button>
-
-          <button
-            type="button"
-            onClick={onPrimary}
-            className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-          >
-            {result.primaryLabel || "Continue Editing"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return String(rawMessage || "Something went wrong. Please try again.");
 }

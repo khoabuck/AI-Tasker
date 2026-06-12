@@ -1,78 +1,165 @@
-// src/services/auth.service.js
-
 import { loginApi, loginWithGoogleApi, getMeApi } from "../api/auth.api";
 
-// ─── Mock data để test khi chưa có BE ────────────────
-const MOCK_USERS = [
-  { email: "client@test.com", password: "123456", role: "CLIENT", status: "ACTIVE", userId: 1, fullName: "Test Client" },
-  { email: "expert@test.com", password: "123456", role: "EXPERT", status: "ACTIVE", userId: 2, fullName: "Test Expert" },
-  { email: "admin@test.com",  password: "123456", role: "ADMIN",  status: "ACTIVE", userId: 3, fullName: "Test Admin"  },
-];
-
-// ⚠️ Đổi thành false khi BE xong
 const USE_MOCK = false;
 
+const MOCK_USERS = [
+  {
+    email: "client@test.com",
+    password: "123456",
+    role: "CLIENT",
+    status: "ACTIVE",
+    userId: 1,
+    fullName: "Test Client",
+  },
+  {
+    email: "expert@test.com",
+    password: "123456",
+    role: "EXPERT",
+    status: "ACTIVE",
+    userId: 2,
+    fullName: "Test Expert",
+  },
+  {
+    email: "admin@test.com",
+    password: "123456",
+    role: "ADMIN",
+    status: "ACTIVE",
+    userId: 3,
+    fullName: "Test Admin",
+  },
+];
+
+const normalizeUser = (user) => {
+  if (!user) return null;
+
+  return {
+    userId: user.userId || user.UserId || 0,
+    email: user.email || user.Email || "",
+    fullName: user.fullName || user.FullName || "",
+    role: user.role || user.Role || "",
+    status: user.status || user.Status || "",
+    authProvider: user.authProvider || user.AuthProvider || "LOCAL",
+    avatarUrl: user.avatarUrl || user.AvatarUrl || null,
+  };
+};
+
 const authService = {
-  // ─── Login thường ────────────────────────────────────
   login: async (credentials) => {
     if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 800));
+      await new Promise((res) => setTimeout(res, 500));
+
       const user = MOCK_USERS.find(
-        (u) => u.email === credentials.email && u.password === credentials.password
+        (item) =>
+          item.email === credentials.email &&
+          item.password === credentials.password
       );
-      if (user) {
-        const { password, ...userInfo } = user;
-        localStorage.setItem("accessToken", "mock-token-" + user.role);
-        localStorage.setItem("user", JSON.stringify(userInfo));
-        return { success: true, role: user.role, status: user.status };
+
+      if (!user) {
+        return {
+          success: false,
+          message: "Invalid email or password.",
+        };
       }
-      return { success: false, message: "Invalid email or password." };
+
+      const { password, ...userInfo } = user;
+      const accessToken = "mock-token-" + userInfo.role;
+
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("user", JSON.stringify(userInfo));
+
+      return {
+        success: true,
+        accessToken,
+        user: userInfo,
+        role: userInfo.role,
+        status: userInfo.status,
+      };
     }
 
-    // REAL MODE
     try {
-      // Bước 1: Login lấy accessToken
       const data = await loginApi(credentials);
-      const { accessToken } = data;
+
+      const accessToken =
+        data?.accessToken ||
+        data?.AccessToken ||
+        data?.token ||
+        data?.Token;
+
+      if (!accessToken) {
+        return {
+          success: false,
+          message: "Login response does not contain accessToken.",
+        };
+      }
+
       localStorage.setItem("accessToken", accessToken);
 
-      // Bước 2: Gọi /auth/me để lấy status mới nhất
-      const user = await getMeApi();
+      let user = normalizeUser(data?.user || data?.User);
+
+      try {
+        const freshUser = await getMeApi();
+        user = normalizeUser(freshUser);
+      } catch {
+        // Nếu /auth/me lỗi thì dùng user từ login response.
+      }
+
+      if (!user) {
+        return {
+          success: false,
+          message: "Login response does not contain user information.",
+        };
+      }
+
       localStorage.setItem("user", JSON.stringify(user));
 
-      return { success: true, role: user.role, status: user.status };
+      return {
+        success: true,
+        accessToken,
+        user,
+        role: user.role,
+        status: user.status,
+      };
     } catch (error) {
-      return { success: false, message: error.response?.data?.message || "Login failed." };
+      return {
+        success: false,
+        message: error?.response?.data?.message || "Login failed.",
+      };
     }
   },
 
-  // ─── Login với Google ─────────────────────────────────
   loginWithGoogle: async () => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 800));
-      const userInfo = { userId: 99, fullName: "Google User", role: "CLIENT", status: "ACTIVE" };
-      localStorage.setItem("accessToken", "mock-token-google");
-      localStorage.setItem("user", JSON.stringify(userInfo));
-      return { success: true, role: "CLIENT", status: "ACTIVE" };
-    }
-    // REAL MODE — redirect browser về backend
     loginWithGoogleApi();
   },
 
-  // ─── Logout ──────────────────────────────────────────
   logout: async () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
+
+    localStorage.removeItem("aitasker_expert_profile_setup_draft");
+    localStorage.removeItem("aitasker_expert_profile_edit_draft");
+    localStorage.removeItem("aitasker_expert_profile_correction_draft");
   },
 
-  // ─── Helpers ─────────────────────────────────────────
   getCurrentUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
+    try {
+      const user = localStorage.getItem("user");
+      return user ? JSON.parse(user) : null;
+    } catch {
+      return null;
+    }
   },
-  isAuthenticated: () => !!localStorage.getItem("accessToken"),
-  getRole: () => authService.getCurrentUser()?.role || null,
-  getStatus: () => authService.getCurrentUser()?.status || null,
+
+  isAuthenticated: () => {
+    return Boolean(localStorage.getItem("accessToken"));
+  },
+
+  getRole: () => {
+    return authService.getCurrentUser()?.role || null;
+  },
+
+  getStatus: () => {
+    return authService.getCurrentUser()?.status || null;
+  },
 };
 
 export default authService;

@@ -10,4 +10,9 @@ public interface IRecommendationService
         int jobPostingId,
         int limit
     );
+
+    Task<List<JobRecommendationResponse>> GetRecommendedJobsForMeAsync(
+        int expertUserId,
+        int limit
+    );
 }
