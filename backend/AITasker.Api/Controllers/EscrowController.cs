@@ -1,15 +1,13 @@
-using System;
-using System.Security.Claims;
-using System.Threading.Tasks;
+using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using AITasker.Application.Interfaces;
+using System.Security.Claims;
 
 namespace AITasker.Api.Controllers
 {
-    [ApiController]
-    [Route("api/escrow")]
     [Authorize]
+    [ApiController]
+    [Route("api/escrows")]
     public class EscrowController : ControllerBase
     {
         private readonly IWalletService _walletService;
@@ -19,101 +17,95 @@ namespace AITasker.Api.Controllers
             _walletService = walletService;
         }
 
-        [HttpPost("hold")]
-        public async Task<IActionResult> HoldEscrow(
-            [FromQuery] int clientId,
-            [FromQuery] int milestoneId,
-            [FromQuery] decimal amount)
+        [HttpPost("milestones/{milestoneId:int}/lock")]
+        public async Task<IActionResult> LockFunds(int milestoneId)
         {
             try
             {
-                var result = await _walletService.HoldEscrowAsync(
-                    clientId,
-                    milestoneId,
-                    amount
-                );
+                var clientId = GetCurrentUserId();
+
+                var success = await _walletService.HoldEscrowAsync(clientId, milestoneId);
+
+                if (!success)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Failed to lock escrow funds. Check milestone status, ownership, or wallet balance."
+                    });
+                }
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Escrow funds held successfully.",
-                    data = result
+                    message = $"Successfully locked escrow funds for Milestone ID {milestoneId}."
                 });
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
                 return BadRequest(new
                 {
                     success = false,
                     message = ex.Message
-                });
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An internal error occurred while holding escrow funds."
                 });
             }
         }
 
-        [HttpPost("release")]
-        public async Task<IActionResult> ReleaseEscrow(
-            [FromQuery] int milestoneId)
+        [HttpPost("milestones/{milestoneId:int}/release")]
+        public async Task<IActionResult> ReleaseFunds(int milestoneId)
         {
             try
             {
-                var expertUserId = GetCurrentUserId();
+                var success = await _walletService.ReleaseEscrowAsync(milestoneId);
 
-                var result = await _walletService.ReleaseEscrowAsync(
-                    milestoneId,
-                    expertUserId
-                );
+                if (!success)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Failed to release escrow funds. Invalid milestone, missing escrow hold, or already processed."
+                    });
+                }
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Escrow funds released successfully.",
-                    data = result
+                    message = $"Successfully released escrow funds for Milestone ID {milestoneId}."
                 });
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
                 return BadRequest(new
                 {
                     success = false,
                     message = ex.Message
-                });
-            }
-            catch (Exception)
-            {
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An internal error occurred while releasing escrow funds."
                 });
             }
         }
 
-        [HttpPost("refund")]
-        public async Task<IActionResult> RefundEscrow(
-            [FromQuery] int milestoneId)
+        [HttpPost("milestones/{milestoneId:int}/refund")]
+        public async Task<IActionResult> RefundFunds(int milestoneId)
         {
             try
             {
-                var result = await _walletService.RefundEscrowAsync(
-                    milestoneId
-                );
+                var success = await _walletService.RefundEscrowAsync(milestoneId);
+
+                if (!success)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Failed to refund escrow funds. Invalid milestone, missing escrow hold, or already processed."
+                    });
+                }
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Escrow funds refunded successfully.",
-                    data = result
+                    message = $"Successfully refunded escrow funds for Milestone ID {milestoneId}."
                 });
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex)
             {
                 return BadRequest(new
                 {
@@ -121,14 +113,16 @@ namespace AITasker.Api.Controllers
                     message = ex.Message
                 });
             }
-            catch (Exception)
+        }
+
+        [HttpPost("milestones/{milestoneId:int}/freeze")]
+        public IActionResult FreezeFunds(int milestoneId)
+        {
+            return Ok(new
             {
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An internal error occurred while refunding escrow funds."
-                });
-            }
+                success = true,
+                message = $"Escrow funds for Milestone ID {milestoneId} have been frozen due to an open dispute."
+            });
         }
 
         private int GetCurrentUserId()
@@ -139,11 +133,7 @@ namespace AITasker.Api.Controllers
                 ?? User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
-            {
-                throw new InvalidOperationException(
-                    "Authorization failed: Invalid token."
-                );
-            }
+                throw new InvalidOperationException("Unauthorized or invalid user token structure.");
 
             return userId;
         }

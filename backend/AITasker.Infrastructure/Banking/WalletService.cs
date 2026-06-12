@@ -1,9 +1,7 @@
-using System;
-using System.Threading.Tasks;
-using Microsoft.EntityFrameworkCore;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
 {
@@ -18,17 +16,7 @@ namespace AITasker.Infrastructure.Banking
 
         private async Task<Wallet> GetOrCreateWalletAsync(int userId)
         {
-            var userExists =
-                await _context.Users.AnyAsync(u => u.UserId == userId);
-
-            if (!userExists)
-            {
-                throw new InvalidOperationException("User not found.");
-            }
-
-            var wallet =
-                await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.UserId == userId);
+            var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
             if (wallet == null)
             {
@@ -37,6 +25,7 @@ namespace AITasker.Infrastructure.Banking
                     UserId = userId,
                     AvailableBalance = 0m,
                     LockedBalance = 0m,
+                    TotalEarning = 0m,
                     UpdatedAt = DateTime.UtcNow
                 };
 
@@ -47,56 +36,46 @@ namespace AITasker.Infrastructure.Banking
             return wallet;
         }
 
-        private async Task<int> ResolveClientUserIdAsync(int clientId)
+        public async Task<Wallet> GetWalletByUserIdAsync(int userId)
         {
-            var userExists =
-                await _context.Users.AnyAsync(u => u.UserId == clientId);
-
-            if (userExists)
-            {
-                return clientId;
-            }
-
-            var clientProfile =
-                await _context.ClientProfiles
-                    .FirstOrDefaultAsync(c => c.ClientProfileId == clientId);
-
-            if (clientProfile == null)
-            {
-                throw new InvalidOperationException("Client profile not found.");
-            }
-
-            return clientProfile.UserId;
+            return await GetOrCreateWalletAsync(userId);
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)
         {
             var wallet = await GetOrCreateWalletAsync(userId);
-
             return wallet.AvailableBalance;
         }
 
-        public async Task<bool> DepositAsync(
-            int userId,
-            decimal amount,
-            string transactionRef)
+        public async Task<bool> DepositAsync(int userId, decimal amount, string transactionRef)
+        {
+            return await DepositAsync(
+                userId,
+                amount,
+                $"[Deposit] Wallet deposit with reference {transactionRef}",
+                transactionRef
+            );
+        }
+
+        public async Task<bool> DepositAsync(int userId, decimal amount, string description, string referenceId)
         {
             if (amount <= 0)
-            {
-                throw new InvalidOperationException(
-                    "Deposit amount must be greater than 0."
-                );
-            }
+                return false;
 
-            if (string.IsNullOrWhiteSpace(transactionRef))
-            {
-                throw new InvalidOperationException(
-                    "Transaction reference is required."
-                );
-            }
+            var userExists = await _context.Users.AnyAsync(u => u.UserId == userId);
+            if (!userExists)
+                return false;
 
-            using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            var alreadyExists = await _context.Transactions.AnyAsync(t =>
+                t.UserId == userId &&
+                t.ReferenceId == referenceId &&
+                t.Type == "Deposit" &&
+                t.Status == "SUCCESS");
+
+            if (alreadyExists)
+                return true;
+
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
@@ -108,325 +87,307 @@ namespace AITasker.Infrastructure.Banking
                 var txn = new Transaction
                 {
                     UserId = userId,
+                    ProjectId = 0,
+                    MilestoneId = null,
                     Amount = amount,
                     Type = "Deposit",
-                    Description = "Wallet deposit",
-                    ReferenceId = transactionRef
+                    Status = "SUCCESS",
+                    Description = description,
+                    ReferenceId = referenceId,
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Transactions.Add(txn);
+                await _context.SaveChangesAsync();
 
-                var affectedRows =
-                    await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                return affectedRows > 0;
+                await dbTransaction.CommitAsync();
+                return true;
             }
             catch
             {
-                await transaction.RollbackAsync();
-                throw;
+                await dbTransaction.RollbackAsync();
+                return false;
             }
         }
 
-        public async Task<bool> HoldEscrowAsync(
-            int clientId,
-            int milestoneId,
-            decimal amount)
+        public async Task<bool> WithdrawAsync(int userId, decimal amount, string description)
         {
             if (amount <= 0)
-            {
-                throw new InvalidOperationException(
-                    "Escrow hold amount must be greater than 0."
-                );
-            }
+                return false;
 
-            if (milestoneId <= 0)
-            {
-                throw new InvalidOperationException(
-                    "MilestoneId is required."
-                );
-            }
-
-            using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                var clientUserId =
-                    await ResolveClientUserIdAsync(clientId);
-
-                var wallet =
-                    await _context.Wallets
-                        .FirstOrDefaultAsync(w => w.UserId == clientUserId);
+                var wallet = await _context.Wallets.FirstOrDefaultAsync(w => w.UserId == userId);
 
                 if (wallet == null || wallet.AvailableBalance < amount)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow aborted: Insufficient funds in client wallet."
-                    );
-                }
-
-                var referenceId = $"MILESTONE_{milestoneId}";
-
-                var existingHold =
-                    await _context.Transactions.AnyAsync(t =>
-                        t.ReferenceId == referenceId &&
-                        t.Type == "EscrowHold");
-
-                if (existingHold)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow has already been held for this milestone."
-                    );
-                }
+                    return false;
 
                 wallet.AvailableBalance -= amount;
-                wallet.LockedBalance += amount;
                 wallet.UpdatedAt = DateTime.UtcNow;
 
                 var txn = new Transaction
                 {
-                    UserId = clientUserId,
+                    UserId = userId,
+                    ProjectId = 0,
+                    MilestoneId = null,
                     Amount = -amount,
-                    Type = "EscrowHold",
-                    Description = $"[Escrow Hold] Locked funds for Milestone ID {milestoneId}",
-                    ReferenceId = referenceId
+                    Type = "Withdraw",
+                    Status = "SUCCESS",
+                    Description = description,
+                    ReferenceId = "INTERNAL",
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Transactions.Add(txn);
+                await _context.SaveChangesAsync();
 
-                var affectedRows =
-                    await _context.SaveChangesAsync();
-
-                await transaction.CommitAsync();
-
-                return affectedRows > 0;
+                await dbTransaction.CommitAsync();
+                return true;
             }
             catch
             {
-                await transaction.RollbackAsync();
-                throw;
+                await dbTransaction.RollbackAsync();
+                return false;
             }
         }
 
-        public async Task<bool> ReleaseEscrowAsync(
-            int milestoneId,
-            int expertId)
+        public async Task<bool> HoldEscrowAsync(int clientId, int milestoneId)
         {
-            using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                var milestone =
-                    await _context.Milestones
-                        .Include(m => m.Project)
-                        .FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
+                var milestone = await _context.Milestones
+                    .FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
 
-                if (milestone == null || milestone.Project == null)
-                {
-                    throw new InvalidOperationException("Milestone not found.");
-                }
+                if (milestone == null || milestone.Amount <= 0)
+                    return false;
 
-                if (milestone.Status != "LOCKED")
-                {
-                    throw new InvalidOperationException(
-                        "Only locked milestones can be released."
-                    );
-                }
+                if (milestone.Status != "PENDING" && milestone.Status != "PENDING_ESCROW")
+                    return false;
 
-                var contract =
-                    await _context.ProjectContracts
-                        .FirstOrDefaultAsync(c =>
-                            c.ContractId == milestone.Project.ContractId);
+                var project = await _context.Projects
+                    .FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
 
-                if (contract == null)
-                {
-                    throw new InvalidOperationException(
-                        "Related contract not found."
-                    );
-                }
+                if (project == null)
+                    return false;
 
-                var expertProfile =
-                    await _context.ExpertProfiles
-                        .FirstOrDefaultAsync(e =>
-                            e.ExpertProfileId == contract.ExpertId);
+                var contract = await _context.ProjectContracts
+                    .FirstOrDefaultAsync(c => c.ContractId == project.ContractId);
 
-                if (expertProfile == null)
-                {
-                    throw new InvalidOperationException(
-                        "Expert profile not found."
-                    );
-                }
+                if (contract == null || contract.ClientId != clientId)
+                    return false;
 
-                if (expertProfile.UserId != expertId)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow release rejected: Expert does not match this contract."
-                    );
-                }
+                var alreadyHeld = await _context.Transactions.AnyAsync(t =>
+                    t.MilestoneId == milestoneId &&
+                    t.Type == "EscrowHold" &&
+                    t.Status == "SUCCESS");
 
-                var clientProfile =
-                    await _context.ClientProfiles
-                        .FirstOrDefaultAsync(c =>
-                            c.ClientProfileId == contract.ClientId);
+                if (alreadyHeld)
+                    return true;
 
-                if (clientProfile == null)
-                {
-                    throw new InvalidOperationException(
-                        "Client profile not found."
-                    );
-                }
+                var clientWallet = await _context.Wallets
+                    .FirstOrDefaultAsync(w => w.UserId == clientId);
 
-                var clientWallet =
-                    await _context.Wallets
-                        .FirstOrDefaultAsync(w =>
-                            w.UserId == clientProfile.UserId);
+                if (clientWallet == null || clientWallet.AvailableBalance < milestone.Amount)
+                    return false;
 
-                if (clientWallet == null ||
-                    clientWallet.LockedBalance < milestone.Amount)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow release rejected: Locked balance is insufficient."
-                    );
-                }
-
-                var expertWallet =
-                    await GetOrCreateWalletAsync(expertProfile.UserId);
-
-                clientWallet.LockedBalance -= milestone.Amount;
+                clientWallet.AvailableBalance -= milestone.Amount;
+                clientWallet.LockedBalance += milestone.Amount;
                 clientWallet.UpdatedAt = DateTime.UtcNow;
 
-                expertWallet.AvailableBalance += milestone.Amount;
-                expertWallet.UpdatedAt = DateTime.UtcNow;
+                milestone.Status = "FUNDED";
 
-                milestone.Status = "RELEASED";
-
-                var referenceId = $"MILESTONE_{milestoneId}";
-
-                _context.Transactions.Add(new Transaction
+                var txn = new Transaction
                 {
-                    UserId = expertProfile.UserId,
-                    Amount = milestone.Amount,
-                    Type = "EscrowReceived",
-                    Description = $"[Escrow Release] Received funds from Milestone ID {milestoneId}",
-                    ReferenceId = referenceId
-                });
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = clientProfile.UserId,
+                    UserId = clientId,
+                    ProjectId = project.ProjectId,
+                    MilestoneId = milestone.MilestoneId,
                     Amount = -milestone.Amount,
-                    Type = "EscrowReleased",
-                    Description = $"[Escrow Release] Released funds for Milestone ID {milestoneId}",
-                    ReferenceId = referenceId
-                });
+                    Type = "EscrowHold",
+                    Status = "SUCCESS",
+                    Description = $"[Escrow Hold] Locked funds for Milestone ID {milestone.MilestoneId}",
+                    ReferenceId = milestone.MilestoneId.ToString(),
+                    CreatedAt = DateTime.UtcNow
+                };
 
-                var affectedRows =
-                    await _context.SaveChangesAsync();
+                _context.Transactions.Add(txn);
+                await _context.SaveChangesAsync();
 
-                await transaction.CommitAsync();
-
-                return affectedRows > 0;
+                await dbTransaction.CommitAsync();
+                return true;
             }
             catch
             {
-                await transaction.RollbackAsync();
-                throw;
+                await dbTransaction.RollbackAsync();
+                return false;
+            }
+        }
+
+        public async Task<bool> ReleaseEscrowAsync(int milestoneId)
+        {
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                var milestone = await _context.Milestones
+                    .FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
+
+                if (milestone == null)
+                    return false;
+
+                var project = await _context.Projects
+                    .FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
+
+                if (project == null)
+                    return false;
+
+                var contract = await _context.ProjectContracts
+                    .FirstOrDefaultAsync(c => c.ContractId == project.ContractId);
+
+                if (contract == null)
+                    return false;
+
+                var holdTxn = await _context.Transactions
+                    .FirstOrDefaultAsync(t =>
+                        t.MilestoneId == milestoneId &&
+                        t.Type == "EscrowHold" &&
+                        t.Status == "SUCCESS");
+
+                if (holdTxn == null)
+                    return false;
+
+                var clientId = holdTxn.UserId;
+                var expertId = contract.ExpertId;
+                var escrowAmount = Math.Abs(holdTxn.Amount);
+
+                var clientWallet = await _context.Wallets
+                    .FirstOrDefaultAsync(w => w.UserId == clientId);
+
+                var expertWallet = await GetOrCreateWalletAsync(expertId);
+
+                if (clientWallet == null || clientWallet.LockedBalance < escrowAmount)
+                    return false;
+
+                clientWallet.LockedBalance -= escrowAmount;
+                clientWallet.UpdatedAt = DateTime.UtcNow;
+
+                expertWallet.AvailableBalance += escrowAmount;
+                expertWallet.TotalEarning += escrowAmount;
+                expertWallet.UpdatedAt = DateTime.UtcNow;
+
+                holdTxn.Status = "RELEASED";
+                milestone.Status = "RELEASED";
+
+                var releaseTxn = new Transaction
+                {
+                    UserId = clientId,
+                    ProjectId = project.ProjectId,
+                    MilestoneId = milestone.MilestoneId,
+                    Amount = escrowAmount,
+                    Type = "EscrowReleased",
+                    Status = "SUCCESS",
+                    Description = $"[Escrow Release] Released funds for Milestone ID {milestone.MilestoneId}",
+                    ReferenceId = milestone.MilestoneId.ToString(),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                var expertTxn = new Transaction
+                {
+                    UserId = expertId,
+                    ProjectId = project.ProjectId,
+                    MilestoneId = milestone.MilestoneId,
+                    Amount = escrowAmount,
+                    Type = "EscrowReceived",
+                    Status = "SUCCESS",
+                    Description = $"[Escrow Received] Received funds from Milestone ID {milestone.MilestoneId}",
+                    ReferenceId = milestone.MilestoneId.ToString(),
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.Transactions.Add(releaseTxn);
+                _context.Transactions.Add(expertTxn);
+
+                await _context.SaveChangesAsync();
+
+                await dbTransaction.CommitAsync();
+                return true;
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+                return false;
             }
         }
 
         public async Task<bool> RefundEscrowAsync(int milestoneId)
         {
-            using var transaction =
-                await _context.Database.BeginTransactionAsync();
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
             {
-                var milestone =
-                    await _context.Milestones
-                        .Include(m => m.Project)
-                        .FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
+                var milestone = await _context.Milestones
+                    .FirstOrDefaultAsync(m => m.MilestoneId == milestoneId);
 
-                if (milestone == null || milestone.Project == null)
-                {
-                    throw new InvalidOperationException("Milestone not found.");
-                }
+                if (milestone == null)
+                    return false;
 
-                if (milestone.Status != "LOCKED")
-                {
-                    throw new InvalidOperationException(
-                        "Only locked milestones can be refunded."
-                    );
-                }
+                var project = await _context.Projects
+                    .FirstOrDefaultAsync(p => p.ProjectId == milestone.ProjectId);
 
-                var contract =
-                    await _context.ProjectContracts
-                        .FirstOrDefaultAsync(c =>
-                            c.ContractId == milestone.Project.ContractId);
+                if (project == null)
+                    return false;
 
-                if (contract == null)
-                {
-                    throw new InvalidOperationException(
-                        "Related contract not found."
-                    );
-                }
+                var holdTxn = await _context.Transactions
+                    .FirstOrDefaultAsync(t =>
+                        t.MilestoneId == milestoneId &&
+                        t.Type == "EscrowHold" &&
+                        t.Status == "SUCCESS");
 
-                var clientProfile =
-                    await _context.ClientProfiles
-                        .FirstOrDefaultAsync(c =>
-                            c.ClientProfileId == contract.ClientId);
+                if (holdTxn == null)
+                    return false;
 
-                if (clientProfile == null)
-                {
-                    throw new InvalidOperationException(
-                        "Client profile not found."
-                    );
-                }
+                var clientId = holdTxn.UserId;
+                var escrowAmount = Math.Abs(holdTxn.Amount);
 
-                var clientWallet =
-                    await _context.Wallets
-                        .FirstOrDefaultAsync(w =>
-                            w.UserId == clientProfile.UserId);
+                var clientWallet = await _context.Wallets
+                    .FirstOrDefaultAsync(w => w.UserId == clientId);
 
-                if (clientWallet == null ||
-                    clientWallet.LockedBalance < milestone.Amount)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow refund rejected: Locked balance is insufficient."
-                    );
-                }
+                if (clientWallet == null || clientWallet.LockedBalance < escrowAmount)
+                    return false;
 
-                clientWallet.LockedBalance -= milestone.Amount;
-                clientWallet.AvailableBalance += milestone.Amount;
+                clientWallet.LockedBalance -= escrowAmount;
+                clientWallet.AvailableBalance += escrowAmount;
                 clientWallet.UpdatedAt = DateTime.UtcNow;
 
+                holdTxn.Status = "REFUNDED";
                 milestone.Status = "REFUNDED";
 
-                var referenceId = $"MILESTONE_{milestoneId}";
-
-                _context.Transactions.Add(new Transaction
+                var refundTxn = new Transaction
                 {
-                    UserId = clientProfile.UserId,
-                    Amount = milestone.Amount,
+                    UserId = clientId,
+                    ProjectId = project.ProjectId,
+                    MilestoneId = milestone.MilestoneId,
+                    Amount = escrowAmount,
                     Type = "EscrowRefunded",
-                    Description = $"[Escrow Refund] Refunded funds for Milestone ID {milestoneId}",
-                    ReferenceId = referenceId
-                });
+                    Status = "SUCCESS",
+                    Description = $"[Escrow Refund] Refunded funds for Milestone ID {milestone.MilestoneId}",
+                    ReferenceId = milestone.MilestoneId.ToString(),
+                    CreatedAt = DateTime.UtcNow
+                };
 
-                var affectedRows =
-                    await _context.SaveChangesAsync();
+                _context.Transactions.Add(refundTxn);
+                await _context.SaveChangesAsync();
 
-                await transaction.CommitAsync();
-
-                return affectedRows > 0;
+                await dbTransaction.CommitAsync();
+                return true;
             }
             catch
             {
-                await transaction.RollbackAsync();
-                throw;
+                await dbTransaction.RollbackAsync();
+                return false;
             }
         }
     }

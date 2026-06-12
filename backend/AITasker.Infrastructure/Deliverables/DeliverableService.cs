@@ -180,12 +180,8 @@ namespace AITasker.Infrastructure.Deliverables
                 deliverable.Status = "APPROVED";
                 milestone.Status = "RELEASED";
 
-                var releaseSuccess =
-                    await _walletService.ReleaseEscrowAsync(
-                        deliverable.MilestoneId,
-                        expertProfile.UserId
-                    );
-
+                var releaseSuccess = await _walletService.ReleaseEscrowAsync(deliverable.MilestoneId);
+                
                 if (!releaseSuccess)
                 {
                     throw new InvalidOperationException(
