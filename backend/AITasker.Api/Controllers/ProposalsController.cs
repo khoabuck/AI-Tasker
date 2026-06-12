@@ -1,40 +1,133 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using AITasker.Application.Interfaces;
 using AITasker.Application.DTOs.Requests;
 
 namespace AITasker.Api.Controllers
 {
     [ApiController]
-    [Route("api/[controller]")]
+    [Route("api/proposals")]
+    [Authorize]
     public class ProposalsController : ControllerBase
     {
         private readonly IProposalService _proposalService;
 
-        public ProposalsController(IProposalService proposalService)
+        public ProposalsController(
+            IProposalService proposalService)
         {
             _proposalService = proposalService;
         }
 
         [HttpPost("submit")]
-        public async Task<IActionResult> Submit([FromQuery] int expertId, [FromBody] SubmitProposalRequest request)
+        public async Task<IActionResult> Submit(
+            [FromBody] SubmitProposalRequest request)
         {
-            var result = await _proposalService.SubmitProposalAsync(expertId, request);
-            return Ok(new { Success = result });
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result =
+                    await _proposalService.SubmitProposalAsync(
+                        userId,
+                        request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal submitted successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
         }
 
-        [HttpPost("{id}/counter")]
-        public async Task<IActionResult> Counter(int id, [FromBody] CounterOfferRequest request)
+        [HttpPost("{proposalId}/counter")]
+        public async Task<IActionResult> CounterOffer(
+            int proposalId,
+            [FromBody] CounterOfferRequest request)
         {
-            var result = await _proposalService.CounterOfferAsync(id, request);
-            return Ok(new { Success = result });
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result =
+                    await _proposalService.CounterOfferAsync(
+                        userId,
+                        proposalId,
+                        request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Counter offer submitted successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
         }
 
-        [HttpPost("{id}/decision")]
-        public async Task<IActionResult> Decision(int id, [FromQuery] string status)
+        [HttpPost("{proposalId}/decision")]
+        public async Task<IActionResult> Decision(
+            int proposalId,
+            [FromQuery] string decision)
         {
-            var result = await _proposalService.ProcessProposalStatusAsync(id, status);
-            return Ok(new { Success = result });
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result =
+                    await _proposalService.ProcessProposalStatusAsync(
+                        userId,
+                        proposalId,
+                        decision);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal processed successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdValue =
+                User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? User.FindFirstValue("userId")
+                ?? User.FindFirstValue("sub");
+
+            if (!int.TryParse(userIdValue, out var userId))
+            {
+                throw new InvalidOperationException(
+                    "Invalid user token.");
+            }
+
+            return userId;
         }
     }
 }

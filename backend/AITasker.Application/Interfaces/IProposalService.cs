@@ -5,10 +5,18 @@ namespace AITasker.Application.Interfaces
 {
     public interface IProposalService
     {
-        Task<bool> SubmitProposalAsync(int expertId, SubmitProposalRequest request);
-        
-        Task<bool> CounterOfferAsync(int proposalId, CounterOfferRequest request);
-        
-        Task<bool> ProcessProposalStatusAsync(int proposalId, string decision);
+        Task<bool> SubmitProposalAsync(
+            int userId,
+            SubmitProposalRequest request);
+
+        Task<bool> CounterOfferAsync(
+            int userId,
+            int proposalId,
+            CounterOfferRequest request);
+
+        Task<bool> ProcessProposalStatusAsync(
+            int userId,
+            int proposalId,
+            string decision);
     }
 }

@@ -1,10 +1,10 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
-using AITasker.Application.Interfaces;
 using AITasker.Application.DTOs.Requests;
-using AITasker.Infrastructure.Data;
+using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Infrastructure.Data;
 
 namespace AITasker.Infrastructure.Proposals
 {
@@ -12,83 +12,234 @@ namespace AITasker.Infrastructure.Proposals
     {
         private readonly AITaskerDbContext _context;
 
-        public ProposalService(AITaskerDbContext context)
+        public ProposalService(
+            AITaskerDbContext context)
         {
             _context = context;
         }
 
-        public async Task<bool> SubmitProposalAsync(int expertId, SubmitProposalRequest request)
+        public async Task<bool> SubmitProposalAsync(
+            int userId,
+            SubmitProposalRequest request)
         {
-            // ─── VALIDATION ───
             if (request.ProposedPrice <= 0)
-                throw new ArgumentException("Proposed price must be greater than 0.");
+            {
+                throw new InvalidOperationException(
+                    "Proposed price must be greater than 0.");
+            }
 
-            var job = await _context.JobPostings.FirstOrDefaultAsync(j => j.JobPostingId == request.JobId);
-            if (job == null || job.Status != "OPEN")
-                throw new InvalidOperationException("The target job posting is not open for submission.");
+            var expert =
+                await _context.ExpertProfiles
+                    .Include(x => x.User)
+                    .FirstOrDefaultAsync(
+                        x => x.UserId == userId);
 
-            if (job.ClientProfileId == expertId)
-                throw new InvalidOperationException("Experts cannot submit proposals to their own posted jobs.");
+            if (expert == null)
+            {
+                throw new InvalidOperationException(
+                    "Expert profile not found.");
+            }
 
-            // Deep check: Prevent duplicate proposals from the same expert for this job
-            var alreadySubmitted = await _context.Proposals
-                .AnyAsync(p => p.JobId == request.JobId && p.ExpertId == expertId && p.Status != "REJECTED");
+            if (!expert.AvailableForWork)
+            {
+                throw new InvalidOperationException(
+                    "Expert is not available for work.");
+            }
+
+            var job =
+                await _context.JobPostings
+                    .FirstOrDefaultAsync(
+                        x => x.JobPostingId == request.JobId);
+
+            if (job == null)
+            {
+                throw new InvalidOperationException(
+                    "Job posting not found.");
+            }
+
+            if (job.Status != "OPEN")
+            {
+                throw new InvalidOperationException(
+                    "Job posting is not open.");
+            }
+
+            var alreadySubmitted =
+                await _context.Proposals.AnyAsync(
+                    x =>
+                        x.JobId == request.JobId &&
+                        x.ExpertId == expert.ExpertProfileId &&
+                        x.Status != "REJECTED");
+
             if (alreadySubmitted)
-                throw new InvalidOperationException("You have already submitted an active proposal for this job posting.");
+            {
+                throw new InvalidOperationException(
+                    "You already submitted a proposal.");
+            }
 
-            // ─── EXECUTION ───
             var proposal = new Proposal
             {
                 JobId = request.JobId,
-                ExpertId = expertId,
+                ExpertId = expert.ExpertProfileId,
                 CoverLetter = request.CoverLetter,
                 ProposedPrice = request.ProposedPrice,
-                ProposedTimelineDays = request.ProposedTimelineDays,
-                ExpectedOutputs = request.ExpectedOutputs,
-                WorkingApproach = request.WorkingApproach,
-                PreliminaryMilestonePlan = request.PreliminaryMilestonePlan,
+                ProposedTimelineDays =
+                    request.ProposedTimelineDays,
+                ExpectedOutputs =
+                    request.ExpectedOutputs,
+                WorkingApproach =
+                    request.WorkingApproach,
+                PreliminaryMilestonePlan =
+                    request.PreliminaryMilestonePlan,
                 Status = "SUBMITTED",
                 CreatedAt = DateTime.UtcNow
             };
 
             _context.Proposals.Add(proposal);
-            var affectedRows = await _context.SaveChangesAsync();
-            return affectedRows > 0;
+
+            return await _context.SaveChangesAsync() > 0;
         }
 
-        public async Task<bool> CounterOfferAsync(int proposalId, CounterOfferRequest request)
+        public async Task<bool> CounterOfferAsync(
+            int userId,
+            int proposalId,
+            CounterOfferRequest request)
         {
             if (request.CounterPrice <= 0)
-                throw new ArgumentException("Counter price offer must be greater than 0.");
+            {
+                throw new InvalidOperationException(
+                    "Counter price must be greater than 0.");
+            }
 
-            var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.ProposalId == proposalId);
+            var proposal =
+                await _context.Proposals
+                    .FirstOrDefaultAsync(
+                        x => x.ProposalId == proposalId);
+
             if (proposal == null)
-                throw new InvalidOperationException("Target proposal does not exist.");
+            {
+                throw new InvalidOperationException(
+                    "Proposal not found.");
+            }
 
-            if (proposal.Status == "ACCEPTED" || proposal.Status == "REJECTED")
-                throw new InvalidOperationException("Cannot counter an offer that has already been finalized.");
+            if (
+                proposal.Status == "ACCEPTED" ||
+                proposal.Status == "REJECTED")
+            {
+                throw new InvalidOperationException(
+                    "Proposal already finalized.");
+            }
 
-            // ─── EXECUTION ───
-            proposal.CounterPrice = request.CounterPrice;
-            proposal.CounterTimelineDays = request.CounterTimelineDays;
-            proposal.CounterMessage = request.CounterMessage;
-            proposal.Status = "COUNTER_OFFER";
+            proposal.CounterPrice =
+                request.CounterPrice;
 
-            var affectedRows = await _context.SaveChangesAsync();
-            return affectedRows > 0;
+            proposal.CounterTimelineDays =
+                request.CounterTimelineDays;
+
+            proposal.CounterMessage =
+                request.CounterMessage;
+
+            proposal.Status =
+                "COUNTER_OFFER";
+
+            return await _context.SaveChangesAsync() > 0;
         }
 
-        public async Task<bool> ProcessProposalStatusAsync(int proposalId, string decision)
+        public async Task<bool> ProcessProposalStatusAsync(
+            int userId,
+            int proposalId,
+            string decision)
         {
-            var proposal = await _context.Proposals.FirstOrDefaultAsync(p => p.ProposalId == proposalId);
-            if (proposal == null)
-                throw new InvalidOperationException("Target proposal does not exist.");
+            var proposal =
+                await _context.Proposals
+                    .FirstOrDefaultAsync(
+                        x => x.ProposalId == proposalId);
 
-            // ─── EXECUTION ───
-            proposal.Status = decision.ToUpper() == "ACCEPT" ? "ACCEPTED" : "REJECTED";
-            
-            var affectedRows = await _context.SaveChangesAsync();
-            return affectedRows > 0;
+            if (proposal == null)
+            {
+                throw new InvalidOperationException(
+                    "Proposal not found.");
+            }
+
+            decision = decision.ToUpper();
+
+            if (
+                decision != "ACCEPT" &&
+                decision != "REJECT")
+            {
+                throw new InvalidOperationException(
+                    "Decision must be ACCEPT or REJECT.");
+            }
+
+            if (decision == "REJECT")
+            {
+                proposal.Status = "REJECTED";
+
+                return await _context.SaveChangesAsync() > 0;
+            }
+
+            proposal.Status = "ACCEPTED";
+
+            var contractExists =
+                await _context.ProjectContracts
+                    .AnyAsync(
+                        x => x.ProposalId == proposalId);
+
+            if (!contractExists)
+            {
+                var contract =
+                    new ProjectContract
+                    {
+                        ProposalId =
+                            proposal.ProposalId,
+
+                        ExpertId =
+                            proposal.ExpertId,
+
+                        ClientId = 0,
+
+                        ProjectScope =
+                            proposal.WorkingApproach,
+
+                        FinalPrice =
+                            proposal.CounterPrice ??
+                            proposal.ProposedPrice,
+
+                        FinalTimelineDays =
+                            proposal.CounterTimelineDays ??
+                            proposal.ProposedTimelineDays,
+
+                        Deliverables =
+                            proposal.ExpectedOutputs,
+
+                        AcceptanceCriteria =
+                            "To be defined",
+
+                        RevisionLimit = 2,
+
+                        PaymentTerms =
+                            "Milestone Based",
+
+                        PlatformFeeRate = 10,
+
+                        PlatformFeeAmount = 0,
+
+                        TotalClientPayment =
+                            proposal.CounterPrice ??
+                            proposal.ProposedPrice,
+
+                        ContractSource =
+                            "PROPOSAL",
+
+                        Status = "DRAFT",
+
+                        CreatedAt =
+                            DateTime.UtcNow
+                    };
+
+                _context.ProjectContracts.Add(contract);
+            }
+
+            return await _context.SaveChangesAsync() > 0;
         }
     }
 }
