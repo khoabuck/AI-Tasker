@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using AITasker.Infrastructure.Reviews;
+using AITasker.Infrastructure.Banking;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -215,6 +216,8 @@ builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectContractServi
 builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 
 builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
+
+builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
 builder.Services.AddHttpClient();
 

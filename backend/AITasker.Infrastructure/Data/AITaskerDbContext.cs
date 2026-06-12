@@ -43,6 +43,8 @@ public class AITaskerDbContext : DbContext
     public DbSet<Wallet> Wallets { get; set; }
 
     public DbSet<Transaction> Transactions { get; set; }
+    
+    public DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
     public DbSet<Deliverable> Deliverables { get; set; }
 
@@ -748,6 +750,56 @@ public class AITaskerDbContext : DbContext
             entity.HasOne(r => r.Expert)
                 .WithMany()
                 .HasForeignKey(r => r.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // WithdrawalRequest
+        // =========================
+        modelBuilder.Entity<WithdrawalRequest>(entity =>
+        {
+            entity.ToTable("WithdrawalRequests");
+
+            entity.HasKey(w => w.WithdrawalRequestId);
+
+            entity.Property(w => w.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(w => w.BankName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(w => w.BankAccountNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(w => w.BankAccountHolder)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(w => w.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(w => w.AdminNote)
+                .HasMaxLength(1000);
+
+            entity.Property(w => w.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(w => w.UserId);
+            entity.HasIndex(w => w.Status);
+            entity.HasIndex(w => w.CreatedAt);
+
+            entity.HasOne(w => w.User)
+                .WithMany()
+                .HasForeignKey(w => w.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(w => w.ProcessedByAdmin)
+                .WithMany()
+                .HasForeignKey(w => w.ProcessedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
