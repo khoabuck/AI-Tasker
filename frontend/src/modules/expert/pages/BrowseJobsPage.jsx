@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axiosInstance from "../../../api/axiosInstance";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
+import jobService from "../../../services/job.service";
 
 export default function BrowseJobsPage() {
   const navigate = useNavigate();
@@ -20,16 +20,10 @@ export default function BrowseJobsPage() {
       setLoading(true);
       setError("");
 
-      const response = await axiosInstance.get("/jobs/open");
+      const data = await jobService.getOpenJobs();
+      const validJobs = data.filter((job) => job?.id);
 
-      console.log("GET OPEN JOBS RAW:", response?.data);
-
-      const list = unwrapListData(response);
-      const normalizedJobs = list.map(normalizeJob).filter((job) => job?.id);
-
-      console.log("GET OPEN JOBS NORMALIZED:", normalizedJobs);
-
-      setJobs(normalizedJobs);
+      setJobs(validJobs);
     } catch (err) {
       console.error("LOAD OPEN JOBS ERROR:", err?.response?.data || err);
       setError(
@@ -60,7 +54,7 @@ export default function BrowseJobsPage() {
 
   const handleViewDetail = (job) => {
     if (!job?.id) {
-      alert("Job id is missing. Please check JobPostingId from backend.");
+      alert("Job id is missing. Please check backend field JobPostingId.");
       return;
     }
 
@@ -142,7 +136,6 @@ export default function BrowseJobsPage() {
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     <Badge>{job.category || "General"}</Badge>
                     <Badge>{job.status || "OPEN"}</Badge>
-
                     {job.complexity && <Badge>{job.complexity}</Badge>}
                   </div>
 
@@ -204,191 +197,6 @@ export default function BrowseJobsPage() {
       </div>
     </ExpertLayout>
   );
-}
-
-function unwrapListData(response) {
-  const data = response?.data;
-
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.data)) return data.data;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.jobs)) return data.jobs;
-  if (Array.isArray(data?.result)) return data.result;
-  if (Array.isArray(data?.data?.items)) return data.data.items;
-  if (Array.isArray(data?.data?.jobs)) return data.data.jobs;
-  if (Array.isArray(data?.result?.items)) return data.result.items;
-  if (Array.isArray(data?.result?.jobs)) return data.result.jobs;
-
-  return [];
-}
-
-function normalizeJob(job) {
-  if (!job) return null;
-
-  const id = getValue(
-    job.id,
-    job.Id,
-    job.ID,
-    job.jobPostingId,
-    job.JobPostingId,
-    job.jobPostingID,
-    job.JobPostingID,
-    job.jobId,
-    job.JobId,
-    job.JobID
-  );
-
-  return {
-    id,
-    jobPostingId: id,
-
-    title: getValue(
-      job.title,
-      job.Title,
-      job.jobTitle,
-      job.JobTitle,
-      job.projectTitle,
-      job.ProjectTitle,
-      job.name,
-      job.Name,
-      "Untitled job"
-    ),
-
-    description: getValue(
-      job.description,
-      job.Description,
-      job.aiGeneratedDescription,
-      job.AiGeneratedDescription,
-      job.jobDescription,
-      job.JobDescription,
-      job.requirements,
-      job.Requirements,
-      "No description provided."
-    ),
-
-    status: getValue(job.status, job.Status, "OPEN"),
-
-    category: getValue(
-      job.categoryName,
-      job.CategoryName,
-      job.category,
-      job.Category,
-      job.projectType,
-      job.ProjectType,
-      "General"
-    ),
-
-    complexity: getValue(job.complexity, job.Complexity, ""),
-
-    skills: toArray(
-      getValue(
-        job.skills,
-        job.Skills,
-        job.requiredSkills,
-        job.RequiredSkills,
-        job.skillNames,
-        job.SkillNames,
-        job.tags,
-        job.Tags,
-        ""
-      )
-    ),
-
-    budgetMin: Number(
-      getValue(
-        job.budgetMin,
-        job.BudgetMin,
-        job.expectedBudgetMin,
-        job.ExpectedBudgetMin,
-        job.minBudget,
-        job.MinBudget,
-        0
-      )
-    ),
-
-    budgetMax: Number(
-      getValue(
-        job.budgetMax,
-        job.BudgetMax,
-        job.expectedBudgetMax,
-        job.ExpectedBudgetMax,
-        job.maxBudget,
-        job.MaxBudget,
-        job.budget,
-        job.Budget,
-        0
-      )
-    ),
-
-    durationDays: Number(
-      getValue(
-        job.durationDays,
-        job.DurationDays,
-        job.projectDurationDays,
-        job.ProjectDurationDays,
-        job.preferredProjectDurationDays,
-        job.PreferredProjectDurationDays,
-        0
-      )
-    ),
-
-    deadline: getValue(job.deadline, job.Deadline, job.dueDate, job.DueDate, ""),
-
-    createdAt: getValue(
-      job.createdAt,
-      job.CreatedAt,
-      job.postedAt,
-      job.PostedAt,
-      ""
-    ),
-
-    clientName: getValue(
-      job.clientName,
-      job.ClientName,
-      job.clientFullName,
-      job.ClientFullName,
-      job.ownerName,
-      job.OwnerName,
-      "Client"
-    ),
-
-    raw: job,
-  };
-}
-
-function getValue(...values) {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
-  );
-}
-
-function toArray(value) {
-  if (!value) return [];
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "object" && item !== null) {
-          return getValue(
-            item.name,
-            item.Name,
-            item.skillName,
-            item.SkillName,
-            item.title,
-            item.Title
-          );
-        }
-
-        return item;
-      })
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-  }
-
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function InfoBox({ label, value }) {

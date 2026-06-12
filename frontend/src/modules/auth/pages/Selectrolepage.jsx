@@ -1,11 +1,8 @@
-// src/modules/auth/pages/SelectRolePage.jsx
-// POST /api/auth/select-role { "role": "CLIENT" | "EXPERT" }
-// Gọi sau khi verify email xong, status = PENDING_ROLE
-
 import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
-import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
+import authService from "../../../services/auth.service";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
@@ -39,7 +36,11 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const { refreshUser } = useAuth();
+  const location = useLocation();
+  const { refreshUser, handleLoginSuccess } = useAuth();
+
+  const loginEmail = location.state?.email || "";
+  const loginPassword = location.state?.password || "";
 
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -52,17 +53,81 @@ export default function SelectRolePage() {
     setError("");
 
     try {
-      await axiosInstance.post("/auth/select-role", { role: selected });
+      const selectResponse = await axiosInstance.post("/auth/select-role", {
+        role: selected,
+      });
 
-      await refreshUser();
+      const responseData = selectResponse?.data || {};
+
+      const newToken =
+        responseData.accessToken ||
+        responseData.AccessToken ||
+        responseData.token ||
+        responseData.Token ||
+        responseData.data?.accessToken ||
+        responseData.data?.AccessToken ||
+        responseData.data?.token ||
+        responseData.data?.Token;
+
+      const userFromResponse =
+        responseData.user ||
+        responseData.User ||
+        responseData.data?.user ||
+        responseData.data?.User ||
+        responseData.data ||
+        responseData;
+
+      const selectedUser = normalizeUser(userFromResponse, selected);
+
+      if (newToken) {
+        localStorage.setItem("accessToken", newToken);
+        localStorage.setItem("user", JSON.stringify(selectedUser));
+
+        handleLoginSuccess({
+          accessToken: newToken,
+          user: selectedUser,
+        });
+      } else if (loginEmail && loginPassword) {
+        const loginResult = await authService.login({
+          email: loginEmail,
+          password: loginPassword,
+        });
+
+        if (!loginResult.success) {
+          setError(
+            "Chọn vai trò thành công nhưng không thể làm mới token. Vui lòng đăng nhập lại."
+          );
+          return;
+        }
+
+        handleLoginSuccess({
+          accessToken: loginResult.accessToken,
+          user: loginResult.user,
+        });
+      } else {
+        localStorage.setItem("user", JSON.stringify(selectedUser));
+
+        try {
+          await refreshUser();
+        } catch {
+          // Không chặn flow.
+        }
+      }
 
       if (selected === "EXPERT") {
         navigate("/expert/setup-profile", { replace: true });
-      } else {
-        navigate("/setup-profile", { replace: true });
+        return;
       }
+
+      navigate("/setup-profile", { replace: true });
     } catch (err) {
-      setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
+      console.error("SELECT ROLE ERROR:", err?.response?.data || err);
+
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          "Đã có lỗi xảy ra khi chọn vai trò."
+      );
     } finally {
       setLoading(false);
     }
@@ -79,7 +144,6 @@ export default function SelectRolePage() {
         fontFamily: "Inter, sans-serif",
       }}
     >
-      {/* Navbar */}
       <nav
         style={{
           position: "fixed",
@@ -115,7 +179,6 @@ export default function SelectRolePage() {
         </div>
       </nav>
 
-      {/* Main */}
       <main
         style={{
           flex: 1,
@@ -127,7 +190,6 @@ export default function SelectRolePage() {
         }}
       >
         <div style={{ maxWidth: 700, margin: "0 auto", padding: "0 16px" }}>
-          {/* Header */}
           <div style={{ textAlign: "center", marginBottom: 48 }}>
             <h1
               style={{
@@ -146,7 +208,6 @@ export default function SelectRolePage() {
             </p>
           </div>
 
-          {/* Role Cards */}
           <div
             style={{
               display: "grid",
@@ -161,7 +222,12 @@ export default function SelectRolePage() {
               return (
                 <div
                   key={role.key}
-                  onClick={() => setSelected(role.key)}
+                  onClick={() => {
+                    if (!loading) {
+                      setSelected(role.key);
+                      setError("");
+                    }
+                  }}
                   style={{
                     background: isSelected
                       ? `rgba(${
@@ -174,14 +240,13 @@ export default function SelectRolePage() {
                     }`,
                     borderRadius: 16,
                     padding: 32,
-                    cursor: "pointer",
+                    cursor: loading ? "not-allowed" : "pointer",
                     transition: "all 0.2s",
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`
                       : "none",
                   }}
                 >
-                  {/* Icon */}
                   <div
                     style={{
                       width: 56,
@@ -210,7 +275,6 @@ export default function SelectRolePage() {
                     </span>
                   </div>
 
-                  {/* Title */}
                   <h3
                     style={{
                       fontFamily: "Hanken Grotesk, sans-serif",
@@ -234,7 +298,6 @@ export default function SelectRolePage() {
                     {role.desc}
                   </p>
 
-                  {/* Features */}
                   <ul
                     style={{
                       listStyle: "none",
@@ -245,9 +308,9 @@ export default function SelectRolePage() {
                       gap: 8,
                     }}
                   >
-                    {role.features.map((f) => (
+                    {role.features.map((feature) => (
                       <li
-                        key={f}
+                        key={feature}
                         style={{
                           display: "flex",
                           alignItems: "center",
@@ -265,12 +328,12 @@ export default function SelectRolePage() {
                         >
                           check_circle
                         </span>
-                        {f}
+
+                        {feature}
                       </li>
                     ))}
                   </ul>
 
-                  {/* Selected indicator */}
                   {isSelected && (
                     <div
                       style={{
@@ -297,7 +360,6 @@ export default function SelectRolePage() {
             })}
           </div>
 
-          {/* Error */}
           {error && (
             <div
               style={{
@@ -315,7 +377,6 @@ export default function SelectRolePage() {
             </div>
           )}
 
-          {/* Confirm Button */}
           <button
             onClick={handleConfirm}
             disabled={!selected || loading}
@@ -356,4 +417,16 @@ export default function SelectRolePage() {
       </main>
     </div>
   );
+}
+
+function normalizeUser(user, selectedRole) {
+  return {
+    userId: user?.userId || user?.UserId || 0,
+    email: user?.email || user?.Email || "",
+    fullName: user?.fullName || user?.FullName || "",
+    role: user?.role || user?.Role || selectedRole,
+    status: user?.status || user?.Status || "PENDING_PROFILE",
+    authProvider: user?.authProvider || user?.AuthProvider || "LOCAL",
+    avatarUrl: user?.avatarUrl || user?.AvatarUrl || null,
+  };
 }

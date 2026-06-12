@@ -1,16 +1,13 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import authService from "../../services/auth.service";
+import { useAuth } from "../../context/AuthContext";
 
 export default function ExpertNavbar() {
   const navigate = useNavigate();
-  const user = authService.getCurrentUser?.();
+  const { user, handleLogout: logoutContext } = useAuth();
 
   const handleLogout = () => {
-    if (authService.logout) {
-      authService.logout();
-    }
-
-    navigate("/login");
+    logoutContext();
+    navigate("/login", { replace: true });
   };
 
   const navLinkClass = ({ isActive }) =>

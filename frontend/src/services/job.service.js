@@ -6,29 +6,6 @@ const getValue = (...values) => {
   );
 };
 
-const getNestedValue = (...values) => {
-  const value = getValue(...values);
-
-  if (typeof value === "object" && value !== null) {
-    return getValue(
-      value.name,
-      value.Name,
-      value.title,
-      value.Title,
-      value.fullName,
-      value.FullName,
-      value.email,
-      value.Email,
-      value.skillName,
-      value.SkillName,
-      value.category,
-      value.Category
-    );
-  }
-
-  return value;
-};
-
 const toArray = (value) => {
   if (!value) return [];
 
@@ -37,10 +14,10 @@ const toArray = (value) => {
       .map((item) => {
         if (typeof item === "object" && item !== null) {
           return getValue(
-            item.name,
-            item.Name,
             item.skillName,
             item.SkillName,
+            item.name,
+            item.Name,
             item.title,
             item.Title,
             item.category,
@@ -66,8 +43,8 @@ const unwrapListData = (response) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.jobs)) return data.jobs;
+  if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.data?.items)) return data.data.items;
   if (Array.isArray(data?.data?.jobs)) return data.data.jobs;
   if (Array.isArray(data?.result?.items)) return data.result.items;
@@ -106,18 +83,16 @@ const normalizeJob = (job) => {
     job.JobPostingID,
     job.jobId,
     job.JobId,
-    job.jobID,
-    job.JobID,
-    job.projectId,
-    job.ProjectId,
-    job.projectID,
-    job.ProjectID
+    job.JobID
   );
 
   return {
     id,
     jobPostingId: id,
     clientProfileId: getValue(job.clientProfileId, job.ClientProfileId, 0),
+    clientUserId: getValue(job.clientUserId, job.ClientUserId, 0),
+    clientName: getValue(job.clientName, job.ClientName, "Client"),
+    clientAvatarUrl: getValue(job.clientAvatarUrl, job.ClientAvatarUrl, ""),
 
     title: getValue(
       job.title,
@@ -126,8 +101,6 @@ const normalizeJob = (job) => {
       job.JobTitle,
       job.projectTitle,
       job.ProjectTitle,
-      job.name,
-      job.Name,
       "Untitled job"
     ),
 
@@ -136,12 +109,8 @@ const normalizeJob = (job) => {
       job.Description,
       job.jobDescription,
       job.JobDescription,
-      job.requirement,
-      job.Requirement,
       job.requirements,
       job.Requirements,
-      job.summary,
-      job.Summary,
       "No description provided."
     ),
 
@@ -151,134 +120,52 @@ const normalizeJob = (job) => {
       ""
     ),
 
-    status: getValue(
-      job.status,
-      job.Status,
-      job.jobStatus,
-      job.JobStatus,
-      "OPEN"
-    ),
-
-    category: getNestedValue(
-      job.category,
-      job.Category,
-      job.categoryName,
-      job.CategoryName,
-      job.skillCategory,
-      job.SkillCategory,
-      job.projectCategory,
-      job.ProjectCategory,
-      job.projectType,
-      job.ProjectType,
-      "General"
-    ),
-
-    projectType: getValue(job.projectType, job.ProjectType, ""),
+    budgetMin: Number(getValue(job.budgetMin, job.BudgetMin, 0)),
+    budgetMax: Number(getValue(job.budgetMax, job.BudgetMax, 0)),
+    deadline: getValue(job.deadline, job.Deadline, ""),
+    projectType: getValue(job.projectType, job.ProjectType, "General"),
+    category: getValue(job.projectType, job.ProjectType, "General"),
     complexity: getValue(job.complexity, job.Complexity, ""),
+
     expectedDeliverables: getValue(
       job.expectedDeliverables,
       job.ExpectedDeliverables,
       ""
     ),
-    isAiAssisted: Boolean(getValue(job.isAiAssisted, job.IsAiAssisted, false)),
 
-    skills: toArray(
+    status: getValue(job.status, job.Status, "OPEN"),
+    isAiAssisted: Boolean(getValue(job.isAiAssisted, job.IsAiAssisted, false)),
+    createdAt: getValue(job.createdAt, job.CreatedAt, ""),
+    updatedAt: getValue(job.updatedAt, job.UpdatedAt, ""),
+
+    durationDays: Number(
       getValue(
-        job.skills,
-        job.Skills,
-        job.requiredSkills,
-        job.RequiredSkills,
-        job.skillNames,
-        job.SkillNames,
-        job.tags,
-        job.Tags,
-        ""
+        job.durationDays,
+        job.DurationDays,
+        job.preferredProjectDurationDays,
+        job.PreferredProjectDurationDays,
+        0
       )
     ),
 
-    budgetMin: getValue(
-      job.budgetMin,
-      job.BudgetMin,
-      job.minBudget,
-      job.MinBudget,
-      job.expectedBudgetMin,
-      job.ExpectedBudgetMin,
-      job.projectBudgetMin,
-      job.ProjectBudgetMin,
-      job.budgetFrom,
-      job.BudgetFrom,
-      0
+    skills: toArray(
+      getValue(job.skills, job.Skills, job.requiredSkills, job.RequiredSkills, "")
     ),
 
-    budgetMax: getValue(
-      job.budgetMax,
-      job.BudgetMax,
-      job.maxBudget,
-      job.MaxBudget,
-      job.expectedBudgetMax,
-      job.ExpectedBudgetMax,
-      job.projectBudgetMax,
-      job.ProjectBudgetMax,
-      job.budgetTo,
-      job.BudgetTo,
-      job.budget,
-      job.Budget,
-      0
+    matchScore: Number(getValue(job.matchScore, job.MatchScore, 0)),
+    skillMatchScore: Number(getValue(job.skillMatchScore, job.SkillMatchScore, 0)),
+    matchedSkillCount: Number(
+      getValue(job.matchedSkillCount, job.MatchedSkillCount, 0)
     ),
-
-    durationDays: getValue(
-      job.durationDays,
-      job.DurationDays,
-      job.projectDurationDays,
-      job.ProjectDurationDays,
-      job.preferredProjectDurationDays,
-      job.PreferredProjectDurationDays,
-      job.estimatedDurationDays,
-      job.EstimatedDurationDays,
-      job.duration,
-      job.Duration,
-      0
+    requiredSkillCount: Number(
+      getValue(job.requiredSkillCount, job.RequiredSkillCount, 0)
     ),
-
-    deadline: getValue(
-      job.deadline,
-      job.Deadline,
-      job.dueDate,
-      job.DueDate,
-      job.expiredAt,
-      job.ExpiredAt,
-      job.applicationDeadline,
-      job.ApplicationDeadline,
-      ""
+    matchedSkills: toArray(getValue(job.matchedSkills, job.MatchedSkills, [])),
+    requiredSkills: toArray(
+      getValue(job.requiredSkills, job.RequiredSkills, job.skills, job.Skills, [])
     ),
-
-    createdAt: getValue(
-      job.createdAt,
-      job.CreatedAt,
-      job.postedAt,
-      job.PostedAt,
-      job.createdDate,
-      job.CreatedDate,
-      ""
-    ),
-
-    updatedAt: getValue(job.updatedAt, job.UpdatedAt, ""),
-
-    clientName: getNestedValue(
-      job.client,
-      job.Client,
-      job.clientName,
-      job.ClientName,
-      job.clientFullName,
-      job.ClientFullName,
-      job.ownerName,
-      job.OwnerName,
-      job.createdByName,
-      job.CreatedByName,
-      job.customerName,
-      job.CustomerName,
-      "Client"
-    ),
+    matchReason: getValue(job.matchReason, job.MatchReason, ""),
+    riskNote: getValue(job.riskNote, job.RiskNote, ""),
 
     raw: job,
   };
@@ -290,19 +177,15 @@ const jobService = {
 
     console.log("GET OPEN JOBS RESPONSE:", response?.data);
 
-    const list = unwrapListData(response);
-
-    return list.map(normalizeJob).filter(Boolean);
+    return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },
 
-  async getRecommendedJobs() {
-    const response = await jobApi.getRecommendedJobs();
+  async getRecommendedJobs(limit = 10) {
+    const response = await jobApi.getRecommendedJobs(limit);
 
     console.log("GET RECOMMENDED JOBS RESPONSE:", response?.data);
 
-    const list = unwrapListData(response);
-
-    return list.map(normalizeJob).filter(Boolean);
+    return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },
 
   async getJobById(jobId) {
@@ -314,9 +197,7 @@ const jobService = {
 
     console.log("GET JOB DETAIL RESPONSE:", response?.data);
 
-    const data = unwrapDetailData(response);
-
-    return normalizeJob(data);
+    return normalizeJob(unwrapDetailData(response));
   },
 
   async getMyJobs() {
@@ -324,24 +205,16 @@ const jobService = {
 
     console.log("GET MY JOBS RESPONSE:", response?.data);
 
-    const list = unwrapListData(response);
-
-    return list.map(normalizeJob).filter(Boolean);
+    return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },
 
   async saveJobDraft(payload) {
     const response = await saveJobDraftApi(payload);
-
-    console.log("SAVE JOB DRAFT RESPONSE:", response?.data);
-
     return unwrapDetailData(response);
   },
 
   async submitJob(payload) {
     const response = await submitJobApi(payload);
-
-    console.log("SUBMIT JOB RESPONSE:", response?.data);
-
     return unwrapDetailData(response);
   },
 };

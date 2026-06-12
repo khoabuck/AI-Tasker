@@ -10,37 +10,36 @@ const toNumber = (value) => {
   return Number.isNaN(number) ? 0 : number;
 };
 
+const trim = (value) => String(value || "").trim();
+
+const normalizeCertificate = (item) => ({
+  certificateName: trim(item.certificateName),
+  certificateIssuer: trim(item.certificateIssuer),
+  certificateUrl: trim(item.certificateUrl),
+  issuedAt: item.issuedAt ? new Date(item.issuedAt).toISOString() : null,
+});
+
 const buildPayload = (formData) => ({
-  avatarUrl: formData.avatarUrl || "",
-  professionalTitle: String(formData.professionalTitle || "").trim(),
-  bio: String(formData.bio || "").trim(),
-  skills: String(formData.skills || "").trim(),
+  avatarUrl: trim(formData.avatarUrl),
+  professionalTitle: trim(formData.professionalTitle),
+  bio: trim(formData.bio),
+  skills: trim(formData.skills),
   yearsOfExperience: toNumber(formData.yearsOfExperience),
   expectedProjectBudgetMin: toNumber(formData.expectedProjectBudgetMin),
   expectedProjectBudgetMax: toNumber(formData.expectedProjectBudgetMax),
   preferredProjectDurationDays: toNumber(formData.preferredProjectDurationDays),
   availableForWork: Boolean(formData.availableForWork),
-  portfolioUrl: String(formData.portfolioUrl || "").trim(),
-  linkedInUrl: String(formData.linkedInUrl || "").trim(),
-  gitHubUrl: String(formData.gitHubUrl || "").trim(),
-
+  portfolioUrl: trim(formData.portfolioUrl),
+  linkedInUrl: trim(formData.linkedInUrl),
+  gitHubUrl: trim(formData.gitHubUrl),
   certificates: (formData.certificates || [])
-    .filter((item) => {
-      const name = String(item.certificateName || "").trim();
-      const issuer = String(item.certificateIssuer || "").trim();
-      const url = String(item.certificateUrl || "").trim();
-      const issuedAt = String(item.issuedAt || "").trim();
-
-      return name !== "" || issuer !== "" || url !== "" || issuedAt !== "";
-    })
-    .map((item) => ({
-      certificateName: String(item.certificateName || "").trim(),
-      certificateIssuer: String(item.certificateIssuer || "").trim(),
-      certificateUrl: String(item.certificateUrl || "").trim(),
-      issuedAt: item.issuedAt
-        ? new Date(item.issuedAt).toISOString()
-        : new Date().toISOString(),
-    })),
+    .map(normalizeCertificate)
+    .filter(
+      (item) =>
+        item.certificateName !== "" ||
+        item.certificateIssuer !== "" ||
+        item.certificateUrl !== ""
+    ),
 });
 
 const expertProfileService = {
@@ -51,7 +50,6 @@ const expertProfileService = {
 
   async createExpertProfile(formData) {
     const payload = buildPayload(formData);
-
     console.log("CREATE EXPERT PROFILE PAYLOAD:", payload);
 
     const response = await expertProfileApi.createExpertProfile(payload);
@@ -60,7 +58,6 @@ const expertProfileService = {
 
   async resubmitExpertProfile(formData) {
     const payload = buildPayload(formData);
-
     console.log("RESUBMIT EXPERT PROFILE PAYLOAD:", payload);
 
     const response = await expertProfileApi.resubmitExpertProfile(payload);

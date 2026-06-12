@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import axiosInstance from "../../../api/axiosInstance";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
+import jobService from "../../../services/job.service";
 
 export default function JobDetailPage() {
   const navigate = useNavigate();
@@ -20,24 +20,13 @@ export default function JobDetailPage() {
       setLoading(true);
       setError("");
 
-      if (!jobId || jobId === "undefined" || jobId === "null") {
-        throw new Error("Invalid job id.");
-      }
+      const data = await jobService.getJobById(jobId);
 
-      const response = await axiosInstance.get(`/jobs/${jobId}`);
-
-      console.log("GET JOB DETAIL RAW:", response?.data);
-
-      const data = unwrapDetailData(response);
-      const normalizedJob = normalizeJob(data);
-
-      console.log("GET JOB DETAIL NORMALIZED:", normalizedJob);
-
-      if (!normalizedJob?.id) {
+      if (!data?.id) {
         throw new Error("Job detail does not have a valid id.");
       }
 
-      setJob(normalizedJob);
+      setJob(data);
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
       setError(
@@ -243,202 +232,6 @@ export default function JobDetailPage() {
       </div>
     </ExpertLayout>
   );
-}
-
-function unwrapDetailData(response) {
-  const data = response?.data;
-
-  if (!data) return null;
-
-  if (data?.data?.job) return data.data.job;
-  if (data?.data?.item) return data.data.item;
-  if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
-
-  if (data?.job) return data.job;
-  if (data?.item) return data.item;
-  if (data?.result) return data.result;
-
-  return data;
-}
-
-function normalizeJob(job) {
-  if (!job) return null;
-
-  const id = getValue(
-    job.id,
-    job.Id,
-    job.ID,
-    job.jobPostingId,
-    job.JobPostingId,
-    job.jobPostingID,
-    job.JobPostingID,
-    job.jobId,
-    job.JobId,
-    job.JobID
-  );
-
-  return {
-    id,
-    jobPostingId: id,
-
-    title: getValue(
-      job.title,
-      job.Title,
-      job.jobTitle,
-      job.JobTitle,
-      job.projectTitle,
-      job.ProjectTitle,
-      job.name,
-      job.Name,
-      "Untitled job"
-    ),
-
-    description: getValue(
-      job.description,
-      job.Description,
-      job.jobDescription,
-      job.JobDescription,
-      job.requirements,
-      job.Requirements,
-      "No description provided."
-    ),
-
-    aiGeneratedDescription: getValue(
-      job.aiGeneratedDescription,
-      job.AiGeneratedDescription,
-      ""
-    ),
-
-    status: getValue(job.status, job.Status, "OPEN"),
-
-    category: getValue(
-      job.categoryName,
-      job.CategoryName,
-      job.category,
-      job.Category,
-      job.projectType,
-      job.ProjectType,
-      "General"
-    ),
-
-    complexity: getValue(job.complexity, job.Complexity, ""),
-
-    expectedDeliverables: getValue(
-      job.expectedDeliverables,
-      job.ExpectedDeliverables,
-      ""
-    ),
-
-    skills: toArray(
-      getValue(
-        job.skills,
-        job.Skills,
-        job.requiredSkills,
-        job.RequiredSkills,
-        job.skillNames,
-        job.SkillNames,
-        job.tags,
-        job.Tags,
-        ""
-      )
-    ),
-
-    budgetMin: Number(
-      getValue(
-        job.budgetMin,
-        job.BudgetMin,
-        job.expectedBudgetMin,
-        job.ExpectedBudgetMin,
-        job.minBudget,
-        job.MinBudget,
-        0
-      )
-    ),
-
-    budgetMax: Number(
-      getValue(
-        job.budgetMax,
-        job.BudgetMax,
-        job.expectedBudgetMax,
-        job.ExpectedBudgetMax,
-        job.maxBudget,
-        job.MaxBudget,
-        job.budget,
-        job.Budget,
-        0
-      )
-    ),
-
-    durationDays: Number(
-      getValue(
-        job.durationDays,
-        job.DurationDays,
-        job.projectDurationDays,
-        job.ProjectDurationDays,
-        job.preferredProjectDurationDays,
-        job.PreferredProjectDurationDays,
-        0
-      )
-    ),
-
-    deadline: getValue(job.deadline, job.Deadline, job.dueDate, job.DueDate, ""),
-
-    createdAt: getValue(
-      job.createdAt,
-      job.CreatedAt,
-      job.postedAt,
-      job.PostedAt,
-      ""
-    ),
-
-    clientName: getValue(
-      job.clientName,
-      job.ClientName,
-      job.clientFullName,
-      job.ClientFullName,
-      job.ownerName,
-      job.OwnerName,
-      "Client"
-    ),
-
-    raw: job,
-  };
-}
-
-function getValue(...values) {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
-  );
-}
-
-function toArray(value) {
-  if (!value) return [];
-
-  if (Array.isArray(value)) {
-    return value
-      .map((item) => {
-        if (typeof item === "object" && item !== null) {
-          return getValue(
-            item.name,
-            item.Name,
-            item.skillName,
-            item.SkillName,
-            item.title,
-            item.Title
-          );
-        }
-
-        return item;
-      })
-      .map((item) => String(item || "").trim())
-      .filter(Boolean);
-  }
-
-  return String(value)
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
 }
 
 function BackButton({ onClick }) {

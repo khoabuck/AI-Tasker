@@ -7,7 +7,6 @@ import uploadService from "../../../services/upload.service";
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
-const REVIEW_FEEDBACK_KEY = "aitasker_expert_profile_review_feedback";
 
 const emptyForm = {
   avatarUrl: "",
@@ -43,9 +42,14 @@ export default function SetupExpertProfilePage() {
   const [loading, setLoading] = useState(isEditPage);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [submitted, setSubmitted] = useState(false);
+  const [touched, setTouched] = useState({});
+
   const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
-  const [reviewFeedback, setReviewFeedback] = useState(null);
+  const [modal, setModal] = useState(null);
+
+  const formErrors = useMemo(() => validateForm(formData), [formData]);
 
   useEffect(() => {
     loadInitialData();
@@ -62,11 +66,6 @@ export default function SetupExpertProfilePage() {
 
       const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
       const normalDraft = readJson(draftKey);
-      const savedFeedback = readJson(REVIEW_FEEDBACK_KEY);
-
-      if (savedFeedback) {
-        setReviewFeedback(savedFeedback);
-      }
 
       if (correctionDraft) {
         setFormData({
@@ -136,11 +135,30 @@ export default function SetupExpertProfilePage() {
     }
   };
 
-  const requiredErrors = useMemo(() => {
-    return validateForm(formData);
-  }, [formData]);
+  const markTouched = (name) => {
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }));
+  };
+
+  const getFieldError = (name) => {
+    if (!submitted && !touched[name]) return "";
+    return formErrors[name] || "";
+  };
+
+  const getGroupError = (name, fieldNames = []) => {
+    const groupTouched = fieldNames.some((fieldName) => touched[fieldName]);
+
+    if (!submitted && !groupTouched) return "";
+
+    return formErrors[name] || "";
+  };
 
   const updateField = (name, value) => {
+    setError("");
+    setModal(null);
+
     setFormData((prev) => ({
       ...prev,
       [name]: value,
@@ -148,6 +166,9 @@ export default function SetupExpertProfilePage() {
   };
 
   const updateCertificate = (index, name, value) => {
+    setError("");
+    setModal(null);
+
     setFormData((prev) => {
       const nextCertificates = [...prev.certificates];
 
@@ -200,13 +221,22 @@ export default function SetupExpertProfilePage() {
     try {
       setUploadingAvatar(true);
       setError("");
+      setModal(null);
 
       const imageUrl = await uploadService.uploadImage(file, "avatar");
 
       updateField("avatarUrl", imageUrl);
     } catch (err) {
       console.error("AVATAR UPLOAD ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+
+      setModal({
+        type: "danger",
+        title: "Upload failed",
+        message: getFriendlyError(err),
+        detail: "",
+        showResubmit: false,
+        showClose: true,
+      });
     } finally {
       setUploadingAvatar(false);
     }
@@ -215,20 +245,20 @@ export default function SetupExpertProfilePage() {
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    setSubmitted(true);
+    setError("");
+    setModal(null);
+
     const errors = validateForm(formData);
 
     if (Object.keys(errors).length > 0) {
-      setError("Please fill in all required fields before submitting.");
+      setError("Please check the highlighted fields before submitting.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
     try {
       setSaving(true);
-      setError("");
-      setSuccessMessage("");
-      setReviewFeedback(null);
-      localStorage.removeItem(REVIEW_FEEDBACK_KEY);
 
       const result = isEditPage
         ? await expertProfileService.resubmitExpertProfile(formData)
@@ -237,18 +267,26 @@ export default function SetupExpertProfilePage() {
       console.log("EXPERT PROFILE SUBMIT SUCCESS:", result);
 
       const reviewStatus = getReviewStatus(result);
+      const userStatus = getUserStatus(result);
       const reviewNote = getReviewNote(result);
       const missingInformation = getMissingInformation(result);
 
-      if (reviewStatus === "APPROVED") {
+      if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         clearExpertProfileDrafts();
         updateLocalUserStatus("ACTIVE");
 
-        setSuccessMessage("Your expert profile has been approved successfully.");
+        setModal({
+          type: "success",
+          title: "Setup profile successfully",
+          message: "Your expert profile has been approved.",
+          detail: "Redirecting to dashboard...",
+          showResubmit: false,
+          showClose: false,
+        });
 
         setTimeout(() => {
-          navigate("/expert/dashboard", { replace: true });
-        }, 700);
+          window.location.replace("/expert/dashboard");
+        }, 900);
 
         return;
       }
@@ -257,20 +295,19 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(formData);
         updateLocalUserStatus("PENDING_PROFILE");
 
-        const feedback = {
+        setModal({
           type: "warning",
-          title: "Your profile needs correction",
+          title: "Profile needs correction",
           message:
             reviewNote ||
-            "Your profile was submitted successfully, but it needs some corrections before it can be approved.",
-          missingInformation:
+            "Your profile was submitted, but it needs some corrections before approval.",
+          detail:
             missingInformation ||
-            "Please review your bio, skills, public links, and certificates. Then edit and submit again.",
-        };
+            "Please review your bio, skills, public links, and certificates.",
+          showResubmit: true,
+          showClose: true,
+        });
 
-        setReviewFeedback(feedback);
-        localStorage.setItem(REVIEW_FEEDBACK_KEY, JSON.stringify(feedback));
-        window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
@@ -278,56 +315,64 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(formData);
         updateLocalUserStatus("PENDING_PROFILE");
 
-        const feedback = {
+        setModal({
           type: "danger",
-          title: "Your profile was rejected",
+          title: "Profile was rejected",
           message:
             reviewNote ||
-            "Your profile was rejected. Please update your information and submit again.",
-          missingInformation:
+            "Your expert profile was rejected. Please update your information and submit again.",
+          detail:
             missingInformation ||
             "Please check your profile information, public links, and certificates.",
-        };
+          showResubmit: true,
+          showClose: true,
+        });
 
-        setReviewFeedback(feedback);
-        localStorage.setItem(REVIEW_FEEDBACK_KEY, JSON.stringify(feedback));
-        window.scrollTo({ top: 0, behavior: "smooth" });
         return;
       }
 
       saveCorrectionDraft(formData);
-      updateLocalUserStatus("PENDING_REVIEW");
 
-      const feedback = {
+      setModal({
         type: "info",
-        title: "Your profile has been submitted",
+        title: "Profile submitted",
         message:
-          "Your expert profile has been submitted and is waiting for review.",
-        missingInformation: "",
-      };
-
-      setReviewFeedback(feedback);
-      localStorage.setItem(REVIEW_FEEDBACK_KEY, JSON.stringify(feedback));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+          "Your expert profile has been submitted. Please check your profile status later.",
+        detail: "",
+        showResubmit: false,
+        showClose: true,
+      });
     } catch (err) {
       console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
-      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      saveCorrectionDraft(formData);
+
+      setModal({
+        type: "danger",
+        title: "Submit failed",
+        message: getFriendlyError(err),
+        detail:
+          "Your form data has been saved. You can go to resubmit page and try again.",
+        showResubmit: true,
+        showClose: true,
+      });
     } finally {
       setSaving(false);
     }
   };
 
-  const handleEditAgain = () => {
+  const handleGoResubmit = () => {
     saveCorrectionDraft(formData);
+    setModal(null);
     navigate("/expert/profile/edit", { replace: true });
   };
 
   const handleClearDraft = () => {
     clearExpertProfileDrafts();
     setFormData(emptyForm);
-    setReviewFeedback(null);
-    setSuccessMessage("");
+    setTouched({});
+    setSubmitted(false);
+    setModal(null);
     setError("");
   };
 
@@ -352,12 +397,12 @@ export default function SetupExpertProfilePage() {
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {isEditPage ? "Edit Expert Profile" : "Setup Expert Profile"}
+              {isEditPage ? "Resubmit Expert Profile" : "Setup Expert Profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Update your expert profile"
+                ? "Update and resubmit your expert profile"
                 : "Create your expert profile"}
             </h1>
 
@@ -368,18 +413,7 @@ export default function SetupExpertProfilePage() {
           </div>
 
           {error && (
-            <Alert type="danger" title="Something went wrong" message={error} />
-          )}
-
-          {successMessage && (
-            <Alert type="success" title="Success" message={successMessage} />
-          )}
-
-          {reviewFeedback && (
-            <ReviewFeedbackCard
-              feedback={reviewFeedback}
-              onEditAgain={handleEditAgain}
-            />
+            <Alert type="danger" title="Please check your form" message={error} />
           )}
 
           <form
@@ -411,6 +445,7 @@ export default function SetupExpertProfilePage() {
 
                   <label className="inline-flex cursor-pointer rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
                     {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
+
                     <input
                       type="file"
                       accept="image/*"
@@ -428,7 +463,8 @@ export default function SetupExpertProfilePage() {
                     onChange={(value) =>
                       updateField("professionalTitle", value)
                     }
-                    error={requiredErrors.professionalTitle}
+                    onBlur={() => markTouched("professionalTitle")}
+                    error={getFieldError("professionalTitle")}
                     placeholder="Example: Full-stack React Developer"
                   />
 
@@ -437,7 +473,8 @@ export default function SetupExpertProfilePage() {
                     required
                     value={formData.bio}
                     onChange={(value) => updateField("bio", value)}
-                    error={requiredErrors.bio}
+                    onBlur={() => markTouched("bio")}
+                    error={getFieldError("bio")}
                     placeholder="At least 50 characters."
                   />
 
@@ -446,7 +483,8 @@ export default function SetupExpertProfilePage() {
                     required
                     value={formData.skills}
                     onChange={(value) => updateField("skills", value)}
-                    error={requiredErrors.skills}
+                    onBlur={() => markTouched("skills")}
+                    error={getFieldError("skills")}
                     placeholder="React, JavaScript, C#, SQL"
                   />
                 </div>
@@ -464,7 +502,8 @@ export default function SetupExpertProfilePage() {
                   required
                   value={formData.yearsOfExperience}
                   onChange={(value) => updateField("yearsOfExperience", value)}
-                  error={requiredErrors.yearsOfExperience}
+                  onBlur={() => markTouched("yearsOfExperience")}
+                  error={getFieldError("yearsOfExperience")}
                   placeholder="Example: 2"
                 />
 
@@ -475,7 +514,8 @@ export default function SetupExpertProfilePage() {
                   onChange={(value) =>
                     updateField("preferredProjectDurationDays", value)
                   }
-                  error={requiredErrors.preferredProjectDurationDays}
+                  onBlur={() => markTouched("preferredProjectDurationDays")}
+                  error={getFieldError("preferredProjectDurationDays")}
                   placeholder="Example: 14"
                 />
 
@@ -486,7 +526,8 @@ export default function SetupExpertProfilePage() {
                   onChange={(value) =>
                     updateField("expectedProjectBudgetMin", value)
                   }
-                  error={requiredErrors.expectedProjectBudgetMin}
+                  onBlur={() => markTouched("expectedProjectBudgetMin")}
+                  error={getFieldError("expectedProjectBudgetMin")}
                   placeholder="Example: 100"
                 />
 
@@ -497,7 +538,8 @@ export default function SetupExpertProfilePage() {
                   onChange={(value) =>
                     updateField("expectedProjectBudgetMax", value)
                   }
-                  error={requiredErrors.expectedProjectBudgetMax}
+                  onBlur={() => markTouched("expectedProjectBudgetMax")}
+                  error={getFieldError("expectedProjectBudgetMax")}
                   placeholder="Example: 1000"
                 />
               </div>
@@ -529,7 +571,8 @@ export default function SetupExpertProfilePage() {
                   label="Portfolio URL"
                   value={formData.portfolioUrl}
                   onChange={(value) => updateField("portfolioUrl", value)}
-                  error={requiredErrors.portfolioUrl}
+                  onBlur={() => markTouched("portfolioUrl")}
+                  error={getFieldError("portfolioUrl")}
                   placeholder="https://your-portfolio.com"
                 />
 
@@ -537,7 +580,8 @@ export default function SetupExpertProfilePage() {
                   label="LinkedIn URL"
                   value={formData.linkedInUrl}
                   onChange={(value) => updateField("linkedInUrl", value)}
-                  error={requiredErrors.linkedInUrl}
+                  onBlur={() => markTouched("linkedInUrl")}
+                  error={getFieldError("linkedInUrl")}
                   placeholder="https://linkedin.com/in/you"
                 />
 
@@ -545,12 +589,19 @@ export default function SetupExpertProfilePage() {
                   label="GitHub URL"
                   value={formData.gitHubUrl}
                   onChange={(value) => updateField("gitHubUrl", value)}
-                  error={requiredErrors.gitHubUrl}
+                  onBlur={() => markTouched("gitHubUrl")}
+                  error={getFieldError("gitHubUrl")}
                   placeholder="https://github.com/you"
                 />
               </div>
 
-              <FieldError message={requiredErrors.publicLinks} />
+              <FieldError
+                message={getGroupError("publicLinks", [
+                  "portfolioUrl",
+                  "linkedInUrl",
+                  "gitHubUrl",
+                ])}
+              />
             </section>
 
             <section className="border-t border-white/10 pt-6">
@@ -566,7 +617,10 @@ export default function SetupExpertProfilePage() {
                 </button>
               </div>
 
-              <FieldError message={requiredErrors.certificates} />
+              <FieldError message={submitted ? formErrors.certificates : ""} />
+              <FieldError
+                message={submitted ? formErrors.duplicateCertificates : ""}
+              />
 
               <div className="space-y-4">
                 {formData.certificates.map((certificate, index) => (
@@ -596,7 +650,8 @@ export default function SetupExpertProfilePage() {
                         onChange={(value) =>
                           updateCertificate(index, "certificateName", value)
                         }
-                        error={requiredErrors[`certificateName_${index}`]}
+                        onBlur={() => markTouched(`certificateName_${index}`)}
+                        error={getFieldError(`certificateName_${index}`)}
                         placeholder="Example: React Developer Certificate"
                       />
 
@@ -607,7 +662,8 @@ export default function SetupExpertProfilePage() {
                         onChange={(value) =>
                           updateCertificate(index, "certificateIssuer", value)
                         }
-                        error={requiredErrors[`certificateIssuer_${index}`]}
+                        onBlur={() => markTouched(`certificateIssuer_${index}`)}
+                        error={getFieldError(`certificateIssuer_${index}`)}
                         placeholder="Example: Coursera"
                       />
 
@@ -618,7 +674,8 @@ export default function SetupExpertProfilePage() {
                         onChange={(value) =>
                           updateCertificate(index, "certificateUrl", value)
                         }
-                        error={requiredErrors[`certificateUrl_${index}`]}
+                        onBlur={() => markTouched(`certificateUrl_${index}`)}
+                        error={getFieldError(`certificateUrl_${index}`)}
                         placeholder="https://certificate-link.com"
                       />
 
@@ -670,6 +727,14 @@ export default function SetupExpertProfilePage() {
           </form>
         </div>
       </div>
+
+      {modal && (
+        <ResultModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          onGoResubmit={handleGoResubmit}
+        />
+      )}
     </SetupShell>
   );
 }
@@ -702,6 +767,97 @@ function SetupShell({ children, onLogout }) {
   );
 }
 
+function ResultModal({ modal, onClose, onGoResubmit }) {
+  const icon =
+    modal.type === "success"
+      ? "check_circle"
+      : modal.type === "warning"
+      ? "warning"
+      : modal.type === "danger"
+      ? "error"
+      : "info";
+
+  const color =
+    modal.type === "success"
+      ? "text-green-300"
+      : modal.type === "warning"
+      ? "text-yellow-300"
+      : modal.type === "danger"
+      ? "text-red-300"
+      : "text-cyan-300";
+
+  const buttonColor =
+    modal.type === "success"
+      ? "border-green-300/50 bg-green-300/10 text-green-200 hover:bg-green-300 hover:text-black"
+      : modal.type === "warning"
+      ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-200 hover:bg-yellow-300 hover:text-black"
+      : "border-red-300/50 bg-red-300/10 text-red-200 hover:bg-red-300 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="mb-5 flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+            <span className={`material-symbols-outlined text-3xl ${color}`}>
+              {icon}
+            </span>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-extrabold text-white">{modal.title}</h3>
+
+            <p className="mt-2 text-sm leading-6 text-gray-300">
+              {modal.message}
+            </p>
+          </div>
+        </div>
+
+        {modal.detail && (
+          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
+            {modal.detail}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          {modal.showClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+            >
+              Close
+            </button>
+          )}
+
+          {modal.showResubmit && (
+            <button
+              type="button"
+              onClick={onGoResubmit}
+              className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${buttonColor}`}
+            >
+              Go to Resubmit
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Alert({ type, title, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
+
+  return (
+    <div className={`mb-6 rounded-xl border px-5 py-4 text-sm ${style}`}>
+      <p className="font-bold">{title}</p>
+      <p className="mt-1">{message}</p>
+    </div>
+  );
+}
+
 function validateForm(data) {
   const errors = {};
 
@@ -711,17 +867,13 @@ function validateForm(data) {
 
   if (isEmpty(data.bio)) {
     errors.bio = "Bio is required.";
-  }
-
-  if (!isEmpty(data.bio) && String(data.bio).trim().length < 50) {
+  } else if (String(data.bio).trim().length < 50) {
     errors.bio = "Bio must be at least 50 characters.";
   }
 
   if (isEmpty(data.skills)) {
     errors.skills = "Skills are required.";
-  }
-
-  if (!isEmpty(data.skills) && String(data.skills).trim().length < 10) {
+  } else if (String(data.skills).trim().length < 10) {
     errors.skills = "Skills must be more specific.";
   }
 
@@ -781,7 +933,10 @@ function validateForm(data) {
     }
   });
 
-  const validCertificates = (data.certificates || []).filter(
+  const certificateUrls = [];
+  const certificates = data.certificates || [];
+
+  const validCertificates = certificates.filter(
     (item) =>
       !isEmpty(item.certificateName) ||
       !isEmpty(item.certificateIssuer) ||
@@ -792,34 +947,117 @@ function validateForm(data) {
     errors.certificates = "At least one certificate is required.";
   }
 
-  (data.certificates || []).forEach((item, index) => {
+  certificates.forEach((item, index) => {
     const hasAnyValue =
       !isEmpty(item.certificateName) ||
       !isEmpty(item.certificateIssuer) ||
       !isEmpty(item.certificateUrl) ||
       !isEmpty(item.issuedAt);
 
-    if (hasAnyValue) {
-      if (isEmpty(item.certificateName)) {
-        errors[`certificateName_${index}`] = "Certificate name is required.";
-      }
+    if (!hasAnyValue) return;
 
-      if (isEmpty(item.certificateIssuer)) {
-        errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
-      }
+    if (isEmpty(item.certificateName)) {
+      errors[`certificateName_${index}`] = "Certificate name is required.";
+    }
 
-      if (isEmpty(item.certificateUrl)) {
-        errors[`certificateUrl_${index}`] = "Certificate URL is required.";
-      }
+    if (isEmpty(item.certificateIssuer)) {
+      errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
+    }
 
-      if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
-        errors[`certificateUrl_${index}`] =
-          "Certificate URL must start with http:// or https://";
-      }
+    if (isEmpty(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] = "Certificate URL is required.";
+    }
+
+    if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] =
+        "Certificate URL must start with http:// or https://";
+    }
+
+    if (!isEmpty(item.certificateUrl)) {
+      certificateUrls.push(String(item.certificateUrl).trim().toLowerCase());
     }
   });
 
+  if (certificateUrls.length !== new Set(certificateUrls).size) {
+    errors.duplicateCertificates = "Certificate URLs must not be duplicated.";
+  }
+
   return errors;
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function NumberInput(props) {
+  return (
+    <TextInput
+      {...props}
+      onChange={(nextValue) => {
+        if (/^\d*$/.test(nextValue)) props.onChange(nextValue);
+      }}
+    />
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        rows={5}
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function FieldError({ message }) {
+  if (!message) return null;
+
+  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
 }
 
 function getReviewStatus(result) {
@@ -830,6 +1068,12 @@ function getReviewStatus(result) {
       result?.ReviewStatus ||
       ""
   )
+    .trim()
+    .toUpperCase();
+}
+
+function getUserStatus(result) {
+  return String(result?.userStatus || result?.UserStatus || "")
     .trim()
     .toUpperCase();
 }
@@ -859,14 +1103,26 @@ function getMissingInformation(result) {
   return String(value || "");
 }
 
+function saveCorrectionDraft(data) {
+  localStorage.setItem(CORRECTION_DRAFT_KEY, JSON.stringify(data));
+  localStorage.setItem(EDIT_DRAFT_KEY, JSON.stringify(data));
+  localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(data));
+}
+
+function clearExpertProfileDrafts() {
+  localStorage.removeItem(SETUP_DRAFT_KEY);
+  localStorage.removeItem(EDIT_DRAFT_KEY);
+  localStorage.removeItem(CORRECTION_DRAFT_KEY);
+}
+
 function updateLocalUserStatus(status) {
   try {
-    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
 
     localStorage.setItem(
       "user",
       JSON.stringify({
-        ...currentUser,
+        ...user,
         role: "EXPERT",
         status,
       })
@@ -874,19 +1130,6 @@ function updateLocalUserStatus(status) {
   } catch (error) {
     console.error("UPDATE LOCAL USER STATUS ERROR:", error);
   }
-}
-
-function saveCorrectionDraft(formData) {
-  localStorage.setItem(CORRECTION_DRAFT_KEY, JSON.stringify(formData));
-  localStorage.setItem(EDIT_DRAFT_KEY, JSON.stringify(formData));
-  localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(formData));
-}
-
-function clearExpertProfileDrafts() {
-  localStorage.removeItem(SETUP_DRAFT_KEY);
-  localStorage.removeItem(EDIT_DRAFT_KEY);
-  localStorage.removeItem(CORRECTION_DRAFT_KEY);
-  localStorage.removeItem(REVIEW_FEEDBACK_KEY);
 }
 
 function readJson(key) {
@@ -909,8 +1152,13 @@ function isValidUrl(value) {
 function getFriendlyError(err) {
   const status = err?.response?.status;
 
-  if (status === 401) return "Your session has expired. Please login again.";
-  if (status === 403) return "Backend is blocking this action.";
+  if (status === 401) {
+    return "Your session has expired. Please login again.";
+  }
+
+  if (status === 403) {
+    return "Backend blocked this request because the current token does not have EXPERT permission.";
+  }
 
   const rawMessage =
     err?.response?.data?.message ||
@@ -920,123 +1168,4 @@ function getFriendlyError(err) {
     "";
 
   return String(rawMessage || "Something went wrong. Please try again.");
-}
-
-function Alert({ type, title, message }) {
-  const style =
-    type === "success"
-      ? "border-green-500/30 bg-green-500/10 text-green-300"
-      : "border-red-500/30 bg-red-500/10 text-red-300";
-
-  return (
-    <div className={`mb-6 rounded-xl border px-5 py-4 text-sm ${style}`}>
-      <p className="font-bold">{title}</p>
-      <p className="mt-1">{message}</p>
-    </div>
-  );
-}
-
-function ReviewFeedbackCard({ feedback, onEditAgain }) {
-  const style =
-    feedback.type === "warning"
-      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
-      : feedback.type === "danger"
-      ? "border-red-500/30 bg-red-500/10 text-red-300"
-      : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200";
-
-  return (
-    <div className={`mb-6 rounded-2xl border px-5 py-5 text-sm ${style}`}>
-      <div className="mb-3 flex items-center gap-3">
-        <span className="material-symbols-outlined">
-          {feedback.type === "warning"
-            ? "warning"
-            : feedback.type === "danger"
-            ? "error"
-            : "info"}
-        </span>
-
-        <h3 className="text-base font-bold">{feedback.title}</h3>
-      </div>
-
-      <p className="mb-3 leading-6">{feedback.message}</p>
-
-      {feedback.missingInformation && (
-        <div className="mb-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6">
-          <p className="mb-1 font-bold">What should you fix?</p>
-          <p>{feedback.missingInformation}</p>
-        </div>
-      )}
-
-      {(feedback.type === "warning" || feedback.type === "danger") && (
-        <button
-          type="button"
-          onClick={onEditAgain}
-          className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
-        >
-          Edit Profile Again
-        </button>
-      )}
-    </div>
-  );
-}
-
-function TextInput({ label, value, onChange, placeholder, required, error }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
-
-      <input
-        type="text"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
-      />
-
-      <FieldError message={error} />
-    </div>
-  );
-}
-
-function NumberInput({ label, value, onChange, required, error, placeholder }) {
-  return (
-    <TextInput
-      label={label}
-      required={required}
-      value={value}
-      placeholder={placeholder}
-      onChange={(nextValue) => {
-        if (/^\d*$/.test(nextValue)) onChange(nextValue);
-      }}
-      error={error}
-    />
-  );
-}
-
-function TextArea({ label, value, onChange, placeholder, required, error }) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
-
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        rows={5}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
-      />
-
-      <FieldError message={error} />
-    </div>
-  );
-}
-
-function FieldError({ message }) {
-  if (!message) return null;
-
-  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
 }

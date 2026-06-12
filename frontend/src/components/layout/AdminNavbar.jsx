@@ -1,16 +1,13 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import authService from "../../services/auth.service";
+import { useAuth } from "../../context/AuthContext";
 
 export default function AdminNavbar() {
   const navigate = useNavigate();
-  const user = authService.getCurrentUser?.();
+  const { user, handleLogout: logoutContext } = useAuth();
 
   const handleLogout = () => {
-    if (authService.logout) {
-      authService.logout();
-    }
-
-    navigate("/login");
+    logoutContext();
+    navigate("/login", { replace: true });
   };
 
   const navLinkClass = ({ isActive }) =>
@@ -22,7 +19,6 @@ export default function AdminNavbar() {
 
   return (
     <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-[#0b0f16] px-5 py-5 md:flex md:flex-col">
-      {/* Logo */}
       <Link
         to="/admin/dashboard"
         className="mb-8 inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
@@ -34,7 +30,6 @@ export default function AdminNavbar() {
         </span>
       </Link>
 
-      {/* Admin info */}
       <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full border border-red-400/40 bg-red-400/10 text-sm font-bold text-red-300">
@@ -50,7 +45,6 @@ export default function AdminNavbar() {
         </div>
       </div>
 
-      {/* Sidebar nav */}
       <nav className="flex flex-1 flex-col gap-2">
         <NavLink to="/admin/dashboard" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">
@@ -67,16 +61,12 @@ export default function AdminNavbar() {
         </NavLink>
 
         <NavLink to="/admin/jobs" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            work
-          </span>
+          <span className="material-symbols-outlined text-[20px]">work</span>
           Jobs
         </NavLink>
 
         <NavLink to="/admin/users" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            group
-          </span>
+          <span className="material-symbols-outlined text-[20px]">group</span>
           Users
         </NavLink>
 
@@ -88,7 +78,6 @@ export default function AdminNavbar() {
         </NavLink>
       </nav>
 
-      {/* Bottom actions */}
       <div className="mt-6 border-t border-white/10 pt-4">
         <button
           type="button"
