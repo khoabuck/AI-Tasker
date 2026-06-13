@@ -1,6 +1,6 @@
 // src/modules/client/pages/ProjectsPage.jsx
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -23,6 +23,11 @@ const FILTERS = [
   { key: "DISPUTED",  label: "Disputed",  color: "#f97316" },
 ];
 
+// Các status được phép Edit
+const EDITABLE_STATUSES = ["DRAFT", "OPEN"];
+// Các status được phép Cancel
+const CANCELLABLE_STATUSES = ["DRAFT", "OPEN", "ACTIVE"];
+
 function StatusBadge({ status }) {
   const cfg = STATUS_CONFIG[status] || { label: status, color: "#8c90a0", bg: "rgba(140,144,160,0.08)", border: "rgba(140,144,160,0.25)" };
   return (
@@ -32,16 +37,53 @@ function StatusBadge({ status }) {
   );
 }
 
-function JobCard({ job, onDelete }) {
+function JobCard({ job, onStatusChange }) {
   const navigate = useNavigate();
+  const [actionLoading, setActionLoading] = useState(null); // "submit" | "cancel"
+
+  const jobId = job.jobPostingId || job.id;
   const date = job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
   const skills = job.skills || [];
 
-  return (
-    <div style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 28, display: "flex", flexDirection: "column", gap: 16, transition: "border-color 0.2s" }}
-      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)")}
-      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}>
+  const canEdit   = EDITABLE_STATUSES.includes(job.status);
+  const canSubmit = job.status === "DRAFT";
+  const canCancel = CANCELLABLE_STATUSES.includes(job.status);
 
+  // ── Submit DRAFT → OPEN ──────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!confirm("Submit job này để tìm Expert?")) return;
+    setActionLoading("submit");
+    try {
+      await axiosInstance.put(`/jobs/${jobId}/submit`);
+      onStatusChange(jobId, "OPEN");
+    } catch (err) {
+      alert(err?.response?.data?.message || "Submit thất bại. Vui lòng thử lại.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Cancel job ───────────────────────────────────────────────────
+  const handleCancel = async () => {
+    if (!confirm("Bạn chắc chắn muốn cancel job này?")) return;
+    setActionLoading("cancel");
+    try {
+      await axiosInstance.put(`/jobs/${jobId}/cancel`);
+      onStatusChange(jobId, "CANCELLED");
+    } catch (err) {
+      alert(err?.response?.data?.message || "Cancel thất bại. Vui lòng thử lại.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  return (
+    <div
+      style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 28, display: "flex", flexDirection: "column", gap: 16, transition: "border-color 0.2s" }}
+      onMouseEnter={(e) => (e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)")}
+      onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)")}
+    >
+      {/* Top row */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -74,6 +116,7 @@ function JobCard({ job, onDelete }) {
         <StatusBadge status={job.status} />
       </div>
 
+      {/* Description */}
       {(job.aiGeneratedDescription || job.description) && (
         <div style={{ background: job.aiGeneratedDescription ? "rgba(0,240,255,0.03)" : "rgba(255,255,255,0.02)", border: `1px solid ${job.aiGeneratedDescription ? "rgba(0,240,255,0.1)" : "rgba(255,255,255,0.06)"}`, borderRadius: 8, padding: "12px 14px" }}>
           {job.aiGeneratedDescription && (
@@ -88,6 +131,7 @@ function JobCard({ job, onDelete }) {
         </div>
       )}
 
+      {/* Skills */}
       {skills.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {skills.slice(0, 8).map((s, i) => {
@@ -106,26 +150,74 @@ function JobCard({ job, onDelete }) {
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 10, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <button onClick={() => navigate(`/client/projects/${job.jobPostingId || job.id}`)}
-          style={{ flex: 1, padding: "10px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
+      {/* Action buttons */}
+      <div style={{ display: "flex", gap: 8, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap" }}>
+
+        {/* View Details — cyan */}
+        <button
+          onClick={() => navigate(`/client/projects/${jobId}`)}
+          style={{ flex: 1, minWidth: 100, padding: "10px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 14px rgba(0,240,255,0.2)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}>
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}
+        >
           View Details
         </button>
-        <button onClick={() => navigate(`/client/projects/${job.jobPostingId || job.id}/recommendations`)}
-          style={{ flex: 1, padding: "10px", background: "rgba(192,193,255,0.05)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
+
+        {/* AI Recommendation — purple */}
+        <button
+          onClick={() => navigate(`/client/projects/${jobId}/recommendations`)}
+          style={{ flex: 1, minWidth: 100, padding: "10px", background: "rgba(192,193,255,0.05)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 14px rgba(192,193,255,0.2)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}>
+          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}
+        >
           <span className="material-symbols-outlined" style={{ fontSize: 15 }}>auto_awesome</span>
-          AI Recommendation
+          AI Rec
         </button>
-        <button onClick={() => onDelete(job.jobPostingId || job.id)}
-          style={{ padding: "10px 14px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 14, cursor: "pointer", display: "flex", alignItems: "center", transition: "all 0.2s" }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.15)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(248,113,113,0.08)")}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>delete</span>
-        </button>
+
+        {/* Edit — yellow, chỉ hiện khi DRAFT hoặc OPEN */}
+        {canEdit && (
+          <button
+            onClick={() => navigate(`/client/post-job?editId=${jobId}`)}
+            style={{ padding: "10px 14px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s" }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(250,204,21,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(250,204,21,0.2)"; e.currentTarget.style.borderColor = "#facc15"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(250,204,21,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(250,204,21,0.25)"; }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit</span>
+            Edit
+          </button>
+        )}
+
+        {/* Submit — green, chỉ hiện khi DRAFT */}
+        {canSubmit && (
+          <button
+            onClick={handleSubmit}
+            disabled={actionLoading === "submit"}
+            style={{ padding: "10px 14px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: actionLoading === "submit" ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: actionLoading === "submit" ? 0.6 : 1, transition: "all 0.2s" }}
+            onMouseEnter={(e) => { if (!actionLoading) { e.currentTarget.style.background = "rgba(34,197,94,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(34,197,94,0.2)"; e.currentTarget.style.borderColor = "#22c55e"; }}}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(34,197,94,0.25)"; }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              {actionLoading === "submit" ? "hourglass_empty" : "publish"}
+            </span>
+            {actionLoading === "submit" ? "..." : "Submit"}
+          </button>
+        )}
+
+        {/* Cancel — red, chỉ hiện khi DRAFT / OPEN / ACTIVE */}
+        {canCancel && (
+          <button
+            onClick={handleCancel}
+            disabled={!!actionLoading}
+            style={{ padding: "10px 14px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 6, opacity: actionLoading ? 0.6 : 1, transition: "all 0.2s" }}
+            onMouseEnter={(e) => { if (!actionLoading) e.currentTarget.style.background = "rgba(248,113,113,0.15)"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.08)"; }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+              {actionLoading === "cancel" ? "hourglass_empty" : "cancel"}
+            </span>
+            {actionLoading === "cancel" ? "..." : "Cancel"}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -133,6 +225,7 @@ function JobCard({ job, onDelete }) {
 
 export default function ProjectsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [jobs, setJobs] = useState([]);
   const [filter, setFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
@@ -147,11 +240,15 @@ export default function ProjectsPage() {
       })
       .catch(() => setError("Failed to load projects. Please try again."))
       .finally(() => setLoading(false));
-  }, []);
+  }, [location.key]); // re-fetch mỗi khi navigate về trang này
 
-  const handleDelete = (id) => {
-    if (!confirm("Are you sure you want to delete this job?")) return;
-    setJobs((prev) => prev.filter((j) => (j.jobPostingId || j.id) !== id));
+  // Callback từ JobCard: cập nhật status local, không cần fetch lại
+  const handleStatusChange = (jobId, newStatus) => {
+    setJobs((prev) =>
+      prev.map((j) =>
+        (j.jobPostingId || j.id) === jobId ? { ...j, status: newStatus } : j
+      )
+    );
   };
 
   const filtered = filter === "ALL" ? jobs : jobs.filter((j) => j.status === filter);
@@ -172,10 +269,12 @@ export default function ProjectsPage() {
                 : `${filtered.length} job${filtered.length !== 1 ? "s" : ""} ${filter.toLowerCase()}`}
             </p>
           </div>
-          <button onClick={() => navigate("/client/post-job")}
+          <button
+            onClick={() => navigate("/client/post-job")}
             style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 24px", background: "#00F0FF", color: "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 14, border: "none", borderRadius: 10, cursor: "pointer", boxShadow: "0 0 20px rgba(0,240,255,0.25)", transition: "all 0.2s" }}
             onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 0 30px rgba(0,240,255,0.45)")}
-            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 20px rgba(0,240,255,0.25)")}>
+            onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "0 0 20px rgba(0,240,255,0.25)")}
+          >
             <span className="material-symbols-outlined">add</span>
             Post New Job
           </button>
@@ -250,7 +349,11 @@ export default function ProjectsPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               {filtered.map((job) => (
-                <JobCard key={job.jobPostingId || job.id} job={job} onDelete={handleDelete} />
+                <JobCard
+                  key={job.jobPostingId || job.id}
+                  job={job}
+                  onStatusChange={handleStatusChange}
+                />
               ))}
             </div>
           )
