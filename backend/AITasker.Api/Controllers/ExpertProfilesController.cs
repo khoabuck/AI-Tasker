@@ -83,15 +83,15 @@ public class ExpertProfilesController : ControllerBase
 
     [HttpPut("me")]
     [Authorize(Roles = "EXPERT")]
-    public async Task<IActionResult> UpdateMyExpertProfile(
-        [FromBody] UpdateExpertProfileRequest request
+    public async Task<IActionResult> UpdateMyBasicExpertProfile(
+        [FromBody] UpdateExpertBasicProfileRequest request
     )
     {
         try
         {
             var userId = GetCurrentUserId();
 
-            var result = await _expertProfileService.UpdateAsync(
+            var result = await _expertProfileService.UpdateBasicAsync(
                 userId,
                 request
             );
@@ -99,7 +99,7 @@ public class ExpertProfilesController : ControllerBase
             return Ok(new
             {
                 success = true,
-                message = GetSubmitMessage(result.ProfileReviewStatus),
+                message = "Expert basic profile updated successfully.",
                 data = result
             });
         }
@@ -113,17 +113,17 @@ public class ExpertProfilesController : ControllerBase
         }
     }
 
-    [HttpPut("me/work-preferences")]
+    [HttpPut("me/basic")]
     [Authorize(Roles = "EXPERT")]
-    public async Task<IActionResult> UpdateMyWorkPreferences(
-        [FromBody] UpdateExpertWorkPreferencesRequest request
+    public async Task<IActionResult> UpdateMyBasicExpertProfileV2(
+        [FromBody] UpdateExpertBasicProfileRequest request
     )
     {
         try
         {
             var userId = GetCurrentUserId();
 
-            var result = await _expertProfileService.UpdateWorkPreferencesAsync(
+            var result = await _expertProfileService.UpdateBasicAsync(
                 userId,
                 request
             );
@@ -131,7 +131,39 @@ public class ExpertProfilesController : ControllerBase
             return Ok(new
             {
                 success = true,
-                message = "Expert work preferences updated successfully.",
+                message = "Expert basic profile updated successfully.",
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("me/verification")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyExpertVerificationProfile(
+        [FromBody] UpdateExpertVerificationProfileRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateVerificationAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Message,
                 data = result
             });
         }

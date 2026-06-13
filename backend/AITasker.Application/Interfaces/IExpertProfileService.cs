@@ -15,15 +15,15 @@ public interface IExpertProfileService
         CreateExpertProfileRequest request
     );
 
-    Task<ExpertProfileResponse> UpdateAsync(
+    Task<ExpertProfileResponse> UpdateBasicAsync(
         int userId,
-        UpdateExpertProfileRequest request
+        UpdateExpertBasicProfileRequest request
+    );
+
+    Task<ExpertVerificationUpdateResponse> UpdateVerificationAsync(
+        int userId,
+        UpdateExpertVerificationProfileRequest request
     );
 
     Task<ExpertProfileResponse> GetMeAsync(int userId);
-
-    Task<ExpertProfileResponse> UpdateWorkPreferencesAsync(
-        int userId,
-        UpdateExpertWorkPreferencesRequest request
-    );
 }
