@@ -292,6 +292,153 @@ public class ClientProfileService : IClientProfileService
         return MapToClientProfileResponse(clientProfile);
     }
 
+    public async Task<ClientProfileResponse> UpdateIndividualAsync(
+        int userId,
+        UpdateIndividualClientProfileRequest request)
+    {
+        var clientProfile = await _clientProfileRepository.GetByUserIdAsync(
+            userId
+        );
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        var user = clientProfile.User;
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to update client profile."
+            );
+        }
+
+        if (user.Role != "CLIENT")
+        {
+            throw new InvalidOperationException(
+                "Only CLIENT role can update client profile."
+            );
+        }
+
+        if (clientProfile.ClientType != "INDIVIDUAL")
+        {
+            throw new InvalidOperationException(
+                "This API only supports individual client profile update."
+            );
+        }
+
+        ValidateIndividualProfileUpdateRequest(request);
+        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
+
+        user.FullName = request.FullName!.Trim();
+
+        if (request.AvatarUrl != null)
+        {
+            user.AvatarUrl = NormalizeNullableText(request.AvatarUrl);
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
+        clientProfile.Address = NormalizeNullableText(request.Address);
+        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
+        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
+        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
+        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
+        clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
+        clientProfile.UpdatedAt = DateTime.UtcNow;
+
+        await _clientProfileRepository.SaveChangesAsync();
+
+        return MapToClientProfileResponse(clientProfile);
+    }
+
+    public async Task<ClientProfileResponse> UpdateBusinessAsync(
+        int userId,
+        UpdateBusinessClientProfileRequest request)
+    {
+        var clientProfile = await _clientProfileRepository.GetByUserIdAsync(
+            userId
+        );
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        var user = clientProfile.User;
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to update client profile."
+            );
+        }
+
+        if (user.Role != "CLIENT")
+        {
+            throw new InvalidOperationException(
+                "Only CLIENT role can update client profile."
+            );
+        }
+
+        if (clientProfile.ClientType != "BUSINESS")
+        {
+            throw new InvalidOperationException(
+                "This API only supports business client profile update."
+            );
+        }
+
+        if (clientProfile.BusinessProfile == null)
+        {
+            throw new InvalidOperationException("Business profile not found.");
+        }
+
+        ValidateBusinessProfileUpdateRequest(request);
+        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
+
+        user.FullName = request.FullName!.Trim();
+
+        if (request.AvatarUrl != null)
+        {
+            user.AvatarUrl = NormalizeNullableText(request.AvatarUrl);
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
+        clientProfile.Address = NormalizeNullableText(request.Address);
+        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
+        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
+        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
+        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
+        clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
+        clientProfile.UpdatedAt = DateTime.UtcNow;
+
+        clientProfile.BusinessProfile.BusinessEmail =
+            NormalizeNullableText(request.BusinessEmail);
+
+        clientProfile.BusinessProfile.BusinessPhone =
+            NormalizeNullableText(request.BusinessPhone);
+
+        clientProfile.BusinessProfile.UpdatedAt = DateTime.UtcNow;
+
+        await _clientProfileRepository.SaveChangesAsync();
+
+        return MapToClientProfileResponse(clientProfile);
+    }
+
     public async Task<ClientProfileResponse?> GetMyProfileAsync(int userId)
     {
         var clientProfile = await _clientProfileRepository.GetByUserIdAsync(
@@ -364,6 +511,84 @@ public class ClientProfileService : IClientProfileService
                 BusinessPhone = businessPhone
             }
         );
+    }
+
+    private static void ValidateIndividualProfileUpdateRequest(
+        UpdateIndividualClientProfileRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            throw new InvalidOperationException("Full name is required.");
+        }
+
+        var fullName = request.FullName.Trim();
+
+        if (fullName.Length < 2 || fullName.Length > 255)
+        {
+            throw new InvalidOperationException("Full name length is invalid.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            throw new InvalidOperationException("Phone number is required.");
+        }
+
+        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
+        ValidateMaxLength(request.Address, 500, "Address");
+        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
+        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
+        ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
+    }
+
+    private static void ValidateBusinessProfileUpdateRequest(
+        UpdateBusinessClientProfileRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            throw new InvalidOperationException("Full name is required.");
+        }
+
+        var fullName = request.FullName.Trim();
+
+        if (fullName.Length < 2 || fullName.Length > 255)
+        {
+            throw new InvalidOperationException("Full name length is invalid.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            throw new InvalidOperationException("Phone number is required.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.BusinessEmail)
+            && !IsValidEmail(request.BusinessEmail.Trim()))
+        {
+            throw new InvalidOperationException(
+                "Business email format is invalid."
+            );
+        }
+
+        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
+        ValidateMaxLength(request.Address, 500, "Address");
+        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
+        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
+        ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
+        ValidateMaxLength(request.BusinessEmail, 255, "Business email");
+        ValidateMaxLength(request.BusinessPhone, 30, "Business phone");
+    }
+
+    private static void ValidateMaxLength(
+        string? value,
+        int maxLength,
+        string fieldName)
+    {
+        if (!string.IsNullOrWhiteSpace(value)
+            && value.Trim().Length > maxLength)
+        {
+            throw new InvalidOperationException(
+                $"{fieldName} must be at most {maxLength} characters."
+            );
+        }
     }
 
     private static void ValidateBusinessVerificationInput(
@@ -529,6 +754,9 @@ public class ClientProfileService : IClientProfileService
         {
             ClientProfileId = clientProfile.ClientProfileId,
             UserId = clientProfile.UserId,
+            FullName = clientProfile.User.FullName,
+            Email = clientProfile.User.Email,
+            AvatarUrl = clientProfile.User.AvatarUrl,
             ClientType = clientProfile.ClientType,
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,

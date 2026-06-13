@@ -17,8 +17,6 @@ public class ExpertProfilesController : ControllerBase
         _expertProfileService = expertProfileService;
     }
 
-    // POST /api/expert-profiles
-    // Expert tạo hồ sơ lần đầu
     [HttpPost]
     [Authorize(Roles = "EXPERT")]
     public async Task<IActionResult> CreateExpertProfile(
@@ -29,7 +27,10 @@ public class ExpertProfilesController : ControllerBase
         {
             var userId = GetCurrentUserId();
 
-            var result = await _expertProfileService.CreateAsync(userId, request);
+            var result = await _expertProfileService.CreateAsync(
+                userId,
+                request
+            );
 
             return Ok(new
             {
@@ -48,8 +49,6 @@ public class ExpertProfilesController : ControllerBase
         }
     }
 
-    // PUT /api/expert-profiles/resubmit
-    // Expert sửa và nộp lại hồ sơ khi NEEDS_CORRECTION hoặc REJECTED
     [HttpPut("resubmit")]
     [Authorize(Roles = "EXPERT")]
     public async Task<IActionResult> ResubmitExpertProfile(
@@ -60,7 +59,10 @@ public class ExpertProfilesController : ControllerBase
         {
             var userId = GetCurrentUserId();
 
-            var result = await _expertProfileService.ResubmitAsync(userId, request);
+            var result = await _expertProfileService.ResubmitAsync(
+                userId,
+                request
+            );
 
             return Ok(new
             {
@@ -79,8 +81,70 @@ public class ExpertProfilesController : ControllerBase
         }
     }
 
-    // GET /api/expert-profiles/me
-    // Expert xem hồ sơ của chính mình
+    [HttpPut("me")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyExpertProfile(
+        [FromBody] UpdateExpertProfileRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = GetSubmitMessage(result.ProfileReviewStatus),
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("me/work-preferences")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyWorkPreferences(
+        [FromBody] UpdateExpertWorkPreferencesRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateWorkPreferencesAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = "Expert work preferences updated successfully.",
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
     [HttpGet("me")]
     [Authorize(Roles = "EXPERT")]
     public async Task<IActionResult> GetMyExpertProfile()
