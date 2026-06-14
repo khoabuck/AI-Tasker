@@ -11,13 +11,21 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using AITasker.Infrastructure.Reviews;
+using AITasker.Infrastructure.Banking;
 
 var builder = WebApplication.CreateBuilder(args);
-//BE 1 => Phan Tien Phat
+
 // =========================
 // Controllers
 // =========================
 builder.Services.AddControllers();
+
+
+// =========================
+// SignalR
+// =========================
+builder.Services.AddSignalR();
 
 // =========================
 // Swagger/OpenAPI + JWT Authorize
@@ -125,6 +133,21 @@ builder.Services
 
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddCookie("External", options =>
     {
@@ -178,6 +201,25 @@ builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddScoped<IAuthService, AuthService>();
+
+builder.Services.AddScoped<AITasker.Application.Interfaces.IWalletService, AITasker.Infrastructure.Banking.WalletService>();
+
+builder.Services.AddScoped<AITasker.Application.Interfaces.IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
+
+builder.Services.AddScoped<AITasker.Application.Interfaces.IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
+
+builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationService, AITasker.Infrastructure.Notifications.NotificationService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
+
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
+builder.Services.AddScoped<AITasker.Application.Interfaces.IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+
+builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
+
+builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
+
+builder.Services.AddHttpClient();
 
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 
@@ -257,6 +299,8 @@ builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(clie
     client.Timeout = TimeSpan.FromSeconds(12);
 });
 
+builder.Services.AddScoped<IReviewService, ReviewService>();
+
 // =========================
 // App pipeline
 // =========================
@@ -277,6 +321,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// =======================================================
+// MAP SIGNALR REALTIME HUBS ENDPOINTS
+// =======================================================
+app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
+app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
 
 // =========================
 // Test endpoints
