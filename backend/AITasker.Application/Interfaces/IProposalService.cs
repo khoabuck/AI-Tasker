@@ -1,22 +1,39 @@
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using AITasker.Application.DTOs.Requests;
+using AITasker.Application.DTOs.Responses;
 
 namespace AITasker.Application.Interfaces
 {
     public interface IProposalService
     {
-        Task<bool> SubmitProposalAsync(
+        Task<ProposalResponse> SubmitProposalAsync(
             int userId,
             SubmitProposalRequest request);
 
-        Task<bool> CounterOfferAsync(
+        Task<IReadOnlyList<ProposalResponse>> GetMyProposalsAsync(
+            int userId);
+
+        Task<IReadOnlyList<ProposalResponse>> GetJobProposalsAsync(
+            int userId,
+            int jobId);
+
+        Task<ProposalResponse> GetProposalByIdAsync(
+            int userId,
+            int proposalId);
+
+        Task<ProposalResponse> CounterOfferAsync(
             int userId,
             int proposalId,
             CounterOfferRequest request);
 
-        Task<bool> ProcessProposalStatusAsync(
+        Task<ProposalResponse> ProcessProposalStatusAsync(
             int userId,
             int proposalId,
             string decision);
+
+        Task<ProposalResponse> WithdrawProposalAsync(
+            int userId,
+            int proposalId);
     }
 }
