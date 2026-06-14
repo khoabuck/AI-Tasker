@@ -1,11 +1,9 @@
-using System;
-using System.Collections.Generic;
 using System.Security.Claims;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
-using AITasker.Application.Interfaces;
 using AITasker.Application.DTOs.Requests;
+using AITasker.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 
 namespace AITasker.Api.Controllers
 {
@@ -21,7 +19,45 @@ namespace AITasker.Api.Controllers
             _projectService = projectService;
         }
 
-        [HttpPost("initialize/{contractId}")]
+        [HttpPost("from-contract/{contractId:int}")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> CreateFromContract(int contractId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.CreateProjectFromContractAsync(
+                    currentUserId,
+                    contractId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Project created or loaded successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("initialize/{contractId:int}")]
+        [Authorize(Roles = "CLIENT")]
         public async Task<IActionResult> InitializeProject(
             int contractId,
             [FromBody] List<CreateMilestoneRequest> milestones)
@@ -30,17 +66,49 @@ namespace AITasker.Api.Controllers
             {
                 var currentUserId = GetCurrentUserId();
 
-                var result =
-                    await _projectService.InitializeProjectWithMilestonesAsync(
-                        currentUserId,
-                        contractId,
-                        milestones
-                    );
+                var result = await _projectService.InitializeProjectWithMilestonesAsync(
+                    currentUserId,
+                    contractId,
+                    milestones);
 
                 return Ok(new
                 {
                     success = true,
                     message = "Project and milestones initialized successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("me")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> GetMyProjects()
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.GetMyProjectsAsync(currentUserId);
+
+                return Ok(new
+                {
+                    success = true,
                     data = result
                 });
             }
@@ -52,27 +120,239 @@ namespace AITasker.Api.Controllers
                     message = ex.Message
                 });
             }
-            catch (Exception)
+        }
+
+        [HttpGet("{projectId:int}")]
+        public async Task<IActionResult> GetProjectById(int projectId)
+        {
+            try
             {
-                return StatusCode(500, new
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.GetProjectByIdAsync(
+                    currentUserId,
+                    projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
                 {
                     success = false,
-                    message = "An internal error occurred while initializing project."
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("{projectId:int}/milestones")]
+        public async Task<IActionResult> GetProjectMilestones(int projectId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.GetProjectMilestonesAsync(
+                    currentUserId,
+                    projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{projectId:int}/milestones")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> CreateMilestone(
+            int projectId,
+            [FromBody] CreateMilestoneRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.CreateMilestoneAsync(
+                    currentUserId,
+                    projectId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Milestone created successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{projectId:int}/complete-check")]
+        public async Task<IActionResult> CompleteProjectCheck(int projectId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.CompleteProjectCheckAsync(
+                    currentUserId,
+                    projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Project completion check finished.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("/api/milestones/{milestoneId:int}")]
+        public async Task<IActionResult> GetMilestoneById(int milestoneId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.GetMilestoneByIdAsync(
+                    currentUserId,
+                    milestoneId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPatch("/api/milestones/{milestoneId:int}")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> UpdateMilestone(
+            int milestoneId,
+            [FromBody] UpdateMilestoneRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _projectService.UpdateMilestoneAsync(
+                    currentUserId,
+                    milestoneId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Milestone updated successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
         }
 
         private int GetCurrentUserId()
         {
-            var userIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-                              ?? User.FindFirstValue("userId")
-                              ?? User.FindFirstValue("sub");
+            var userIdValue =
+                User.FindFirstValue("userId") ??
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException(
-                    "Authorization failed: Invalid or missing user token."
-                );
+                throw new InvalidOperationException("Invalid user token.");
             }
 
             return userId;

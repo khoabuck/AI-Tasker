@@ -2,7 +2,7 @@ using System;
 
 namespace AITasker.Application.DTOs.Requests
 {
-    public class CreateMilestoneRequest
+    public class UpdateMilestoneRequest
     {
         public string Title { get; set; } = string.Empty;
 

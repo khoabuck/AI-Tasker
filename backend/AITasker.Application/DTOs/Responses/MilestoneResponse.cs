@@ -1,9 +1,13 @@
-using System;
-
-namespace AITasker.Application.DTOs.Requests
+namespace AITasker.Application.DTOs.Responses
 {
-    public class CreateMilestoneRequest
+    public class MilestoneResponse
     {
+        public int MilestoneId { get; set; }
+
+        public int ProjectId { get; set; }
+
+        public string ProjectTitle { get; set; } = string.Empty;
+
         public string Title { get; set; } = string.Empty;
 
         public string Description { get; set; } = string.Empty;
@@ -19,5 +23,13 @@ namespace AITasker.Application.DTOs.Requests
         public DateTime Deadline { get; set; }
 
         public int RevisionLimit { get; set; }
+
+        public int RevisionUsed { get; set; }
+
+        public string PaymentStatus { get; set; } = string.Empty;
+
+        public string Status { get; set; } = string.Empty;
+
+        public DateTime CreatedAt { get; set; }
     }
 }
