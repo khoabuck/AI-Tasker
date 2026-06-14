@@ -41,9 +41,14 @@ export function AuthProvider({ children }) {
       const freshUser = await getMeApi();
       setUser(freshUser);
       saveAuth({ user: freshUser });
-    } catch {
-      clearAuth();
-      setUser(null);
+    } catch (err) {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        clearAuth();
+        setUser(null);
+      } else {
+        const stored = localStorage.getItem("user");
+        if (stored) setUser(JSON.parse(stored));
+      }
     }
   };
 

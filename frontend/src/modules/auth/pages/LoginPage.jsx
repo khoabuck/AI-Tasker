@@ -23,25 +23,30 @@ export default function LoginPage() {
       const result = await authService.login({ email: form.email, password: form.password });
       if (result.success) {
         // Redirect based on account status and role
-        const { status, role } = result;
+        const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+        const status = storedUser.status || result.status;
+        const role = storedUser.role || result.role;
+
+        console.log("LOGIN REDIRECT DATA =", {
+          status,
+          role,
+          storedUser,
+          result,
+        });
 
         if (status === "PENDING_EMAIL_VERIFICATION") {
           navigate("/verify-email-notice", { state: { email: form.email } });
-        } else if (status === "PENDING_ROLE" || !role) {
+        } else if (!role || status === "PENDING_ROLE") {
           navigate("/select-role");
-        } else if (status === "PENDING_PROFILE") {
-          navigate("/setup-profile");
-        } else if (status === "ACTIVE") {
-          if (role === "CLIENT") navigate("/client/dashboard");
-          else if (role === "EXPERT") navigate("/expert/dashboard");
-          else if (role === "ADMIN") navigate("/admin/dashboard");
-          else navigate("/select-role");
-        } else if (status === "SUSPENDED") {
-          setError("Your account has been temporarily suspended. Please contact support.");
-        } else if (status === "BANNED") {
-          setError("Your account has been permanently banned.");
+        } else if (role === "CLIENT") {
+          navigate("/client/dashboard");
+        } else if (role === "EXPERT") {
+          navigate("/expert/dashboard");
+        } else if (role === "ADMIN") {
+          navigate("/admin/dashboard");
         } else {
-          navigate("/select-role");
+          navigate("/");
         }
       } else {
         setError(result.message || "Login failed.");

@@ -2,7 +2,7 @@
 // POST /api/auth/select-role { "role": "CLIENT" | "EXPERT" }
 // Gọi sau khi verify email xong, status = PENDING_ROLE
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -33,21 +33,70 @@ export default function SelectRolePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return;
+
+    const user = JSON.parse(storedUser);
+
+    if (user.status === "PENDING_ROLE") return;
+
+    if (user.status === "PENDING_PROFILE") {
+      navigate("/setup-profile", { replace: true });
+      return;
+    }
+
+    if (user.status === "ACTIVE") {
+      if (user.role === "CLIENT") navigate("/client/dashboard", { replace: true });
+      else if (user.role === "EXPERT") navigate("/expert/dashboard", { replace: true });
+      else if (user.role === "ADMIN") navigate("/admin/dashboard", { replace: true });
+      else navigate("/", { replace: true });
+    }
+  }, [navigate]);
+
   const handleConfirm = async () => {
     if (!selected) return;
     setLoading(true);
     setError("");
     try {
-      const res = await axiosInstance.post("/auth/select-role", { role: selected });
-      
-      // Lưu token mới vào localStorage
-      if (res.data.accessToken) {
-        localStorage.setItem("accessToken", res.data.accessToken);
-      }
+      const res = await axiosInstance.post("/auth/select-role", {
+      role: selected,
+    });
 
-      navigate("/setup-profile");
-    } catch (err) {
-      setError(err?.response?.data?.message || "Đã có lỗi xảy ra.");
+    if (res.data.accessToken) {
+      localStorage.setItem("accessToken", res.data.accessToken);
+    }
+
+    const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+    const updatedUser = {
+      ...oldUser,
+      role: selected,
+      status: "PENDING_PROFILE",
+    };
+
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+
+    navigate("/setup-profile", { replace: true });
+        }  catch (err) {
+            const message = err?.response?.data?.message || "Đã có lỗi xảy ra.";
+
+            if (message === "User is not in pending role status.") {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+      if (user.status === "ACTIVE") {
+        if (user.role === "CLIENT") navigate("/client/dashboard", { replace: true });
+        else if (user.role === "EXPERT") navigate("/expert/dashboard", { replace: true });
+        else navigate("/", { replace: true });
+  } else {
+    navigate("/setup-profile", { replace: true });
+  }
+
+  return;
+}
+
+        setError(message);
+      
     } finally {
       setLoading(false);
     }

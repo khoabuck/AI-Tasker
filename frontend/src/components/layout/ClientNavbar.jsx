@@ -133,9 +133,9 @@ export default function ClientNavbar() {
     : "CL";
 
   const handleLogout = async () => {
-    await authService.logout();
-    navigate("/");
-  };
+  await authService.logout();
+  window.location.href = "/";
+};
 
   return (
     <header className="sticky top-0 z-50 bg-[#101319]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center w-full px-4 md:px-12 py-4">

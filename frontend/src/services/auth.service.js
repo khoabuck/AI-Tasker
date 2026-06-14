@@ -30,20 +30,45 @@ const authService = {
     }
 
     // REAL MODE
-    try {
-      // Bước 1: Login lấy accessToken
-      const data = await loginApi(credentials);
-      const { accessToken } = data;
-      localStorage.setItem("accessToken", accessToken);
+try {
+  const data = await loginApi(credentials);
+  const { accessToken } = data;
 
-      // Bước 2: Gọi /auth/me để lấy status mới nhất
-      const user = await getMeApi();
-      localStorage.setItem("user", JSON.stringify(user));
+  localStorage.setItem("accessToken", accessToken);
 
-      return { success: true, role: user.role, status: user.status };
-    } catch (error) {
-      return { success: false, message: error.response?.data?.message || "Login failed." };
-    }
+  let user = data.user;
+
+  if (!user) {
+    user = await getMeApi();
+  }
+
+  if (!user?.role || !user?.status) {
+    const payload = JSON.parse(atob(accessToken.split(".")[1]));
+
+    const tokenRole =
+      payload.role ||
+      payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+
+    user = {
+      ...user,
+      role: user?.role || tokenRole || null,
+      status: user?.status || "ACTIVE",
+    };
+  }
+
+  localStorage.setItem("user", JSON.stringify(user));
+
+  return {
+    success: true,
+    role: user.role,
+    status: user.status,
+  };
+} catch (error) {
+  return {
+    success: false,
+    message: error.response?.data?.message || "Login failed.",
+  };
+}
   },
 
   // ─── Login với Google ─────────────────────────────────
@@ -61,17 +86,25 @@ const authService = {
 
   // ─── Logout ──────────────────────────────────────────
   logout: async () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("user");
+  localStorage.removeItem("token");
+  localStorage.removeItem("currentUser");
+  sessionStorage.clear();
   },
 
   // ─── Helpers ─────────────────────────────────────────
   getCurrentUser: () => {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
+  const user = localStorage.getItem("user");
+  return user ? JSON.parse(user) : null;
   },
+
+  getToken: () => localStorage.getItem("accessToken"),
+
   isAuthenticated: () => !!localStorage.getItem("accessToken"),
+
   getRole: () => authService.getCurrentUser()?.role || null,
+
   getStatus: () => authService.getCurrentUser()?.status || null,
 };
 
