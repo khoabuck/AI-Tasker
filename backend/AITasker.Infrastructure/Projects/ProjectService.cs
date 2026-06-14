@@ -59,7 +59,7 @@ namespace AITasker.Infrastructure.Projects
             var wallet = await _context.Wallets
                 .FirstOrDefaultAsync(w => w.UserId == clientProfile.UserId);
 
-            if (wallet == null || wallet.LockedBalance < contract.TotalClientPayment)
+            if (wallet == null || wallet.AvailableBalance < contract.TotalClientPayment)
                 throw new InvalidOperationException("Client milestone funds have not been locked in escrow.");
 
             var totalMilestonesAmount = requests.Sum(r => r.Amount);
