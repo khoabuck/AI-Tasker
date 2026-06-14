@@ -120,6 +120,74 @@ public class ClientProfilesController : ControllerBase
         }
     }
 
+    [HttpPut("individual/me")]
+    public async Task<IActionResult> UpdateIndividual(
+        UpdateIndividualClientProfileRequest request)
+    {
+        var userIdResult = GetCurrentUserId();
+
+        if (userIdResult == null)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _clientProfileService.UpdateIndividualAsync(
+                userIdResult.Value,
+                request
+            );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("business/me")]
+    public async Task<IActionResult> UpdateBusiness(
+        UpdateBusinessClientProfileRequest request)
+    {
+        var userIdResult = GetCurrentUserId();
+
+        if (userIdResult == null)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _clientProfileService.UpdateBusinessAsync(
+                userIdResult.Value,
+                request
+            );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
     [HttpGet("me")]
     public async Task<IActionResult> GetMyProfile()
     {
