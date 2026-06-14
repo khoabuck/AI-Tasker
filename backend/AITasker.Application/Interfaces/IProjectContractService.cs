@@ -1,16 +1,28 @@
-using System.Threading.Tasks;
 using AITasker.Application.DTOs.Requests;
+using AITasker.Application.DTOs.Responses;
 
 namespace AITasker.Application.Interfaces
 {
     public interface IProjectContractService
     {
-        Task<bool> CreateDraftContractAsync(CreateContractRequest request);
-
-        Task<bool> ConfirmContractAsync(
-            int contractId,
+        Task<ProjectContractResponse> CreateContractFromProposalAsync(
             int userId,
-            string userRole
-        );
+            int proposalId);
+
+        Task<ProjectContractResponse> CreateDraftContractAsync(
+            int userId,
+            CreateContractRequest request);
+
+        Task<ProjectContractResponse> GetContractByIdAsync(
+            int userId,
+            int contractId);
+
+        Task<ProjectContractResponse> GetContractByProposalIdAsync(
+            int userId,
+            int proposalId);
+
+        Task<ProjectContractResponse> ConfirmContractAsync(
+            int contractId,
+            int userId);
     }
 }
