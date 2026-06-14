@@ -1,209 +1,324 @@
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
+import { useAuth } from "../../../context/AuthContext";
+import expertProfileService from "../../../services/expertProfile.service";
+import jobService from "../../../services/job.service";
 
 export default function ExpertDashboard() {
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)] transition hover:border-cyan-400/40 hover:shadow-[0_0_35px_rgba(0,240,255,0.08)]";
+  const { user } = useAuth();
 
-  const quickActions = [
-    {
-      title: "Expert Profile",
-      desc: "Set up your skills, certificates and portfolio.",
-      icon: "person",
-      to: "/expert/profile",
-      tag: "Required",
-    },
-    {
-      title: "Browse Jobs",
-      desc: "Find open jobs that match your expert profile.",
-      icon: "work",
-      to: "/expert/jobs",
-      tag: "Open jobs",
-    },
-    {
-      title: "Recommended Jobs",
-      desc: "View AI recommended jobs for your skills.",
-      icon: "auto_awesome",
-      to: "/expert/recommended-jobs",
-      tag: "AI match",
-    },
-  ];
+  const [profile, setProfile] = useState(null);
+  const [openJobs, setOpenJobs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [profileError, setProfileError] = useState("");
+  const [jobsError, setJobsError] = useState("");
 
-  const workItems = [
-    {
-      title: "My Proposals",
-      desc: "Track proposals you sent to clients.",
-      icon: "description",
-      to: "/expert/proposals",
-      tag: "Proposal",
-    },
-    {
-      title: "My Projects",
-      desc: "View active projects and milestones.",
-      icon: "folder_open",
-      to: "/expert/projects",
-      tag: "Project",
-    },
-    {
-      title: "Deliverables",
-      desc: "Submit your project deliverables.",
-      icon: "upload_file",
-      to: "/expert/deliverables",
-      tag: "Submit",
-    },
-  ];
+  useEffect(() => {
+    loadDashboardData();
+  }, []);
 
-  const supportItems = [
-    {
-      title: "Messages",
-      desc: "Chat with clients in real time.",
-      icon: "chat",
-      to: "/expert/messages",
-      tag: "Chat",
-    },
-    {
-      title: "Disputes",
-      desc: "Open or track project disputes.",
-      icon: "gavel",
-      to: "/expert/disputes",
-      tag: "Support",
-    },
-    {
-      title: "Wallet",
-      desc: "Check simulated balance and payments.",
-      icon: "account_balance_wallet",
-      to: "/expert/wallet",
-      tag: "Finance",
-    },
-  ];
+  const loadDashboardData = async () => {
+    try {
+      setLoading(true);
+      setProfileError("");
+      setJobsError("");
 
-  const renderSection = (title, icon, items) => (
-    <section className="mb-10">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="h-7 w-1 rounded-full bg-[#00F0FF]" />
+      const [profileResult, jobsResult] = await Promise.allSettled([
+        expertProfileService.getMyExpertProfile(),
+        jobService.getOpenJobs(),
+      ]);
 
-        <h2 className="text-xl font-bold text-white">{title}</h2>
+      if (profileResult.status === "fulfilled") {
+        setProfile(profileResult.value);
+        updateLocalUserStatus(profileResult.value?.userStatus);
+      } else {
+        console.error(
+          "LOAD EXPERT PROFILE ERROR:",
+          profileResult.reason?.response?.data || profileResult.reason
+        );
 
-        <span className="material-symbols-outlined text-[20px] text-[#00F0FF]">
-          {icon}
-        </span>
-      </div>
+        setProfileError("Your profile information could not be loaded.");
+      }
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-        {items.map((item) => (
-          <Link key={item.title} to={item.to} className={cardStyle}>
-            <div className="mb-5 flex items-start justify-between">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
-                <span className="material-symbols-outlined text-2xl text-[#00F0FF]">
-                  {item.icon}
-                </span>
-              </div>
+      if (jobsResult.status === "fulfilled") {
+        setOpenJobs(jobsResult.value || []);
+      } else {
+        console.error(
+          "LOAD OPEN JOBS ERROR:",
+          jobsResult.reason?.response?.data || jobsResult.reason
+        );
 
-              <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
-                {item.tag}
-              </span>
-            </div>
+        setJobsError("Open jobs could not be loaded.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
-            <h3 className="text-lg font-bold text-white">{item.title}</h3>
+  const reviewStatus = getReviewStatus(profile);
+  const userStatus = String(profile?.userStatus || user?.status || "").toUpperCase();
 
-            <p className="mt-2 min-h-[48px] text-sm leading-6 text-gray-400">
-              {item.desc}
+  const isActive = userStatus === "ACTIVE" || reviewStatus === "APPROVED";
+
+  const canResubmit =
+    reviewStatus === "NEEDS_CORRECTION" || reviewStatus === "REJECTED";
+
+  const displayName = profile?.fullName || user?.fullName || user?.email || "Expert";
+
+  const expertSkills = useMemo(() => {
+    return toArray(profile?.skills).map((skill) => skill.toLowerCase());
+  }, [profile]);
+
+  const recommendedJobs = useMemo(() => {
+    return openJobs
+      .map((job) => ({
+        ...job,
+        matchScore: calculateMatchScore(job, profile, expertSkills),
+      }))
+      .sort((a, b) => b.matchScore - a.matchScore)
+      .slice(0, 3);
+  }, [openJobs, profile, expertSkills]);
+
+  if (loading) {
+    return (
+      <ExpertLayout>
+        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
+          Loading expert dashboard...
+        </div>
+      </ExpertLayout>
+    );
+  }
+
+  if (!isActive) {
+    return (
+      <ExpertLayout>
+        <div className="px-5 py-10 md:px-8">
+          <div className="mx-auto max-w-4xl rounded-3xl border border-yellow-500/30 bg-yellow-500/10 p-8 text-yellow-200">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-yellow-300">
+              Expert account is not active
             </p>
 
-            <div className="mt-5 flex items-center justify-between gap-3">
-              <button className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300">
-                Details
-              </button>
+            <h1 className="text-3xl font-extrabold text-white">
+              Your profile must be approved before using the expert dashboard.
+            </h1>
 
-              <button className="flex-1 rounded-lg border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
-                Open
-              </button>
+            <p className="mt-4 text-sm leading-7">
+              Current account status: <b>{userStatus || "UNKNOWN"}</b>. Review
+              status: <b>{reviewStatus || "UNKNOWN"}</b>.
+            </p>
+
+            {profile?.profileReviewNote && (
+              <div className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6">
+                <p className="font-bold">Review note</p>
+                <p className="mt-1">{profile.profileReviewNote}</p>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              {canResubmit ? (
+                <Link
+                  to="/expert/profile/edit"
+                  className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
+                >
+                  Edit Profile Again
+                </Link>
+              ) : (
+                <Link
+                  to="/expert/setup-profile"
+                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                >
+                  Setup Profile
+                </Link>
+              )}
+
+              <Link
+                to="/expert/profile"
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+              >
+                View Profile
+              </Link>
             </div>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
+          </div>
+        </div>
+      </ExpertLayout>
+    );
+  }
 
   return (
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <section className="mb-10">
+          <section className="mb-8 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              AI Expert Workspace
+              Expert Dashboard
             </p>
 
-            <h1 className="max-w-3xl text-3xl font-extrabold leading-tight text-white md:text-5xl">
-              Manage your expert work in one place
+            <h1 className="text-3xl font-extrabold text-white md:text-5xl">
+              Welcome back, {displayName}
             </h1>
 
-            <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-400">
-              Complete your profile, find jobs, send proposals, manage projects
-              and track deliverables in the AI Tasker expert workspace.
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400">
+              Your expert account is active. You can browse jobs, submit
+              proposals, and manage your work.
             </p>
-          </section>
 
-          <section className="mb-10 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <div className={cardStyle}>
-              <p className="text-xs uppercase tracking-wider text-gray-500">
-                Open Jobs
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">0</p>
-              <p className="mt-2 text-xs text-gray-500">Ready to apply</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <StatusBadge status={userStatus} />
+              <StatusBadge status={reviewStatus} />
+
+              {profile?.availableForWork && <StatusBadge status="AVAILABLE" />}
             </div>
 
-            <div className={cardStyle}>
-              <p className="text-xs uppercase tracking-wider text-gray-500">
-                Proposals
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">0</p>
-              <p className="mt-2 text-xs text-gray-500">Submitted</p>
-            </div>
-
-            <div className={cardStyle}>
-              <p className="text-xs uppercase tracking-wider text-gray-500">
-                Projects
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">0</p>
-              <p className="mt-2 text-xs text-gray-500">Active now</p>
-            </div>
-
-            <div className={cardStyle}>
-              <p className="text-xs uppercase tracking-wider text-gray-500">
-                Disputes
-              </p>
-              <p className="mt-2 text-3xl font-bold text-white">0</p>
-              <p className="mt-2 text-xs text-gray-500">Need action</p>
-            </div>
-          </section>
-
-          <section className="mb-10 rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="font-bold text-yellow-300">
-                  Complete your expert profile first
-                </h2>
-                <p className="mt-1 text-sm text-yellow-100/70">
-                  Your profile helps the system match you with suitable AI
-                  projects.
-                </p>
-              </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link
+                to="/expert/jobs"
+                className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                Browse Jobs
+              </Link>
 
               <Link
-                to="/expert/profile"
-                className="rounded-xl border border-yellow-300/40 px-5 py-3 text-center text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
+                to="/expert/recommended-jobs"
+                className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
               >
-                Setup Profile
+                AI Recommended Jobs
               </Link>
             </div>
           </section>
 
-          {renderSection("Top Expert Actions", "bolt", quickActions)}
-          {renderSection("Work Management", "folder_open", workItems)}
-          {renderSection("Support & Finance", "support_agent", supportItems)}
+          {(profileError || jobsError) && (
+            <div className="mb-6 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm text-yellow-200">
+              {profileError || jobsError}
+            </div>
+          )}
+
+          <div className="mb-8 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard label="Open Jobs" value={openJobs.length} />
+            <StatCard label="AI Matches" value={recommendedJobs.length} />
+            <StatCard label="Skills" value={expertSkills.length} />
+            <StatCard label="Profile Score" value={profile?.profileScore ?? 0} />
+          </div>
+
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-extrabold text-white">
+                Top Recommended Jobs
+              </h2>
+
+              <Link
+                to="/expert/jobs"
+                className="text-sm font-bold text-cyan-300 hover:text-cyan-200"
+              >
+                View all
+              </Link>
+            </div>
+
+            {recommendedJobs.length === 0 ? (
+              <p className="text-sm text-gray-500">
+                No jobs available right now.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {recommendedJobs.map((job) => (
+                  <Link
+                    key={job.id}
+                    to={`/expert/jobs/${job.id}`}
+                    className="rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/40"
+                  >
+                    <p className="font-bold text-white">{job.title}</p>
+
+                    <p className="mt-2 line-clamp-2 text-sm text-gray-400">
+                      {job.description}
+                    </p>
+
+                    <p className="mt-3 text-xs font-bold text-cyan-300">
+                      Match: {job.matchScore}%
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </ExpertLayout>
   );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
+      <p className="text-sm text-gray-500">{label}</p>
+      <p className="mt-2 text-3xl font-extrabold text-white">{value}</p>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const value = String(status || "UNKNOWN").toUpperCase();
+
+  const style =
+    value === "ACTIVE" || value === "APPROVED" || value === "AVAILABLE"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+
+  return (
+    <span
+      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+    >
+      {value}
+    </span>
+  );
+}
+
+function getReviewStatus(profile) {
+  return String(
+    profile?.profileReviewStatus || profile?.ProfileReviewStatus || ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function updateLocalUserStatus(status) {
+  if (!status) return;
+
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        ...user,
+        role: "EXPERT",
+        status,
+      })
+    );
+  } catch (error) {
+    console.error("UPDATE LOCAL USER STATUS ERROR:", error);
+  }
+}
+
+function toArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function calculateMatchScore(job, profile, expertSkills) {
+  if (!profile || expertSkills.length === 0) return 0;
+
+  const jobSkills = (job.skills || []).map((skill) =>
+    String(skill).toLowerCase()
+  );
+
+  if (jobSkills.length === 0) return 0;
+
+  const matched = jobSkills.filter((skill) => expertSkills.includes(skill));
+
+  return Math.min(100, Math.round((matched.length / jobSkills.length) * 100));
 }

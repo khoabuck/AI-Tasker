@@ -245,6 +245,7 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 // =========================
 builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
+builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
 
 // =========================
@@ -276,6 +277,18 @@ builder.Services.AddHttpClient<
     IExpertProfileReviewProvider,
     GroqExpertProfileReviewProvider
 >();
+
+// =========================
+// Certificate Verification Service
+// HttpClient checks and scores certificate proof links
+// =========================
+builder.Services.AddHttpClient<
+    ICertificateVerificationService,
+    CertificateVerificationService
+>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 
 // =========================
 // URL Inspection Service

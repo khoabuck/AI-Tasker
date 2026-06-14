@@ -47,6 +47,33 @@ public class RecommendationsController : ControllerBase
         }
     }
 
+    [HttpGet("experts/me/jobs")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> GetRecommendedJobsForMe(
+        [FromQuery] int limit = 10
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var recommendations =
+                await _recommendationService.GetRecommendedJobsForMeAsync(
+                    userId,
+                    limit
+                );
+
+            return Ok(recommendations);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
+
     private int GetCurrentUserId()
     {
         var userIdValue =

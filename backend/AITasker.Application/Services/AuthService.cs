@@ -366,7 +366,7 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task<UserResponse> SelectRoleAsync(int userId, SelectRoleRequest request)
+    public async Task<AuthResponse> SelectRoleAsync(int userId, SelectRoleRequest request)
     {
         var user = await _userRepository.GetByIdAsync(userId);
 
@@ -413,7 +413,12 @@ public class AuthService : IAuthService
 
         await _userRepository.SaveChangesAsync();
 
-        return MapToUserResponse(user);
+        return new AuthResponse
+        {
+            AccessToken = _jwtTokenService.GenerateToken(user),
+            ExpiresAt = _jwtTokenService.GetExpiresAt(),
+            User = MapToUserResponse(user)
+        };
     }
 
     public async Task<UserResponse?> GetCurrentUserAsync(int userId)

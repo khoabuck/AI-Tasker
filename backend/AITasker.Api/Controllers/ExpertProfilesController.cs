@@ -8,7 +8,6 @@ namespace AITasker.Api.Controllers;
 
 [ApiController]
 [Route("api/expert-profiles")]
-[Authorize]
 public class ExpertProfilesController : ControllerBase
 {
     private readonly IExpertProfileService _expertProfileService;
@@ -19,17 +18,24 @@ public class ExpertProfilesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateExpertProfileRequest request)
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> CreateExpertProfile(
+        [FromBody] CreateExpertProfileRequest request
+    )
     {
         try
         {
             var userId = GetCurrentUserId();
-            var result = await _expertProfileService.CreateAsync(userId, request);
+
+            var result = await _expertProfileService.CreateAsync(
+                userId,
+                request
+            );
 
             return Ok(new
             {
                 success = true,
-                message = "Expert profile submitted successfully.",
+                message = GetSubmitMessage(result.ProfileReviewStatus),
                 data = result
             });
         }
@@ -44,17 +50,120 @@ public class ExpertProfilesController : ControllerBase
     }
 
     [HttpPut("resubmit")]
-    public async Task<IActionResult> Resubmit([FromBody] CreateExpertProfileRequest request)
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> ResubmitExpertProfile(
+        [FromBody] CreateExpertProfileRequest request
+    )
     {
         try
         {
             var userId = GetCurrentUserId();
-            var result = await _expertProfileService.ResubmitAsync(userId, request);
+
+            var result = await _expertProfileService.ResubmitAsync(
+                userId,
+                request
+            );
 
             return Ok(new
             {
                 success = true,
-                message = "Expert profile resubmitted successfully.",
+                message = GetSubmitMessage(result.ProfileReviewStatus),
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("me")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyBasicExpertProfile(
+        [FromBody] UpdateExpertBasicProfileRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateBasicAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = "Expert basic profile updated successfully.",
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("me/basic")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyBasicExpertProfileV2(
+        [FromBody] UpdateExpertBasicProfileRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateBasicAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = "Expert basic profile updated successfully.",
+                data = result
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("me/verification")]
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> UpdateMyExpertVerificationProfile(
+        [FromBody] UpdateExpertVerificationProfileRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+
+            var result = await _expertProfileService.UpdateVerificationAsync(
+                userId,
+                request
+            );
+
+            return Ok(new
+            {
+                success = true,
+                message = result.Message,
                 data = result
             });
         }
@@ -69,16 +178,19 @@ public class ExpertProfilesController : ControllerBase
     }
 
     [HttpGet("me")]
-    public async Task<IActionResult> GetMe()
+    [Authorize(Roles = "EXPERT")]
+    public async Task<IActionResult> GetMyExpertProfile()
     {
         try
         {
             var userId = GetCurrentUserId();
+
             var result = await _expertProfileService.GetMeAsync(userId);
 
             return Ok(new
             {
                 success = true,
+                message = "Expert profile retrieved successfully.",
                 data = result
             });
         }
@@ -95,15 +207,25 @@ public class ExpertProfilesController : ControllerBase
     private int GetCurrentUserId()
     {
         var userIdValue =
-            User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("userId")
-            ?? User.FindFirstValue("sub");
+            User.FindFirstValue("userId") ??
+            User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-        if (!int.TryParse(userIdValue, out var userId))
+        if (string.IsNullOrWhiteSpace(userIdValue))
         {
-            throw new InvalidOperationException("Invalid user token.");
+            throw new InvalidOperationException("UserId not found in token.");
         }
 
-        return userId;
+        return int.Parse(userIdValue);
+    }
+
+    private static string GetSubmitMessage(string? profileReviewStatus)
+    {
+        return profileReviewStatus?.Trim().ToUpperInvariant() switch
+        {
+            "APPROVED" => "Expert profile approved successfully.",
+            "NEEDS_CORRECTION" => "Expert profile submitted but needs correction.",
+            "REJECTED" => "Expert profile rejected.",
+            _ => "Expert profile submitted but needs correction."
+        };
     }
 }

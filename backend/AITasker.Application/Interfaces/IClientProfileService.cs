@@ -20,5 +20,15 @@ public interface IClientProfileService
         CreateBusinessClientProfileRequest request
     );
 
+    Task<ClientProfileResponse> UpdateIndividualAsync(
+        int userId,
+        UpdateIndividualClientProfileRequest request
+    );
+
+    Task<ClientProfileResponse> UpdateBusinessAsync(
+        int userId,
+        UpdateBusinessClientProfileRequest request
+    );
+
     Task<ClientProfileResponse?> GetMyProfileAsync(int userId);
 }

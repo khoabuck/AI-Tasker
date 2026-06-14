@@ -312,14 +312,41 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<DateTime?>("CheckedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("DetectedCertificateName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("DetectedIssuer")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
 
                     b.Property<int>("ExpertProfileId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<string>("VerificationNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("VerificationScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasDefaultValue("UNVERIFIED");
 
                     b.HasKey("ExpertCertificateId");
 
@@ -353,6 +380,22 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<decimal>("ExpectedProjectBudgetMin")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExperienceConfidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("ExperienceVerificationNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("ExperienceVerificationStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)")
+                        .HasDefaultValue("UNVERIFIED");
 
                     b.Property<string>("ExpertCategory")
                         .IsRequired()
@@ -413,6 +456,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("datetime2");
+
+                    b.Property<int>("VerifiedYearsOfExperience")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("YearsOfExperience")
                         .HasColumnType("int");

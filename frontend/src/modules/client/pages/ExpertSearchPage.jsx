@@ -1,18 +1,9 @@
 // src/modules/client/pages/ExpertSearchPage.jsx
-// Tìm Expert thủ công — search theo tên/skill + filter
-// TODO (BE): GET /api/experts?keyword=&seniority=&availability= khi BE xong
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ClientLayout from "../../../components/layout/ClientLayout";
+import axiosInstance from "../../../api/axiosInstance";
 
-const MOCK_EXPERTS = [
-  { id: 1, name: "Dr. Aris Thorne", role: "Senior ML Architect", badge: "98% MATCH", badgeColor: "#00F0FF", rating: 4.5, skills: ["LLM", "Healthcare AI", "PyTorch"], bio: "Ex-DeepMind specialist focused on generative models for precision medicine.", highlight: null },
-  { id: 2, name: "Marcus Vane", role: "NLP Lead Scientist", badge: "TOP PICK", badgeColor: "#c0c1ff", rating: 5, skills: ["Transformers", "BERT", "Semantics"], bio: null, highlight: "Marcus has successfully deployed 14 healthcare LLM projects in the last 24 months." },
-  { id: 3, name: "Elena Kostic", role: "Generative AI Specialist", badge: "92% MATCH", badgeColor: "#00F0FF", rating: 4, skills: ["Stable Diffusion", "GANs", "AWS SageMaker"], bio: "Pioneering work in multimodal content generation and infrastructure optimization.", highlight: null },
-];
-
-const SENIORITY_OPTIONS = ["Junior", "Senior", "Lead", "Director"];
-const AVAILABILITY_OPTIONS = ["Immediately", "In 2 Weeks", "In 1 Month"];
+const SENIORITY_OPTIONS = ["Fresher", "Junior", "Mid-level", "Senior", "Lead"];
 
 function StarRating({ rating }) {
   return (
@@ -27,28 +18,50 @@ function StarRating({ rating }) {
 }
 
 function ExpertCard({ expert }) {
-  const isTertiary = expert.badge === "TOP PICK";
+  // Support cả mock data lẫn API data
+  const name = expert.fullName || expert.name;
+  const role = expert.professionalTitle || expert.role;
+  const skills = expert.expertSkills
+    ? expert.expertSkills.map(s => s.skillName)
+    : (expert.skills || []);
+  const bio = expert.bio;
+  const badge = expert.badge || (expert.level ? expert.level : null);
+  const badgeColor = expert.badgeColor || "#00F0FF";
+  const rating = expert.rating || (expert.profileScore ? expert.profileScore / 20 : null);
+  const highlight = expert.highlight || null;
+  const isTertiary = badge === "TOP PICK";
+
   return (
     <div style={{ background: isTertiary ? "#101319" : "rgba(29,32,38,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 24, position: "relative", overflow: "hidden", transition: "border-color 0.3s" }}
       onMouseEnter={(e) => (e.currentTarget.style.borderColor = isTertiary ? "rgba(192,193,255,0.5)" : "rgba(0,240,255,0.5)")}
       onMouseLeave={(e) => (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")}>
-      <div style={{ position: "absolute", top: 0, right: 0, padding: "4px 12px", background: `${expert.badgeColor}18`, borderLeft: `1px solid ${expert.badgeColor}33`, borderBottom: `1px solid ${expert.badgeColor}33`, borderRadius: "0 0 0 12px" }}>
-        <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: expert.badgeColor, fontWeight: 700 }}>{expert.badge}</span>
+      {badge && (
+        <div style={{ position: "absolute", top: 0, right: 0, padding: "4px 12px", background: `${badgeColor}18`, borderLeft: `1px solid ${badgeColor}33`, borderBottom: `1px solid ${badgeColor}33`, borderRadius: "0 0 0 12px" }}>
+          <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, color: badgeColor, fontWeight: 700 }}>{badge}</span>
+        </div>
+      )}
+
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+        <img
+          src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId || expert.id}`}
+          alt={name}
+          style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.2)", flexShrink: 0 }} />
+        <div>
+          <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 600, color: "#e1e2eb" }}>{name}</h4>
+          <p style={{ fontSize: 11, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>{role}</p>
+          {rating && <StarRating rating={rating} />}
+        </div>
       </div>
-      <div style={{ marginBottom: 20 }}>
-        <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 600, color: "#e1e2eb" }}>{expert.name}</h4>
-        <p style={{ fontSize: 11, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", marginTop: 2 }}>{expert.role}</p>
-        <StarRating rating={expert.rating} />
-      </div>
+
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-        {expert.skills.map((skill) => (
+        {skills.map((skill) => (
           <span key={skill} style={{ padding: "4px 8px", background: isTertiary ? "rgba(98,101,240,0.1)" : "rgba(39,42,48,0.8)", borderRadius: 4, fontSize: 10, fontFamily: "JetBrains Mono, monospace", color: isTertiary ? "#c0c1ff" : "#c2c6d6", border: `1px solid ${isTertiary ? "rgba(192,193,255,0.3)" : "rgba(255,255,255,0.12)"}` }}>{skill}</span>
         ))}
       </div>
-      {expert.bio && <p style={{ fontSize: 14, color: "#8c90a0", lineHeight: 1.6, marginBottom: 24, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{expert.bio}</p>}
-      {expert.highlight && (
+      {bio && <p style={{ fontSize: 14, color: "#8c90a0", lineHeight: 1.6, marginBottom: 24, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{bio}</p>}
+      {highlight && (
         <div style={{ padding: 12, background: "rgba(11,14,20,0.5)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)", marginBottom: 24 }}>
-          <p style={{ fontSize: 11, fontStyle: "italic", color: "#c2c6d6", lineHeight: 1.6 }}>"{expert.highlight}"</p>
+          <p style={{ fontSize: 11, fontStyle: "italic", color: "#c2c6d6", lineHeight: 1.6 }}>"{highlight}"</p>
         </div>
       )}
       <div style={{ display: "flex", gap: 12 }}>
@@ -65,31 +78,59 @@ function ExpertCard({ expert }) {
 
 export default function ExpertSearchPage() {
   const [query, setQuery] = useState("");
-  const [seniority, setSeniority] = useState([]);
-  const [availability, setAvailability] = useState("");
+  const [seniority, setSeniority] = useState("");
   const [searching, setSearching] = useState(false);
   const [experts, setExperts] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
+  const [minBudget, setMinBudget] = useState("");
+  const [maxBudget, setMaxBudget] = useState("");
 
-  const toggleSeniority = (val) => setSeniority((prev) => prev.includes(val) ? prev.filter((s) => s !== val) : [...prev, val]);
+  const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val)); };
+  const isBudgetInvalid = minBudget && maxBudget && Number(minBudget) > Number(maxBudget);
 
-  const handleSearch = () => {
+  // Load luôn khi vào trang
+  useEffect(() => {
+    handleSearch();
+  }, []);
+
+  const handleSearch = async () => {
+    if (isBudgetInvalid) {
+      alert("Budget Min must be less than Budget Max");
+      return;
+    }
     setSearching(true);
-    // ── TODO (BE): swap mock bằng API ──────────────────────────────────
-    // const res = await axiosInstance.get("/experts", { params: { keyword: query, seniority: seniority.join(","), availability } });
-    // setExperts(res.data);
-    // ───────────────────────────────────────────────────────────────────
-    setTimeout(() => {
-      const filtered = MOCK_EXPERTS.filter((e) =>
-        !query.trim() || e.name.toLowerCase().includes(query.toLowerCase()) ||
-        e.role.toLowerCase().includes(query.toLowerCase()) ||
-        e.skills.some((s) => s.toLowerCase().includes(query.toLowerCase()))
-      );
-      setExperts(filtered); setHasSearched(true); setSearching(false);
-    }, 1000);
+    try {
+      const res = await axiosInstance.get("/experts", {
+        params: {
+          keyword: query.trim() || undefined,
+          level: seniority || undefined,
+          availableOnly: true,
+          page: 1,
+          pageSize: 20,
+        },
+      });
+      const data = res.data;
+      const items = Array.isArray(data) ? data : (data?.items || data?.data || []);
+      setExperts(items);
+      setHasSearched(true);
+    } catch (err) {
+      setExperts([]);
+      setHasSearched(true);
+    } finally {
+      setSearching(false);
+    }
   };
 
-  const handleReset = () => { setQuery(""); setSeniority([]); setAvailability(""); setExperts([]); setHasSearched(false); };
+  const handleReset = () => {
+    setQuery("");
+    setSeniority("");
+    setMinBudget("");
+    setMaxBudget("");
+    setExperts([]);
+    setHasSearched(false);
+    // Load lại all experts
+    setTimeout(() => handleSearch(), 0);
+  };
 
   return (
     <ClientLayout>
@@ -103,7 +144,7 @@ export default function ExpertSearchPage() {
           <p style={{ color: "#8c90a0", fontSize: 15 }}>Tìm kiếm Expert theo tên, kỹ năng hoặc từ khóa</p>
         </div>
 
-        {/* Search Bar — Manual */}
+        {/* Search Bar */}
         <section style={{ maxWidth: 900, margin: "0 auto 48px" }}>
           <div style={{ position: "relative" }}>
             <div style={{ position: "absolute", inset: -4, background: "linear-gradient(90deg, #00F0FF, #1772eb, #6265f0)", borderRadius: 20, filter: "blur(8px)", opacity: 0.25, zIndex: 0 }} />
@@ -122,15 +163,6 @@ export default function ExpertSearchPage() {
               </button>
             </div>
           </div>
-          <div style={{ marginTop: 16, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Recent:</span>
-            {["React Developer", "Data Scientist", "UX Designer"].map((tag) => (
-              <button key={tag} onClick={() => setQuery(tag)}
-                style={{ background: "#272a30", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 999, padding: "4px 12px", fontSize: 12, color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#c2c6d6")}>{tag}</button>
-            ))}
-          </div>
         </section>
 
         <div style={{ display: "flex", gap: 24, maxWidth: 1400, margin: "0 auto" }}>
@@ -147,39 +179,47 @@ export default function ExpertSearchPage() {
               <div style={{ marginBottom: 24 }}>
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Seniority</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  {SENIORITY_OPTIONS.map((s) => (
-                    <button key={s} onClick={() => toggleSeniority(s)}
-                      style={{ padding: "8px", borderRadius: 6, border: `1px solid ${seniority.includes(s) ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: "#272a30", fontSize: 12, color: seniority.includes(s) ? "#00F0FF" : "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}>{s}</button>
-                  ))}
+                  {SENIORITY_OPTIONS.map((s) => {
+                    const isSelected = seniority === s;
+                    return (
+                      <button key={s} type="button" onClick={() => toggleSeniority(s)}
+                        className={`rounded-md px-2 py-2 text-xs transition-all ${isSelected ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]" : "border border-white/10 bg-[#272a30] text-[#c2c6d6] hover:border-cyan-400/50 hover:text-cyan-400"}`}>
+                        {s}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-              <div style={{ marginBottom: 24 }}>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Hourly Rate ($)</label>
-                <input type="range" min={50} max={500} style={{ width: "100%", accentColor: "#00F0FF" }} />
-                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                  <span>$50</span><span>$500+</span>
+
+              <div className="mb-6">
+                <label className="mb-3 block font-mono text-[10px] uppercase tracking-[0.15em] text-gray-400">Project Budget</label>
+                <div className="mb-3">
+                  <label className="mb-1 block text-xs text-gray-400">Budget Min ($)</label>
+                  <input type="number" min="0" value={minBudget}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) setMinBudget(v); }}
+                    placeholder="e.g. 500"
+                    className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none ${isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"}`} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-gray-400">Budget Max ($)</label>
+                  <input type="number" min="0" value={maxBudget}
+                    onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) setMaxBudget(v); }}
+                    placeholder="e.g. 2000"
+                    className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none ${isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"}`} />
                 </div>
               </div>
+
               <div>
-                <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Availability</label>
-                <select value={availability} onChange={(e) => setAvailability(e.target.value)}
-                  style={{ width: "100%", background: "#0b0e14", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 12px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
-                  <option value="">Any</option>
-                  {AVAILABILITY_OPTIONS.map((a) => <option key={a} value={a}>{a}</option>)}
-                </select>
+                <button type="button" onClick={handleSearch} disabled={searching}
+                  className="mt-4 w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-bold text-[#101319] shadow-[0_0_15px_rgba(0,240,255,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70">
+                  {searching ? "Applying..." : "Apply"}
+                </button>
               </div>
             </div>
           </aside>
 
           {/* Results */}
           <div style={{ flex: 1 }}>
-            {!hasSearched && !searching && (
-              <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#232A35" }}>person_search</span>
-                <p style={{ fontSize: 16, marginBottom: 8 }}>Tìm kiếm Expert phù hợp</p>
-                <p style={{ fontSize: 14, color: "#414754" }}>Nhập tên, kỹ năng hoặc từ khóa rồi bấm <span style={{ color: "#00F0FF" }}>Search</span></p>
-              </div>
-            )}
             {searching && (
               <div style={{ textAlign: "center", padding: "80px 0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 64, display: "block", marginBottom: 16, color: "#00F0FF", animation: "spin 1s linear infinite" }}>autorenew</span>
@@ -200,7 +240,9 @@ export default function ExpertSearchPage() {
                   </div>
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
-                    {experts.map((expert) => <ExpertCard key={expert.id} expert={expert} />)}
+                    {experts.map((expert) => (
+                      <ExpertCard key={expert.expertProfileId || expert.id} expert={expert} />
+                    ))}
                   </div>
                 )}
               </>
