@@ -43,6 +43,8 @@ public class AITaskerDbContext : DbContext
     public DbSet<Wallet> Wallets { get; set; }
 
     public DbSet<Transaction> Transactions { get; set; }
+
+    public DbSet<Escrow> Escrows { get; set; }
     
     public DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
@@ -664,6 +666,50 @@ public class AITaskerDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(t => t.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Escrow
+        // =========================
+        modelBuilder.Entity<Escrow>(entity =>
+        {
+            entity.ToTable("Escrows");
+
+            entity.HasKey(e => e.EscrowId);
+
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAt);
+
+            entity.HasIndex(e => e.ProjectId);
+
+            entity.HasIndex(e => e.MilestoneId)
+                .IsUnique()
+                .HasFilter("[MilestoneId] IS NOT NULL");
+
+            entity.HasOne(e => e.Project)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Milestone)
+                .WithOne()
+                .HasForeignKey<Escrow>(e => e.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ClientProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================
