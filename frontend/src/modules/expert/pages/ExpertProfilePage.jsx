@@ -33,6 +33,7 @@ export default function ExpertProfilePage() {
 
       setError(
         err?.response?.data?.message ||
+          err?.response?.data?.title ||
           err?.message ||
           "Cannot load expert profile right now."
       );
@@ -57,7 +58,6 @@ export default function ExpertProfilePage() {
         <div className="px-5 py-10 md:px-8">
           <div className="mx-auto max-w-5xl rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-red-300">
             <p className="font-bold">Cannot load profile</p>
-
             <p className="mt-2 text-sm">{error}</p>
 
             <button
@@ -74,12 +74,13 @@ export default function ExpertProfilePage() {
   }
 
   const reviewStatus = getReviewStatus(profile);
-  const userStatus = String(profile?.userStatus || "").toUpperCase();
+  const userStatus = getUserStatus(profile);
 
   const canResubmit =
     reviewStatus === "NEEDS_CORRECTION" || reviewStatus === "REJECTED";
 
-  const isApproved = reviewStatus === "APPROVED" || userStatus === "ACTIVE";
+  const canUpdateAfterActive =
+    userStatus === "ACTIVE" || reviewStatus === "APPROVED";
 
   return (
     <ExpertLayout>
@@ -110,7 +111,7 @@ export default function ExpertProfilePage() {
                   </p>
 
                   <h1 className="text-3xl font-extrabold text-white">
-                    {profile?.fullName || "Expert"}
+                    {profile?.fullName || profile?.email || "Expert"}
                   </h1>
 
                   <p className="mt-2 text-lg font-semibold text-cyan-200">
@@ -141,24 +142,31 @@ export default function ExpertProfilePage() {
                     to="/expert/profile/edit"
                     className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-center text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
                   >
-                    Edit Profile Again
+                    Resubmit Profile
                   </Link>
                 )}
 
-                {isApproved && (
-                  <button
-                    type="button"
-                    disabled
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-500"
-                    title="Backend update API for approved profile is not available yet."
-                  >
-                    Update Profile Coming Soon
-                  </button>
+                {canUpdateAfterActive && (
+                  <>
+                    <Link
+                      to="/expert/profile/update-basic"
+                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    >
+                      Update Basic
+                    </Link>
+
+                    <Link
+                      to="/expert/profile/update-verification"
+                      className="rounded-xl border border-purple-400/60 bg-purple-400/10 px-5 py-3 text-center text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
+                    >
+                      Update Verification
+                    </Link>
+                  </>
                 )}
 
                 <Link
                   to="/expert/jobs"
-                  className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-center text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
                 >
                   Browse Jobs
                 </Link>
@@ -166,12 +174,26 @@ export default function ExpertProfilePage() {
             </div>
           </section>
 
+          {canUpdateAfterActive && (
+            <section className="mb-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-cyan-200">
+              <p className="font-bold">Update logic after ACTIVE</p>
+
+              <p className="mt-2 text-sm leading-6">
+                Basic update is applied directly without AI. Verification
+                update will be reviewed by AI first. If AI approves, new data is
+                applied. If AI needs correction or rejects it, your current
+                profile is kept.
+              </p>
+            </section>
+          )}
+
           {canResubmit && (
             <section className="mb-6 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-yellow-200">
               <p className="font-bold">Your profile needs correction</p>
 
               <p className="mt-2 text-sm leading-6">
                 {profile?.profileReviewNote ||
+                  profile?.reviewNote ||
                   "Please update your profile information and submit again."}
               </p>
 
@@ -214,7 +236,7 @@ export default function ExpertProfilePage() {
                   <div className="space-y-3">
                     {profile.certificates.map((cert, index) => (
                       <a
-                        key={cert.expertCertificateId || index}
+                        key={cert.expertCertificateId || cert.id || index}
                         href={cert.certificateUrl}
                         target="_blank"
                         rel="noreferrer"
@@ -361,8 +383,17 @@ function StatusBadge({ label, status }) {
 
 function getReviewStatus(profile) {
   return String(
-    profile?.profileReviewStatus || profile?.ProfileReviewStatus || ""
+    profile?.profileReviewStatus ||
+      profile?.ProfileReviewStatus ||
+      profile?.reviewStatus ||
+      ""
   )
+    .trim()
+    .toUpperCase();
+}
+
+function getUserStatus(profile) {
+  return String(profile?.userStatus || profile?.UserStatus || "")
     .trim()
     .toUpperCase();
 }

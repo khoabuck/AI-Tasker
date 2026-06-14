@@ -48,6 +48,8 @@ import ExpertMessagesPage from "../../modules/expert/pages/MessagesPage";
 import RecommendedJobsPage from "../../modules/expert/pages/RecommendedJobsPage";
 import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
 import ProjectMilestonesPage from "../../modules/expert/pages/ProjectMilestonesPage";
+import UpdateExpertBasicProfilePage from "../../modules/expert/pages/UpdateExpertBasicProfilePage";
+import UpdateExpertVerificationProfilePage from "../../modules/expert/pages/UpdateExpertVerificationProfilePage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -115,6 +117,8 @@ export default function AppRouter() {
       <Route path="/expert/messages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertMessagesPage /></ProtectedRoute>} />
       <Route path="/expert/recommended-jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><RecommendedJobsPage /></ProtectedRoute>} />
       <Route path="/expert/wallet" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertWalletPage /></ProtectedRoute>} />
+      <Route path="/expert/profile/update-basic" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertBasicProfilePage /></ProtectedRoute>} />
+      <Route path="/expert/profile/update-verification" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertVerificationProfilePage /></ProtectedRoute>} />
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
