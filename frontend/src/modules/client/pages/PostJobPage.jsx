@@ -59,12 +59,16 @@ const buildPayload = (form) => ({
   aiGeneratedDescription: form.aiGeneratedDescription || null,
   budgetMin: Number(form.budgetMin),
   budgetMax: Number(form.budgetMax),
-  deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  deadline: form.deadline
+    ? new Date(form.deadline).toISOString()
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
   isAiAssisted: !!form.aiGeneratedDescription,
-  skillIds: form.skills.map((s) => s.id),
+  skillIds: form.skills
+    .map((s) => Number(s.id))
+    .filter((id) => Number.isInteger(id) && id > 0),
 });
 
 export default function PostJobPage() {
@@ -125,7 +129,12 @@ export default function PostJobPage() {
         projectType: data.suggestedProjectType || prev.projectType,
         complexity: data.suggestedComplexity || "",
         expectedDeliverables: data.expectedDeliverables || "",
-        skills: (data.suggestedSkills || []).map(s => ({ id: s.skillId, name: s.skillName })),
+        skills: (data.suggestedSkills || [])
+        .map((s) => ({
+          id: Number(s.skillId ?? s.SkillId ?? s.id),
+          name: s.skillName ?? s.SkillName ?? s.name,
+        }))
+        .filter((s) => Number.isInteger(s.id) && s.id > 0),
       }));
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to generate. Please try again.");
