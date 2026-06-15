@@ -852,24 +852,102 @@ public class AITaskerDbContext : DbContext
         modelBuilder.Entity<Proposal>(entity =>
         {
             entity.ToTable("Proposals");
+
             entity.HasKey(e => e.ProposalId);
-            entity.Property(e => e.ProposedPrice).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.CounterPrice).HasColumnType("decimal(18,2)");
+
+            entity.Property(e => e.CoverLetter)
+                .IsRequired();
+
+            entity.Property(e => e.ExpectedOutputs)
+                .IsRequired();
+
+            entity.Property(e => e.WorkingApproach)
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.ProposedPrice)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.CounterPrice)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.JobId);
+
+            entity.HasIndex(e => e.ExpertId);
+
+            entity.HasIndex(e => e.Status);
         });
-        
+                
         // =========================
         // ProjectContract
         // =========================
         modelBuilder.Entity<ProjectContract>(entity =>
         {
             entity.ToTable("ProjectContracts");
+
             entity.HasKey(e => e.ContractId);
-            entity.HasIndex(e => e.ProposalId).IsUnique();
-            entity.Property(e => e.FinalPrice).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.PlatformFeeRate).HasColumnType("decimal(5,2)");
-            entity.Property(e => e.PlatformFeeAmount).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.TotalClientPayment).HasColumnType("decimal(18,2)");
+
+            entity.HasIndex(e => e.ProposalId)
+                .IsUnique();
+
+            entity.Property(e => e.ProjectScope)
+                .IsRequired();
+
+            entity.Property(e => e.FinalPrice)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.PlatformFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(e => e.PlatformFeeAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.TotalClientPayment)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.Deliverables)
+                .IsRequired();
+
+            entity.Property(e => e.AcceptanceCriteria)
+                .IsRequired();
+
+            entity.Property(e => e.PaymentTerms)
+                .IsRequired();
+
+            entity.Property(e => e.ContractSource)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.ClientId);
+
+            entity.HasIndex(e => e.ExpertId);
+
+            entity.HasIndex(e => e.Status);
+
+            entity.HasOne(e => e.Proposal)
+                .WithOne(p => p.ProjectContract)
+                .HasForeignKey<ProjectContract>(e => e.ProposalId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
+        
 
         // === ======================
         // Project
