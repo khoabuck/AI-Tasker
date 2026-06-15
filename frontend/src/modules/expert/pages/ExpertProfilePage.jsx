@@ -147,21 +147,12 @@ export default function ExpertProfilePage() {
                 )}
 
                 {canUpdateAfterActive && (
-                  <>
-                    <Link
-                      to="/expert/profile/update-basic"
-                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                    >
-                      Update Basic
-                    </Link>
-
-                    <Link
-                      to="/expert/profile/update-verification"
-                      className="rounded-xl border border-purple-400/60 bg-purple-400/10 px-5 py-3 text-center text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
-                    >
-                      Update Verification
-                    </Link>
-                  </>
+                  <Link
+                    to="/expert/profile/update"
+                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  >
+                    Update Profile
+                  </Link>
                 )}
 
                 <Link
@@ -176,13 +167,12 @@ export default function ExpertProfilePage() {
 
           {canUpdateAfterActive && (
             <section className="mb-6 rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5 text-cyan-200">
-              <p className="font-bold">Update logic after ACTIVE</p>
+              <p className="font-bold">Update profile logic</p>
 
               <p className="mt-2 text-sm leading-6">
-                Basic update is applied directly without AI. Verification
-                update will be reviewed by AI first. If AI approves, new data is
-                applied. If AI needs correction or rejects it, your current
-                profile is kept.
+                Basic information is updated directly. Verification information
+                is reviewed by AI first. If approved, new verification data is
+                applied. If not approved, your current verified profile is kept.
               </p>
             </section>
           )}
