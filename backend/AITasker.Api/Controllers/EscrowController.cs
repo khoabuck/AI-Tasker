@@ -1,7 +1,8 @@
+using System.Security.Claims;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
 
 namespace AITasker.Api.Controllers
 {
@@ -17,31 +18,106 @@ namespace AITasker.Api.Controllers
             _walletService = walletService;
         }
 
-        [HttpPost("milestones/{milestoneId:int}/lock")]
-        public async Task<IActionResult> LockFunds(int milestoneId)
+        [HttpGet("projects/{projectId:int}")]
+        public async Task<IActionResult> GetProjectEscrows(int projectId)
         {
             try
             {
-                var clientId = GetCurrentUserId();
+                var currentUserId = GetCurrentUserId();
 
-                var success = await _walletService.HoldEscrowAsync(clientId, milestoneId);
-
-                if (!success)
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = "Failed to lock escrow funds. Check milestone status, ownership, or wallet balance."
-                    });
-                }
+                var result = await _walletService.GetProjectEscrowsAsync(
+                    currentUserId,
+                    projectId);
 
                 return Ok(new
                 {
                     success = true,
-                    message = $"Successfully locked escrow funds for Milestone ID {milestoneId}."
+                    data = result
                 });
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("projects/{projectId:int}/lock")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> LockProjectEscrow(int projectId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _walletService.LockProjectEscrowAsync(
+                    currentUserId,
+                    projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("milestones/{milestoneId:int}/lock")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> LockMilestoneEscrow(int milestoneId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _walletService.HoldEscrowAsync(
+                    currentUserId,
+                    milestoneId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(new
                 {
@@ -52,28 +128,33 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("milestones/{milestoneId:int}/release")]
+        [Authorize(Roles = "CLIENT,ADMIN")]
         public async Task<IActionResult> ReleaseFunds(int milestoneId)
         {
             try
             {
-                var success = await _walletService.ReleaseEscrowAsync(milestoneId);
+                var currentUserId = GetCurrentUserId();
 
-                if (!success)
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = "Failed to release escrow funds. Invalid milestone, missing escrow hold, or already processed."
-                    });
-                }
+                var result = await _walletService.ReleaseEscrowAsync(
+                    currentUserId,
+                    milestoneId);
 
                 return Ok(new
                 {
                     success = true,
-                    message = $"Successfully released escrow funds for Milestone ID {milestoneId}."
+                    message = result.Message,
+                    data = result
                 });
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(new
                 {
@@ -84,28 +165,33 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("milestones/{milestoneId:int}/refund")]
+        [Authorize(Roles = "CLIENT,ADMIN")]
         public async Task<IActionResult> RefundFunds(int milestoneId)
         {
             try
             {
-                var success = await _walletService.RefundEscrowAsync(milestoneId);
+                var currentUserId = GetCurrentUserId();
 
-                if (!success)
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = "Failed to refund escrow funds. Invalid milestone, missing escrow hold, or already processed."
-                    });
-                }
+                var result = await _walletService.RefundEscrowAsync(
+                    currentUserId,
+                    milestoneId);
 
                 return Ok(new
                 {
                     success = true,
-                    message = $"Successfully refunded escrow funds for Milestone ID {milestoneId}."
+                    message = result.Message,
+                    data = result
                 });
             }
-            catch (Exception ex)
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
             {
                 return BadRequest(new
                 {
@@ -116,24 +202,53 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("milestones/{milestoneId:int}/freeze")]
-        public IActionResult FreezeFunds(int milestoneId)
+        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
+        public async Task<IActionResult> FreezeFunds(int milestoneId)
         {
-            return Ok(new
+            try
             {
-                success = true,
-                message = $"Escrow funds for Milestone ID {milestoneId} have been frozen due to an open dispute."
-            });
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _walletService.FreezeEscrowAsync(
+                    currentUserId,
+                    milestoneId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = result.Message,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
         }
 
         private int GetCurrentUserId()
         {
             var userIdValue =
-                User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? User.FindFirstValue("userId")
-                ?? User.FindFirstValue("sub");
+                User.FindFirstValue("userId") ??
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
+            {
                 throw new InvalidOperationException("Unauthorized or invalid user token structure.");
+            }
 
             return userId;
         }

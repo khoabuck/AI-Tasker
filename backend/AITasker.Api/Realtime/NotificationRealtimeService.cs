@@ -8,7 +8,8 @@ namespace AITasker.Api.Realtime
     {
         private readonly IHubContext<NotificationHub> _hubContext;
 
-        public NotificationRealtimeService(IHubContext<NotificationHub> hubContext)
+        public NotificationRealtimeService(
+            IHubContext<NotificationHub> hubContext)
         {
             _hubContext = hubContext;
         }

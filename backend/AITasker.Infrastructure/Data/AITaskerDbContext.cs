@@ -43,12 +43,16 @@ public class AITaskerDbContext : DbContext
     public DbSet<Wallet> Wallets { get; set; }
 
     public DbSet<Transaction> Transactions { get; set; }
+
+    public DbSet<Escrow> Escrows { get; set; }
     
     public DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
     public DbSet<Deliverable> Deliverables { get; set; }
 
     public DbSet<Dispute> Disputes { get; set; }
+
+    public DbSet<DisputeEvidence> DisputeEvidences { get; set; }
 
     public DbSet<Review> Reviews { get; set; }
 
@@ -667,6 +671,50 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // Escrow
+        // =========================
+        modelBuilder.Entity<Escrow>(entity =>
+        {
+            entity.ToTable("Escrows");
+
+            entity.HasKey(e => e.EscrowId);
+
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAt);
+
+            entity.HasIndex(e => e.ProjectId);
+
+            entity.HasIndex(e => e.MilestoneId)
+                .IsUnique()
+                .HasFilter("[MilestoneId] IS NOT NULL");
+
+            entity.HasOne(e => e.Project)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Milestone)
+                .WithOne()
+                .HasForeignKey<Escrow>(e => e.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ClientProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
         // Deliverable
         // =========================
         modelBuilder.Entity<Deliverable>(entity =>
@@ -691,21 +739,94 @@ public class AITaskerDbContext : DbContext
         modelBuilder.Entity<Dispute>(entity =>
         {
             entity.ToTable("Disputes");
+
             entity.HasKey(d => d.DisputeId);
 
-            entity.Property(d => d.DisputedAmount).HasColumnType("decimal(18,2)");
-            entity.Property(d => d.Status).HasMaxLength(50);
-            entity.Property(d => d.ResolutionType).HasMaxLength(50);
+            entity.Property(d => d.Reason)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(d => d.DisputedAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(d => d.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(d => d.ResolutionType)
+                .HasMaxLength(50);
+
+            entity.Property(d => d.AdminDecision)
+                .HasMaxLength(4000);
+
+            entity.Property(d => d.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(d => d.ProjectId);
+
+            entity.HasIndex(d => d.MilestoneId);
+
+            entity.HasIndex(d => d.Status);
+
+            entity.HasOne(d => d.Project)
+                .WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Milestone)
+                .WithMany()
+                .HasForeignKey(d => d.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.OpenedByUser)
-                  .WithMany()
-                  .HasForeignKey(d => d.OpenedByUserId)
-                  .OnDelete(DeleteBehavior.Restrict);
+                .WithMany()
+                .HasForeignKey(d => d.OpenedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.RespondentUser)
-                  .WithMany()
-                  .HasForeignKey(d => d.RespondentUserId)
-                  .OnDelete(DeleteBehavior.Restrict);
+                .WithMany()
+                .HasForeignKey(d => d.RespondentUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(d => d.Evidences)
+                .WithOne(e => e.Dispute)
+                .HasForeignKey(e => e.DisputeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // DisputeEvidence
+        // =========================
+        modelBuilder.Entity<DisputeEvidence>(entity =>
+        {
+            entity.ToTable("DisputeEvidences");
+
+            entity.HasKey(e => e.EvidenceId);
+
+            entity.Property(e => e.EvidenceText)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(e => e.FileUrl)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.DisputeId);
+
+            entity.HasIndex(e => e.UploadedByUserId);
+
+            entity.HasOne(e => e.Dispute)
+                .WithMany(d => d.Evidences)
+                .HasForeignKey(e => e.DisputeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.UploadedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.UploadedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================

@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260614080747_AddEscrowTable")]
+    partial class AddEscrowTable
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -209,8 +212,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DisputeId"));
 
                     b.Property<string>("AdminDecision")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -229,8 +231,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ResolutionType")
                         .HasMaxLength(50)
@@ -249,52 +250,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("DisputeId");
 
-                    b.HasIndex("MilestoneId");
-
                     b.HasIndex("OpenedByUserId");
-
-                    b.HasIndex("ProjectId");
 
                     b.HasIndex("RespondentUserId");
 
-                    b.HasIndex("Status");
-
                     b.ToTable("Disputes", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DisputeEvidence", b =>
-                {
-                    b.Property<int>("EvidenceId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EvidenceId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DisputeId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EvidenceText")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("FileUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("UploadedByUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("EvidenceId");
-
-                    b.HasIndex("DisputeId");
-
-                    b.HasIndex("UploadedByUserId");
-
-                    b.ToTable("DisputeEvidences", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -1332,20 +1292,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.Milestone", "Milestone")
-                        .WithMany()
-                        .HasForeignKey("MilestoneId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("AITasker.Domain.Entities.User", "OpenedByUser")
                         .WithMany()
                         .HasForeignKey("OpenedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1355,32 +1304,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Milestone");
-
                     b.Navigation("OpenedByUser");
 
-                    b.Navigation("Project");
-
                     b.Navigation("RespondentUser");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DisputeEvidence", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Dispute", "Dispute")
-                        .WithMany("Evidences")
-                        .HasForeignKey("DisputeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", "UploadedByUser")
-                        .WithMany()
-                        .HasForeignKey("UploadedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Dispute");
-
-                    b.Navigation("UploadedByUser");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -1594,11 +1520,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
                 {
                     b.Navigation("BusinessProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
-                {
-                    b.Navigation("Evidences");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>

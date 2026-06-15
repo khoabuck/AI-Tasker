@@ -7,5 +7,7 @@ namespace AITasker.Application.DTOs.Requests
         public decimal ExpertAmount { get; set; }
 
         public decimal ClientAmount { get; set; }
+
+        public string AdminDecision { get; set; } = string.Empty;
     }
 }

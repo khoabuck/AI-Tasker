@@ -10,6 +10,14 @@ namespace AITasker.Application.Interfaces
             int currentUserId,
             CreateReviewRequest request);
 
-        Task<IReadOnlyList<ReviewResponse>> GetExpertReviewsAsync(int expertId);
+        Task<ReviewResponse> GetProjectReviewAsync(
+            int currentUserId,
+            int projectId);
+
+        Task<IReadOnlyList<ReviewResponse>> GetExpertReviewsAsync(
+            int expertProfileId);
+
+        Task<IReadOnlyList<ReviewResponse>> GetMyReviewsAsync(
+            int currentUserId);
     }
 }

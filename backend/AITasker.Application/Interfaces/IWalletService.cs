@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Responses;
 using AITasker.Domain.Entities;
 
 namespace AITasker.Application.Interfaces
@@ -8,16 +9,54 @@ namespace AITasker.Application.Interfaces
 
         Task<Wallet> GetWalletByUserIdAsync(int userId);
 
-        Task<bool> DepositAsync(int userId, decimal amount, string transactionRef);
+        Task<WalletResponse> GetMyWalletAsync(int userId);
 
-        Task<bool> DepositAsync(int userId, decimal amount, string description, string referenceId);
+        Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(int userId);
 
-        Task<bool> WithdrawAsync(int userId, decimal amount, string description);
+        Task<IReadOnlyList<EscrowResponse>> GetProjectEscrowsAsync(
+            int currentUserId,
+            int projectId);
 
-        Task<bool> HoldEscrowAsync(int clientId, int milestoneId);
+        Task<bool> DepositAsync(
+            int userId,
+            decimal amount,
+            string transactionRef);
 
-        Task<bool> ReleaseEscrowAsync(int milestoneId);
+        Task<bool> DepositAsync(
+            int userId,
+            decimal amount,
+            string description,
+            string referenceId);
 
-        Task<bool> RefundEscrowAsync(int milestoneId);
+        Task<bool> WithdrawAsync(
+            int userId,
+            decimal amount,
+            string description);
+
+        Task<EscrowOperationResponse> LockProjectEscrowAsync(
+            int currentUserId,
+            int projectId);
+
+        Task<EscrowOperationResponse> HoldEscrowAsync(
+            int currentUserId,
+            int milestoneId);
+
+        Task<EscrowOperationResponse> ReleaseEscrowAsync(
+            int currentUserId,
+            int milestoneId);
+
+        Task<EscrowOperationResponse> RefundEscrowAsync(
+            int currentUserId,
+            int milestoneId);
+
+        Task<EscrowOperationResponse> FreezeEscrowAsync(
+            int currentUserId,
+            int milestoneId);
+
+        Task<bool> ReleaseEscrowAsync(
+            int milestoneId);
+
+        Task<bool> RefundEscrowAsync(
+            int milestoneId);
     }
 }

@@ -1,28 +1,29 @@
-using System.Threading.Tasks;
-using AITasker.Domain.Entities;
+using AITasker.Application.DTOs.Requests;
+using AITasker.Application.DTOs.Responses;
 
 namespace AITasker.Application.Interfaces
 {
     public interface IDeliverableService
     {
-        Task<Deliverable?> SubmitDeliverableAsync(
-            int milestoneId,
+        Task<DeliverableResponse> SubmitDeliverableAsync(
             int expertUserId,
-            string description,
-            string? fileUrl,
-            string? demoUrl,
-            string? testResultUrl
-        );
+            SubmitDeliverableRequest request);
 
-        Task<bool> ApproveDeliverableAsync(
+        Task<IReadOnlyList<DeliverableResponse>> GetMilestoneDeliverablesAsync(
+            int currentUserId,
+            int milestoneId);
+
+        Task<DeliverableResponse> GetDeliverableByIdAsync(
+            int currentUserId,
+            int deliverableId);
+
+        Task<DeliverableResponse> ApproveDeliverableAsync(
             int deliverableId,
-            int clientUserId
-        );
+            int clientUserId);
 
-        Task<bool> RequestRevisionAsync(
+        Task<DeliverableResponse> RequestRevisionAsync(
             int deliverableId,
             int clientUserId,
-            string feedback
-        );
+            RevisionRequest request);
     }
 }

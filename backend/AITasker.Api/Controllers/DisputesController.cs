@@ -1,9 +1,8 @@
-using System;
 using System.Security.Claims;
-using System.Threading.Tasks;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AITasker.Api.Controllers
@@ -21,27 +20,30 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> OpenDispute(
-            [FromBody] OpenDisputeRequest request)
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> OpenDispute([FromBody] OpenDisputeRequest request)
         {
             try
             {
                 var currentUserId = GetCurrentUserId();
 
-                var disputeId = await _disputeService.OpenDisputeAsync(
-                    request.ProjectId,
-                    request.MilestoneId,
+                var result = await _disputeService.OpenDisputeAsync(
                     currentUserId,
-                    request.RespondentUserId,
-                    request.DisputedAmount,
-                    request.Reason ?? string.Empty
-                );
+                    request);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Dispute opened successfully. Escrow funds have been frozen temporarily.",
-                    disputeId
+                    message = "Dispute opened successfully. Related escrow has been frozen.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (InvalidOperationException ex)
@@ -52,34 +54,21 @@ namespace AITasker.Api.Controllers
                     message = ex.Message
                 });
             }
-            catch (Exception)
-            {
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An internal error occurred while opening dispute."
-                });
-            }
         }
 
-        [HttpPost("{disputeId}/resolve")]
-        public async Task<IActionResult> ResolveDispute(
-            int disputeId,
-            [FromBody] ResolveDisputeRequest request)
+        [HttpGet("me")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> GetMyDisputes()
         {
             try
             {
-                var result = await _disputeService.ResolveDisputeAsync(
-                    disputeId,
-                    request.ResolutionType,
-                    request.ExpertAmount,
-                    request.ClientAmount
-                );
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.GetMyDisputesAsync(currentUserId);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Dispute resolved successfully.",
                     data = result
                 });
             }
@@ -91,12 +80,78 @@ namespace AITasker.Api.Controllers
                     message = ex.Message
                 });
             }
-            catch (Exception)
+        }
+
+        [HttpGet("{disputeId:int}")]
+        public async Task<IActionResult> GetDisputeById(int disputeId)
+        {
+            try
             {
-                return StatusCode(500, new
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.GetDisputeByIdAsync(
+                    currentUserId,
+                    disputeId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
                 {
                     success = false,
-                    message = "An internal error occurred while resolving dispute."
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{disputeId:int}/evidences")]
+        public async Task<IActionResult> AddEvidence(
+            int disputeId,
+            [FromBody] CreateDisputeEvidenceRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.AddEvidenceAsync(
+                    currentUserId,
+                    disputeId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Dispute evidence submitted successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
         }
@@ -104,15 +159,13 @@ namespace AITasker.Api.Controllers
         private int GetCurrentUserId()
         {
             var userIdValue =
-                User.FindFirstValue(ClaimTypes.NameIdentifier)
-                ?? User.FindFirstValue("userId")
-                ?? User.FindFirstValue("sub");
+                User.FindFirstValue("userId") ??
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException(
-                    "Authorization failed: Invalid token."
-                );
+                throw new InvalidOperationException("Authorization failed: Invalid token.");
             }
 
             return userId;
