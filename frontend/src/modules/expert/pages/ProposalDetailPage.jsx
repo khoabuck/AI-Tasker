@@ -20,6 +20,7 @@ export default function ProposalDetailPage() {
 
   useEffect(() => {
     loadProposal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
   const loadProposal = async () => {
@@ -34,6 +35,7 @@ export default function ProposalDetailPage() {
     } catch (err) {
       console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load proposal detail."));
+      setProposal(null);
     } finally {
       setLoading(false);
     }
@@ -51,7 +53,12 @@ export default function ProposalDetailPage() {
 
       const data = await proposalService.withdrawProposal(proposalId);
 
-      setProposal(data);
+      if (data?.proposalId) {
+        setProposal(data);
+      } else {
+        await loadProposal();
+      }
+
       setMessage("Proposal withdrawn successfully.");
     } catch (err) {
       console.error("WITHDRAW PROPOSAL ERROR:", err?.response?.data || err);
@@ -75,19 +82,21 @@ export default function ProposalDetailPage() {
     return (
       <ExpertLayout>
         <div className="px-5 py-10 md:px-8">
-          <Alert
-            type="danger"
-            title="Proposal not found"
-            message={error || "Cannot load proposal detail."}
-          />
+          <div className="mx-auto max-w-5xl">
+            <Alert
+              type="danger"
+              title="Proposal not found"
+              message={error || "Cannot load proposal detail."}
+            />
 
-          <button
-            type="button"
-            onClick={() => navigate("/expert/proposals")}
-            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-          >
-            Back to Proposals
-          </button>
+            <button
+              type="button"
+              onClick={() => navigate("/expert/proposals")}
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+            >
+              Back to Proposals
+            </button>
+          </div>
         </div>
       </ExpertLayout>
     );
@@ -130,20 +139,46 @@ export default function ProposalDetailPage() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => navigate(`/expert/jobs/${proposal.jobId}`)}
-                className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
-              >
-                View Job
-              </button>
+              {proposal.jobId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/expert/jobs/${proposal.jobId}`)}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
+                >
+                  View Job
+                </button>
+              )}
+
+              {proposal.contractId ? (
+                <button
+                  type="button"
+                  onClick={() =>
+                    navigate(`/expert/contracts/${proposal.contractId}`)
+                  }
+                  className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                >
+                  View Contract
+                </button>
+              ) : (
+                status === "ACCEPTED" && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/expert/proposals/${proposal.proposalId}/contract`)
+                    }
+                    className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                  >
+                    View Contract
+                  </button>
+                )
+              )}
 
               {canWithdrawProposal(status) && (
                 <button
                   type="button"
                   disabled={actionLoading}
                   onClick={handleWithdraw}
-                  className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:opacity-50"
+                  className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionLoading ? "Withdrawing..." : "Withdraw"}
                 </button>
@@ -201,7 +236,7 @@ export default function ProposalDetailPage() {
               <Card title="Proposal Summary">
                 <Info
                   label="Proposed Price"
-                  value={`$${proposal.proposedPrice || 0}`}
+                  value={formatMoney(proposal.proposedPrice)}
                 />
 
                 <Info
@@ -221,7 +256,7 @@ export default function ProposalDetailPage() {
                 <Card title="Counter Summary">
                   <Info
                     label="Counter Price"
-                    value={`$${proposal.counterPrice}`}
+                    value={formatMoney(proposal.counterPrice)}
                   />
 
                   <Info
@@ -262,7 +297,7 @@ function Info({ label, value }) {
   return (
     <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 font-bold text-white">{value || "N/A"}</p>
+      <p className="mt-1 break-words font-bold text-white">{value || "N/A"}</p>
     </div>
   );
 }
@@ -300,6 +335,14 @@ function Alert({ type, title, message }) {
   );
 }
 
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  if (!number) return "$0";
+
+  return `$${number.toLocaleString()}`;
+}
+
 function formatDate(value) {
   if (!value) return "N/A";
 
@@ -314,6 +357,7 @@ function getFriendlyError(err, fallback) {
   return (
     err?.response?.data?.message ||
     err?.response?.data?.title ||
+    err?.response?.data ||
     err?.message ||
     fallback
   );

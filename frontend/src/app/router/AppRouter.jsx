@@ -40,6 +40,8 @@ import BrowseJobsPage from "../../modules/expert/pages/BrowseJobsPage";
 import JobDetailPage from "../../modules/expert/pages/JobDetailPage";
 import SubmitProposalPage from "../../modules/expert/pages/SubmitProposalPage";
 import MyProposalsPage from "../../modules/expert/pages/MyProposalsPage";
+import ProposalDetailPage from "../../modules/expert/pages/ProposalDetailPage";
+import ContractDetailPage from "../../modules/expert/pages/ContractDetailPage";
 import MyProjectsPage from "../../modules/expert/pages/MyProjectsPage";
 import ProjectDetailPage from "../../modules/expert/pages/ProjectDetailPage";
 import DeliverablesPage from "../../modules/expert/pages/DeliverablesPage";
@@ -50,7 +52,6 @@ import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
 import ProjectMilestonesPage from "../../modules/expert/pages/ProjectMilestonesPage";
 import UpdateExpertBasicProfilePage from "../../modules/expert/pages/UpdateExpertBasicProfilePage";
 import UpdateExpertVerificationProfilePage from "../../modules/expert/pages/UpdateExpertVerificationProfilePage";
-import ProposalDetailPage from "../../modules/expert/pages/ProposalDetailPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -103,24 +104,31 @@ export default function AppRouter() {
       {/* Expert */}
       <Route path="/expert" element={<ProtectedRoute allowedRoles={["EXPERT"]}><Navigate to="/expert/dashboard" replace /></ProtectedRoute>} />
       <Route path="/expert/dashboard" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertDashboard /></ProtectedRoute>} />
+
       <Route path="/expert/profile" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertProfilePage /></ProtectedRoute>} />
       <Route path="/expert/setup-profile" element={<ProtectedRoute allowedRoles={["EXPERT"]}><SetupExpertProfilePage /></ProtectedRoute>} />
       <Route path="/expert/profile/edit" element={<ProtectedRoute allowedRoles={["EXPERT"]}><EditExpertProfilePage /></ProtectedRoute>} />
+      <Route path="/expert/profile/update-basic" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertBasicProfilePage /></ProtectedRoute>} />
+      <Route path="/expert/profile/update-verification" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertVerificationProfilePage /></ProtectedRoute>} />
+
       <Route path="/expert/jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><BrowseJobsPage /></ProtectedRoute>} />
       <Route path="/expert/jobs/:jobId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><JobDetailPage /></ProtectedRoute>} />
       <Route path="/expert/jobs/:jobId/proposal" element={<ProtectedRoute allowedRoles={["EXPERT"]}><SubmitProposalPage /></ProtectedRoute>} />
+      <Route path="/expert/recommended-jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><RecommendedJobsPage /></ProtectedRoute>} />
+
       <Route path="/expert/proposals" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProposalsPage /></ProtectedRoute>} />
       <Route path="/expert/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalDetailPage /></ProtectedRoute>} />
+      <Route path="/expert/proposals/:proposalId/contract" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
+      <Route path="/expert/contracts/:contractId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
+
       <Route path="/expert/projects" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProjectsPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/milestones" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectMilestonesPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/deliverables" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverablesPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/dispute" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputePage /></ProtectedRoute>} />
+
       <Route path="/expert/messages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertMessagesPage /></ProtectedRoute>} />
-      <Route path="/expert/recommended-jobs" element={<ProtectedRoute allowedRoles={["EXPERT"]}><RecommendedJobsPage /></ProtectedRoute>} />
       <Route path="/expert/wallet" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertWalletPage /></ProtectedRoute>} />
-      <Route path="/expert/profile/update-basic" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertBasicProfilePage /></ProtectedRoute>} />
-      <Route path="/expert/profile/update-verification" element={<ProtectedRoute allowedRoles={["EXPERT"]}><UpdateExpertVerificationProfilePage /></ProtectedRoute>} />
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
