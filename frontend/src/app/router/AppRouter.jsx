@@ -50,6 +50,7 @@ import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
 import ProjectMilestonesPage from "../../modules/expert/pages/ProjectMilestonesPage";
 import UpdateExpertBasicProfilePage from "../../modules/expert/pages/UpdateExpertBasicProfilePage";
 import UpdateExpertVerificationProfilePage from "../../modules/expert/pages/UpdateExpertVerificationProfilePage";
+import ProposalDetailPage from "../../modules/expert/pages/ProposalDetailPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -109,6 +110,7 @@ export default function AppRouter() {
       <Route path="/expert/jobs/:jobId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><JobDetailPage /></ProtectedRoute>} />
       <Route path="/expert/jobs/:jobId/proposal" element={<ProtectedRoute allowedRoles={["EXPERT"]}><SubmitProposalPage /></ProtectedRoute>} />
       <Route path="/expert/proposals" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProposalsPage /></ProtectedRoute>} />
+      <Route path="/expert/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalDetailPage /></ProtectedRoute>} />
       <Route path="/expert/projects" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProjectsPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/milestones" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectMilestonesPage /></ProtectedRoute>} />

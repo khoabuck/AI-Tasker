@@ -1168,4 +1168,7 @@ function getFriendlyError(err) {
     "";
 
   return String(rawMessage || "Something went wrong. Please try again.");
+
+  
+
 }
