@@ -1,20 +1,29 @@
 import axiosInstance from "./axiosInstance";
 
 const expertWalletApi = {
-  getWalletSummary() {
-    return axiosInstance.get("/expert/wallet/summary");
+  getMyWallet() {
+    return axiosInstance.get("/wallets/me");
   },
 
-  getWalletTransactions() {
-    return axiosInstance.get("/expert/wallet/transactions");
+  getWalletBalance() {
+    return axiosInstance.get("/wallets/balance");
   },
 
-  getEscrowRecords() {
-    return axiosInstance.get("/expert/wallet/escrows");
+  getMyTransactions() {
+    return axiosInstance.get("/transactions/me");
   },
 
-  requestWithdraw(data) {
-    return axiosInstance.post("/expert/wallet/withdraw", data);
+  createWithdrawal(data) {
+    return axiosInstance.post("/withdrawals", data);
+  },
+
+  getMyWithdrawals() {
+    return axiosInstance.get("/withdrawals/me");
+  },
+
+  // Chủ yếu phía Client dùng để nạp tiền
+  createDeposit(data) {
+    return axiosInstance.post("/wallets/deposit", data);
   },
 };
 

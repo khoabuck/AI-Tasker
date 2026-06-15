@@ -1,16 +1,28 @@
 import axiosInstance from "./axiosInstance";
 
 const escrowApi = {
-  getMyWalletSummary() {
-    return axiosInstance.get("/wallet/me");
+  getProjectEscrows(projectId) {
+    return axiosInstance.get(`/escrows/projects/${projectId}`);
   },
 
-  getMyEscrows() {
-    return axiosInstance.get("/escrows/me");
+  lockProjectEscrow(projectId) {
+    return axiosInstance.post(`/escrows/projects/${projectId}/lock`);
   },
 
-  getMyTransactions() {
-    return axiosInstance.get("/transactions/me");
+  lockMilestoneEscrow(milestoneId) {
+    return axiosInstance.post(`/escrows/milestones/${milestoneId}/lock`);
+  },
+
+  releaseMilestoneEscrow(milestoneId) {
+    return axiosInstance.post(`/escrows/milestones/${milestoneId}/release`);
+  },
+
+  refundMilestoneEscrow(milestoneId) {
+    return axiosInstance.post(`/escrows/milestones/${milestoneId}/refund`);
+  },
+
+  freezeMilestoneEscrow(milestoneId) {
+    return axiosInstance.post(`/escrows/milestones/${milestoneId}/freeze`);
   },
 };
 
