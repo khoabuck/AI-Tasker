@@ -33,11 +33,11 @@ public class AITaskerDbContext : DbContext
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
 
     public DbSet<Proposal> Proposals { get; set; }
-        
+
     public DbSet<ProjectContract> ProjectContracts { get; set; }
-        
+
     public DbSet<Project> Projects { get; set; }
-        
+
     public DbSet<Milestone> Milestones { get; set; }
 
     public DbSet<Wallet> Wallets { get; set; }
@@ -45,7 +45,7 @@ public class AITaskerDbContext : DbContext
     public DbSet<Transaction> Transactions { get; set; }
 
     public DbSet<Escrow> Escrows { get; set; }
-    
+
     public DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
 
     public DbSet<Deliverable> Deliverables { get; set; }
@@ -634,21 +634,188 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // Proposal
+        // =========================
+        modelBuilder.Entity<Proposal>(entity =>
+        {
+            entity.ToTable("Proposals");
+
+            entity.HasKey(e => e.ProposalId);
+
+            entity.Property(e => e.CoverLetter)
+                .IsRequired();
+
+            entity.Property(e => e.ExpectedOutputs)
+                .IsRequired();
+
+            entity.Property(e => e.WorkingApproach)
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.ProposedPrice)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.CounterPrice)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.JobId);
+
+            entity.HasIndex(e => e.ExpertId);
+
+            entity.HasIndex(e => e.Status);
+
+            entity.HasOne(e => e.JobPosting)
+                .WithMany()
+                .HasForeignKey(e => e.JobId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // ProjectContract
+        // =========================
+        modelBuilder.Entity<ProjectContract>(entity =>
+        {
+            entity.ToTable("ProjectContracts");
+
+            entity.HasKey(e => e.ContractId);
+
+            entity.HasIndex(e => e.ProposalId)
+                .IsUnique();
+
+            entity.Property(e => e.ProjectScope)
+                .IsRequired();
+
+            entity.Property(e => e.FinalPrice)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.PlatformFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(e => e.PlatformFeeAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.TotalClientPayment)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.Deliverables)
+                .IsRequired();
+
+            entity.Property(e => e.AcceptanceCriteria)
+                .IsRequired();
+
+            entity.Property(e => e.PaymentTerms)
+                .IsRequired();
+
+            entity.Property(e => e.ContractSource)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.ClientId);
+
+            entity.HasIndex(e => e.ExpertId);
+
+            entity.HasIndex(e => e.Status);
+
+            entity.HasOne(e => e.Proposal)
+                .WithOne(p => p.ProjectContract)
+                .HasForeignKey<ProjectContract>(e => e.ProposalId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ClientProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Project
+        // =========================
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("Projects");
+
+            entity.HasKey(e => e.ProjectId);
+
+            entity.Property(e => e.TotalBudget)
+                .HasColumnType("decimal(18,2)");
+
+            entity.HasIndex(e => e.ContractId)
+                .IsUnique();
+
+            entity.HasOne(e => e.Contract)
+                .WithOne(c => c.Project)
+                .HasForeignKey<Project>(e => e.ContractId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(e => e.Milestones)
+                .WithOne(m => m.Project)
+                .HasForeignKey(m => m.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Milestone
+        // =========================
+        modelBuilder.Entity<Milestone>(entity =>
+        {
+            entity.ToTable("Milestones");
+
+            entity.HasKey(e => e.MilestoneId);
+
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(18,2)");
+        });
+
+        // =========================
         // Wallet
         // =========================
         modelBuilder.Entity<Wallet>(entity =>
         {
             entity.ToTable("Wallets");
+
             entity.HasKey(w => w.WalletId);
 
-            entity.Property(w => w.AvailableBalance).HasColumnType("decimal(18,2)");
-            entity.Property(w => w.LockedBalance).HasColumnType("decimal(18,2)");
-            entity.Property(w => w.TotalEarning).HasColumnType("decimal(18,2)");
+            entity.Property(w => w.AvailableBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(w => w.LockedBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(w => w.TotalEarning)
+                .HasColumnType("decimal(18,2)");
 
             entity.HasOne(w => w.User)
-                  .WithOne()
-                  .HasForeignKey<Wallet>(w => w.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                .WithOne()
+                .HasForeignKey<Wallet>(w => w.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -657,17 +824,25 @@ public class AITaskerDbContext : DbContext
         modelBuilder.Entity<Transaction>(entity =>
         {
             entity.ToTable("Transactions");
+
             entity.HasKey(t => t.TransactionId);
 
-            entity.Property(t => t.Amount).HasColumnType("decimal(18,2)");
-            entity.Property(t => t.Type).HasMaxLength(50);
-            entity.Property(t => t.Status).HasMaxLength(50);
-            entity.Property(t => t.ReferenceId).HasMaxLength(100);
+            entity.Property(t => t.Amount)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(t => t.Type)
+                .HasMaxLength(50);
+
+            entity.Property(t => t.Status)
+                .HasMaxLength(50);
+
+            entity.Property(t => t.ReferenceId)
+                .HasMaxLength(100);
 
             entity.HasOne(t => t.User)
-                  .WithMany()
-                  .HasForeignKey(t => t.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
+                .WithMany()
+                .HasForeignKey(t => t.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -720,17 +895,25 @@ public class AITaskerDbContext : DbContext
         modelBuilder.Entity<Deliverable>(entity =>
         {
             entity.ToTable("Deliverables");
+
             entity.HasKey(d => d.DeliverableId);
 
-            entity.Property(d => d.Status).HasMaxLength(50);
-            entity.Property(d => d.FileUrl).HasMaxLength(500);
-            entity.Property(d => d.DemoUrl).HasMaxLength(500);
-            entity.Property(d => d.TestResultUrl).HasMaxLength(500);
+            entity.Property(d => d.Status)
+                .HasMaxLength(50);
+
+            entity.Property(d => d.FileUrl)
+                .HasMaxLength(500);
+
+            entity.Property(d => d.DemoUrl)
+                .HasMaxLength(500);
+
+            entity.Property(d => d.TestResultUrl)
+                .HasMaxLength(500);
 
             entity.HasOne(d => d.Expert)
-                  .WithMany()
-                  .HasForeignKey(d => d.ExpertId)
-                  .OnDelete(DeleteBehavior.Restrict);
+                .WithMany()
+                .HasForeignKey(d => d.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================
@@ -830,85 +1013,28 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
-        // Notification
-        // =========================
-        modelBuilder.Entity<Notification>(entity =>
-        {
-            entity.ToTable("Notifications");
-            entity.HasKey(n => n.NotificationId);
-
-            entity.Property(n => n.Title).HasMaxLength(255);
-            entity.Property(n => n.Type).HasMaxLength(50);
-
-            entity.HasOne(n => n.User)
-                  .WithMany()
-                  .HasForeignKey(n => n.UserId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-        
-        // =========================
-        // Proposal
-        // =========================
-        modelBuilder.Entity<Proposal>(entity =>
-        {
-            entity.ToTable("Proposals");
-            entity.HasKey(e => e.ProposalId);
-            entity.Property(e => e.ProposedPrice).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.CounterPrice).HasColumnType("decimal(18,2)");
-        });
-        
-        // =========================
-        // ProjectContract
-        // =========================
-        modelBuilder.Entity<ProjectContract>(entity =>
-        {
-            entity.ToTable("ProjectContracts");
-            entity.HasKey(e => e.ContractId);
-            entity.HasIndex(e => e.ProposalId).IsUnique();
-            entity.Property(e => e.FinalPrice).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.PlatformFeeRate).HasColumnType("decimal(5,2)");
-            entity.Property(e => e.PlatformFeeAmount).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.TotalClientPayment).HasColumnType("decimal(18,2)");
-        });
-
-        // === ======================
-        // Project
-        // =========================
-        modelBuilder.Entity<Project>(entity =>
-        {
-            entity.ToTable("Projects");
-            entity.HasKey(e => e.ProjectId);
-            entity.Property(e => e.TotalBudget).HasColumnType("decimal(18,2)");
-            entity.HasMany(e => e.Milestones)
-                  .WithOne(m => m.Project)
-                  .HasForeignKey(m => m.ProjectId)
-                  .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        // =========================
-        // Milestone
-        // =========================
-        modelBuilder.Entity<Milestone>(entity =>
-        {
-            entity.ToTable("Milestones");
-            entity.HasKey(e => e.MilestoneId);
-            entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
-        });
-
-        // =========================
         // Review
         // =========================
         modelBuilder.Entity<Review>(entity =>
         {
             entity.ToTable("Reviews");
+
             entity.HasKey(r => r.ReviewId);
 
-            entity.Property(r => r.Rating).IsRequired();
-            entity.Property(r => r.Comment).HasMaxLength(1000);
-            entity.Property(r => r.CreatedAt).IsRequired();
+            entity.Property(r => r.Rating)
+                .IsRequired();
 
-            entity.HasIndex(r => r.ProjectId).IsUnique();
+            entity.Property(r => r.Comment)
+                .HasMaxLength(1000);
+
+            entity.Property(r => r.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(r => r.ProjectId)
+                .IsUnique();
+
             entity.HasIndex(r => r.ExpertId);
+
             entity.HasIndex(r => r.ClientId);
 
             entity.HasOne(r => r.Project)
@@ -925,6 +1051,27 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(r => r.ExpertId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Notification
+        // =========================
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications");
+
+            entity.HasKey(n => n.NotificationId);
+
+            entity.Property(n => n.Title)
+                .HasMaxLength(255);
+
+            entity.Property(n => n.Type)
+                .HasMaxLength(50);
+
+            entity.HasOne(n => n.User)
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -963,7 +1110,9 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.HasIndex(w => w.UserId);
+
             entity.HasIndex(w => w.Status);
+
             entity.HasIndex(w => w.CreatedAt);
 
             entity.HasOne(w => w.User)

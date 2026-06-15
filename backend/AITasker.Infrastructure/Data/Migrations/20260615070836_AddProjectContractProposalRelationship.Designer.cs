@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260615070836_AddProjectContractProposalRelationship")]
+    partial class AddProjectContractProposalRelationship
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -876,9 +879,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("ProjectId");
 
-                    b.HasIndex("ContractId")
-                        .IsUnique();
-
                     b.ToTable("Projects", (string)null);
                 });
 
@@ -1542,61 +1542,15 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ProjectContract", "Contract")
-                        .WithOne("Project")
-                        .HasForeignKey("AITasker.Domain.Entities.Project", "ContractId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Contract");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ProjectContract", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.HasOne("AITasker.Domain.Entities.Proposal", "Proposal")
                         .WithOne("ProjectContract")
                         .HasForeignKey("AITasker.Domain.Entities.ProjectContract", "ProposalId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("ClientProfile");
-
-                    b.Navigation("ExpertProfile");
-
                     b.Navigation("Proposal");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.JobPosting", "JobPosting")
-                        .WithMany()
-                        .HasForeignKey("JobId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-
-                    b.Navigation("JobPosting");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
@@ -1691,11 +1645,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
                 {
                     b.Navigation("Milestones");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProjectContract", b =>
-                {
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>

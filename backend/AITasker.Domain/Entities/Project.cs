@@ -24,5 +24,7 @@ namespace AITasker.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public ICollection<Milestone> Milestones { get; set; } = new List<Milestone>();
+    
+        public ProjectContract? Contract { get; set; }
     }
 }
