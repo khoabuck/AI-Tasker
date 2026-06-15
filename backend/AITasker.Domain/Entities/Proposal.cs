@@ -33,5 +33,9 @@ namespace AITasker.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public ProjectContract? ProjectContract { get; set; }
+
+        public JobPosting? JobPosting { get; set; }
+
+        public ExpertProfile? ExpertProfile { get; set; }
     }
 }

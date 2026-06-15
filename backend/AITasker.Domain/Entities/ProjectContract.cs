@@ -47,5 +47,11 @@ namespace AITasker.Domain.Entities
         public DateTime? ConfirmedAt { get; set; }
 
         public Proposal? Proposal { get; set; }
+
+        public ClientProfile? ClientProfile { get; set; }
+
+        public ExpertProfile? ExpertProfile { get; set; }
+
+        public Project? Project { get; set; }
     }
 }
