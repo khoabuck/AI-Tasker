@@ -52,6 +52,8 @@ import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
 import ProjectMilestonesPage from "../../modules/expert/pages/ProjectMilestonesPage";
 import UpdateExpertBasicProfilePage from "../../modules/expert/pages/UpdateExpertBasicProfilePage";
 import UpdateExpertVerificationProfilePage from "../../modules/expert/pages/UpdateExpertVerificationProfilePage";
+import MilestoneDetailPage from "../../modules/expert/pages/MilestoneDetailPage";
+
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -129,6 +131,9 @@ export default function AppRouter() {
 
       <Route path="/expert/messages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertMessagesPage /></ProtectedRoute>} />
       <Route path="/expert/wallet" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertWalletPage /></ProtectedRoute>} />
+
+      <Route path="/expert/milestones/:milestoneId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MilestoneDetailPage /></ProtectedRoute>} />
+      
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />
