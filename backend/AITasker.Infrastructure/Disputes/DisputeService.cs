@@ -140,6 +140,11 @@ namespace AITasker.Infrastructure.Disputes
                         throw new InvalidOperationException("Locked escrow not found for this milestone.");
                     }
 
+                    if (request.DisputedAmount != escrow.Amount)
+                    {
+                        throw new InvalidOperationException("Milestone dispute amount must equal the locked escrow amount for that milestone.");
+                    }
+
                     escrow.Status = EscrowStatusFrozen;
                     escrow.UpdatedAt = DateTime.UtcNow;
 
@@ -170,6 +175,52 @@ namespace AITasker.Infrastructure.Disputes
                     if (existingProjectDispute)
                     {
                         throw new InvalidOperationException("An open project-level dispute already exists for this project.");
+                    }
+
+                    var lockedEscrows = await _context.Escrows
+                        .Where(e =>
+                            e.ProjectId == project.ProjectId &&
+                            (e.Status == EscrowStatusLocked ||
+                             e.Status == EscrowStatusFrozen))
+                        .ToListAsync();
+
+                    if (!lockedEscrows.Any())
+                    {
+                        throw new InvalidOperationException("No locked escrow found for project-level dispute.");
+                    }
+
+                    var lockedAmount = lockedEscrows.Sum(e => e.Amount);
+
+                    if (request.DisputedAmount != lockedAmount)
+                    {
+                        throw new InvalidOperationException("Project-level dispute amount must equal the total locked escrow amount of the project.");
+                    }
+
+                    foreach (var projectEscrow in lockedEscrows)
+                    {
+                        projectEscrow.Status = EscrowStatusFrozen;
+                        projectEscrow.UpdatedAt = DateTime.UtcNow;
+
+                        if (projectEscrow.MilestoneId.HasValue)
+                        {
+                            var frozenMilestone = await GetMilestoneAsync(projectEscrow.MilestoneId.Value);
+                            frozenMilestone.Status = MilestoneStatusDisputed;
+                            frozenMilestone.PaymentStatus = PaymentStatusFrozen;
+                        }
+
+                        _context.Transactions.Add(new Transaction
+                        {
+                            UserId = currentUserId,
+                            ProjectId = project.ProjectId,
+                            MilestoneId = projectEscrow.MilestoneId,
+                            EscrowId = projectEscrow.EscrowId,
+                            Amount = 0,
+                            Type = TxEscrowFreeze,
+                            Status = TransactionStatusSuccess,
+                            Description = $"[Dispute Open] Escrow frozen for Project ID {project.ProjectId}",
+                            ReferenceId = $"PROJECT_{project.ProjectId}",
+                            CreatedAt = DateTime.UtcNow
+                        });
                     }
                 }
 
@@ -404,6 +455,7 @@ namespace AITasker.Infrastructure.Disputes
 
                 Milestone? milestone = null;
                 Escrow? escrow = null;
+                var projectEscrows = new List<Escrow>();
 
                 if (dispute.MilestoneId.HasValue)
                 {
@@ -420,9 +472,30 @@ namespace AITasker.Infrastructure.Disputes
                         throw new InvalidOperationException("Frozen escrow not found for dispute milestone.");
                     }
 
-                    if (dispute.DisputedAmount > escrow.Amount)
+                    if (dispute.DisputedAmount != escrow.Amount)
                     {
-                        throw new InvalidOperationException("Disputed amount cannot exceed escrow amount.");
+                        throw new InvalidOperationException("Milestone dispute amount must equal escrow amount before resolution.");
+                    }
+                }
+                else
+                {
+                    projectEscrows = await _context.Escrows
+                        .Where(e =>
+                            e.ProjectId == project.ProjectId &&
+                            (e.Status == EscrowStatusFrozen ||
+                             e.Status == EscrowStatusLocked))
+                        .ToListAsync();
+
+                    if (!projectEscrows.Any())
+                    {
+                        throw new InvalidOperationException("Frozen escrows not found for project-level dispute.");
+                    }
+
+                    var projectEscrowTotal = projectEscrows.Sum(e => e.Amount);
+
+                    if (dispute.DisputedAmount != projectEscrowTotal)
+                    {
+                        throw new InvalidOperationException("Project-level dispute amount must equal total frozen escrow amount before resolution.");
                     }
                 }
 
@@ -502,6 +575,43 @@ namespace AITasker.Infrastructure.Disputes
                     }
 
                     escrow.UpdatedAt = DateTime.UtcNow;
+                }
+
+                foreach (var projectEscrow in projectEscrows)
+                {
+                    if (normalizedResolutionType == ResolutionReleaseToExpert)
+                    {
+                        projectEscrow.Status = EscrowStatusReleased;
+                    }
+                    else if (normalizedResolutionType == ResolutionRefundToClient)
+                    {
+                        projectEscrow.Status = EscrowStatusRefunded;
+                    }
+                    else
+                    {
+                        projectEscrow.Status = EscrowStatusResolved;
+                    }
+
+                    projectEscrow.UpdatedAt = DateTime.UtcNow;
+
+                    if (projectEscrow.MilestoneId.HasValue)
+                    {
+                        var projectMilestone = await GetMilestoneAsync(projectEscrow.MilestoneId.Value);
+                        projectMilestone.Status = MilestoneStatusResolved;
+
+                        if (normalizedResolutionType == ResolutionReleaseToExpert)
+                        {
+                            projectMilestone.PaymentStatus = PaymentStatusReleased;
+                        }
+                        else if (normalizedResolutionType == ResolutionRefundToClient)
+                        {
+                            projectMilestone.PaymentStatus = PaymentStatusRefunded;
+                        }
+                        else
+                        {
+                            projectMilestone.PaymentStatus = PaymentStatusPartialRefund;
+                        }
+                    }
                 }
 
                 if (milestone != null)
