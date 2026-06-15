@@ -32,6 +32,32 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
 
+    public DbSet<Proposal> Proposals { get; set; }
+        
+    public DbSet<ProjectContract> ProjectContracts { get; set; }
+        
+    public DbSet<Project> Projects { get; set; }
+        
+    public DbSet<Milestone> Milestones { get; set; }
+
+    public DbSet<Wallet> Wallets { get; set; }
+
+    public DbSet<Transaction> Transactions { get; set; }
+
+    public DbSet<Escrow> Escrows { get; set; }
+    
+    public DbSet<WithdrawalRequest> WithdrawalRequests { get; set; }
+
+    public DbSet<Deliverable> Deliverables { get; set; }
+
+    public DbSet<Dispute> Disputes { get; set; }
+
+    public DbSet<DisputeEvidence> DisputeEvidences { get; set; }
+
+    public DbSet<Review> Reviews { get; set; }
+
+    public DbSet<Notification> Notifications { get; set; }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -605,6 +631,350 @@ public class AITaskerDbContext : DbContext
             }).IsUnique();
 
             entity.HasIndex(x => x.SkillId);
+        });
+
+        // =========================
+        // Wallet
+        // =========================
+        modelBuilder.Entity<Wallet>(entity =>
+        {
+            entity.ToTable("Wallets");
+            entity.HasKey(w => w.WalletId);
+
+            entity.Property(w => w.AvailableBalance).HasColumnType("decimal(18,2)");
+            entity.Property(w => w.LockedBalance).HasColumnType("decimal(18,2)");
+            entity.Property(w => w.TotalEarning).HasColumnType("decimal(18,2)");
+
+            entity.HasOne(w => w.User)
+                  .WithOne()
+                  .HasForeignKey<Wallet>(w => w.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Transaction
+        // =========================
+        modelBuilder.Entity<Transaction>(entity =>
+        {
+            entity.ToTable("Transactions");
+            entity.HasKey(t => t.TransactionId);
+
+            entity.Property(t => t.Amount).HasColumnType("decimal(18,2)");
+            entity.Property(t => t.Type).HasMaxLength(50);
+            entity.Property(t => t.Status).HasMaxLength(50);
+            entity.Property(t => t.ReferenceId).HasMaxLength(100);
+
+            entity.HasOne(t => t.User)
+                  .WithMany()
+                  .HasForeignKey(t => t.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Escrow
+        // =========================
+        modelBuilder.Entity<Escrow>(entity =>
+        {
+            entity.ToTable("Escrows");
+
+            entity.HasKey(e => e.EscrowId);
+
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.Property(e => e.UpdatedAt);
+
+            entity.HasIndex(e => e.ProjectId);
+
+            entity.HasIndex(e => e.MilestoneId)
+                .IsUnique()
+                .HasFilter("[MilestoneId] IS NOT NULL");
+
+            entity.HasOne(e => e.Project)
+                .WithMany()
+                .HasForeignKey(e => e.ProjectId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Milestone)
+                .WithOne()
+                .HasForeignKey<Escrow>(e => e.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ClientProfile)
+                .WithMany()
+                .HasForeignKey(e => e.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Deliverable
+        // =========================
+        modelBuilder.Entity<Deliverable>(entity =>
+        {
+            entity.ToTable("Deliverables");
+            entity.HasKey(d => d.DeliverableId);
+
+            entity.Property(d => d.Status).HasMaxLength(50);
+            entity.Property(d => d.FileUrl).HasMaxLength(500);
+            entity.Property(d => d.DemoUrl).HasMaxLength(500);
+            entity.Property(d => d.TestResultUrl).HasMaxLength(500);
+
+            entity.HasOne(d => d.Expert)
+                  .WithMany()
+                  .HasForeignKey(d => d.ExpertId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Dispute
+        // =========================
+        modelBuilder.Entity<Dispute>(entity =>
+        {
+            entity.ToTable("Disputes");
+
+            entity.HasKey(d => d.DisputeId);
+
+            entity.Property(d => d.Reason)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(d => d.DisputedAmount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(d => d.Status)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(d => d.ResolutionType)
+                .HasMaxLength(50);
+
+            entity.Property(d => d.AdminDecision)
+                .HasMaxLength(4000);
+
+            entity.Property(d => d.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(d => d.ProjectId);
+
+            entity.HasIndex(d => d.MilestoneId);
+
+            entity.HasIndex(d => d.Status);
+
+            entity.HasOne(d => d.Project)
+                .WithMany()
+                .HasForeignKey(d => d.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Milestone)
+                .WithMany()
+                .HasForeignKey(d => d.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.OpenedByUser)
+                .WithMany()
+                .HasForeignKey(d => d.OpenedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.RespondentUser)
+                .WithMany()
+                .HasForeignKey(d => d.RespondentUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasMany(d => d.Evidences)
+                .WithOne(e => e.Dispute)
+                .HasForeignKey(e => e.DisputeId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // DisputeEvidence
+        // =========================
+        modelBuilder.Entity<DisputeEvidence>(entity =>
+        {
+            entity.ToTable("DisputeEvidences");
+
+            entity.HasKey(e => e.EvidenceId);
+
+            entity.Property(e => e.EvidenceText)
+                .HasMaxLength(4000)
+                .IsRequired();
+
+            entity.Property(e => e.FileUrl)
+                .HasMaxLength(500);
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.DisputeId);
+
+            entity.HasIndex(e => e.UploadedByUserId);
+
+            entity.HasOne(e => e.Dispute)
+                .WithMany(d => d.Evidences)
+                .HasForeignKey(e => e.DisputeId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.UploadedByUser)
+                .WithMany()
+                .HasForeignKey(e => e.UploadedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Notification
+        // =========================
+        modelBuilder.Entity<Notification>(entity =>
+        {
+            entity.ToTable("Notifications");
+            entity.HasKey(n => n.NotificationId);
+
+            entity.Property(n => n.Title).HasMaxLength(255);
+            entity.Property(n => n.Type).HasMaxLength(50);
+
+            entity.HasOne(n => n.User)
+                  .WithMany()
+                  .HasForeignKey(n => n.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+        
+        // =========================
+        // Proposal
+        // =========================
+        modelBuilder.Entity<Proposal>(entity =>
+        {
+            entity.ToTable("Proposals");
+            entity.HasKey(e => e.ProposalId);
+            entity.Property(e => e.ProposedPrice).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.CounterPrice).HasColumnType("decimal(18,2)");
+        });
+        
+        // =========================
+        // ProjectContract
+        // =========================
+        modelBuilder.Entity<ProjectContract>(entity =>
+        {
+            entity.ToTable("ProjectContracts");
+            entity.HasKey(e => e.ContractId);
+            entity.HasIndex(e => e.ProposalId).IsUnique();
+            entity.Property(e => e.FinalPrice).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.PlatformFeeRate).HasColumnType("decimal(5,2)");
+            entity.Property(e => e.PlatformFeeAmount).HasColumnType("decimal(18,2)");
+            entity.Property(e => e.TotalClientPayment).HasColumnType("decimal(18,2)");
+        });
+
+        // === ======================
+        // Project
+        // =========================
+        modelBuilder.Entity<Project>(entity =>
+        {
+            entity.ToTable("Projects");
+            entity.HasKey(e => e.ProjectId);
+            entity.Property(e => e.TotalBudget).HasColumnType("decimal(18,2)");
+            entity.HasMany(e => e.Milestones)
+                  .WithOne(m => m.Project)
+                  .HasForeignKey(m => m.ProjectId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // Milestone
+        // =========================
+        modelBuilder.Entity<Milestone>(entity =>
+        {
+            entity.ToTable("Milestones");
+            entity.HasKey(e => e.MilestoneId);
+            entity.Property(e => e.Amount).HasColumnType("decimal(18,2)");
+        });
+
+        // =========================
+        // Review
+        // =========================
+        modelBuilder.Entity<Review>(entity =>
+        {
+            entity.ToTable("Reviews");
+            entity.HasKey(r => r.ReviewId);
+
+            entity.Property(r => r.Rating).IsRequired();
+            entity.Property(r => r.Comment).HasMaxLength(1000);
+            entity.Property(r => r.CreatedAt).IsRequired();
+
+            entity.HasIndex(r => r.ProjectId).IsUnique();
+            entity.HasIndex(r => r.ExpertId);
+            entity.HasIndex(r => r.ClientId);
+
+            entity.HasOne(r => r.Project)
+                .WithMany()
+                .HasForeignKey(r => r.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Client)
+                .WithMany()
+                .HasForeignKey(r => r.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.Expert)
+                .WithMany()
+                .HasForeignKey(r => r.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // WithdrawalRequest
+        // =========================
+        modelBuilder.Entity<WithdrawalRequest>(entity =>
+        {
+            entity.ToTable("WithdrawalRequests");
+
+            entity.HasKey(w => w.WithdrawalRequestId);
+
+            entity.Property(w => w.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(w => w.BankName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(w => w.BankAccountNumber)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(w => w.BankAccountHolder)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(w => w.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(w => w.AdminNote)
+                .HasMaxLength(1000);
+
+            entity.Property(w => w.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(w => w.UserId);
+            entity.HasIndex(w => w.Status);
+            entity.HasIndex(w => w.CreatedAt);
+
+            entity.HasOne(w => w.User)
+                .WithMany()
+                .HasForeignKey(w => w.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(w => w.ProcessedByAdmin)
+                .WithMany()
+                .HasForeignKey(w => w.ProcessedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

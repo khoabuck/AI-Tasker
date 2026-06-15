@@ -1,0 +1,47 @@
+namespace AITasker.Application.DTOs.Responses
+{
+    public class ProposalResponse
+    {
+        public int ProposalId { get; set; }
+
+        public int JobId { get; set; }
+
+        public string JobTitle { get; set; } = string.Empty;
+
+        public int ClientProfileId { get; set; }
+
+        public int ClientUserId { get; set; }
+
+        public string ClientName { get; set; } = string.Empty;
+
+        public int ExpertProfileId { get; set; }
+
+        public int ExpertUserId { get; set; }
+
+        public string ExpertName { get; set; } = string.Empty;
+
+        public string CoverLetter { get; set; } = string.Empty;
+
+        public decimal ProposedPrice { get; set; }
+
+        public int ProposedTimelineDays { get; set; }
+
+        public string ExpectedOutputs { get; set; } = string.Empty;
+
+        public string WorkingApproach { get; set; } = string.Empty;
+
+        public string? PreliminaryMilestonePlan { get; set; }
+
+        public decimal? CounterPrice { get; set; }
+
+        public int? CounterTimelineDays { get; set; }
+
+        public string? CounterMessage { get; set; }
+
+        public string Status { get; set; } = string.Empty;
+
+        public int? ContractId { get; set; }
+
+        public DateTime CreatedAt { get; set; }
+    }
+}

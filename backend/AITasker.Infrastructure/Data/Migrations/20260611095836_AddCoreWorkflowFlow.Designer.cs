@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260611095836_AddCoreWorkflowFlow")]
+    partial class AddCoreWorkflowFlow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -209,8 +212,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DisputeId"));
 
                     b.Property<string>("AdminDecision")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
@@ -229,8 +231,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Reason")
                         .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ResolutionType")
                         .HasMaxLength(50)
@@ -249,52 +250,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("DisputeId");
 
-                    b.HasIndex("MilestoneId");
-
                     b.HasIndex("OpenedByUserId");
-
-                    b.HasIndex("ProjectId");
 
                     b.HasIndex("RespondentUserId");
 
-                    b.HasIndex("Status");
-
                     b.ToTable("Disputes", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DisputeEvidence", b =>
-                {
-                    b.Property<int>("EvidenceId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EvidenceId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DisputeId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EvidenceText")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("FileUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("UploadedByUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("EvidenceId");
-
-                    b.HasIndex("DisputeId");
-
-                    b.HasIndex("UploadedByUserId");
-
-                    b.ToTable("DisputeEvidences", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -332,50 +292,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("EmailVerificationTokens", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Escrow", b =>
-                {
-                    b.Property<int>("EscrowId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EscrowId"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ClientProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("MilestoneId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.HasKey("EscrowId");
-
-                    b.HasIndex("ClientProfileId");
-
-                    b.HasIndex("MilestoneId")
-                        .IsUnique()
-                        .HasFilter("[MilestoneId] IS NOT NULL");
-
-                    b.HasIndex("ProjectId");
-
-                    b.ToTable("Escrows", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
                 {
                     b.Property<int>("ExpertCertificateId")
@@ -399,41 +315,14 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<DateTime?>("CheckedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("DetectedCertificateName")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("DetectedIssuer")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
 
                     b.Property<int>("ExpertProfileId")
                         .HasColumnType("int");
 
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("VerificationNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<decimal>("VerificationScore")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(5,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<string>("VerificationStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
 
                     b.HasKey("ExpertCertificateId");
 
@@ -467,22 +356,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<decimal>("ExpectedProjectBudgetMin")
                         .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ExperienceConfidenceScore")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(5,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<string>("ExperienceVerificationNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("ExperienceVerificationStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
 
                     b.Property<string>("ExpertCategory")
                         .IsRequired()
@@ -543,11 +416,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<int>("VerifiedYearsOfExperience")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
 
                     b.Property<int>("YearsOfExperience")
                         .HasColumnType("int");
@@ -666,9 +534,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("JobPostingId");
 
-                    b.HasIndex("ClientProfileId", "Status");
+                    b.HasIndex("ClientProfileId");
 
-                    b.HasIndex("Status", "Deadline");
+                    b.HasIndex("Status");
 
                     b.ToTable("JobPostings", (string)null);
                 });
@@ -682,9 +550,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobSkillId"));
 
                     b.Property<bool>("IsRequired")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
+                        .HasColumnType("bit");
 
                     b.Property<int>("JobPostingId")
                         .HasColumnType("int");
@@ -693,8 +559,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("SkillLevelRequired")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("JobSkillId");
 
@@ -714,10 +579,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MilestoneId"));
 
-                    b.Property<string>("AcceptanceCriteria")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -731,24 +592,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ExpectedDeliverable")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PaymentStatus")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("ProjectId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RevisionLimit")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RevisionUsed")
                         .HasColumnType("int");
 
                     b.Property<string>("Status")
@@ -1017,45 +861,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("Proposals", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
-                {
-                    b.Property<int>("ReviewId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ReviewId"));
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Comment")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("ExpertId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProjectId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("Rating")
-                        .HasColumnType("int");
-
-                    b.HasKey("ReviewId");
-
-                    b.HasIndex("ClientId");
-
-                    b.HasIndex("ExpertId");
-
-                    b.HasIndex("ProjectId")
-                        .IsUnique();
-
-                    b.ToTable("Reviews", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
                 {
                     b.Property<int>("SkillId")
@@ -1117,7 +922,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<int?>("MilestoneId")
                         .HasColumnType("int");
 
-                    b.Property<int?>("ProjectId")
+                    b.Property<int>("ProjectId")
                         .HasColumnType("int");
 
                     b.Property<string>("ReferenceId")
@@ -1237,66 +1042,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("Wallets", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.WithdrawalRequest", b =>
-                {
-                    b.Property<int>("WithdrawalRequestId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("WithdrawalRequestId"));
-
-                    b.Property<string>("AdminNote")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("BankAccountHolder")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("BankAccountNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("BankName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ProcessedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("ProcessedByAdminId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("WithdrawalRequestId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("ProcessedByAdminId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("WithdrawalRequests", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
@@ -1332,20 +1077,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.Milestone", "Milestone")
-                        .WithMany()
-                        .HasForeignKey("MilestoneId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("AITasker.Domain.Entities.User", "OpenedByUser")
                         .WithMany()
                         .HasForeignKey("OpenedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1355,32 +1089,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("Milestone");
-
                     b.Navigation("OpenedByUser");
 
-                    b.Navigation("Project");
-
                     b.Navigation("RespondentUser");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DisputeEvidence", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Dispute", "Dispute")
-                        .WithMany("Evidences")
-                        .HasForeignKey("DisputeId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", "UploadedByUser")
-                        .WithMany()
-                        .HasForeignKey("UploadedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Dispute");
-
-                    b.Navigation("UploadedByUser");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.EmailVerificationToken", b =>
@@ -1392,32 +1103,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Escrow", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
-                        .WithMany()
-                        .HasForeignKey("ClientProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Milestone", "Milestone")
-                        .WithOne()
-                        .HasForeignKey("AITasker.Domain.Entities.Escrow", "MilestoneId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ClientProfile");
-
-                    b.Navigation("Milestone");
-
-                    b.Navigation("Project");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
@@ -1524,33 +1209,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "Client")
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", "Expert")
-                        .WithMany()
-                        .HasForeignKey("ExpertId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-
-                    b.Navigation("Expert");
-
-                    b.Navigation("Project");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Transaction", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -1573,32 +1231,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.WithdrawalRequest", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "ProcessedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("ProcessedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("AITasker.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ProcessedByAdmin");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
                 {
                     b.Navigation("BusinessProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
-                {
-                    b.Navigation("Evidences");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfile", b =>

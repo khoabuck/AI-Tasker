@@ -7,17 +7,25 @@ using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
 using AITasker.Infrastructure.Repositories;
 using AITasker.Infrastructure.Services;
+using AITasker.Infrastructure.Reviews;
+using AITasker.Infrastructure.Banking;
+using AITasker.Infrastructure.Dashboards;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
-//BE 1 => Phan Tien Phat
+
 // =========================
 // Controllers
 // =========================
 builder.Services.AddControllers();
+
+// =========================
+// SignalR
+// =========================
+builder.Services.AddSignalR();
 
 // =========================
 // Swagger/OpenAPI + JWT Authorize
@@ -125,6 +133,22 @@ builder.Services
 
             ClockSkew = TimeSpan.Zero
         };
+
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+
+                return Task.CompletedTask;
+            }
+        };
     })
     .AddCookie("External", options =>
     {
@@ -171,14 +195,16 @@ builder.Services.AddScoped<
 builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 
 // =========================
-// Dependency Injection - Core Services
+// Dependency Injection - Auth / Security Services
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
-
 builder.Services.AddScoped<IAuthService, AuthService>();
 
+// =========================
+// Dependency Injection - Client / Business / Expert Profile
+// =========================
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 
 builder.Services.AddScoped<
@@ -202,21 +228,65 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 // BE2 - Expert Skills API
 // =========================
 builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
+builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
+
+// =========================
+// BE2 - Expert Directory / Recommendation
+// =========================
 builder.Services.AddScoped<IRecommendationService, RecommendationService>();
 builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
-builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
 
 // =========================
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
 
-
 // =========================
 // BE2 - AI Job Assistant
 // =========================
 builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
 builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
+
+// =========================
+// BE2 - Proposal / Contract / Project / Milestone Flow
+// =========================
+builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
+builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
+builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+
+// =========================
+// BE2 - Review Flow
+// =========================
+builder.Services.AddScoped<IReviewService, ReviewService>();
+
+// =========================
+// BE2 - Admin Dashboard
+// =========================
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
+
+// =========================
+// BE3 - Wallet / Escrow / VNPay / Withdrawal
+// =========================
+builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
+builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
+
+// =========================
+// BE3 - Deliverables / Disputes
+// =========================
+builder.Services.AddScoped<IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
+builder.Services.AddScoped<IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
+
+// =========================
+// BE3 - Notifications / Realtime
+// =========================
+builder.Services.AddScoped<INotificationService, AITasker.Infrastructure.Notifications.NotificationService>();
+builder.Services.AddScoped<INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
+
+// =========================
+// HttpClient
+// =========================
+builder.Services.AddHttpClient();
 
 // =========================
 // Business Verification Provider
@@ -277,6 +347,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// =======================================================
+// MAP SIGNALR REALTIME HUBS ENDPOINTS
+// =======================================================
+app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
+app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
 
 // =========================
 // Test endpoints
