@@ -80,6 +80,7 @@ const normalizeWallet = (wallet) => {
     userId: getValue(wallet.userId, wallet.UserId, null),
 
     balance,
+
     availableBalance: Number(
       getValue(
         wallet.availableBalance,
@@ -301,11 +302,13 @@ const normalizeWithdrawal = (withdrawal) => {
     amount: Number(getValue(withdrawal.amount, withdrawal.Amount, 0)),
 
     bankName: getValue(withdrawal.bankName, withdrawal.BankName, ""),
+
     bankAccountNumber: getValue(
       withdrawal.bankAccountNumber,
       withdrawal.BankAccountNumber,
       ""
     ),
+
     bankAccountName: getValue(
       withdrawal.bankAccountName,
       withdrawal.BankAccountName,
@@ -315,6 +318,7 @@ const normalizeWithdrawal = (withdrawal) => {
     ),
 
     note: getValue(withdrawal.note, withdrawal.Note, ""),
+
     adminNote: getValue(
       withdrawal.adminNote,
       withdrawal.AdminNote,
@@ -326,6 +330,7 @@ const normalizeWithdrawal = (withdrawal) => {
     status,
 
     createdAt: getValue(withdrawal.createdAt, withdrawal.CreatedAt, ""),
+
     processedAt: getValue(
       withdrawal.processedAt,
       withdrawal.ProcessedAt,
@@ -346,7 +351,7 @@ const buildWithdrawalPayload = (formData) => {
     bankName: trim(formData.bankName),
     bankAccountNumber: trim(formData.bankAccountNumber),
 
-    // Giữ cả 2 tên field để tránh lệch tên DTO BE.
+    // Gửi cả 2 field để tránh lệch tên DTO backend.
     bankAccountName: trim(formData.bankAccountName),
     accountHolderName: trim(formData.bankAccountName),
 
@@ -356,20 +361,32 @@ const buildWithdrawalPayload = (formData) => {
 
 const expertWalletService = {
   async getWalletOverview() {
-    const [walletResponse, balanceResponse, transactionsResponse, withdrawalsResponse] =
+    /*
+      QUAN TRỌNG:
+      Không gọi /wallets/me và /wallets/balance song song cho account mới.
+
+      Lý do:
+      Backend WalletService.GetOrCreateWalletAsync có thể bị race condition.
+      Nếu 2 API cùng lúc tạo wallet cho user mới, SQL sẽ báo duplicate UserId.
+    */
+
+    const walletResponse = await expertWalletApi.getMyWallet();
+
+    console.log("GET WALLET RESPONSE:", walletResponse?.data);
+
+    const wallet = normalizeWallet(unwrapData(walletResponse));
+
+    const [balanceResponse, transactionsResponse, withdrawalsResponse] =
       await Promise.all([
-        expertWalletApi.getMyWallet(),
         expertWalletApi.getWalletBalance(),
         expertWalletApi.getMyTransactions(),
         expertWalletApi.getMyWithdrawals(),
       ]);
 
-    console.log("GET WALLET RESPONSE:", walletResponse?.data);
     console.log("GET WALLET BALANCE RESPONSE:", balanceResponse?.data);
     console.log("GET TRANSACTIONS RESPONSE:", transactionsResponse?.data);
     console.log("GET WITHDRAWALS RESPONSE:", withdrawalsResponse?.data);
 
-    const wallet = normalizeWallet(unwrapData(walletResponse));
     const balance = normalizeBalance(unwrapData(balanceResponse));
 
     return {
@@ -377,9 +394,11 @@ const expertWalletService = {
         ...wallet,
         ...balance,
       },
+
       transactions: unwrapListData(transactionsResponse)
         .map(normalizeTransaction)
         .filter(Boolean),
+
       withdrawals: unwrapListData(withdrawalsResponse)
         .map(normalizeWithdrawal)
         .filter(Boolean),

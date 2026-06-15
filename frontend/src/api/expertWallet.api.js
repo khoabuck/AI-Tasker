@@ -21,7 +21,6 @@ const expertWalletApi = {
     return axiosInstance.get("/withdrawals/me");
   },
 
-  // Chủ yếu phía Client dùng để nạp tiền
   createDeposit(data) {
     return axiosInstance.post("/wallets/deposit", data);
   },
