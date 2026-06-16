@@ -31,12 +31,7 @@ public class ClientProfileService : IClientProfileService
     {
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
         ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
@@ -71,18 +66,16 @@ public class ClientProfileService : IClientProfileService
     {
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
         var companyName = request.CompanyName?.Trim() ?? string.Empty;
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
         var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
         var businessEmail = NormalizeNullableText(request.BusinessEmail);
-        var businessPhone = NormalizeNullableText(request.BusinessPhone);
-
-        if (string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
 
         ValidateBusinessVerificationInput(
             companyName,
@@ -211,18 +204,16 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
         var companyName = request.CompanyName?.Trim() ?? string.Empty;
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
         var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
         var businessEmail = NormalizeNullableText(request.BusinessEmail);
-        var businessPhone = NormalizeNullableText(request.BusinessPhone);
-
-        if (string.IsNullOrWhiteSpace(phoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
 
         ValidateBusinessVerificationInput(
             companyName,
@@ -336,6 +327,8 @@ public class ClientProfileService : IClientProfileService
         ValidateIndividualProfileUpdateRequest(request);
         ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
         user.FullName = request.FullName!.Trim();
 
         if (request.AvatarUrl != null)
@@ -345,7 +338,7 @@ public class ClientProfileService : IClientProfileService
 
         user.UpdatedAt = DateTime.UtcNow;
 
-        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
+        clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
         clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
         clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
@@ -408,6 +401,12 @@ public class ClientProfileService : IClientProfileService
         ValidateBusinessProfileUpdateRequest(request);
         ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
+
         user.FullName = request.FullName!.Trim();
 
         if (request.AvatarUrl != null)
@@ -417,7 +416,7 @@ public class ClientProfileService : IClientProfileService
 
         user.UpdatedAt = DateTime.UtcNow;
 
-        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
+        clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
         clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
         clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
@@ -429,8 +428,7 @@ public class ClientProfileService : IClientProfileService
         clientProfile.BusinessProfile.BusinessEmail =
             NormalizeNullableText(request.BusinessEmail);
 
-        clientProfile.BusinessProfile.BusinessPhone =
-            NormalizeNullableText(request.BusinessPhone);
+        clientProfile.BusinessProfile.BusinessPhone = businessPhone;
 
         clientProfile.BusinessProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -528,12 +526,7 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Full name length is invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
-
-        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
+        ValidateAndNormalizePhoneNumber(request.PhoneNumber);
         ValidateMaxLength(request.Address, 500, "Address");
         ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
         ValidateMaxLength(request.MainProblems, 1000, "Main problems");
@@ -555,10 +548,7 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Full name length is invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
+        ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
         if (!string.IsNullOrWhiteSpace(request.BusinessEmail)
             && !IsValidEmail(request.BusinessEmail.Trim()))
@@ -568,13 +558,59 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
+        ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
+
         ValidateMaxLength(request.Address, 500, "Address");
         ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
         ValidateMaxLength(request.MainProblems, 1000, "Main problems");
         ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
         ValidateMaxLength(request.BusinessEmail, 255, "Business email");
-        ValidateMaxLength(request.BusinessPhone, 30, "Business phone");
+    }
+
+    private static string ValidateAndNormalizePhoneNumber(
+        string? value,
+        string fieldName = "Phone number")
+    {
+        var phoneNumber = value?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            throw new InvalidOperationException($"{fieldName} is required.");
+        }
+
+        if (phoneNumber.Length != 10 || phoneNumber[0] != '0')
+        {
+            throw new InvalidOperationException(
+                $"{fieldName} must start with 0 and contain exactly 10 digits."
+            );
+        }
+
+        foreach (var character in phoneNumber)
+        {
+            if (!char.IsDigit(character))
+            {
+                throw new InvalidOperationException(
+                    $"{fieldName} must start with 0 and contain exactly 10 digits."
+                );
+            }
+        }
+
+        return phoneNumber;
+    }
+
+    private static string? ValidateAndNormalizeOptionalPhoneNumber(
+        string? value,
+        string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return ValidateAndNormalizePhoneNumber(value, fieldName);
     }
 
     private static void ValidateMaxLength(
