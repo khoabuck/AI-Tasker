@@ -51,6 +51,7 @@ export default function UpdateExpertProfilePage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [modal, setModal] = useState(null);
 
   const basicErrors = useMemo(() => validateBasicForm(basicForm), [basicForm]);
 
@@ -68,6 +69,7 @@ export default function UpdateExpertProfilePage() {
       setLoading(true);
       setError("");
       setMessage("");
+      setModal(null);
 
       const profile = await expertProfileService.getMyExpertProfile();
 
@@ -123,6 +125,7 @@ export default function UpdateExpertProfilePage() {
   const updateBasicField = (name, value) => {
     setError("");
     setMessage("");
+    setModal(null);
 
     setBasicForm((prev) => ({
       ...prev,
@@ -133,6 +136,7 @@ export default function UpdateExpertProfilePage() {
   const updateVerificationField = (name, value) => {
     setError("");
     setMessage("");
+    setModal(null);
 
     setVerificationForm((prev) => ({
       ...prev,
@@ -143,6 +147,7 @@ export default function UpdateExpertProfilePage() {
   const updateCertificate = (index, name, value) => {
     setError("");
     setMessage("");
+    setModal(null);
 
     setVerificationForm((prev) => {
       const certificates = [...prev.certificates];
@@ -197,6 +202,7 @@ export default function UpdateExpertProfilePage() {
       setUploadingAvatar(true);
       setError("");
       setMessage("");
+      setModal(null);
 
       const imageUrl = await uploadService.uploadImage(file, "avatar");
 
@@ -216,6 +222,7 @@ export default function UpdateExpertProfilePage() {
     setBasicSubmitted(true);
     setError("");
     setMessage("");
+    setModal(null);
 
     const errors = validateBasicForm(basicForm);
 
@@ -229,19 +236,23 @@ export default function UpdateExpertProfilePage() {
     try {
       setSavingBasic(true);
 
-      await expertProfileService.updateBasicExpertProfile(basicForm);
+      const payload = buildBasicPayload(basicForm);
 
-      setMessage(
-        "Basic profile updated successfully. This update was applied directly."
-      );
+      await expertProfileService.updateBasicExpertProfile(payload);
 
       updateLocalUserStatus("ACTIVE");
 
-      setTimeout(() => {
-        navigate("/expert/profile", { replace: true });
-      }, 800);
+      setModal({
+        type: "success",
+        title: "Basic profile updated",
+        message:
+          "Your basic profile was updated directly. AI review was not required.",
+        showBackProfile: true,
+        showEditAgain: false,
+      });
     } catch (err) {
       console.error("UPDATE BASIC PROFILE ERROR:", err?.response?.data || err);
+
       setError(getFriendlyError(err, "Cannot update basic profile."));
     } finally {
       setSavingBasic(false);
@@ -254,6 +265,7 @@ export default function UpdateExpertProfilePage() {
     setVerificationSubmitted(true);
     setError("");
     setMessage("");
+    setModal(null);
 
     const errors = validateVerificationForm(verificationForm);
 
@@ -267,52 +279,61 @@ export default function UpdateExpertProfilePage() {
     try {
       setSavingVerification(true);
 
+      const payload = buildVerificationPayload(verificationForm);
+
       const result =
-        await expertProfileService.updateVerificationExpertProfile(
-          verificationForm
-        );
+        await expertProfileService.updateVerificationExpertProfile(payload);
 
       console.log("UPDATE VERIFICATION RESULT:", result);
 
       updateLocalUserStatus("ACTIVE");
 
       const applied = Boolean(result?.applied || result?.Applied);
+      const reviewStatus = getReviewStatus(result);
       const resultMessage = getResultMessage(result);
       const missingInformation = getMissingInformation(result);
 
       if (applied) {
-        setMessage(
-          resultMessage ||
-            "Verification update approved. Your verification information has been applied."
-        );
-
-        setTimeout(() => {
-          navigate("/expert/profile", { replace: true });
-        }, 1000);
+        setModal({
+          type: "success",
+          title: "Verification update approved",
+          message:
+            resultMessage ||
+            "AI approved your verification update. The new data has been applied.",
+          detail: "",
+          showBackProfile: true,
+          showEditAgain: false,
+        });
 
         return;
       }
 
-      setMessage(
-        resultMessage ||
-          `Verification update was reviewed but not applied. Your current verified profile is kept.${
-            missingInformation
-              ? `\nMissing information: ${missingInformation}`
-              : ""
-          }`
-      );
+      setModal({
+        type: "warning",
+        title: `Verification update ${reviewStatus || "needs correction"}`,
+        message:
+          resultMessage ||
+          "AI did not approve this update. Your current verified profile was kept.",
+        detail:
+          missingInformation ||
+          "Please improve your skills, public proof links, or certificates and try again.",
+        showBackProfile: true,
+        showEditAgain: true,
+      });
     } catch (err) {
-      console.error(
-        "UPDATE VERIFICATION ERROR:",
-        err?.response?.data || err
-      );
+      console.error("UPDATE VERIFICATION ERROR:", err?.response?.data || err);
 
-      setError(
-        getFriendlyError(
+      setModal({
+        type: "danger",
+        title: "Verification update failed",
+        message: getFriendlyError(
           err,
           "Cannot update verification profile. Your current verified profile was not changed."
-        )
-      );
+        ),
+        detail: "Your current profile was not changed.",
+        showBackProfile: true,
+        showEditAgain: true,
+      });
     } finally {
       setSavingVerification(false);
     }
@@ -394,7 +415,9 @@ export default function UpdateExpertProfilePage() {
             <Alert type="success" title="Update result" message={message} />
           )}
 
-          {error && <Alert type="danger" title="Update error" message={error} />}
+          {error && (
+            <Alert type="danger" title="Update error" message={error} />
+          )}
 
           {activeTab === "basic" && (
             <BasicProfileForm
@@ -405,6 +428,7 @@ export default function UpdateExpertProfilePage() {
               onChange={updateBasicField}
               onSubmit={handleSaveBasic}
               onAvatarUpload={handleAvatarUpload}
+              onCancel={() => navigate("/expert/profile")}
             />
           )}
 
@@ -418,10 +442,19 @@ export default function UpdateExpertProfilePage() {
               onCertificateChange={updateCertificate}
               onAddCertificate={addCertificate}
               onRemoveCertificate={removeCertificate}
+              onCancel={() => navigate("/expert/profile")}
             />
           )}
         </div>
       </div>
+
+      {modal && (
+        <ResultModal
+          modal={modal}
+          onClose={() => setModal(null)}
+          onBackProfile={() => navigate("/expert/profile", { replace: true })}
+        />
+      )}
     </ExpertLayout>
   );
 }
@@ -434,6 +467,7 @@ function BasicProfileForm({
   onChange,
   onSubmit,
   onAvatarUpload,
+  onCancel,
 }) {
   return (
     <form
@@ -477,6 +511,7 @@ function BasicProfileForm({
           <div className="mt-4 flex flex-col gap-3 md:flex-row">
             <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
               {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
+
               <input
                 type="file"
                 accept="image/*"
@@ -580,7 +615,16 @@ function BasicProfileForm({
         />
       </div>
 
-      <div className="mt-8 flex justify-end gap-3">
+      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving || uploadingAvatar}
+          className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
         <button
           type="submit"
           disabled={saving || uploadingAvatar}
@@ -602,6 +646,7 @@ function VerificationProfileForm({
   onCertificateChange,
   onAddCertificate,
   onRemoveCertificate,
+  onCancel,
 }) {
   return (
     <form
@@ -619,58 +664,76 @@ function VerificationProfileForm({
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <TextInput
-          label="Skills"
-          value={formData.skills}
-          error={errors.skills}
-          onChange={(value) => onChange("skills", value)}
-          placeholder="React, JavaScript, C#, SQL"
-          required
-        />
+      <section>
+        <h3 className="mb-4 text-lg font-bold text-white">
+          Skills & Experience
+        </h3>
 
-        <NumberInput
-          label="Years Of Experience"
-          value={formData.yearsOfExperience}
-          error={errors.yearsOfExperience}
-          onChange={(value) => onChange("yearsOfExperience", value)}
-          placeholder="2"
-          required
-        />
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <TextInput
+            label="Skills"
+            value={formData.skills}
+            error={errors.skills}
+            onChange={(value) => onChange("skills", value)}
+            placeholder="React, JavaScript, C#, SQL"
+            required
+          />
 
-        <TextInput
-          label="Portfolio URL"
-          value={formData.portfolioUrl}
-          error={errors.portfolioUrl}
-          onChange={(value) => onChange("portfolioUrl", value)}
-          placeholder="https://portfolio.com"
-        />
+          <NumberInput
+            label="Years Of Experience"
+            value={formData.yearsOfExperience}
+            error={errors.yearsOfExperience}
+            onChange={(value) => onChange("yearsOfExperience", value)}
+            placeholder="2"
+            required
+          />
+        </div>
+      </section>
 
-        <TextInput
-          label="LinkedIn URL"
-          value={formData.linkedInUrl}
-          error={errors.linkedInUrl}
-          onChange={(value) => onChange("linkedInUrl", value)}
-          placeholder="https://linkedin.com/in/..."
-        />
+      <section className="mt-8 border-t border-white/10 pt-6">
+        <h3 className="mb-2 text-lg font-bold text-white">
+          Public Proof Links
+        </h3>
 
-        <TextInput
-          label="GitHub URL"
-          value={formData.gitHubUrl}
-          error={errors.gitHubUrl}
-          onChange={(value) => onChange("gitHubUrl", value)}
-          placeholder="https://github.com/..."
-        />
-      </div>
+        <p className="mb-4 text-sm text-gray-500">
+          Add at least 2 links: Portfolio, LinkedIn, or GitHub.
+        </p>
 
-      <FieldError message={errors.proof} />
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <TextInput
+            label="Portfolio URL"
+            value={formData.portfolioUrl}
+            error={errors.portfolioUrl}
+            onChange={(value) => onChange("portfolioUrl", value)}
+            placeholder="https://portfolio.com"
+          />
 
-      <div className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+          <TextInput
+            label="LinkedIn URL"
+            value={formData.linkedInUrl}
+            error={errors.linkedInUrl}
+            onChange={(value) => onChange("linkedInUrl", value)}
+            placeholder="https://linkedin.com/in/..."
+          />
+
+          <TextInput
+            label="GitHub URL"
+            value={formData.gitHubUrl}
+            error={errors.gitHubUrl}
+            onChange={(value) => onChange("gitHubUrl", value)}
+            placeholder="https://github.com/..."
+          />
+        </div>
+
+        <FieldError message={errors.publicLinks} />
+      </section>
+
+      <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
         <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h3 className="text-lg font-bold text-white">Certificates</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Add public certificate proof if available.
+              Add at least one certificate or public certificate proof.
             </p>
           </div>
 
@@ -683,6 +746,9 @@ function VerificationProfileForm({
             Add Certificate
           </button>
         </div>
+
+        <FieldError message={errors.certificates} />
+        <FieldError message={errors.duplicateCertificates} />
 
         <div className="space-y-4">
           {formData.certificates.map((certificate, index) => (
@@ -707,6 +773,7 @@ function VerificationProfileForm({
                 <TextInput
                   label="Certificate Name"
                   value={certificate.certificateName}
+                  error={errors[`certificateName_${index}`]}
                   onChange={(value) =>
                     onCertificateChange(index, "certificateName", value)
                   }
@@ -716,6 +783,7 @@ function VerificationProfileForm({
                 <TextInput
                   label="Certificate Issuer"
                   value={certificate.certificateIssuer}
+                  error={errors[`certificateIssuer_${index}`]}
                   onChange={(value) =>
                     onCertificateChange(index, "certificateIssuer", value)
                   }
@@ -725,6 +793,7 @@ function VerificationProfileForm({
                 <TextInput
                   label="Certificate URL"
                   value={certificate.certificateUrl}
+                  error={errors[`certificateUrl_${index}`]}
                   onChange={(value) =>
                     onCertificateChange(index, "certificateUrl", value)
                   }
@@ -742,15 +811,24 @@ function VerificationProfileForm({
             </div>
           ))}
         </div>
-      </div>
+      </section>
 
-      <div className="mt-8 flex justify-end gap-3">
+      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
         <button
           type="submit"
           disabled={saving}
           className="rounded-xl border border-purple-400/60 bg-purple-400/10 px-6 py-3 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? "Submitting..." : "Submit Verification Update"}
+          {saving ? "Submitting to AI..." : "Submit AI Verification"}
         </button>
       </div>
     </form>
@@ -883,61 +961,118 @@ function Alert({ type, title, message }) {
   );
 }
 
+function ResultModal({ modal, onClose, onBackProfile }) {
+  const icon =
+    modal.type === "success"
+      ? "check_circle"
+      : modal.type === "warning"
+      ? "warning"
+      : "error";
+
+  const color =
+    modal.type === "success"
+      ? "text-green-300"
+      : modal.type === "warning"
+      ? "text-yellow-300"
+      : "text-red-300";
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl">
+        <div className="mb-5 flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+            <span className={`material-symbols-outlined text-3xl ${color}`}>
+              {icon}
+            </span>
+          </div>
+
+          <div>
+            <h3 className="text-xl font-extrabold text-white">
+              {modal.title}
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-gray-300">
+              {modal.message}
+            </p>
+          </div>
+        </div>
+
+        {modal.detail && (
+          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
+            {modal.detail}
+          </div>
+        )}
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+          {modal.showEditAgain && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
+            >
+              Edit Again
+            </button>
+          )}
+
+          {modal.showBackProfile && (
+            <button
+              type="button"
+              onClick={onBackProfile}
+              className="rounded-xl border border-cyan-300/50 bg-cyan-300/10 px-5 py-3 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300 hover:text-black"
+            >
+              Back to Profile
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function validateBasicForm(formData) {
   const errors = {};
 
-  if (!String(formData.fullName || "").trim()) {
+  if (isEmpty(formData.fullName)) {
     errors.fullName = "Full name is required.";
   }
 
-  if (!String(formData.professionalTitle || "").trim()) {
+  if (isEmpty(formData.professionalTitle)) {
     errors.professionalTitle = "Professional title is required.";
   }
 
-  if (String(formData.professionalTitle || "").trim().length < 5) {
-    errors.professionalTitle =
-      "Professional title must be at least 5 characters.";
-  }
-
-  if (!String(formData.bio || "").trim()) {
+  if (isEmpty(formData.bio)) {
     errors.bio = "Bio is required.";
+  } else if (String(formData.bio).trim().length < 50) {
+    errors.bio = "Bio must be at least 50 characters.";
   }
 
-  if (String(formData.bio || "").trim().length < 20) {
-    errors.bio = "Bio must be at least 20 characters.";
-  }
-
-  const minBudget = Number(formData.expectedProjectBudgetMin);
-  const maxBudget = Number(formData.expectedProjectBudgetMax);
-  const duration = Number(formData.preferredProjectDurationDays);
-
-  if (formData.expectedProjectBudgetMin === "" || Number.isNaN(minBudget)) {
+  if (isEmpty(formData.expectedProjectBudgetMin)) {
     errors.expectedProjectBudgetMin = "Minimum budget is required.";
   }
 
-  if (minBudget < 0) {
-    errors.expectedProjectBudgetMin = "Minimum budget cannot be negative.";
-  }
-
-  if (formData.expectedProjectBudgetMax === "" || Number.isNaN(maxBudget)) {
+  if (isEmpty(formData.expectedProjectBudgetMax)) {
     errors.expectedProjectBudgetMax = "Maximum budget is required.";
   }
 
-  if (maxBudget < 0) {
-    errors.expectedProjectBudgetMax = "Maximum budget cannot be negative.";
-  }
-
-  if (
-    !Number.isNaN(minBudget) &&
-    !Number.isNaN(maxBudget) &&
-    maxBudget < minBudget
-  ) {
-    errors.expectedProjectBudgetMax =
-      "Maximum budget must be greater than or equal to minimum budget.";
-  }
-
-  if (formData.preferredProjectDurationDays === "" || Number.isNaN(duration)) {
+  if (isEmpty(formData.preferredProjectDurationDays)) {
     errors.preferredProjectDurationDays = "Preferred duration is required.";
+  }
+
+  const minBudget = Number(formData.expectedProjectBudgetMin || 0);
+  const maxBudget = Number(formData.expectedProjectBudgetMax || 0);
+  const duration = Number(formData.preferredProjectDurationDays || 0);
+
+  if (minBudget < 0) {
+    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
+  }
+
+  if (maxBudget < 0) {
+    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
+  }
+
+  if (minBudget && maxBudget && minBudget > maxBudget) {
+    errors.expectedProjectBudgetMax =
+      "Maximum budget must be greater than minimum budget.";
   }
 
   if (duration <= 0) {
@@ -945,8 +1080,8 @@ function validateBasicForm(formData) {
       "Preferred duration must be greater than 0.";
   }
 
-  if (formData.avatarUrl && !isValidUrl(formData.avatarUrl)) {
-    errors.avatarUrl = "Avatar URL must be valid.";
+  if (!isEmpty(formData.avatarUrl) && !isValidUrl(formData.avatarUrl)) {
+    errors.avatarUrl = "Avatar URL must start with http:// or https://";
   }
 
   return errors;
@@ -955,59 +1090,114 @@ function validateBasicForm(formData) {
 function validateVerificationForm(formData) {
   const errors = {};
 
-  if (!String(formData.skills || "").trim()) {
+  if (isEmpty(formData.skills)) {
     errors.skills = "Skills are required.";
+  } else if (String(formData.skills).trim().length < 10) {
+    errors.skills = "Skills must be more specific.";
   }
 
-  const skills = String(formData.skills || "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-  if (skills.length < 2) {
-    errors.skills = "Please enter at least 2 skills, separated by commas.";
-  }
-
-  const years = Number(formData.yearsOfExperience);
-
-  if (formData.yearsOfExperience === "" || Number.isNaN(years)) {
+  if (isEmpty(formData.yearsOfExperience)) {
     errors.yearsOfExperience = "Years of experience is required.";
   }
 
-  if (years < 0) {
-    errors.yearsOfExperience = "Years of experience cannot be negative.";
+  const years = Number(formData.yearsOfExperience || 0);
+
+  if (!isEmpty(formData.yearsOfExperience) && years < 0) {
+    errors.yearsOfExperience = "Years of experience must be 0 or higher.";
   }
 
-  if (formData.portfolioUrl && !isValidUrl(formData.portfolioUrl)) {
-    errors.portfolioUrl = "Portfolio URL must be valid.";
+  const publicLinks = [
+    formData.portfolioUrl,
+    formData.linkedInUrl,
+    formData.gitHubUrl,
+  ].filter((item) => !isEmpty(item));
+
+  if (publicLinks.length < 2) {
+    errors.publicLinks =
+      "Please add at least 2 links: Portfolio, LinkedIn, or GitHub.";
   }
 
-  if (formData.linkedInUrl && !isValidUrl(formData.linkedInUrl)) {
-    errors.linkedInUrl = "LinkedIn URL must be valid.";
+  ["portfolioUrl", "linkedInUrl", "gitHubUrl"].forEach((field) => {
+    if (!isEmpty(formData[field]) && !isValidUrl(formData[field])) {
+      errors[field] = "URL must start with http:// or https://";
+    }
+  });
+
+  const certificates = formData.certificates || [];
+
+  const validCertificates = certificates.filter(hasAnyCertificateValue);
+
+  if (validCertificates.length === 0) {
+    errors.certificates = "At least one certificate is required.";
   }
 
-  if (formData.gitHubUrl && !isValidUrl(formData.gitHubUrl)) {
-    errors.gitHubUrl = "GitHub URL must be valid.";
-  }
+  const certificateUrls = [];
 
-  const hasPublicProof =
-    String(formData.portfolioUrl || "").trim() ||
-    String(formData.linkedInUrl || "").trim() ||
-    String(formData.gitHubUrl || "").trim();
+  certificates.forEach((item, index) => {
+    const hasAnyValue = hasAnyCertificateValue(item);
 
-  const hasCertificateProof = (formData.certificates || []).some(
-    (item) =>
-      String(item.certificateName || "").trim() ||
-      String(item.certificateIssuer || "").trim() ||
-      String(item.certificateUrl || "").trim()
-  );
+    if (!hasAnyValue) return;
 
-  if (!hasPublicProof && !hasCertificateProof) {
-    errors.proof =
-      "Please add at least one public proof link or one certificate.";
+    if (isEmpty(item.certificateName)) {
+      errors[`certificateName_${index}`] = "Certificate name is required.";
+    }
+
+    if (isEmpty(item.certificateIssuer)) {
+      errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
+    }
+
+    if (isEmpty(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] = "Certificate URL is required.";
+    }
+
+    if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
+      errors[`certificateUrl_${index}`] =
+        "Certificate URL must start with http:// or https://";
+    }
+
+    if (!isEmpty(item.certificateUrl)) {
+      certificateUrls.push(String(item.certificateUrl).trim().toLowerCase());
+    }
+  });
+
+  if (certificateUrls.length !== new Set(certificateUrls).size) {
+    errors.duplicateCertificates = "Certificate URLs must not be duplicated.";
   }
 
   return errors;
+}
+
+function buildBasicPayload(formData) {
+  return {
+    fullName: String(formData.fullName || "").trim(),
+    avatarUrl: String(formData.avatarUrl || "").trim() || null,
+    professionalTitle: String(formData.professionalTitle || "").trim(),
+    bio: String(formData.bio || "").trim(),
+    expectedProjectBudgetMin: Number(formData.expectedProjectBudgetMin || 0),
+    expectedProjectBudgetMax: Number(formData.expectedProjectBudgetMax || 0),
+    preferredProjectDurationDays: Number(
+      formData.preferredProjectDurationDays || 0
+    ),
+    availableForWork: Boolean(formData.availableForWork),
+  };
+}
+
+function buildVerificationPayload(formData) {
+  return {
+    skills: String(formData.skills || "").trim(),
+    yearsOfExperience: Number(formData.yearsOfExperience || 0),
+    portfolioUrl: String(formData.portfolioUrl || "").trim() || null,
+    linkedInUrl: String(formData.linkedInUrl || "").trim() || null,
+    gitHubUrl: String(formData.gitHubUrl || "").trim() || null,
+    certificates: (formData.certificates || [])
+      .filter(hasAnyCertificateValue)
+      .map((item) => ({
+        certificateName: String(item.certificateName || "").trim(),
+        certificateIssuer: String(item.certificateIssuer || "").trim(),
+        certificateUrl: String(item.certificateUrl || "").trim(),
+        issuedAt: item.issuedAt || null,
+      })),
+  };
 }
 
 function normalizeCertificatesForForm(certificates) {
@@ -1021,6 +1211,15 @@ function normalizeCertificatesForForm(certificates) {
     certificateUrl: item.certificateUrl || item.CertificateUrl || "",
     issuedAt: toDateInputValue(item.issuedAt || item.IssuedAt),
   }));
+}
+
+function hasAnyCertificateValue(item) {
+  return (
+    !isEmpty(item?.certificateName) ||
+    !isEmpty(item?.certificateIssuer) ||
+    !isEmpty(item?.certificateUrl) ||
+    !isEmpty(item?.issuedAt)
+  );
 }
 
 function toSkillText(value) {
@@ -1039,14 +1238,18 @@ function toDateInputValue(value) {
   return date.toISOString().slice(0, 10);
 }
 
-function isValidUrl(value) {
-  try {
-    const url = new URL(value);
-
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
+function getReviewStatus(result) {
+  return String(
+    result?.profileReviewStatus ||
+      result?.ProfileReviewStatus ||
+      result?.reviewStatus ||
+      result?.ReviewStatus ||
+      result?.status ||
+      result?.Status ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
 }
 
 function getResultMessage(result) {
@@ -1062,13 +1265,22 @@ function getResultMessage(result) {
 }
 
 function getMissingInformation(result) {
-  return (
+  const value =
     result?.missingInformation ||
     result?.MissingInformation ||
     result?.missingInfo ||
     result?.MissingInfo ||
-    ""
-  );
+    result?.errors ||
+    result?.Errors ||
+    "";
+
+  if (Array.isArray(value)) return value.join(", ");
+
+  if (typeof value === "object" && value !== null) {
+    return Object.values(value).flat().join(", ");
+  }
+
+  return String(value || "");
 }
 
 function updateLocalUserStatus(status) {
@@ -1090,12 +1302,37 @@ function updateLocalUserStatus(status) {
   }
 }
 
+function isEmpty(value) {
+  return String(value || "").trim() === "";
+}
+
+function isValidUrl(value) {
+  if (isEmpty(value)) return false;
+
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  if (data?.message) return data.message;
+
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || fallback || "Something went wrong. Please try again.";
 }
