@@ -97,13 +97,12 @@ export default function NotificationDropdown() {
 
       {/* Dropdown */}
       {open && (
-        <div style={{ position: "absolute", right: 0, top: "calc(100% + 12px)", width: 380, background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.15)", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.8), 0 0 40px rgba(0,240,255,0.05)", backdropFilter: "blur(24px)", zIndex: 999, overflow: "hidden" }}>
+        <div style={{ position: "absolute", right: -12, top: "calc(100% + 16px)", width: 300, background: "linear-gradient(180deg, rgba(21,25,34,0.98), rgba(12,15,22,0.98))", border: "1px solid rgba(0,240,255,0.22)", borderRadius: 22, boxShadow: "0 24px 80px rgba(0,0,0,0.85), 0 0 50px rgba(0,240,255,0.08)", backdropFilter: "blur(28px)", zIndex: 999, overflow: "hidden" }}>
 
-          {/* Arrow */}
-          <div style={{ position: "absolute", top: -6, right: 14, width: 12, height: 12, background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.15)", borderRight: "none", borderBottom: "none", transform: "rotate(45deg)" }} />
+          
 
           {/* Header */}
-          <div style={{ padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ padding: "18px 22px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.025)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb" }}>Notifications</span>
               {unreadCount > 0 && (
@@ -145,9 +144,38 @@ export default function NotificationDropdown() {
                 <div
                   key={n.notificationId}
                   onClick={() => handleNotificationClick(n)}
-                  style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.05)", cursor: "pointer", background: isUnread ? "rgba(0,240,255,0.02)" : "transparent", transition: "background 0.2s", display: "flex", gap: 12, alignItems: "flex-start", position: "relative" }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = isUnread ? "rgba(0,240,255,0.02)" : "transparent")}
+                  style={{
+                    margin: "8px",
+                    padding: "12px",
+                    borderRadius: "14px",
+                    border: `1px solid ${
+                      isUnread
+                        ? "rgba(0,240,255,0.15)"
+                        : "rgba(255,255,255,0.06)"
+                    }`,
+                    cursor: "pointer",
+                    background: isUnread
+                      ? "rgba(0,240,255,0.04)"
+                      : "rgba(255,255,255,0.02)",
+                    transition: "all 0.25s ease",
+                    display: "flex",
+                    gap: 12,
+                    alignItems: "flex-start",
+                    position: "relative"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(0,240,255,0.08)";
+                    e.currentTarget.style.transform = "translateY(-2px)";
+                    e.currentTarget.style.boxShadow =
+                      "0 6px 20px rgba(0,240,255,0.12)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = isUnread
+                      ? "rgba(0,240,255,0.04)"
+                      : "rgba(255,255,255,0.02)";
+                    e.currentTarget.style.transform = "translateY(0)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }}
                 >
                   {/* Unread dot */}
                   {isUnread && (
@@ -155,7 +183,7 @@ export default function NotificationDropdown() {
                   )}
 
                   {/* Icon */}
-                  <div style={{ width: 38, height: 38, borderRadius: 10, background: cfg.bg, color: cfg.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  <div style={{ width: 42, height: 42, borderRadius: 10, background: cfg.bg, color: cfg.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{cfg.icon}</span>
                   </div>
 

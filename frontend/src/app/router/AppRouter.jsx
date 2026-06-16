@@ -30,6 +30,7 @@ import ClientJobRecommendationPage from "../../modules/client/pages/ClientJobRec
 import EditJobPage from "../../modules/client/pages/EditJobPage";
 import ClientProposalDetailPage from "../../modules/client/pages/ClientProposalDetailPage";
 import NotificationsPage from "../../modules/client/pages/NotificationsPage";
+import ClientReviewPage from "../../modules/client/pages/ClientReviewPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -97,6 +98,7 @@ export default function AppRouter() {
       <Route path="/client/jobs/:id/edit" element={ <RequireAuth> <EditJobPage /> </RequireAuth>} />
       <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />
       <Route path="/client/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+      <Route path="/client/projects/:id/review" element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
 
       {/* ── Expert routes ── */}
       <Route path="/expert"                                        element={<RequireAuth><ExpertDashboard /></RequireAuth>} />

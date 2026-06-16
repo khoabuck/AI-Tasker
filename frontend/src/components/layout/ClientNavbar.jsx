@@ -153,14 +153,14 @@ export default function ClientNavbar() {
       </Link>
 
       {/* Nav items */}
-      <ul className="hidden lg:flex items-center gap-8 h-full justify-center mx-auto">
+      <ul className="hidden lg:flex items-center gap-14 h-full justify-center mx-auto">
         {NAV_ITEMS.map((item) => (
           <NavItem key={item.label} {...item} />
         ))}
       </ul>
 
       {/* Phải: notification + avatar */}
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-8">
         <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block" />
 
         {/* Notification bell */}

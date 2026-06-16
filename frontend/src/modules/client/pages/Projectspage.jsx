@@ -174,6 +174,8 @@ function JobCard({ job, onStatusChange }) {
           AI Rec
         </button>
 
+
+
         {/* Edit — yellow, chỉ hiện khi DRAFT hoặc OPEN */}
         {canEdit && (
           <button
@@ -218,6 +220,47 @@ function JobCard({ job, onStatusChange }) {
             {actionLoading === "cancel" ? "..." : "Cancel"}
           </button>
         )}
+
+        {/* Review — chỉ hiện khi COMPLETED */}
+          {job.status === "COMPLETED" && (
+            <button
+              onClick={() => navigate(`/client/projects/${jobId}/review`)}
+              style={{
+                padding: "10px 14px",
+                background: "rgba(59,130,246,0.08)",
+                color: "#3b82f6",
+                border: "1px solid rgba(59,130,246,0.25)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                transition: "all 0.2s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59,130,246,0.15)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 12px rgba(59,130,246,0.2)";
+                e.currentTarget.style.borderColor = "#3b82f6";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(59,130,246,0.08)";
+                e.currentTarget.style.boxShadow = "none";
+                e.currentTarget.style.borderColor =
+                  "rgba(59,130,246,0.25)";
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 16 }}
+              >
+                star
+              </span>
+              Review
+            </button>
+          )}
       </div>
     </div>
   );

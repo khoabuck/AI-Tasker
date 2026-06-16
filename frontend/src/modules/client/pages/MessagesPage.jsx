@@ -84,7 +84,7 @@ export default function MessagesPage() {
         <div style={{ flex: 1, display: "flex", minHeight: 0 }}>
 
           {/* Sidebar */}
-          <aside style={{ width: 300, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.1)", background: "rgba(11,14,20,0.6)", display: "flex", flexDirection: "column" }}>
+          <aside style={{ width: 260, flexShrink: 0, borderRight: "1px solid rgba(255,255,255,0.1)", background: "rgba(11,14,20,0.6)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700 }}>Inbox</h2>
               <button style={{ padding: 6, borderRadius: 8, background: "#272a30", border: "none", color: "#adc6ff", cursor: "pointer" }}>
@@ -117,7 +117,7 @@ export default function MessagesPage() {
           </aside>
 
           {/* Chat window */}
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          <div style={{ flex: 1,width: "100%", display: "flex", flexDirection: "column", minWidth: 0 }}>
 
             {/* Chat header */}
             <div style={{ flexShrink: 0, height: 64, padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -146,7 +146,7 @@ export default function MessagesPage() {
               </div>
 
               {messages.map((msg) => (
-                <div key={msg.id} style={{ display: "flex", gap: 10, flexDirection: msg.isMe ? "row-reverse" : "row", alignSelf: msg.isMe ? "flex-end" : "flex-start", maxWidth: "80%" }}>
+                <div key={msg.id} style={{ display: "flex", gap: 10, flexDirection: msg.isMe ? "row-reverse" : "row", alignSelf: msg.isMe ? "flex-end" : "flex-start", maxWidth: "95%" }}>
                   {!msg.isMe && (
                     msg.avatar
                       ? <img src={msg.avatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", alignSelf: "flex-end", flexShrink: 0 }} />
@@ -168,7 +168,7 @@ export default function MessagesPage() {
             </div>
 
             {/* Input area */}
-            <div style={{ flexShrink: 0, padding: "8px 16px 12px" }}>
+            <div style={{ flexShrink: 0, padding: "10px 32px 16px" }}>
               <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: "8px 12px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 2, marginBottom: 6 }}>
                   {["add_circle", "image", "attach_file"].map((icon) => (
