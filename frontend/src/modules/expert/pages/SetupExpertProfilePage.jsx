@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
+import { useAuth } from "../../../context/AuthContext";
 
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
@@ -34,6 +35,7 @@ const emptyForm = {
 export default function SetupExpertProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { handleLogout: logoutContext } = useAuth();
 
   const isEditPage = location.pathname === "/expert/profile/edit";
   const draftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
@@ -377,8 +379,31 @@ export default function SetupExpertProfilePage() {
   };
 
   const handleLogout = async () => {
-    await authService.logout();
-    navigate("/login", { replace: true });
+    try {
+      if (typeof logoutContext === "function") {
+        logoutContext();
+      }
+    } catch (error) {
+      console.error("AUTH CONTEXT LOGOUT ERROR:", error);
+    }
+
+    try {
+      if (typeof authService.logout === "function") {
+        await authService.logout();
+      }
+    } catch (error) {
+      console.error("AUTH SERVICE LOGOUT ERROR:", error);
+    }
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+
+    sessionStorage.clear();
+
+    window.location.replace("/login");
   };
 
   if (loading) {
@@ -1168,7 +1193,4 @@ function getFriendlyError(err) {
     "";
 
   return String(rawMessage || "Something went wrong. Please try again.");
-
-  
-
 }
