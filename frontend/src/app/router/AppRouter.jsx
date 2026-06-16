@@ -56,6 +56,7 @@ import DeliverableDetailPage from "../../modules/expert/pages/DeliverableDetailP
 import MyDisputesPage from "../../modules/expert/pages/MyDisputesPage";
 import DisputeDetailPage from "../../modules/expert/pages/DisputeDetailPage";
 import ExpertNotificationsPage from "../../modules/expert/pages/ExpertNotificationsPage";
+import ExpertReviewsPage from "../../modules/expert/pages/ExpertReviewsPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -139,7 +140,7 @@ export default function AppRouter() {
       <Route path="/expert/milestones/:milestoneId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MilestoneDetailPage /></ProtectedRoute>} />
       <Route path="/expert/milestones/:milestoneId/deliverables" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverablesPage /></ProtectedRoute>} />
       <Route path="/expert/deliverables/:deliverableId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverableDetailPage /></ProtectedRoute>} />
-
+      <Route path="/expert/reviews" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertReviewsPage /></ProtectedRoute>} />
       <Route path="/expert/disputes" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyDisputesPage /></ProtectedRoute>} />
       <Route path="/expert/disputes/:disputeId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputeDetailPage /></ProtectedRoute>} />
 

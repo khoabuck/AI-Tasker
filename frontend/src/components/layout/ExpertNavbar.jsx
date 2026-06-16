@@ -163,6 +163,7 @@ export default function ExpertNavbar() {
     location.pathname.startsWith("/expert/milestones") ||
     location.pathname.startsWith("/expert/deliverables") ||
     location.pathname.startsWith("/expert/disputes") ||
+    location.pathname.startsWith("/expert/reviews") ||
     location.pathname.startsWith("/expert/messages");
 
   const getInitials = () => {
@@ -238,6 +239,12 @@ export default function ExpertNavbar() {
                 icon: "gavel",
                 label: "Disputes",
                 description: "Project dispute cases",
+              },
+              {
+                to: "/expert/reviews",
+                icon: "reviews",
+                label: "Reviews",
+                description: "Client ratings and feedback",
               },
               {
                 to: "/expert/messages",
@@ -325,6 +332,12 @@ export default function ExpertNavbar() {
                   label="Wallet"
                 />
 
+                <DropdownLink
+                  to="/expert/reviews"
+                  icon="reviews"
+                  label="Reviews"
+                />
+
                 <div className="my-2 border-t border-white/10" />
 
                 <DropdownLink to="/expert/jobs" icon="work" label="Find Jobs" />
@@ -396,6 +409,7 @@ function NotificationPopup({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-sm font-extrabold text-white">Notifications</p>
+
             <p className="mt-1 text-xs text-gray-500">
               {unreadCount > 0
                 ? `${unreadCount} unread notification(s)`
@@ -426,15 +440,16 @@ function NotificationPopup({
             </span>
 
             <p className="text-sm font-bold text-white">No notifications</p>
+
             <p className="mt-1 text-xs text-gray-500">
               New updates will appear here.
             </p>
           </div>
         ) : (
           <div className="space-y-1">
-            {notifications.map((notification) => (
+            {notifications.map((notification, index) => (
               <div
-                key={notification.notificationId}
+                key={notification.notificationId || index}
                 className={`rounded-xl border px-3 py-3 transition ${
                   notification.isRead
                     ? "border-transparent bg-transparent hover:bg-white/[0.04]"
@@ -523,6 +538,7 @@ function NavDropdown({ label, active, items }) {
         }`}
       >
         {label}
+
         <span className="material-symbols-outlined text-[16px] leading-none">
           expand_more
         </span>
@@ -542,6 +558,7 @@ function NavDropdown({ label, active, items }) {
 
               <span>
                 <span className="block text-sm font-bold">{item.label}</span>
+
                 <span className="mt-0.5 block text-xs leading-5 text-gray-500">
                   {item.description}
                 </span>
@@ -575,9 +592,12 @@ function getNotificationIcon(type) {
   if (value.includes("MILESTONE")) return "flag";
   if (value.includes("DELIVERABLE")) return "inventory_2";
   if (value.includes("DISPUTE")) return "gavel";
+
   if (value.includes("WALLET") || value.includes("WITHDRAW")) {
     return "account_balance_wallet";
   }
+
+  if (value.includes("REVIEW")) return "reviews";
 
   return "notifications";
 }
