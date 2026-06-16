@@ -14,13 +14,13 @@ const unwrapData = (response) => {
   if (!data) return null;
 
   if (data?.data?.wallet) return data.data.wallet;
-  if (data?.data?.balance) return data.data.balance;
+  if (data?.data?.balance !== undefined) return data.data.balance;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
   if (data?.data) return data.data;
 
   if (data?.wallet) return data.wallet;
-  if (data?.balance) return data.balance;
+  if (data?.balance !== undefined) return data.balance;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
 
@@ -54,80 +54,68 @@ const normalizeWallet = (wallet) => {
   if (!wallet) {
     return {
       walletId: null,
+      userId: null,
       balance: 0,
       availableBalance: 0,
-      pendingBalance: 0,
       lockedBalance: 0,
+      pendingBalance: 0,
+      totalEarning: 0,
       totalEarned: 0,
-      currency: "USD",
+      updatedAt: "",
+      raw: null,
     };
   }
 
-  const balance = Number(
+  const availableBalance = Number(
     getValue(
-      wallet.balance,
-      wallet.Balance,
       wallet.availableBalance,
       wallet.AvailableBalance,
-      wallet.amount,
-      wallet.Amount,
+      wallet.balance,
+      wallet.Balance,
+      0
+    )
+  );
+
+  const lockedBalance = Number(
+    getValue(
+      wallet.lockedBalance,
+      wallet.LockedBalance,
+      wallet.escrowAmount,
+      wallet.EscrowAmount,
+      wallet.lockedAmount,
+      wallet.LockedAmount,
+      0
+    )
+  );
+
+  const totalEarning = Number(
+    getValue(
+      wallet.totalEarning,
+      wallet.TotalEarning,
+      wallet.totalEarned,
+      wallet.TotalEarned,
+      wallet.totalIncome,
+      wallet.TotalIncome,
       0
     )
   );
 
   return {
     walletId: getValue(wallet.walletId, wallet.WalletId, wallet.id, wallet.Id),
-    userId: getValue(wallet.userId, wallet.UserId, null),
+    userId: getValue(wallet.userId, wallet.UserId),
 
-    balance,
-
-    availableBalance: Number(
-      getValue(
-        wallet.availableBalance,
-        wallet.AvailableBalance,
-        wallet.availableAmount,
-        wallet.AvailableAmount,
-        balance,
-        0
-      )
-    ),
-
+    balance: availableBalance,
+    availableBalance,
+    lockedBalance,
     pendingBalance: Number(
-      getValue(
-        wallet.pendingBalance,
-        wallet.PendingBalance,
-        wallet.pendingAmount,
-        wallet.PendingAmount,
-        0
-      )
+      getValue(wallet.pendingBalance, wallet.PendingBalance, 0)
     ),
 
-    lockedBalance: Number(
-      getValue(
-        wallet.lockedBalance,
-        wallet.LockedBalance,
-        wallet.escrowAmount,
-        wallet.EscrowAmount,
-        wallet.lockedAmount,
-        wallet.LockedAmount,
-        0
-      )
-    ),
+    totalEarning,
+    totalEarned: totalEarning,
 
-    totalEarned: Number(
-      getValue(
-        wallet.totalEarned,
-        wallet.TotalEarned,
-        wallet.totalIncome,
-        wallet.TotalIncome,
-        0
-      )
-    ),
-
-    currency: getValue(wallet.currency, wallet.Currency, "USD"),
-
-    createdAt: getValue(wallet.createdAt, wallet.CreatedAt, ""),
     updatedAt: getValue(wallet.updatedAt, wallet.UpdatedAt, ""),
+    createdAt: getValue(wallet.createdAt, wallet.CreatedAt, ""),
 
     raw: wallet,
   };
@@ -138,8 +126,6 @@ const normalizeBalance = (balanceData) => {
     return {
       balance: 0,
       availableBalance: 0,
-      pendingBalance: 0,
-      lockedBalance: 0,
     };
   }
 
@@ -147,58 +133,24 @@ const normalizeBalance = (balanceData) => {
     return {
       balance: balanceData,
       availableBalance: balanceData,
-      pendingBalance: 0,
-      lockedBalance: 0,
     };
   }
 
+  const balance = Number(
+    getValue(
+      balanceData.balance,
+      balanceData.Balance,
+      balanceData.availableBalance,
+      balanceData.AvailableBalance,
+      balanceData.amount,
+      balanceData.Amount,
+      0
+    )
+  );
+
   return {
-    balance: Number(
-      getValue(
-        balanceData.balance,
-        balanceData.Balance,
-        balanceData.availableBalance,
-        balanceData.AvailableBalance,
-        balanceData.amount,
-        balanceData.Amount,
-        0
-      )
-    ),
-
-    availableBalance: Number(
-      getValue(
-        balanceData.availableBalance,
-        balanceData.AvailableBalance,
-        balanceData.availableAmount,
-        balanceData.AvailableAmount,
-        balanceData.balance,
-        balanceData.Balance,
-        0
-      )
-    ),
-
-    pendingBalance: Number(
-      getValue(
-        balanceData.pendingBalance,
-        balanceData.PendingBalance,
-        balanceData.pendingAmount,
-        balanceData.PendingAmount,
-        0
-      )
-    ),
-
-    lockedBalance: Number(
-      getValue(
-        balanceData.lockedBalance,
-        balanceData.LockedBalance,
-        balanceData.escrowAmount,
-        balanceData.EscrowAmount,
-        balanceData.lockedAmount,
-        balanceData.LockedAmount,
-        0
-      )
-    ),
-
+    balance,
+    availableBalance: balance,
     raw: balanceData,
   };
 };
@@ -209,39 +161,26 @@ const normalizeTransaction = (transaction) => {
   const transactionId = getValue(
     transaction.transactionId,
     transaction.TransactionId,
-    transaction.paymentTransactionId,
-    transaction.PaymentTransactionId,
     transaction.id,
     transaction.Id
   );
-
-  const status = String(
-    getValue(transaction.status, transaction.Status, "PENDING")
-  )
-    .trim()
-    .toUpperCase();
 
   return {
     transactionId,
     id: transactionId,
 
-    type: getValue(
-      transaction.type,
-      transaction.Type,
-      transaction.transactionType,
-      transaction.TransactionType,
-      "TRANSACTION"
-    ),
+    escrowId: getValue(transaction.escrowId, transaction.EscrowId),
+    projectId: getValue(transaction.projectId, transaction.ProjectId),
+    milestoneId: getValue(transaction.milestoneId, transaction.MilestoneId),
+    userId: getValue(transaction.userId, transaction.UserId),
 
-    title: getValue(
-      transaction.title,
-      transaction.Title,
-      transaction.description,
-      transaction.Description,
-      transaction.type,
-      transaction.Type,
-      "Wallet Transaction"
-    ),
+    type: getValue(transaction.type, transaction.Type, "TRANSACTION"),
+
+    amount: Number(getValue(transaction.amount, transaction.Amount, 0)),
+
+    status: String(getValue(transaction.status, transaction.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
 
     description: getValue(
       transaction.description,
@@ -249,29 +188,13 @@ const normalizeTransaction = (transaction) => {
       ""
     ),
 
-    amount: Number(
-      getValue(
-        transaction.amount,
-        transaction.Amount,
-        transaction.totalAmount,
-        transaction.TotalAmount,
-        transaction.value,
-        transaction.Value,
-        0
-      )
-    ),
-
-    status,
-
-    createdAt: getValue(
-      transaction.createdAt,
-      transaction.CreatedAt,
-      transaction.paidAt,
-      transaction.PaidAt,
-      transaction.date,
-      transaction.Date,
+    referenceId: getValue(
+      transaction.referenceId,
+      transaction.ReferenceId,
       ""
     ),
+
+    createdAt: getValue(transaction.createdAt, transaction.CreatedAt, ""),
 
     raw: transaction,
   };
@@ -289,15 +212,13 @@ const normalizeWithdrawal = (withdrawal) => {
     withdrawal.Id
   );
 
-  const status = String(
-    getValue(withdrawal.status, withdrawal.Status, "PENDING")
-  )
-    .trim()
-    .toUpperCase();
-
   return {
     withdrawalRequestId,
     id: withdrawalRequestId,
+
+    userId: getValue(withdrawal.userId, withdrawal.UserId),
+    userFullName: getValue(withdrawal.userFullName, withdrawal.UserFullName, ""),
+    userEmail: getValue(withdrawal.userEmail, withdrawal.UserEmail, ""),
 
     amount: Number(getValue(withdrawal.amount, withdrawal.Amount, 0)),
 
@@ -309,34 +230,27 @@ const normalizeWithdrawal = (withdrawal) => {
       ""
     ),
 
-    bankAccountName: getValue(
+    bankAccountHolder: getValue(
+      withdrawal.bankAccountHolder,
+      withdrawal.BankAccountHolder,
       withdrawal.bankAccountName,
       withdrawal.BankAccountName,
-      withdrawal.accountHolderName,
-      withdrawal.AccountHolderName,
       ""
     ),
 
-    note: getValue(withdrawal.note, withdrawal.Note, ""),
+    status: String(getValue(withdrawal.status, withdrawal.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
 
-    adminNote: getValue(
-      withdrawal.adminNote,
-      withdrawal.AdminNote,
-      withdrawal.rejectReason,
-      withdrawal.RejectReason,
-      ""
-    ),
-
-    status,
+    adminNote: getValue(withdrawal.adminNote, withdrawal.AdminNote, ""),
 
     createdAt: getValue(withdrawal.createdAt, withdrawal.CreatedAt, ""),
 
-    processedAt: getValue(
-      withdrawal.processedAt,
-      withdrawal.ProcessedAt,
-      withdrawal.approvedAt,
-      withdrawal.ApprovedAt,
-      ""
+    processedAt: getValue(withdrawal.processedAt, withdrawal.ProcessedAt, ""),
+
+    processedByAdminId: getValue(
+      withdrawal.processedByAdminId,
+      withdrawal.ProcessedByAdminId
     ),
 
     raw: withdrawal,
@@ -344,35 +258,23 @@ const normalizeWithdrawal = (withdrawal) => {
 };
 
 const buildWithdrawalPayload = (formData) => {
-  const amount = Number(formData.amount);
-
   return {
-    amount,
+    amount: Number(formData.amount),
     bankName: trim(formData.bankName),
     bankAccountNumber: trim(formData.bankAccountNumber),
-
-    // Gửi cả 2 field để tránh lệch tên DTO backend.
-    bankAccountName: trim(formData.bankAccountName),
-    accountHolderName: trim(formData.bankAccountName),
-
-    note: trim(formData.note) || null,
+    bankAccountHolder: trim(formData.bankAccountHolder),
   };
 };
 
 const expertWalletService = {
   async getWalletOverview() {
     /*
-      QUAN TRỌNG:
       Không gọi /wallets/me và /wallets/balance song song cho account mới.
-
-      Lý do:
-      Backend WalletService.GetOrCreateWalletAsync có thể bị race condition.
-      Nếu 2 API cùng lúc tạo wallet cho user mới, SQL sẽ báo duplicate UserId.
+      Lý do: backend GetOrCreateWalletAsync có thể bị duplicate Wallet UserId.
     */
-
     const walletResponse = await expertWalletApi.getMyWallet();
 
-    console.log("GET WALLET RESPONSE:", walletResponse?.data);
+    console.log("GET MY WALLET RESPONSE:", walletResponse?.data);
 
     const wallet = normalizeWallet(unwrapData(walletResponse));
 
@@ -384,24 +286,26 @@ const expertWalletService = {
       ]);
 
     console.log("GET WALLET BALANCE RESPONSE:", balanceResponse?.data);
-    console.log("GET TRANSACTIONS RESPONSE:", transactionsResponse?.data);
-    console.log("GET WITHDRAWALS RESPONSE:", withdrawalsResponse?.data);
+    console.log("GET MY TRANSACTIONS RESPONSE:", transactionsResponse?.data);
+    console.log("GET MY WITHDRAWALS RESPONSE:", withdrawalsResponse?.data);
 
     const balance = normalizeBalance(unwrapData(balanceResponse));
+
+    const transactions = unwrapListData(transactionsResponse)
+      .map(normalizeTransaction)
+      .filter(Boolean);
+
+    const withdrawals = unwrapListData(withdrawalsResponse)
+      .map(normalizeWithdrawal)
+      .filter(Boolean);
 
     return {
       wallet: {
         ...wallet,
         ...balance,
       },
-
-      transactions: unwrapListData(transactionsResponse)
-        .map(normalizeTransaction)
-        .filter(Boolean),
-
-      withdrawals: unwrapListData(withdrawalsResponse)
-        .map(normalizeWithdrawal)
-        .filter(Boolean),
+      transactions,
+      withdrawals,
     };
   },
 

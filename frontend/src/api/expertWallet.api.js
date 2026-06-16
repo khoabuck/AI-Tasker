@@ -21,8 +21,13 @@ const expertWalletApi = {
     return axiosInstance.get("/withdrawals/me");
   },
 
-  createDeposit(data) {
-    return axiosInstance.post("/wallets/deposit", data);
+  createDeposit({ amount, transactionRef } = {}) {
+    return axiosInstance.post("/wallets/deposit", null, {
+      params: {
+        amount,
+        transactionRef,
+      },
+    });
   },
 };
 
