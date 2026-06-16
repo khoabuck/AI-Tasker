@@ -640,7 +640,16 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Proposal>(entity =>
         {
-            entity.ToTable("Proposals");
+            entity.ToTable("Proposals", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Proposals_Status",
+                "[Status] IN ('SUBMITTED','COUNTER_OFFERED','ACCEPTED','REJECTED','WITHDRAWN','NOT_SELECTED')");
+
+                t.HasCheckConstraint(
+                "CK_Proposals_Price_Timeline",
+                "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0 AND ([CounterPrice] IS NULL OR [CounterPrice] > 0) AND ([CounterTimelineDays] IS NULL OR [CounterTimelineDays] > 0)");
+            });
 
             entity.HasKey(e => e.ProposalId);
 
@@ -681,14 +690,6 @@ public class AITaskerDbContext : DbContext
                 .IsUnique()
                 .HasFilter("[Status] = 'ACCEPTED'");
 
-            entity.HasCheckConstraint(
-                "CK_Proposals_Status",
-                "[Status] IN ('SUBMITTED','COUNTER_OFFERED','ACCEPTED','REJECTED','WITHDRAWN','NOT_SELECTED')");
-
-            entity.HasCheckConstraint(
-                "CK_Proposals_Price_Timeline",
-                "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0 AND ([CounterPrice] IS NULL OR [CounterPrice] > 0) AND ([CounterTimelineDays] IS NULL OR [CounterTimelineDays] > 0)");
-
             entity.HasOne(e => e.JobPosting)
                 .WithMany()
                 .HasForeignKey(e => e.JobId)
@@ -705,7 +706,12 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<ProposalMessage>(entity =>
         {
-            entity.ToTable("ProposalMessages");
+            entity.ToTable("ProposalMessages", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_ProposalMessages_MessageType",
+                "[MessageType] IN ('TEXT','SYSTEM','AGREEMENT')");
+            });
 
             entity.HasKey(e => e.ProposalMessageId);
 
@@ -738,10 +744,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.SenderUserId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasCheckConstraint(
-                "CK_ProposalMessages_MessageType",
-                "[MessageType] IN ('TEXT','SYSTEM','AGREEMENT')");
         });
 
         // =========================
@@ -749,7 +751,20 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<ProjectContract>(entity =>
         {
-            entity.ToTable("ProjectContracts");
+            entity.ToTable("ProjectContracts", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_ProjectContracts_Status",
+                "[Status] IN ('DRAFT','CONFIRMED','CANCELLED')");
+
+                t.HasCheckConstraint(
+                "CK_ProjectContracts_Source",
+                "[ContractSource] IN ('PROPOSAL','CHAT_AGREEMENT')");
+
+                t.HasCheckConstraint(
+                "CK_ProjectContracts_Amounts",
+                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0 AND [RevisionLimit] >= 0");
+            });
 
             entity.HasKey(e => e.ContractId);
 
@@ -815,18 +830,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.ExpertId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasCheckConstraint(
-                "CK_ProjectContracts_Status",
-                "[Status] IN ('DRAFT','CONFIRMED','CANCELLED')");
-
-            entity.HasCheckConstraint(
-                "CK_ProjectContracts_Source",
-                "[ContractSource] IN ('PROPOSAL','CHAT_AGREEMENT')");
-
-            entity.HasCheckConstraint(
-                "CK_ProjectContracts_Amounts",
-                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0 AND [RevisionLimit] >= 0");
         });
 
         // =========================
@@ -834,7 +837,16 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Project>(entity =>
         {
-            entity.ToTable("Projects");
+            entity.ToTable("Projects", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Projects_Status",
+                "[Status] IN ('PENDING_ESCROW','ACTIVE','DISPUTED','COMPLETED','CANCELLED')");
+
+                t.HasCheckConstraint(
+                "CK_Projects_TotalBudget",
+                "[TotalBudget] >= 0");
+            });
 
             entity.HasKey(e => e.ProjectId);
 
@@ -870,14 +882,6 @@ public class AITaskerDbContext : DbContext
                 .WithOne(m => m.Project)
                 .HasForeignKey(m => m.ProjectId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasCheckConstraint(
-                "CK_Projects_Status",
-                "[Status] IN ('PENDING_ESCROW','ACTIVE','DISPUTED','COMPLETED','CANCELLED')");
-
-            entity.HasCheckConstraint(
-                "CK_Projects_TotalBudget",
-                "[TotalBudget] >= 0");
         });
 
         // =========================
@@ -885,7 +889,28 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Milestone>(entity =>
         {
-            entity.ToTable("Milestones");
+            entity.ToTable("Milestones", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Milestones_Amount",
+                "[Amount] >= 0");
+
+                t.HasCheckConstraint(
+                "CK_Milestones_OrderIndex",
+                "[OrderIndex] > 0");
+
+                t.HasCheckConstraint(
+                "CK_Milestones_Revision",
+                "[RevisionLimit] >= 0 AND [RevisionUsed] >= 0 AND [RevisionUsed] <= [RevisionLimit]");
+
+                t.HasCheckConstraint(
+                "CK_Milestones_Status",
+                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
+
+                t.HasCheckConstraint(
+                "CK_Milestones_PaymentStatus",
+                "[PaymentStatus] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','PARTIAL_REFUND')");
+            });
 
             entity.HasKey(e => e.MilestoneId);
 
@@ -928,26 +953,6 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.Status);
 
             entity.HasIndex(e => e.PaymentStatus);
-
-            entity.HasCheckConstraint(
-                "CK_Milestones_Amount",
-                "[Amount] >= 0");
-
-            entity.HasCheckConstraint(
-                "CK_Milestones_OrderIndex",
-                "[OrderIndex] > 0");
-
-            entity.HasCheckConstraint(
-                "CK_Milestones_Revision",
-                "[RevisionLimit] >= 0 AND [RevisionUsed] >= 0 AND [RevisionUsed] <= [RevisionLimit]");
-
-            entity.HasCheckConstraint(
-                "CK_Milestones_Status",
-                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
-
-            entity.HasCheckConstraint(
-                "CK_Milestones_PaymentStatus",
-                "[PaymentStatus] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','PARTIAL_REFUND')");
         });
 
         // =========================
@@ -955,7 +960,12 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Wallet>(entity =>
         {
-            entity.ToTable("Wallets");
+            entity.ToTable("Wallets", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Wallets_Balances",
+                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
+            });
 
             entity.HasKey(w => w.WalletId);
 
@@ -972,10 +982,6 @@ public class AITaskerDbContext : DbContext
                 .WithOne()
                 .HasForeignKey<Wallet>(w => w.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasCheckConstraint(
-                "CK_Wallets_Balances",
-                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
         });
 
         // =========================
@@ -983,7 +989,12 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Transaction>(entity =>
         {
-            entity.ToTable("Transactions");
+            entity.ToTable("Transactions", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Transactions_Status",
+                "[Status] IN ('PENDING','SUCCESS','FAILED','CANCELLED')");
+            });
 
             entity.HasKey(t => t.TransactionId);
 
@@ -1043,10 +1054,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(t => t.MilestoneId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasCheckConstraint(
-                "CK_Transactions_Status",
-                "[Status] IN ('PENDING','SUCCESS','FAILED','CANCELLED')");
         });
 
         // =========================
@@ -1054,7 +1061,16 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Escrow>(entity =>
         {
-            entity.ToTable("Escrows");
+            entity.ToTable("Escrows", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Escrows_Amount",
+                "[Amount] >= 0");
+
+                t.HasCheckConstraint(
+                "CK_Escrows_Status",
+                "[Status] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','RESOLVED')");
+            });
 
             entity.HasKey(e => e.EscrowId);
 
@@ -1095,14 +1111,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(e => e.ClientProfileId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasCheckConstraint(
-                "CK_Escrows_Amount",
-                "[Amount] >= 0");
-
-            entity.HasCheckConstraint(
-                "CK_Escrows_Status",
-                "[Status] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','RESOLVED')");
         });
 
         // =========================
@@ -1110,7 +1118,16 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Deliverable>(entity =>
         {
-            entity.ToTable("Deliverables");
+            entity.ToTable("Deliverables", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Deliverables_VersionNumber",
+                "[VersionNumber] > 0");
+
+                t.HasCheckConstraint(
+                "CK_Deliverables_Status",
+                "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
+            });
 
             entity.HasKey(d => d.DeliverableId);
 
@@ -1161,14 +1178,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.MilestoneId)
                 .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasCheckConstraint(
-                "CK_Deliverables_VersionNumber",
-                "[VersionNumber] > 0");
-
-            entity.HasCheckConstraint(
-                "CK_Deliverables_Status",
-                "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
         });
 
         // =========================
@@ -1176,7 +1185,20 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Dispute>(entity =>
         {
-            entity.ToTable("Disputes");
+            entity.ToTable("Disputes", t =>
+            {
+                t.HasCheckConstraint(
+                "CK_Disputes_Amount",
+                "[DisputedAmount] > 0");
+
+                t.HasCheckConstraint(
+                "CK_Disputes_Status",
+                "[Status] IN ('OPEN','RESOLVED','CANCELLED')");
+
+                t.HasCheckConstraint(
+                "CK_Disputes_ResolutionType",
+                "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT','PARTIAL_SPLIT')");
+            });
 
             entity.HasKey(d => d.DisputeId);
 
@@ -1258,18 +1280,6 @@ public class AITaskerDbContext : DbContext
                 .WithOne(e => e.Dispute)
                 .HasForeignKey(e => e.DisputeId)
                 .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasCheckConstraint(
-                "CK_Disputes_Amount",
-                "[DisputedAmount] > 0");
-
-            entity.HasCheckConstraint(
-                "CK_Disputes_Status",
-                "[Status] IN ('OPEN','RESOLVED','CANCELLED')");
-
-            entity.HasCheckConstraint(
-                "CK_Disputes_ResolutionType",
-                "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT','PARTIAL_SPLIT')");
         });
 
         // =========================
@@ -1311,7 +1321,13 @@ public class AITaskerDbContext : DbContext
         // =========================
         modelBuilder.Entity<Review>(entity =>
         {
-            entity.ToTable("Reviews");
+            entity.ToTable("Reviews", t =>
+            {
+                
+                t.HasCheckConstraint(
+                "CK_Reviews_Rating",
+                "[Rating] BETWEEN 1 AND 5");
+            });
 
             entity.HasKey(r => r.ReviewId);
 
@@ -1345,10 +1361,6 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(r => r.ExpertId)
                 .OnDelete(DeleteBehavior.Restrict);
-                
-            entity.HasCheckConstraint(
-                "CK_Reviews_Rating",
-                "[Rating] BETWEEN 1 AND 5");
         });
 
         // =========================
