@@ -11,22 +11,31 @@ namespace AITasker.Infrastructure.Banking
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusActive = "ACTIVE";
 
+        private const string JobStatusClosed = "CLOSED";
+
+        private const string ProposalStatusAccepted = "ACCEPTED";
+        private const string ProposalStatusRejected = "REJECTED";
+        private const string ProposalStatusWithdrawn = "WITHDRAWN";
+        private const string ProposalStatusNotSelected = "NOT_SELECTED";
+
+        private const string ContractStatusConfirmed = "CONFIRMED";
+
         private const string MilestoneStatusPending = "PENDING";
         private const string MilestoneStatusFunded = "FUNDED";
+        private const string MilestoneStatusSubmitted = "SUBMITTED";
         private const string MilestoneStatusApproved = "APPROVED";
-        private const string MilestoneStatusDisputed = "DISPUTED";
 
         private const string PaymentStatusPending = "PENDING";
         private const string PaymentStatusLocked = "LOCKED";
         private const string PaymentStatusReleased = "RELEASED";
-        private const string PaymentStatusRefunded = "REFUNDED";
-        private const string PaymentStatusFrozen = "FROZEN";
 
-        private const string EscrowStatusPending = "PENDING";
         private const string EscrowStatusLocked = "LOCKED";
         private const string EscrowStatusReleased = "RELEASED";
-        private const string EscrowStatusRefunded = "REFUNDED";
-        private const string EscrowStatusFrozen = "FROZEN";
+
+        private const string DeliverableStatusSubmitted = "SUBMITTED";
+        private const string DeliverableStatusApproved = "APPROVED";
+
+        private const string DisputeStatusOpen = "OPEN";
 
         private const string TransactionStatusSuccess = "SUCCESS";
 
@@ -35,9 +44,7 @@ namespace AITasker.Infrastructure.Banking
         private const string TxEscrowLock = "ESCROW_LOCK";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxEscrowReceive = "ESCROW_RECEIVE";
-        private const string TxRefund = "REFUND";
         private const string TxPlatformFee = "PLATFORM_FEE";
-        private const string TxEscrowFreeze = "ESCROW_FREEZE";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -50,46 +57,15 @@ namespace AITasker.Infrastructure.Banking
             _notificationService = notificationService;
         }
 
-        private async Task<Wallet> GetOrCreateWalletAsync(int userId)
+        public async Task<decimal> GetBalanceAsync(int userId)
         {
-            var wallet = await _context.Wallets
-                .FirstOrDefaultAsync(w => w.UserId == userId);
-
-            if (wallet == null)
-            {
-                var userExists = await _context.Users
-                    .AnyAsync(u => u.UserId == userId);
-
-                if (!userExists)
-                {
-                    throw new InvalidOperationException("User not found.");
-                }
-
-                wallet = new Wallet
-                {
-                    UserId = userId,
-                    AvailableBalance = 0m,
-                    LockedBalance = 0m,
-                    TotalEarning = 0m,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.Wallets.Add(wallet);
-                await _context.SaveChangesAsync();
-            }
-
-            return wallet;
+            var wallet = await GetOrCreateWalletAsync(userId);
+            return wallet.AvailableBalance;
         }
 
         public async Task<Wallet> GetWalletByUserIdAsync(int userId)
         {
             return await GetOrCreateWalletAsync(userId);
-        }
-
-        public async Task<decimal> GetBalanceAsync(int userId)
-        {
-            var wallet = await GetOrCreateWalletAsync(userId);
-            return wallet.AvailableBalance;
         }
 
         public async Task<WalletResponse> GetMyWalletAsync(int userId)
@@ -116,7 +92,10 @@ namespace AITasker.Infrastructure.Banking
             int projectId)
         {
             var project = await GetProjectAsync(projectId);
-            await EnsureUserCanAccessProjectAsync(currentUserId, project);
+
+            await EnsureUserCanAccessProjectAsync(
+                currentUserId,
+                project);
 
             var escrows = await _context.Escrows
                 .AsNoTracking()
@@ -286,6 +265,14 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Project must be PENDING_ESCROW before locking escrow.");
                 }
 
+                if (!string.Equals(contract.Status, ContractStatusConfirmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Contract must be CONFIRMED by both parties before locking escrow.");
+                }
+
+                var proposal = await GetProposalAsync(contract.ProposalId);
+                var job = await GetJobAsync(proposal.JobId);
+
                 var milestones = await _context.Milestones
                     .Where(m => m.ProjectId == project.ProjectId)
                     .OrderBy(m => m.OrderIndex)
@@ -305,23 +292,25 @@ namespace AITasker.Infrastructure.Banking
                         $"Milestone total amount ({milestoneTotal}) must equal contract final price ({contract.FinalPrice}).");
                 }
 
-                var existingLockedEscrows = await _context.Escrows
-                    .Where(e =>
-                        e.ProjectId == project.ProjectId &&
-                        e.Status == EscrowStatusLocked)
+                var existingEscrows = await _context.Escrows
+                    .Where(e => e.ProjectId == project.ProjectId)
                     .ToListAsync();
 
-                if (existingLockedEscrows.Count == milestones.Count)
+                if (existingEscrows.Any())
                 {
-                    return await BuildProjectEscrowResponseAsync(
-                        project,
-                        null,
-                        "Project escrow is already locked.");
-                }
+                    var allLocked = existingEscrows.Count == milestones.Count &&
+                                    existingEscrows.All(e =>
+                                        string.Equals(e.Status, EscrowStatusLocked, StringComparison.OrdinalIgnoreCase));
 
-                if (existingLockedEscrows.Any())
-                {
-                    throw new InvalidOperationException("Project escrow is partially locked. Please check escrow records.");
+                    if (allLocked)
+                    {
+                        return await BuildProjectEscrowResponseAsync(
+                            project,
+                            null,
+                            "Project escrow is already locked.");
+                    }
+
+                    throw new InvalidOperationException("Project escrow is partially initialized. Please check escrow records.");
                 }
 
                 var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
@@ -337,7 +326,7 @@ namespace AITasker.Infrastructure.Banking
 
                 foreach (var milestone in milestones)
                 {
-                    var escrow = new Escrow
+                    _context.Escrows.Add(new Escrow
                     {
                         ProjectId = project.ProjectId,
                         MilestoneId = milestone.MilestoneId,
@@ -346,9 +335,7 @@ namespace AITasker.Infrastructure.Banking
                         Status = EscrowStatusLocked,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
-                    };
-
-                    _context.Escrows.Add(escrow);
+                    });
 
                     milestone.Status = MilestoneStatusFunded;
                     milestone.PaymentStatus = PaymentStatusLocked;
@@ -356,6 +343,25 @@ namespace AITasker.Infrastructure.Banking
 
                 project.Status = ProjectStatusActive;
                 project.StartDate ??= DateTime.UtcNow;
+
+                proposal.Status = ProposalStatusAccepted;
+
+                job.Status = JobStatusClosed;
+                job.UpdatedAt = DateTime.UtcNow;
+
+                var competingProposals = await _context.Proposals
+                    .Where(p =>
+                        p.JobId == job.JobPostingId &&
+                        p.ProposalId != proposal.ProposalId &&
+                        p.Status != ProposalStatusRejected &&
+                        p.Status != ProposalStatusWithdrawn &&
+                        p.Status != ProposalStatusNotSelected)
+                    .ToListAsync();
+
+                foreach (var competingProposal in competingProposals)
+                {
+                    competingProposal.Status = ProposalStatusNotSelected;
+                }
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -434,13 +440,18 @@ namespace AITasker.Infrastructure.Banking
                     throw new UnauthorizedAccessException("Only the project Client can lock milestone escrow.");
                 }
 
+                if (!string.Equals(contract.Status, ContractStatusConfirmed, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Contract must be CONFIRMED before locking milestone escrow.");
+                }
+
                 if (!string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("Project status does not allow milestone escrow lock.");
                 }
 
-                if (!string.Equals(milestone.Status, MilestoneStatusPending, StringComparison.OrdinalIgnoreCase) &&
+                if (!string.Equals(milestone.Status, MilestoneStatusPending, StringComparison.OrdinalIgnoreCase) ||
                     !string.Equals(milestone.PaymentStatus, PaymentStatusPending, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("Milestone must be pending before escrow lock.");
@@ -449,17 +460,16 @@ namespace AITasker.Infrastructure.Banking
                 var existingEscrow = await _context.Escrows
                     .FirstOrDefaultAsync(e => e.MilestoneId == milestoneId);
 
-                if (existingEscrow != null &&
-                    string.Equals(existingEscrow.Status, EscrowStatusLocked, StringComparison.OrdinalIgnoreCase))
-                {
-                    return await BuildProjectEscrowResponseAsync(
-                        project,
-                        milestone,
-                        "Milestone escrow is already locked.");
-                }
-
                 if (existingEscrow != null)
                 {
+                    if (string.Equals(existingEscrow.Status, EscrowStatusLocked, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return await BuildProjectEscrowResponseAsync(
+                            project,
+                            milestone,
+                            "Milestone escrow is already locked.");
+                    }
+
                     throw new InvalidOperationException("Milestone already has an escrow record.");
                 }
 
@@ -551,12 +561,36 @@ namespace AITasker.Infrastructure.Banking
                 var clientProfile = await GetClientProfileAsync(contract.ClientId);
                 var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
 
-                var user = await GetUserAsync(currentUserId);
-
-                if (clientProfile.UserId != currentUserId &&
-                    !string.Equals(user.Role, "ADMIN", StringComparison.OrdinalIgnoreCase))
+                if (clientProfile.UserId != currentUserId)
                 {
-                    throw new UnauthorizedAccessException("Only the project Client or Admin can release escrow.");
+                    throw new UnauthorizedAccessException("Only the project Client can approve deliverable and release escrow.");
+                }
+
+                if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Escrow can only be released when project is ACTIVE.");
+                }
+
+                if (!string.Equals(milestone.Status, MilestoneStatusSubmitted, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Milestone must have a submitted deliverable before escrow release.");
+                }
+
+                if (await HasOpenMilestoneDisputeAsync(milestoneId))
+                {
+                    throw new InvalidOperationException("This milestone has an open dispute. Resolve the dispute instead of releasing escrow directly.");
+                }
+
+                var latestSubmittedDeliverable = await _context.Deliverables
+                    .Where(d =>
+                        d.MilestoneId == milestoneId &&
+                        d.Status == DeliverableStatusSubmitted)
+                    .OrderByDescending(d => d.VersionNumber)
+                    .FirstOrDefaultAsync();
+
+                if (latestSubmittedDeliverable == null)
+                {
+                    throw new InvalidOperationException("No submitted deliverable found for this milestone.");
                 }
 
                 var escrow = await GetLockedEscrowByMilestoneAsync(milestoneId);
@@ -581,6 +615,9 @@ namespace AITasker.Infrastructure.Banking
 
                 milestone.Status = MilestoneStatusApproved;
                 milestone.PaymentStatus = PaymentStatusReleased;
+
+                latestSubmittedDeliverable.Status = DeliverableStatusApproved;
+                latestSubmittedDeliverable.ClientFeedback = null;
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -637,161 +674,20 @@ namespace AITasker.Infrastructure.Banking
             }
         }
 
-        public async Task<EscrowOperationResponse> RefundEscrowAsync(
+        public Task<EscrowOperationResponse> RefundEscrowAsync(
             int currentUserId,
             int milestoneId)
         {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
-                var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
-
-                var user = await GetUserAsync(currentUserId);
-
-                if (clientProfile.UserId != currentUserId &&
-                    !string.Equals(user.Role, "ADMIN", StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new UnauthorizedAccessException("Only the project Client or Admin can refund escrow.");
-                }
-
-                var escrow = await GetLockedOrFrozenEscrowByMilestoneAsync(milestoneId);
-
-                var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
-
-                if (clientWallet.LockedBalance < escrow.Amount)
-                {
-                    throw new InvalidOperationException("Client locked balance is not enough to refund escrow.");
-                }
-
-                clientWallet.LockedBalance -= escrow.Amount;
-                clientWallet.AvailableBalance += escrow.Amount;
-                clientWallet.UpdatedAt = DateTime.UtcNow;
-
-                escrow.Status = EscrowStatusRefunded;
-                escrow.UpdatedAt = DateTime.UtcNow;
-
-                milestone.PaymentStatus = PaymentStatusRefunded;
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = clientProfile.UserId,
-                    ProjectId = project.ProjectId,
-                    MilestoneId = milestone.MilestoneId,
-                    EscrowId = escrow.EscrowId,
-                    Amount = escrow.Amount,
-                    Type = TxRefund,
-                    Status = TransactionStatusSuccess,
-                    Description = $"[Escrow Refund] Refunded funds for Milestone ID {milestone.MilestoneId}",
-                    ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow refunded",
-                    $"Escrow for milestone '{milestone.Title}' has been refunded to your wallet.",
-                    "ESCROW_REFUNDED");
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Escrow refunded",
-                    $"Escrow for milestone '{milestone.Title}' has been refunded to the Client.",
-                    "ESCROW_REFUNDED");
-
-                return await BuildProjectEscrowResponseAsync(
-                    project,
-                    milestone,
-                    "Milestone escrow refunded successfully.");
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
+            throw new InvalidOperationException(
+                "Direct escrow refund is disabled. Use the Admin dispute resolution flow so dispute records, escrow status, and project status stay consistent.");
         }
 
-        public async Task<EscrowOperationResponse> FreezeEscrowAsync(
+        public Task<EscrowOperationResponse> FreezeEscrowAsync(
             int currentUserId,
             int milestoneId)
         {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
-                var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
-
-                var user = await GetUserAsync(currentUserId);
-
-                var userBelongsToProject =
-                    clientProfile.UserId == currentUserId ||
-                    expertProfile.UserId == currentUserId;
-
-                var userIsAdmin = string.Equals(user.Role, "ADMIN", StringComparison.OrdinalIgnoreCase);
-
-                if (!userBelongsToProject && !userIsAdmin)
-                {
-                    throw new UnauthorizedAccessException("Only project members or Admin can freeze escrow.");
-                }
-
-                var escrow = await GetLockedEscrowByMilestoneAsync(milestoneId);
-
-                escrow.Status = EscrowStatusFrozen;
-                escrow.UpdatedAt = DateTime.UtcNow;
-
-                milestone.Status = MilestoneStatusDisputed;
-                milestone.PaymentStatus = PaymentStatusFrozen;
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = currentUserId,
-                    ProjectId = project.ProjectId,
-                    MilestoneId = milestone.MilestoneId,
-                    EscrowId = escrow.EscrowId,
-                    Amount = 0,
-                    Type = TxEscrowFreeze,
-                    Status = TransactionStatusSuccess,
-                    Description = $"[Escrow Freeze] Frozen escrow for Milestone ID {milestone.MilestoneId}",
-                    ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow frozen",
-                    $"Escrow for milestone '{milestone.Title}' has been frozen due to dispute.",
-                    "ESCROW_FROZEN");
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Escrow frozen",
-                    $"Escrow for milestone '{milestone.Title}' has been frozen due to dispute.",
-                    "ESCROW_FROZEN");
-
-                return await BuildProjectEscrowResponseAsync(
-                    project,
-                    milestone,
-                    "Milestone escrow frozen successfully.");
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
+            throw new InvalidOperationException(
+                "Direct escrow freeze is disabled. Open a dispute so the dispute record and escrow freeze are created together.");
         }
 
         public async Task<bool> ReleaseEscrowAsync(int milestoneId)
@@ -803,7 +699,10 @@ namespace AITasker.Infrastructure.Banking
                 var contract = await GetContractAsync(project.ContractId);
                 var clientProfile = await GetClientProfileAsync(contract.ClientId);
 
-                await ReleaseEscrowAsync(clientProfile.UserId, milestoneId);
+                await ReleaseEscrowAsync(
+                    clientProfile.UserId,
+                    milestoneId);
+
                 return true;
             }
             catch
@@ -812,22 +711,42 @@ namespace AITasker.Infrastructure.Banking
             }
         }
 
-        public async Task<bool> RefundEscrowAsync(int milestoneId)
+        public Task<bool> RefundEscrowAsync(int milestoneId)
         {
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
+            return Task.FromResult(false);
+        }
 
-                await RefundEscrowAsync(clientProfile.UserId, milestoneId);
-                return true;
-            }
-            catch
+        private async Task<Wallet> GetOrCreateWalletAsync(int userId)
+        {
+            var wallet = await _context.Wallets
+                .FirstOrDefaultAsync(w => w.UserId == userId);
+
+            if (wallet != null)
             {
-                return false;
+                return wallet;
             }
+
+            var userExists = await _context.Users
+                .AnyAsync(u => u.UserId == userId);
+
+            if (!userExists)
+            {
+                throw new InvalidOperationException("User not found.");
+            }
+
+            wallet = new Wallet
+            {
+                UserId = userId,
+                AvailableBalance = 0m,
+                LockedBalance = 0m,
+                TotalEarning = 0m,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            _context.Wallets.Add(wallet);
+            await _context.SaveChangesAsync();
+
+            return wallet;
         }
 
         private async Task<EscrowOperationResponse> BuildProjectEscrowResponseAsync(
@@ -867,37 +786,6 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private async Task<Escrow> GetLockedEscrowByMilestoneAsync(int milestoneId)
-        {
-            var escrow = await _context.Escrows
-                .FirstOrDefaultAsync(e =>
-                    e.MilestoneId == milestoneId &&
-                    e.Status == EscrowStatusLocked);
-
-            if (escrow == null)
-            {
-                throw new InvalidOperationException("Locked escrow not found for this milestone.");
-            }
-
-            return escrow;
-        }
-
-        private async Task<Escrow> GetLockedOrFrozenEscrowByMilestoneAsync(int milestoneId)
-        {
-            var escrow = await _context.Escrows
-                .FirstOrDefaultAsync(e =>
-                    e.MilestoneId == milestoneId &&
-                    (e.Status == EscrowStatusLocked ||
-                     e.Status == EscrowStatusFrozen));
-
-            if (escrow == null)
-            {
-                throw new InvalidOperationException("Locked or frozen escrow not found for this milestone.");
-            }
-
-            return escrow;
-        }
-
         private async Task EnsureUserCanAccessProjectAsync(
             int currentUserId,
             Project project)
@@ -920,6 +808,28 @@ namespace AITasker.Infrastructure.Banking
             }
 
             throw new UnauthorizedAccessException("You do not have permission to access this project.");
+        }
+
+        private async Task<bool> HasOpenMilestoneDisputeAsync(int milestoneId)
+        {
+            return await _context.Disputes.AnyAsync(d =>
+                d.MilestoneId == milestoneId &&
+                d.Status == DisputeStatusOpen);
+        }
+
+        private async Task<Escrow> GetLockedEscrowByMilestoneAsync(int milestoneId)
+        {
+            var escrow = await _context.Escrows
+                .FirstOrDefaultAsync(e =>
+                    e.MilestoneId == milestoneId &&
+                    e.Status == EscrowStatusLocked);
+
+            if (escrow == null)
+            {
+                throw new InvalidOperationException("Locked escrow not found for this milestone.");
+            }
+
+            return escrow;
         }
 
         private async Task<User> GetUserAsync(int userId)
@@ -972,6 +882,32 @@ namespace AITasker.Infrastructure.Banking
             }
 
             return contract;
+        }
+
+        private async Task<Proposal> GetProposalAsync(int proposalId)
+        {
+            var proposal = await _context.Proposals
+                .FirstOrDefaultAsync(p => p.ProposalId == proposalId);
+
+            if (proposal == null)
+            {
+                throw new InvalidOperationException("Proposal not found.");
+            }
+
+            return proposal;
+        }
+
+        private async Task<JobPosting> GetJobAsync(int jobId)
+        {
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(j => j.JobPostingId == jobId);
+
+            if (job == null)
+            {
+                throw new InvalidOperationException("Job posting not found.");
+            }
+
+            return job;
         }
 
         private async Task<ClientProfile> GetClientProfileAsync(int clientProfileId)

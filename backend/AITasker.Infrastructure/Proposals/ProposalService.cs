@@ -10,10 +10,11 @@ namespace AITasker.Infrastructure.Proposals
     public class ProposalService : IProposalService
     {
         private const string StatusSubmitted = "SUBMITTED";
-        private const string StatusCounterOffer = "COUNTER_OFFER";
+        private const string StatusCounterOffer = "COUNTER_OFFERED";
         private const string StatusAccepted = "ACCEPTED";
         private const string StatusRejected = "REJECTED";
         private const string StatusWithdrawn = "WITHDRAWN";
+        private const string StatusNotSelected = "NOT_SELECTED";
 
         private const string ContractStatusDraft = "DRAFT";
         private const string ContractSourceProposal = "PROPOSAL";
@@ -229,6 +230,16 @@ namespace AITasker.Infrastructure.Proposals
 
             EnsureProposalNotFinalized(proposal);
 
+            var jobAlreadyHasAcceptedProposal = await _context.Proposals.AnyAsync(x =>
+                x.JobId == job.JobPostingId &&
+                x.ProposalId != proposal.ProposalId &&
+                x.Status == StatusAccepted);
+
+            if (normalizedDecision == "ACCEPT" && jobAlreadyHasAcceptedProposal)
+            {
+                throw new InvalidOperationException("This job already has an accepted proposal.");
+            }
+
             if (normalizedDecision == "REJECT")
             {
                 proposal.Status = StatusRejected;
@@ -247,6 +258,20 @@ namespace AITasker.Infrastructure.Proposals
             }
 
             proposal.Status = StatusAccepted;
+
+            var competingProposals = await _context.Proposals
+                .Where(x =>
+                    x.JobId == job.JobPostingId &&
+                    x.ProposalId != proposal.ProposalId &&
+                    x.Status != StatusRejected &&
+                    x.Status != StatusWithdrawn &&
+                    x.Status != StatusNotSelected)
+                .ToListAsync();
+
+            foreach (var competingProposal in competingProposals)
+            {
+                competingProposal.Status = StatusNotSelected;
+            }
 
             var contractExists = await _context.ProjectContracts
                 .AnyAsync(x => x.ProposalId == proposalId);
@@ -420,6 +445,11 @@ namespace AITasker.Infrastructure.Proposals
             if (proposal.Status == StatusWithdrawn)
             {
                 throw new InvalidOperationException("Proposal already withdrawn.");
+            }
+
+            if (proposal.Status == StatusNotSelected)
+            {
+                throw new InvalidOperationException("Proposal was already marked as not selected.");
             }
         }
 

@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
@@ -13,10 +14,185 @@ public class RecommendationService : IRecommendationService
     private const string ExpertReviewApproved = "APPROVED";
 
     private readonly AITaskerDbContext _dbContext;
+    private readonly IJobAssistantProvider _jobAssistantProvider;
 
-    public RecommendationService(AITaskerDbContext dbContext)
+    public RecommendationService(
+        AITaskerDbContext dbContext,
+        IJobAssistantProvider jobAssistantProvider
+    )
     {
         _dbContext = dbContext;
+        _jobAssistantProvider = jobAssistantProvider;
+    }
+
+    public async Task<PromptExpertRecommendationResponse> GetRecommendedExpertsFromPromptAsync(
+        int currentUserId,
+        string? currentUserRole,
+        PromptExpertRecommendationRequest request
+    )
+    {
+        var role = NormalizeRole(currentUserRole);
+
+        if (role != "CLIENT" && role != "ADMIN")
+        {
+            throw new InvalidOperationException(
+                "Only CLIENT or ADMIN can find expert recommendations from prompt."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Prompt))
+        {
+            throw new InvalidOperationException("Prompt is required.");
+        }
+
+        var prompt = request.Prompt.Trim();
+
+        var activeSkills = await _dbContext.Skills
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.SkillName)
+            .Select(x => new
+            {
+                x.SkillId,
+                x.SkillName,
+                x.Category
+            })
+            .ToListAsync();
+
+        if (activeSkills.Count == 0)
+        {
+            throw new InvalidOperationException("No active skills found in system.");
+        }
+
+        var availableSkillNames = activeSkills
+            .Select(x => x.SkillName)
+            .ToList();
+
+        var aiRequest = new JobAssistantRequest
+        {
+            RawRequirement = prompt
+        };
+
+        var aiResult = await _jobAssistantProvider.AnalyzeAsync(
+            aiRequest,
+            availableSkillNames
+        );
+
+        var normalizedAiSkillNames = aiResult.SuggestedSkillNames
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim().ToLowerInvariant())
+            .Distinct()
+            .ToHashSet();
+
+        var matchedSkills = activeSkills
+            .Where(x => normalizedAiSkillNames.Contains(
+                x.SkillName.Trim().ToLowerInvariant()
+            ))
+            .Select(x => new JobAssistantSkillResponse
+            {
+                SkillId = x.SkillId,
+                SkillName = x.SkillName,
+                Category = x.Category
+            })
+            .ToList();
+
+        if (matchedSkills.Count == 0)
+        {
+            return new PromptExpertRecommendationResponse
+            {
+                Prompt = prompt,
+                SuggestedTitle = aiResult.SuggestedTitle,
+                ImprovedDescription = aiResult.ImprovedDescription,
+                AiGeneratedDescription = aiResult.AiGeneratedDescription,
+                SuggestedProjectType = aiResult.SuggestedProjectType,
+                SuggestedComplexity = aiResult.SuggestedComplexity,
+                ExpectedDeliverables = aiResult.ExpectedDeliverables,
+                SuggestedSkillIds = new List<int>(),
+                SuggestedSkills = new List<JobAssistantSkillResponse>(),
+                Warnings = aiResult.Warnings ?? new List<string>
+                {
+                    "AI could not match any skill from the current skill list."
+                },
+                RecommendedExperts = new List<ExpertRecommendationResponse>()
+            };
+        }
+
+        var requiredSkillIds = matchedSkills
+            .Select(x => x.SkillId)
+            .Distinct()
+            .ToHashSet();
+
+        var temporaryJob = new JobPosting
+        {
+            Title = string.IsNullOrWhiteSpace(aiResult.SuggestedTitle)
+                ? "AI Project Request"
+                : aiResult.SuggestedTitle,
+
+            Description = string.IsNullOrWhiteSpace(aiResult.ImprovedDescription)
+                ? prompt
+                : aiResult.ImprovedDescription,
+
+            AiGeneratedDescription = aiResult.AiGeneratedDescription,
+
+            BudgetMin = 0,
+            BudgetMax = 999999999,
+
+            Deadline = DateTime.UtcNow.AddDays(30),
+
+            ProjectType = string.IsNullOrWhiteSpace(aiResult.SuggestedProjectType)
+                ? "AI Service"
+                : aiResult.SuggestedProjectType,
+
+            Complexity = string.IsNullOrWhiteSpace(aiResult.SuggestedComplexity)
+                ? "UNKNOWN"
+                : aiResult.SuggestedComplexity,
+
+            ExpectedDeliverables = string.IsNullOrWhiteSpace(aiResult.ExpectedDeliverables)
+                ? "AI solution based on client requirement."
+                : aiResult.ExpectedDeliverables,
+
+            Status = JobStatusOpen,
+            IsAiAssisted = true
+        };
+
+        var experts = await _dbContext.ExpertProfiles
+            .AsNoTracking()
+            .Include(x => x.User)
+            .Include(x => x.ExpertSkills)
+                .ThenInclude(x => x.Skill)
+            .Where(x =>
+                x.User.Status == UserStatusActive &&
+                x.ProfileReviewStatus == ExpertReviewApproved &&
+                x.AvailableForWork
+            )
+            .ToListAsync();
+
+        var recommendations = experts
+            .Select(expert => BuildExpertRecommendation(
+                expert,
+                temporaryJob,
+                requiredSkillIds
+            ))
+            .Where(x => x.MatchScore > 0)
+            .OrderByDescending(x => x.MatchScore)
+            .ThenByDescending(x => x.SkillMatchScore)
+            .ThenByDescending(x => x.ProfileScore)
+            .ToList();
+
+        return new PromptExpertRecommendationResponse
+        {
+            Prompt = prompt,
+            SuggestedTitle = aiResult.SuggestedTitle,
+            ImprovedDescription = aiResult.ImprovedDescription,
+            AiGeneratedDescription = aiResult.AiGeneratedDescription,
+            SuggestedProjectType = aiResult.SuggestedProjectType,
+            SuggestedComplexity = aiResult.SuggestedComplexity,
+            ExpectedDeliverables = aiResult.ExpectedDeliverables,
+            SuggestedSkillIds = matchedSkills.Select(x => x.SkillId).ToList(),
+            SuggestedSkills = matchedSkills,
+            Warnings = aiResult.Warnings ?? new List<string>(),
+            RecommendedExperts = recommendations
+        };
     }
 
     public async Task<List<ExpertRecommendationResponse>> GetRecommendedExpertsForJobAsync(
@@ -203,8 +379,6 @@ public class RecommendationService : IRecommendationService
             Bio = expert.Bio,
             SkillsText = expert.Skills,
 
-            // Field này vẫn là số năm expert tự khai, chỉ để FE hiển thị.
-            // Điểm recommendation dùng VerifiedYearsOfExperience.
             YearsOfExperience = expert.YearsOfExperience,
 
             ExpectedProjectBudgetMin = expert.ExpectedProjectBudgetMin,

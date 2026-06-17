@@ -129,113 +129,35 @@ namespace AITasker.Api.Controllers
 
         [HttpPost("milestones/{milestoneId:int}/release")]
         [Authorize(Roles = "CLIENT,ADMIN")]
-        public async Task<IActionResult> ReleaseFunds(int milestoneId)
+        public IActionResult ReleaseFunds(int milestoneId)
         {
-            try
+            return BadRequest(new
             {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _walletService.ReleaseEscrowAsync(
-                    currentUserId,
-                    milestoneId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
+                success = false,
+                message = "Use /api/deliverables/{deliverableId}/approve to approve work and release escrow. Direct escrow release is disabled to keep Deliverable -> Escrow flow consistent."
+            });
         }
 
         [HttpPost("milestones/{milestoneId:int}/refund")]
         [Authorize(Roles = "CLIENT,ADMIN")]
-        public async Task<IActionResult> RefundFunds(int milestoneId)
+        public IActionResult RefundFunds(int milestoneId)
         {
-            try
+            return BadRequest(new
             {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _walletService.RefundEscrowAsync(
-                    currentUserId,
-                    milestoneId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
+                success = false,
+                message = "Use the Admin dispute resolution endpoint to refund escrow. Direct refund is disabled to keep Dispute -> Escrow flow consistent."
+            });
         }
 
         [HttpPost("milestones/{milestoneId:int}/freeze")]
         [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public async Task<IActionResult> FreezeFunds(int milestoneId)
+        public IActionResult FreezeFunds(int milestoneId)
         {
-            try
+            return BadRequest(new
             {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _walletService.FreezeEscrowAsync(
-                    currentUserId,
-                    milestoneId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
+                success = false,
+                message = "Use the dispute endpoint to freeze escrow. Direct freeze is disabled so Dispute and Escrow are created/updated together."
+            });
         }
 
         private int GetCurrentUserId()

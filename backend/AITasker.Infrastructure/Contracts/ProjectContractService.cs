@@ -15,6 +15,7 @@ namespace AITasker.Infrastructure.Contracts
         private const string ContractStatusConfirmed = "CONFIRMED";
 
         private const string ContractSourceProposal = "PROPOSAL";
+        private const string ContractSourceChatAgreement = "CHAT_AGREEMENT";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
 
@@ -96,6 +97,22 @@ namespace AITasker.Infrastructure.Contracts
 
             EnsureUserBelongsToProposal(userId, clientProfile, expertProfile);
 
+            var proposalAccepted = string.Equals(
+                proposal.Status,
+                ProposalStatusAccepted,
+                StringComparison.OrdinalIgnoreCase);
+
+            var hasBothPartyAgreement = await HasBothPartyAgreementAsync(
+                proposal.ProposalId,
+                clientProfile.UserId,
+                expertProfile.UserId);
+
+            if (!proposalAccepted && !hasBothPartyAgreement)
+            {
+                throw new InvalidOperationException(
+                    "Proposal must be ACCEPTED or both Client and Expert must mark agreement in negotiation before creating contract draft.");
+            }
+
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == request.ProposalId);
 
@@ -115,8 +132,8 @@ namespace AITasker.Infrastructure.Contracts
                 request.AcceptanceCriteria.Trim(),
                 request.RevisionLimit,
                 request.PaymentTerms.Trim(),
-                ContractSourceProposal,
-                null);
+                proposalAccepted ? ContractSourceProposal : ContractSourceChatAgreement,
+                proposalAccepted ? null : await BuildAgreementSummaryAsync(proposal.ProposalId));
 
             _context.ProjectContracts.Add(contract);
             await _context.SaveChangesAsync();
@@ -336,6 +353,53 @@ namespace AITasker.Infrastructure.Contracts
             _context.Projects.Add(project);
 
             return project;
+        }
+
+        private async Task<bool> HasBothPartyAgreementAsync(
+            int proposalId,
+            int clientUserId,
+            int expertUserId)
+        {
+            var agreedUserIds = await _context.ProposalMessages
+                .AsNoTracking()
+                .Where(m =>
+                    m.ProposalId == proposalId &&
+                    m.IsAgreementMarked &&
+                    (m.SenderUserId == clientUserId || m.SenderUserId == expertUserId))
+                .Select(m => m.SenderUserId)
+                .Distinct()
+                .ToListAsync();
+
+            return agreedUserIds.Contains(clientUserId) &&
+                   agreedUserIds.Contains(expertUserId);
+        }
+
+        private async Task<string> BuildAgreementSummaryAsync(int proposalId)
+        {
+            var latestMessages = await _context.ProposalMessages
+                .AsNoTracking()
+                .Where(m => m.ProposalId == proposalId)
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(5)
+                .Select(m => new
+                {
+                    m.SenderUserId,
+                    m.MessageType,
+                    m.Content,
+                    m.CreatedAt
+                })
+                .ToListAsync();
+
+            var summaryLines = latestMessages
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => m.MessageType == "AGREEMENT"
+                    ? $"User {m.SenderUserId} marked agreement at {m.CreatedAt:O}."
+                    : $"User {m.SenderUserId}: {m.Content}")
+                .ToList();
+
+            return summaryLines.Count == 0
+                ? "Contract created from chat agreement."
+                : string.Join(Environment.NewLine, summaryLines);
         }
 
         private static void ValidateCreateRequest(CreateContractRequest request)

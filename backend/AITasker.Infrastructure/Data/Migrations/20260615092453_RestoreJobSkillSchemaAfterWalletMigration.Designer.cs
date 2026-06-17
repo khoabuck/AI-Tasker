@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260615092453_RestoreJobSkillSchemaAfterWalletMigration")]
+    partial class RestoreJobSkillSchemaAfterWalletMigration
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -155,8 +158,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DeliverableId"));
 
                     b.Property<string>("ClientFeedback")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DemoUrl")
                         .HasMaxLength(500)
@@ -164,8 +166,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("ExpertId")
                         .HasColumnType("int");
@@ -175,8 +176,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("HandoverNotes")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("MilestoneId")
                         .HasColumnType("int");
@@ -200,19 +200,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("ExpertId");
 
-                    b.HasIndex("MilestoneId");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("MilestoneId", "VersionNumber")
-                        .IsUnique();
-
-                    b.ToTable("Deliverables", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Deliverables_Status", "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
-
-                            t.HasCheckConstraint("CK_Deliverables_VersionNumber", "[VersionNumber] > 0");
-                        });
+                    b.ToTable("Deliverables", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
@@ -264,28 +252,17 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("DisputeId");
 
+                    b.HasIndex("MilestoneId");
+
                     b.HasIndex("OpenedByUserId");
+
+                    b.HasIndex("ProjectId");
 
                     b.HasIndex("RespondentUserId");
 
-                    b.HasIndex("MilestoneId", "Status")
-                        .IsUnique()
-                        .HasFilter("[MilestoneId] IS NOT NULL AND [Status] = 'OPEN'");
+                    b.HasIndex("Status");
 
-                    b.HasIndex("ProjectId", "Status");
-
-                    b.HasIndex("ProjectId", "Status", "MilestoneId")
-                        .IsUnique()
-                        .HasFilter("[MilestoneId] IS NULL AND [Status] = 'OPEN'");
-
-                    b.ToTable("Disputes", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Disputes_Amount", "[DisputedAmount] > 0");
-
-                            t.HasCheckConstraint("CK_Disputes_ResolutionType", "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT','PARTIAL_SPLIT')");
-
-                            t.HasCheckConstraint("CK_Disputes_Status", "[Status] IN ('OPEN','RESOLVED','CANCELLED')");
-                        });
+                    b.ToTable("Disputes", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.DisputeEvidence", b =>
@@ -399,14 +376,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("ProjectId");
 
-                    b.HasIndex("Status");
-
-                    b.ToTable("Escrows", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Escrows_Amount", "[Amount] >= 0");
-
-                            t.HasCheckConstraint("CK_Escrows_Status", "[Status] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','RESOLVED')");
-                        });
+                    b.ToTable("Escrows", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertCertificate", b =>
@@ -773,8 +743,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("PaymentStatus")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("ProjectId")
                         .HasColumnType("int");
@@ -787,37 +756,17 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("MilestoneId");
 
-                    b.HasIndex("PaymentStatus");
-
                     b.HasIndex("ProjectId");
 
-                    b.HasIndex("Status");
-
-                    b.HasIndex("ProjectId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("Milestones", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Milestones_Amount", "[Amount] >= 0");
-
-                            t.HasCheckConstraint("CK_Milestones_OrderIndex", "[OrderIndex] > 0");
-
-                            t.HasCheckConstraint("CK_Milestones_PaymentStatus", "[PaymentStatus] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','PARTIAL_REFUND')");
-
-                            t.HasCheckConstraint("CK_Milestones_Revision", "[RevisionLimit] >= 0 AND [RevisionUsed] >= 0 AND [RevisionUsed] <= [RevisionLimit]");
-
-                            t.HasCheckConstraint("CK_Milestones_Status", "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
-                        });
+                    b.ToTable("Milestones", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Notification", b =>
@@ -919,13 +868,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<decimal>("TotalBudget")
                         .HasColumnType("decimal(18,2)");
@@ -935,14 +882,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("ContractId")
                         .IsUnique();
 
-                    b.HasIndex("Status");
-
-                    b.ToTable("Projects", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Projects_Status", "[Status] IN ('PENDING_ESCROW','ACTIVE','DISPUTED','COMPLETED','CANCELLED')");
-
-                            t.HasCheckConstraint("CK_Projects_TotalBudget", "[TotalBudget] >= 0");
-                        });
+                    b.ToTable("Projects", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ProjectContract", b =>
@@ -1032,14 +972,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("ProjectContracts", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProjectContracts_Amounts", "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0 AND [RevisionLimit] >= 0");
-
-                            t.HasCheckConstraint("CK_ProjectContracts_Source", "[ContractSource] IN ('PROPOSAL','CHAT_AGREEMENT')");
-
-                            t.HasCheckConstraint("CK_ProjectContracts_Status", "[Status] IN ('DRAFT','CONFIRMED','CANCELLED')");
-                        });
+                    b.ToTable("ProjectContracts", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>
@@ -1098,66 +1031,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("ExpertId");
 
-                    b.HasIndex("JobId")
-                        .IsUnique()
-                        .HasFilter("[Status] = 'ACCEPTED'");
+                    b.HasIndex("JobId");
 
                     b.HasIndex("Status");
 
-                    b.HasIndex("JobId", "ExpertId")
-                        .IsUnique()
-                        .HasFilter("[Status] <> 'WITHDRAWN'");
-
-                    b.ToTable("Proposals", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Proposals_Price_Timeline", "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0 AND ([CounterPrice] IS NULL OR [CounterPrice] > 0) AND ([CounterTimelineDays] IS NULL OR [CounterTimelineDays] > 0)");
-
-                            t.HasCheckConstraint("CK_Proposals_Status", "[Status] IN ('SUBMITTED','COUNTER_OFFERED','ACCEPTED','REJECTED','WITHDRAWN','NOT_SELECTED')");
-                        });
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalMessage", b =>
-                {
-                    b.Property<int>("ProposalMessageId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalMessageId"));
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsAgreementMarked")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("MessageType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<int>("ProposalId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("SenderUserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("ProposalMessageId");
-
-                    b.HasIndex("ProposalId");
-
-                    b.HasIndex("SenderUserId");
-
-                    b.HasIndex("ProposalId", "SenderUserId", "IsAgreementMarked");
-
-                    b.ToTable("ProposalMessages", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProposalMessages_MessageType", "[MessageType] IN ('TEXT','SYSTEM','AGREEMENT')");
-                        });
+                    b.ToTable("Proposals", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
@@ -1196,10 +1074,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("ProjectId")
                         .IsUnique();
 
-                    b.ToTable("Reviews", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Reviews_Rating", "[Rating] BETWEEN 1 AND 5");
-                        });
+                    b.ToTable("Reviews", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
@@ -1255,8 +1130,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int?>("EscrowId")
                         .HasColumnType("int");
@@ -1286,20 +1160,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("TransactionId");
 
-                    b.HasIndex("EscrowId");
-
-                    b.HasIndex("MilestoneId");
-
-                    b.HasIndex("ProjectId");
-
                     b.HasIndex("UserId");
 
-                    b.HasIndex("Type", "Status", "CreatedAt");
-
-                    b.ToTable("Transactions", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Transactions_Status", "[Status] IN ('PENDING','SUCCESS','FAILED','CANCELLED')");
-                        });
+                    b.ToTable("Transactions", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.User", b =>
@@ -1392,10 +1255,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("Wallets", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_Wallets_Balances", "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
-                        });
+                    b.ToTable("Wallets", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.WithdrawalRequest", b =>
@@ -1488,12 +1348,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("AITasker.Domain.Entities.Milestone", null)
-                        .WithMany()
-                        .HasForeignKey("MilestoneId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
                     b.Navigation("Expert");
                 });
 
@@ -1577,7 +1431,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasOne("AITasker.Domain.Entities.Project", "Project")
                         .WithMany()
                         .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("ClientProfile");
@@ -1748,25 +1602,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("JobPosting");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalMessage", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Proposal", "Proposal")
-                        .WithMany()
-                        .HasForeignKey("ProposalId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.User", "SenderUser")
-                        .WithMany()
-                        .HasForeignKey("SenderUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Proposal");
-
-                    b.Navigation("SenderUser");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Review", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "Client")
@@ -1796,25 +1631,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.Transaction", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.Escrow", null)
-                        .WithMany()
-                        .HasForeignKey("EscrowId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("AITasker.Domain.Entities.Milestone", null)
-                        .WithMany()
-                        .HasForeignKey("MilestoneId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("AITasker.Domain.Entities.Project", null)
-                        .WithMany()
-                        .HasForeignKey("ProjectId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("AITasker.Domain.Entities.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("User");
