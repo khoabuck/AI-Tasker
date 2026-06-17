@@ -13,7 +13,7 @@ const FILTERS = [
   { key: "COUNTER_OFFER", label: "Counter Offer" },
   { key: "ACCEPTED", label: "Accepted" },
   { key: "REJECTED", label: "Rejected" },
-  { key: "WITHDRAWN", label: "Withdrawn" },
+  { key: "WITHDRAWN", label: "Cancelled" },
 ];
 
 export default function MyProposalsPage() {
@@ -56,8 +56,10 @@ export default function MyProposalsPage() {
     }
   };
 
-  const handleWithdraw = async (proposalId) => {
-    const ok = window.confirm("Are you sure you want to withdraw this proposal?");
+  const handleCancelProposal = async (proposalId) => {
+    const ok = window.confirm(
+      "Are you sure you want to cancel this proposal? This only cancels your submitted proposal."
+    );
 
     if (!ok) return;
 
@@ -68,11 +70,11 @@ export default function MyProposalsPage() {
 
       await proposalService.withdrawProposal(proposalId);
 
-      setMessage("Proposal withdrawn successfully.");
+      setMessage("Proposal cancelled successfully.");
       await loadProposals();
     } catch (err) {
-      console.error("WITHDRAW PROPOSAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot withdraw proposal."));
+      console.error("CANCEL PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot cancel proposal."));
     } finally {
       setActionLoadingId(null);
     }
@@ -93,7 +95,7 @@ export default function MyProposalsPage() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                View proposals submitted by you and withdraw proposals that are
+                View proposals submitted by you and cancel proposals that are
                 still pending.
               </p>
             </div>
@@ -169,7 +171,7 @@ export default function MyProposalsPage() {
                   key={proposal.proposalId}
                   proposal={proposal}
                   actionLoadingId={actionLoadingId}
-                  onWithdraw={handleWithdraw}
+                  onCancelProposal={handleCancelProposal}
                   onViewDetail={() =>
                     navigate(`/expert/proposals/${proposal.proposalId}`)
                   }
@@ -187,7 +189,7 @@ export default function MyProposalsPage() {
 function ProposalCard({
   proposal,
   actionLoadingId,
-  onWithdraw,
+  onCancelProposal,
   onViewDetail,
   onViewJob,
 }) {
@@ -243,10 +245,7 @@ function ProposalCard({
             />
 
             {proposal.counterPrice && (
-              <Info
-                label="Counter Price"
-                value={`$${proposal.counterPrice}`}
-              />
+              <Info label="Counter Price" value={`$${proposal.counterPrice}`} />
             )}
 
             {proposal.counterTimelineDays && (
@@ -282,12 +281,12 @@ function ProposalCard({
               <button
                 type="button"
                 disabled={actionLoadingId === proposal.proposalId}
-                onClick={() => onWithdraw(proposal.proposalId)}
+                onClick={() => onCancelProposal(proposal.proposalId)}
                 className="w-full rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {actionLoadingId === proposal.proposalId
-                  ? "Withdrawing..."
-                  : "Withdraw"}
+                  ? "Cancelling..."
+                  : "Cancel Proposal"}
               </button>
             )}
           </div>
@@ -320,9 +319,17 @@ function StatusBadge({ status }) {
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {PROPOSAL_STATUS_LABEL[status] || status}
+      {getProposalStatusLabel(status)}
     </span>
   );
+}
+
+function getProposalStatusLabel(status) {
+  const value = String(status || "").toUpperCase();
+
+  if (value === "WITHDRAWN") return "CANCELLED";
+
+  return PROPOSAL_STATUS_LABEL[value] || value;
 }
 
 function Alert({ type, title, message }) {

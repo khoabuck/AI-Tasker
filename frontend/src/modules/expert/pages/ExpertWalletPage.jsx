@@ -34,14 +34,22 @@ export default function ExpertWalletPage() {
 
   const pendingWithdrawalAmount = useMemo(() => {
     return withdrawals
-      .filter((item) => item.status === "PENDING")
+      .filter((item) => isPendingStatus(item.status))
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
   }, [withdrawals]);
 
   const approvedWithdrawalAmount = useMemo(() => {
     return withdrawals
-      .filter((item) => item.status === "APPROVED")
+      .filter((item) => isApprovedStatus(item.status))
       .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  }, [withdrawals]);
+
+  const latestTransactions = useMemo(() => {
+    return [...transactions].slice(0, 8);
+  }, [transactions]);
+
+  const latestWithdrawals = useMemo(() => {
+    return [...withdrawals].slice(0, 6);
   }, [withdrawals]);
 
   const loadWalletData = async () => {
@@ -53,8 +61,8 @@ export default function ExpertWalletPage() {
       const overview = await expertWalletService.getWalletOverview();
 
       setWallet(overview.wallet);
-      setTransactions(overview.transactions);
-      setWithdrawals(overview.withdrawals);
+      setTransactions(Array.isArray(overview.transactions) ? overview.transactions : []);
+      setWithdrawals(Array.isArray(overview.withdrawals) ? overview.withdrawals : []);
     } catch (err) {
       console.error("LOAD EXPERT WALLET ERROR:", err?.response?.data || err);
 
@@ -114,83 +122,87 @@ export default function ExpertWalletPage() {
       setWithdrawForm(initialWithdrawForm);
       setShowWithdrawModal(false);
       setMessage(
-        "Withdrawal request submitted successfully. Please wait for admin approval."
+        "Payout request submitted successfully. You will be notified after review."
       );
 
       const overview = await expertWalletService.getWalletOverview();
 
       setWallet(overview.wallet);
-      setTransactions(overview.transactions);
-      setWithdrawals(overview.withdrawals);
+      setTransactions(Array.isArray(overview.transactions) ? overview.transactions : []);
+      setWithdrawals(Array.isArray(overview.withdrawals) ? overview.withdrawals : []);
     } catch (err) {
       console.error("CREATE WITHDRAWAL ERROR:", err?.response?.data || err);
 
-      setWithdrawError(
-        getFriendlyError(err, "Cannot submit withdrawal request.")
-      );
+      setWithdrawError(getFriendlyError(err, "Cannot submit payout request."));
     } finally {
       setSubmittingWithdraw(false);
     }
   };
 
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
-
   return (
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Expert Wallet
-              </p>
+          <section className="mb-8 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+            <div className="relative p-6 md:p-8">
+              <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-green-400/10 blur-3xl" />
+              <div className="absolute bottom-0 right-28 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Wallet & withdrawals
-              </h1>
+              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                    Expert Wallet
+                  </p>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track your available balance, payment transactions and withdrawal
-                requests.
-              </p>
+                  <h1 className="max-w-3xl text-3xl font-extrabold leading-tight text-white md:text-5xl">
+                    Manage your earnings and payouts
+                  </h1>
+
+                  <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400">
+                    Track released project earnings, pending payouts, and wallet
+                    activity in one secure workspace.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={openWithdrawModal}
+                    disabled={loading || availableBalance <= 0}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      payments
+                    </span>
+                    Request Payout
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={loadWalletData}
+                    disabled={loading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      refresh
+                    </span>
+                    {loading ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
+              </div>
             </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <button
-                type="button"
-                onClick={openWithdrawModal}
-                disabled={loading || availableBalance <= 0}
-                className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Withdraw
-              </button>
-
-              <button
-                type="button"
-                onClick={loadWalletData}
-                disabled={loading}
-                className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {loading ? "Refreshing..." : "Refresh"}
-              </button>
-            </div>
-          </div>
+          </section>
 
           {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
-            </div>
+            <Alert type="success" title="Success" message={message} />
           )}
 
           {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
+            <Alert type="danger" title="Wallet error" message={error} />
           )}
 
           {loading ? (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
+            <div className="rounded-3xl border border-white/10 bg-[#151a22] p-12 text-center text-gray-400">
               <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
                 hourglass_empty
               </span>
@@ -198,11 +210,12 @@ export default function ExpertWalletPage() {
             </div>
           ) : (
             <>
-              <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
+              <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
                 <SummaryCard
                   icon="account_balance_wallet"
                   label="Available Balance"
                   value={formatMoney(availableBalance)}
+                  description="Ready for payout"
                   tone="green"
                 />
 
@@ -210,78 +223,56 @@ export default function ExpertWalletPage() {
                   icon="lock"
                   label="Locked Balance"
                   value={formatMoney(lockedBalance)}
+                  description="Held for ongoing work"
                   tone="yellow"
                 />
 
                 <SummaryCard
                   icon="schedule"
-                  label="Pending Withdraw"
+                  label="Pending Payout"
                   value={formatMoney(pendingWithdrawalAmount)}
+                  description="Waiting for review"
                   tone="cyan"
                 />
 
                 <SummaryCard
                   icon="trending_up"
-                  label="Total Earning"
+                  label="Total Earnings"
                   value={formatMoney(totalEarning)}
-                  tone="cyan"
+                  description="Lifetime released earnings"
+                  tone="purple"
                 />
               </section>
 
-              <section className={`${cardStyle} mb-6 p-6 md:p-8`}>
-                <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-xl font-bold text-white">
-                      Ready to withdraw your earnings?
-                    </h2>
-
-                    <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
-                      Submit a withdrawal request with your bank information.
-                      Admin will review and process the request before the money
-                      is transferred.
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={openWithdrawModal}
-                    disabled={availableBalance <= 0}
-                    className="rounded-xl border border-green-400/50 bg-green-400/10 px-6 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Request Withdrawal
-                  </button>
-                </div>
-              </section>
-
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_420px]">
-                <section className={`${cardStyle} p-6 md:p-8`}>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_390px]">
+                <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
                   <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div>
-                      <h2 className="text-lg font-bold text-white">
-                        Transaction History
+                      <h2 className="text-xl font-extrabold text-white">
+                        Wallet Activity
                       </h2>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        Payments and wallet activities.
+                        Recent wallet movements from project payments and payouts.
                       </p>
                     </div>
 
                     <span className="w-fit rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                      {transactions.length} items
+                      {transactions.length} item(s)
                     </span>
                   </div>
 
-                  {transactions.length === 0 ? (
+                  {latestTransactions.length === 0 ? (
                     <EmptyState
                       icon="receipt_long"
-                      title="No transactions yet"
-                      description="Your payment history will appear here."
+                      title="No wallet activity yet"
+                      description="Payments from released milestones and payout records will appear here."
                     />
                   ) : (
                     <div className="space-y-3">
-                      {transactions.map((transaction, index) => (
+                      {latestTransactions.map((transaction, index) => (
                         <TransactionItem
-                          key={transaction.transactionId || index}
+                          key={transaction.transactionId || transaction.id || index}
                           transaction={transaction}
                         />
                       ))}
@@ -289,16 +280,16 @@ export default function ExpertWalletPage() {
                   )}
                 </section>
 
-                <aside className="space-y-6">
-                  <section className={`${cardStyle} p-6 md:p-8`}>
+                <aside>
+                  <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6">
                     <div className="mb-6 flex items-center justify-between gap-4">
                       <div>
-                        <h2 className="text-lg font-bold text-white">
-                          Withdrawal Requests
+                        <h2 className="text-lg font-extrabold text-white">
+                          Payout Requests
                         </h2>
 
                         <p className="mt-1 text-sm text-gray-500">
-                          Your request history and approval status.
+                          Recent payout request status.
                         </p>
                       </div>
 
@@ -307,17 +298,18 @@ export default function ExpertWalletPage() {
                       </span>
                     </div>
 
-                    {withdrawals.length === 0 ? (
+                    {latestWithdrawals.length === 0 ? (
                       <EmptyState
                         icon="payments"
-                        title="No withdrawal requests"
-                        description="Submitted withdrawal requests will appear here."
+                        title="No payout requests"
+                        description="Your payout requests will appear here."
+                        compact
                       />
                     ) : (
                       <div className="space-y-3">
-                        {withdrawals.map((withdrawal, index) => (
+                        {latestWithdrawals.map((withdrawal, index) => (
                           <WithdrawalItem
-                            key={withdrawal.withdrawalRequestId || index}
+                            key={withdrawal.withdrawalRequestId || withdrawal.id || index}
                             withdrawal={withdrawal}
                           />
                         ))}
@@ -325,9 +317,9 @@ export default function ExpertWalletPage() {
                     )}
 
                     {approvedWithdrawalAmount > 0 && (
-                      <div className="mt-5 rounded-xl border border-green-400/20 bg-green-400/10 p-4">
+                      <div className="mt-5 rounded-2xl border border-green-400/20 bg-green-400/10 p-4">
                         <p className="text-xs uppercase tracking-wider text-green-300">
-                          Approved Withdrawals
+                          Approved payouts
                         </p>
 
                         <p className="mt-1 text-xl font-bold text-white">
@@ -379,15 +371,15 @@ function WithdrawModal({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-green-300">
-                Withdrawal
+                Payout Request
               </p>
 
               <h2 className="text-xl font-extrabold text-white">
-                Withdraw earnings
+                Request a payout
               </h2>
 
               <p className="mt-1 text-xs leading-5 text-gray-400">
-                Enter bank information to send a withdrawal request.
+                Enter your bank details to request a transfer.
               </p>
             </div>
 
@@ -444,14 +436,15 @@ function WithdrawModal({
           />
 
           <Input
-            label="Bank Account Holder"
+            label="Account Holder"
             value={formData.bankAccountHolder}
             onChange={(value) => onChange("bankAccountHolder", value)}
             placeholder="NGUYEN VAN A"
           />
 
           <p className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-[11px] leading-5 text-yellow-100">
-            Please double-check your bank account before submitting.
+            Please double-check your bank account before submitting. Incorrect
+            information may delay your payout.
           </p>
 
           <div className="flex gap-3 pt-1">
@@ -469,7 +462,7 @@ function WithdrawModal({
               disabled={submitting}
               className="flex-1 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {submitting ? "Submitting..." : "Confirm"}
+              {submitting ? "Submitting..." : "Submit Request"}
             </button>
           </div>
         </form>
@@ -478,16 +471,18 @@ function WithdrawModal({
   );
 }
 
-function SummaryCard({ icon, label, value, tone }) {
+function SummaryCard({ icon, label, value, description, tone }) {
   const toneClass =
     tone === "green"
       ? "border-green-400/20 bg-green-400/10 text-green-300"
       : tone === "yellow"
       ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+      : tone === "purple"
+      ? "border-purple-400/20 bg-purple-400/10 text-purple-300"
       : "border-cyan-400/20 bg-cyan-400/10 text-[#00F0FF]";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}
       >
@@ -495,49 +490,61 @@ function SummaryCard({ icon, label, value, tone }) {
       </div>
 
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-
-      <p className="mt-2 text-3xl font-bold text-white">{value}</p>
+      <p className="mt-2 text-2xl font-black text-white">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p>
     </div>
   );
 }
 
 function TransactionItem({ transaction }) {
   const amount = Number(transaction.amount || 0);
+  const positive = amount >= 0;
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <StatusBadge status={transaction.status} />
-
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-              {formatDate(transaction.createdAt)}
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-cyan-400/30">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-3">
+          <div
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
+              positive
+                ? "border-green-400/20 bg-green-400/10 text-green-300"
+                : "border-red-400/20 bg-red-400/10 text-red-300"
+            }`}
+          >
+            <span className="material-symbols-outlined">
+              {positive ? "south_west" : "north_east"}
             </span>
-
-            {transaction.type && (
-              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase text-cyan-300">
-                {transaction.type}
-              </span>
-            )}
           </div>
 
-          <h3 className="text-sm font-bold text-white">
-            {transaction.description || transaction.type || "Wallet Transaction"}
-          </h3>
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <StatusBadge status={transaction.status} />
 
-          {transaction.referenceId && (
+              {transaction.type && (
+                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase text-cyan-300">
+                  {formatTransactionType(transaction.type)}
+                </span>
+              )}
+            </div>
+
+            <h3 className="text-sm font-bold text-white">
+              {transaction.description ||
+                formatTransactionType(transaction.type) ||
+                "Wallet activity"}
+            </h3>
+
             <p className="mt-1 text-xs text-gray-500">
-              Ref: {transaction.referenceId}
+              {formatDate(transaction.createdAt)}
             </p>
-          )}
+          </div>
         </div>
 
         <p
-          className={`text-lg font-bold ${
-            amount < 0 ? "text-red-300" : "text-white"
+          className={`text-lg font-black ${
+            positive ? "text-green-300" : "text-red-300"
           }`}
         >
+          {positive ? "+" : ""}
           {formatMoney(amount)}
         </p>
       </div>
@@ -547,11 +554,11 @@ function TransactionItem({ transaction }) {
 
 function WithdrawalItem({ withdrawal }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <StatusBadge status={withdrawal.status} />
 
-        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
+        <span className="text-xs text-gray-500">
           {formatDate(withdrawal.createdAt)}
         </span>
       </div>
@@ -559,25 +566,25 @@ function WithdrawalItem({ withdrawal }) {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h3 className="text-sm font-bold text-white">
-            {withdrawal.bankName || "Bank"}
+            {withdrawal.bankName || "Bank account"}
           </h3>
 
           <p className="mt-1 text-xs text-gray-400">
-            Account: {withdrawal.bankAccountNumber || "N/A"}
+            {maskBankAccount(withdrawal.bankAccountNumber)}
           </p>
 
           <p className="mt-1 text-xs text-gray-400">
-            Holder: {withdrawal.bankAccountHolder || "N/A"}
+            {withdrawal.bankAccountHolder || "Account holder"}
           </p>
 
           {withdrawal.adminNote && (
             <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-gray-300">
-              Admin note: {withdrawal.adminNote}
+              Review note: {withdrawal.adminNote}
             </p>
           )}
         </div>
 
-        <p className="shrink-0 text-lg font-bold text-white">
+        <p className="shrink-0 text-base font-black text-white">
           {formatMoney(withdrawal.amount)}
         </p>
       </div>
@@ -613,10 +620,18 @@ function Input({
   );
 }
 
-function EmptyState({ icon, title, description }) {
+function EmptyState({ icon, title, description, compact = false }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+    <div
+      className={`rounded-2xl border border-white/10 bg-white/[0.03] text-center ${
+        compact ? "p-6" : "p-8"
+      }`}
+    >
+      <span
+        className={`material-symbols-outlined mb-3 block text-gray-500 ${
+          compact ? "text-4xl" : "text-5xl"
+        }`}
+      >
         {icon}
       </span>
 
@@ -629,6 +644,7 @@ function EmptyState({ icon, title, description }) {
 
 function StatusBadge({ status }) {
   const value = String(status || "PENDING").toUpperCase();
+  const label = getStatusLabel(value);
 
   const className =
     value === "SUCCESS" ||
@@ -649,7 +665,7 @@ function StatusBadge({ status }) {
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
     >
-      {value}
+      {label}
     </span>
   );
 }
@@ -666,7 +682,7 @@ function validateWithdrawForm(formData, availableBalance) {
   }
 
   if (availableBalance > 0 && amount > availableBalance) {
-    return "Withdrawal amount cannot be greater than available balance.";
+    return "Payout amount cannot be greater than available balance.";
   }
 
   if (!String(formData.bankName || "").trim()) {
@@ -678,10 +694,52 @@ function validateWithdrawForm(formData, availableBalance) {
   }
 
   if (!String(formData.bankAccountHolder || "").trim()) {
-    return "Bank account holder is required.";
+    return "Account holder is required.";
   }
 
   return "";
+}
+
+function isPendingStatus(status) {
+  return String(status || "").toUpperCase() === "PENDING";
+}
+
+function isApprovedStatus(status) {
+  return String(status || "").toUpperCase() === "APPROVED";
+}
+
+function getStatusLabel(status) {
+  const value = String(status || "").toUpperCase();
+
+  if (value === "PENDING") return "Pending";
+  if (value === "APPROVED") return "Approved";
+  if (value === "REJECTED") return "Rejected";
+  if (value === "SUCCESS") return "Success";
+  if (value === "COMPLETED") return "Completed";
+  if (value === "PAID") return "Paid";
+  if (value === "FAILED") return "Failed";
+  if (value === "LOCKED") return "Locked";
+  if (value === "HELD") return "Held";
+  if (value === "REFUNDED") return "Refunded";
+
+  return value || "Pending";
+}
+
+function formatTransactionType(type) {
+  const value = String(type || "").replaceAll("_", " ").toLowerCase();
+
+  if (!value) return "";
+
+  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function maskBankAccount(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "Account information unavailable";
+  if (text.length <= 4) return text;
+
+  return `•••• ${text.slice(-4)}`;
 }
 
 function formatMoney(value) {
@@ -706,6 +764,20 @@ function formatDate(value) {
     month: "2-digit",
     day: "2-digit",
   });
+}
+
+function Alert({ type, title, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
+
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
+      <p className="font-bold">{title}</p>
+      <p className="mt-1">{message}</p>
+    </div>
+  );
 }
 
 function getFriendlyError(err, fallback) {
