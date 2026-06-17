@@ -12,14 +12,6 @@ public class ClientProfile
 
     public string? Address { get; set; }
 
-    public string? AiNeeds { get; set; }
-
-    public string? MainProblems { get; set; }
-
-    public decimal? ExpectedBudgetMin { get; set; }
-
-    public decimal? ExpectedBudgetMax { get; set; }
-
     public decimal PlatformFeeRate { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
