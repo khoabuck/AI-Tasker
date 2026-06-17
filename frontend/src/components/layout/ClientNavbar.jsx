@@ -5,36 +5,23 @@ import authService from "../../services/auth.service";
 import NotificationDropdown from "./NotificationDropdown";
 
 const NAV_ITEMS = [
-
-  {
-    label: "HOME",
-    to: "/client/dashboard",
-    dropdown: null,
-  },
-  {
-    label: "POST JOB",
-    to: "/client/post-job",
-    dropdown: null,
-  },
+  { label: "HOME", to: "/client/dashboard", dropdown: null },
+  { label: "POST JOB", to: "/client/post-job", dropdown: null },
   {
     label: "FIND AI EXPERT",
     dropdown: [
-      { icon: "auto_awesome",  label: "AI Matching",   to: "/client/ai-matching" },
+      { icon: "auto_awesome", label: "AI Matching", to: "/client/ai-matching" },
       { icon: "person_search", label: "Expert Search", to: "/client/experts" },
     ],
   },
-  {
-    label: "JOB",
-    dropdown: [
-      { icon: "list",          label: "List Jobs",      to: "/client/projects" },
-      { icon: "chat_bubble",   label: "Messages",           to: "/client/messages" },
-    ],
-  },
+  { label: "MY JOBS", to: "/client/jobs", dropdown: null },
+  { label: "MY PROJECTS", to: "/client/projects", dropdown: null },
+  { label: "MESSAGES", to: "/client/messages", dropdown: null },
   {
     label: "FINANCE",
     dropdown: [
-      { icon: "account_balance_wallet", label: "Wallet",       to: "/client/wallet" },
-      { icon: "receipt_long",           label: "Transactions", to: "/client/transactions" },
+      { icon: "account_balance_wallet", label: "Wallet", to: "/client/wallet" },
+      { icon: "receipt_long", label: "Transactions", to: "/client/transactions" },
     ],
   },
 ];

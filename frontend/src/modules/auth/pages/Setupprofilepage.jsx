@@ -41,6 +41,60 @@ function FieldError({ name, errors }) {
   );
 }
 
+// ── Parse lỗi trả về từ BE (AI check field) ─────────────────────────
+// BE có thể trả nhiều dạng khác nhau tuỳ framework, hàm này chuẩn hoá
+// tất cả về { fieldErrors: { phoneNumber: "msg", ... }, message: "..." }
+function parseApiError(err) {
+  const status = err?.response?.status;
+  const resData = err?.response?.data;
+
+  // Không có response nghĩa là lỗi network/timeout, không phải lỗi field
+  if (!resData) {
+    return {
+      fieldErrors: {},
+      message: "Could not connect to the server. Please check your network connection and try again.",
+    };
+  }
+
+  const fieldErrors = {};
+
+  // Dạng 1: errors là object thẳng { fieldName: "message" }
+  if (resData.errors && typeof resData.errors === "object" && !Array.isArray(resData.errors)) {
+    Object.assign(fieldErrors, resData.errors);
+  }
+
+  // Dạng 2: errors là array [{ field, message }] / [{ fieldName, msg }]
+  if (Array.isArray(resData.errors)) {
+    resData.errors.forEach((item) => {
+      if (typeof item === "string") return; // không đủ info để gắn vào field
+      const key = item.field || item.fieldName || item.name;
+      const msg = item.message || item.msg || item.detail || item.reason;
+      if (key && msg) fieldErrors[key] = msg;
+    });
+  }
+
+  // Dạng 3: một số BE (Spring Boot) dùng "validationErrors" hoặc "violations"
+  const altList = resData.validationErrors || resData.violations;
+  if (Array.isArray(altList)) {
+    altList.forEach((item) => {
+      const key = item.field || item.fieldName || item.propertyPath;
+      const msg = item.message || item.defaultMessage;
+      if (key && msg) fieldErrors[key] = msg;
+    });
+  }
+
+  // Message tổng quát hiển thị trong banner đỏ
+  const message =
+    resData.message ||
+    (status === 401 && "Your session has expired. Please log in again.") ||
+    (status === 403 && "You do not have permission to perform this action.") ||
+    (status === 409 && "Some of this information already exists in the system (e.g. tax code, email).") ||
+    (status >= 500 && "A server error occurred. Please try again later.") ||
+    "Some information is invalid. Please check the fields below.";
+
+  return { fieldErrors, message };
+}
+
 export default function SetupProfilePage() {
   const navigate = useNavigate();
   const [clientType, setClientType] = useState("individual");
@@ -110,19 +164,19 @@ export default function SetupProfilePage() {
   };
 
   const handleBusinessChange = (e) => {
-  const { name, value } = e.target;
+    const { name, value } = e.target;
 
-  setBusiness((prev) => ({ ...prev, [name]: value }));
+    setBusiness((prev) => ({ ...prev, [name]: value }));
 
-  if (fieldErrors[name]) {
-    setFieldErrors((prev) => ({ ...prev, [name]: null }));
-  }
+    if (fieldErrors[name]) {
+      setFieldErrors((prev) => ({ ...prev, [name]: null }));
+    }
 
-  setGlobalError("");
-};
+    setGlobalError("");
+  };
 
   const handleBudgetChange = (e) => {
-  const { name, value } = e.target;
+    const { name, value } = e.target;
 
     // Cho phép xóa rỗng
     if (value === "") {
@@ -154,7 +208,7 @@ export default function SetupProfilePage() {
     setGlobalError("");
   };
 
-  // ── FE Validate ─────────────────────────────────────────────────
+  // ── FE Validate (check format cơ bản trước khi gọi API) ──────────
   const validateForm = () => {
     const errors = {};
     const f = clientType === "individual" ? individual : business;
@@ -258,81 +312,97 @@ export default function SetupProfilePage() {
     return errors;
   };
 
-  // ── Submit ───────────────────────────────────────────────────────
+  // ── Submit: gọi API thật để BE (AI) check toàn bộ field ──────────
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setGlobalError("");
+  e.preventDefault();
+  setGlobalError("");
 
-    // FE validate trước
-    const feErrors = validateForm();
-    if (Object.keys(feErrors).length > 0) {
-      setFieldErrors(feErrors);
-      setGlobalError("Please check and fill in the correct fields below.");
+  const feErrors = validateForm();
+  if (Object.keys(feErrors).length > 0) {
+    setFieldErrors(feErrors);
+    setGlobalError("Please check and fill in the correct fields below.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  setLoading(true);
+  setFieldErrors({});
+
+  try {
+    let res;
+
+    if (clientType === "individual") {
+      const payload = {
+        phoneNumber: individual.phoneNumber,
+        address: individual.address,
+        aiNeeds: individual.aiNeeds,
+        mainProblems: individual.mainProblems,
+        expectedBudgetMin: Number(individual.expectedBudgetMin),
+        expectedBudgetMax: Number(individual.expectedBudgetMax),
+      };
+
+      res = isEdit
+        ? await axiosInstance.put("/client-profiles/individual/me", payload)
+        : await axiosInstance.post("/client-profiles/individual", payload);
+    } else {
+      const payload = {
+        phoneNumber: business.phoneNumber,
+        address: business.address,
+        aiNeeds: business.aiNeeds,
+        mainProblems: business.mainProblems,
+        expectedBudgetMin: Number(business.expectedBudgetMin),
+        expectedBudgetMax: Number(business.expectedBudgetMax),
+        companyName: business.companyName,
+        taxCode: business.taxCode,
+        industry: business.industry,
+        companyAddress: business.companyAddress,
+        businessEmail: business.businessEmail,
+        businessPhone: business.businessPhone,
+      };
+
+      res = isEdit
+        ? await axiosInstance.put("/client-profiles/business/resubmit", payload)
+        : await axiosInstance.post("/client-profiles/business", payload);
+    }
+
+    console.log("PROFILE SUBMIT RESPONSE:", res.data);
+
+    const userStatus = res.data?.userStatus;
+    const verificationStatus = res.data?.businessProfile?.verificationStatus;
+    const verificationNote = res.data?.businessProfile?.verificationNote;
+
+    if (
+      userStatus === "BUSINESS_NEEDS_CORRECTION" ||
+      verificationStatus === "NEEDS_CORRECTION"
+    ) {
+      setGlobalError(
+        verificationNote || "Business information needs correction."
+      );
+
+      setFieldErrors({
+        companyName: verificationNote || "Company name needs correction.",
+        taxCode: verificationNote || "Tax code needs correction.",
+        companyAddress: verificationNote || "Company address needs correction.",
+      });
+
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
-    setLoading(true);
-    setFieldErrors({});
+    navigate("/client/dashboard");
+  } catch (err) {
+    const { fieldErrors: beErrors, message } = parseApiError(err);
 
-    try {
-      if (clientType === "individual") {
-        const payload = {
-          phoneNumber:       individual.phoneNumber,
-          address:           individual.address,
-          aiNeeds:           individual.aiNeeds,
-          mainProblems:      individual.mainProblems,
-          expectedBudgetMin: Number(individual.expectedBudgetMin),
-          expectedBudgetMax: Number(individual.expectedBudgetMax),
-        };
-        if (isEdit) {
-          await axiosInstance.put("/client-profiles/individual/me", payload);
-        } else {
-          await axiosInstance.post("/client-profiles/individual", payload);
-        }
-      } else {
-        const payload = {
-          phoneNumber:       business.phoneNumber,
-          address:           business.address,
-          aiNeeds:           business.aiNeeds,
-          mainProblems:      business.mainProblems,
-          expectedBudgetMin: Number(business.expectedBudgetMin),
-          expectedBudgetMax: Number(business.expectedBudgetMax),
-          companyName:       business.companyName,
-          taxCode:           business.taxCode,
-          industry:          business.industry,
-          companyAddress:    business.companyAddress,
-          businessEmail:     business.businessEmail,
-          businessPhone:     business.businessPhone,
-        };
-        if (isEdit) {
-          await axiosInstance.put("/client-profiles/business/resubmit", payload);
-        } else {
-          await axiosInstance.post("/client-profiles/business", payload);
-        }
-      }
-
-      // ✅ AI check pass → vào dashboard
-      navigate("/client/dashboard");
-
-    } catch (err) {
-      const resData = err?.response?.data;
-
-      // BE trả về errors object → highlight từng field
-      if (resData?.errors && typeof resData.errors === "object") {
-        setFieldErrors(resData.errors);
-        setGlobalError(resData.message || "Some information is invalid. Please check again.");
-      } else {
-        // Lỗi chung (network, server...)
-        setGlobalError(resData?.message || "An error occurred. Please try again.");
-      }
-
-      // Scroll lên đầu form để thấy lỗi
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } finally {
-      setLoading(false);
+    if (Object.keys(beErrors).length > 0) {
+      setFieldErrors(beErrors);
     }
-  };
+
+    setGlobalError(message);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } finally {
+    setLoading(false);
+  }
+};
 
   // ── Loading prefill ──────────────────────────────────────────────
   if (fetching) return (
@@ -464,7 +534,7 @@ export default function SetupProfilePage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div>
                     <label style={{ ...labelStyle, color: fieldErrors.expectedBudgetMin ? "#f87171" : "#8c90a0" }}>Min Budget (USD)</label>
-                    <input type="number" min="0" name="expectedBudgetMin" value={form.expectedBudgetMin} onChange={handleChange}
+                    <input type="number" min="0" name="expectedBudgetMin" value={form.expectedBudgetMin} onChange={handleBudgetChange}
                       placeholder="500"
                       style={getInputStyle("expectedBudgetMin", fieldErrors)}
                       onFocus={(e) => (e.target.style.borderColor = fieldErrors.expectedBudgetMin ? "#ef4444" : "#00F0FF")}
@@ -473,7 +543,7 @@ export default function SetupProfilePage() {
                   </div>
                   <div>
                     <label style={{ ...labelStyle, color: fieldErrors.expectedBudgetMax ? "#f87171" : "#8c90a0" }}>Max Budget (USD)</label>
-                    <input type="number" min="0" name="expectedBudgetMax" value={form.expectedBudgetMax} onChange={handleChange}
+                    <input type="number" min="0" name="expectedBudgetMax" value={form.expectedBudgetMax} onChange={handleBudgetChange}
                       placeholder="5000"
                       style={getInputStyle("expectedBudgetMax", fieldErrors)}
                       onFocus={(e) => (e.target.style.borderColor = fieldErrors.expectedBudgetMax ? "#ef4444" : "#00F0FF")}

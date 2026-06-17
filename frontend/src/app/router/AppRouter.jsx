@@ -16,8 +16,6 @@ import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
 
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
-import PostJobPage from "../../modules/client/pages/PostJobPage";
-import ProjectsPage from "../../modules/client/pages/ProjectsPage";
 import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
@@ -31,6 +29,10 @@ import EditJobPage from "../../modules/client/pages/EditJobPage";
 import ClientProposalDetailPage from "../../modules/client/pages/ClientProposalDetailPage";
 import NotificationsPage from "../../modules/client/pages/NotificationsPage";
 import ClientReviewPage from "../../modules/client/pages/ClientReviewPage";
+import JobsPage from "../../modules/client/pages/JobsPage";
+import ProjectsListPage from "../../modules/client/pages/ProjectsListPage";
+import ClientProjectDetailPage from "../../modules/client/pages/ClientProjectDetailPage";
+import PostJobPage from "../../modules/client/pages/PostJobPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -85,7 +87,6 @@ export default function AppRouter() {
       {/* ── Client routes ── */}
       <Route path="/client/dashboard"    element={<RequireAuth><ClientDashboard /></RequireAuth>} />
       <Route path="/client/post-job"     element={<RequireAuth><PostJobPage /></RequireAuth>} />
-      <Route path="/client/projects"     element={<RequireAuth><ProjectsPage /></RequireAuth>} />
       <Route path="/client/profile"      element={<RequireAuth><ClientProfilePage /></RequireAuth>} />
       <Route path="/client/profile/edit" element={<RequireAuth><EditProfilePage /></RequireAuth>} />
       <Route path="/client/experts"      element={<RequireAuth><ExpertSearchPage /></RequireAuth>} />
@@ -93,12 +94,20 @@ export default function AppRouter() {
       <Route path="/client/messages"     element={<RequireAuth><MessagesPage /></RequireAuth>} />
       <Route path="/client/wallet"       element={<RequireAuth><WalletPage /></RequireAuth>} />
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
-      <Route path="/client/projects/:id" element={<RequireAuth><ClientJobDetailPage /></RequireAuth>} />
-      <Route path="/client/projects/:id/recommendations" element={<RequireAuth><ClientJobRecommendationPage /></RequireAuth>} />
-      <Route path="/client/jobs/:id/edit" element={ <RequireAuth> <EditJobPage /> </RequireAuth>} />
+
+      {/* Jobs — danh sách + chi tiết + edit */}
+      <Route path="/client/jobs"          element={<RequireAuth><JobsPage /></RequireAuth>} />
+      <Route path="/client/jobs/:id"      element={<RequireAuth><ClientJobDetailPage /></RequireAuth>} />
+      <Route path="/client/jobs/:id/edit" element={<RequireAuth><EditJobPage /></RequireAuth>} />
+      <Route path="/client/jobs/:id/recommendations" element={<RequireAuth><ClientJobRecommendationPage /></RequireAuth>} />
+
+      {/* Projects — danh sách + chi tiết + review */}
+      <Route path="/client/projects"             element={<RequireAuth><ProjectsListPage /></RequireAuth>} />
+      <Route path="/client/projects/:id"         element={<RequireAuth><ClientProjectDetailPage /></RequireAuth>} />
+      <Route path="/client/projects/:id/review"  element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
+
       <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />
       <Route path="/client/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
-      <Route path="/client/projects/:id/review" element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
 
       {/* ── Expert routes ── */}
       <Route path="/expert"                                        element={<RequireAuth><ExpertDashboard /></RequireAuth>} />

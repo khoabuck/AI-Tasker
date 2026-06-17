@@ -50,6 +50,8 @@ public class SmtpEmailSender : IEmailSender
 
         using var smtpClient = new SmtpClient();
 
+        smtpClient.ServerCertificateValidationCallback = (s, c, h, e) => true;
+
         await smtpClient.ConnectAsync(host, port, SecureSocketOptions.StartTls);
         await smtpClient.AuthenticateAsync(username, password);
         await smtpClient.SendAsync(message);

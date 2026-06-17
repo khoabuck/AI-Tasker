@@ -45,54 +45,82 @@ export default function EditProfilePage() {
   const [fieldErrors, setFieldErrors] = useState({});
 
   const [individual, setIndividual] = useState({
-    phoneNumber: "", address: "", aiNeeds: "", mainProblems: "",
-    expectedBudgetMin: "", expectedBudgetMax: "",
+    fullName: "",
+    phoneNumber: "",
+    address: "",
+    aiNeeds: "",
+    mainProblems: "",
+    expectedBudgetMin: "",
+    expectedBudgetMax: "",
+    avatarUrl: "",
   });
 
   const [business, setBusiness] = useState({
-    phoneNumber: "", address: "", aiNeeds: "", mainProblems: "",
-    expectedBudgetMin: "", expectedBudgetMax: "",
-    companyName: "", taxCode: "", industry: "",
-    companyAddress: "", businessEmail: "", businessPhone: "",
+    fullName: "",
+    phoneNumber: "",
+    address: "",
+    aiNeeds: "",
+    mainProblems: "",
+    expectedBudgetMin: "",
+    expectedBudgetMax: "",
+    avatarUrl: "",
+    companyName: "",
+    taxCode: "",
+    industry: "",
+    companyAddress: "",
+    businessEmail: "",
+    businessPhone: "",
   });
 
   // ── Load data cũ ─────────────────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await axiosInstance.get("/client-profiles/me");
-        const data = res.data;
-        const isBusiness = !!data.companyName;
-        setClientType(isBusiness ? "business" : "individual");
-        const common = {
-          phoneNumber:       data.phoneNumber       || "",
-          address:           data.address           || "",
-          aiNeeds:           data.aiNeeds           || "",
-          mainProblems:      data.mainProblems      || "",
-          expectedBudgetMin: data.expectedBudgetMin || "",
-          expectedBudgetMax: data.expectedBudgetMax || "",
-        };
-        if (isBusiness) {
-          setBusiness({
-            ...common,
-            companyName:    data.companyName    || "",
-            taxCode:        data.taxCode        || "",
-            industry:       data.industry       || "",
-            companyAddress: data.companyAddress || "",
-            businessEmail:  data.businessEmail  || "",
-            businessPhone:  data.businessPhone  || "",
-          });
-        } else {
-          setIndividual(common);
-        }
-      } catch {
-        setGlobalError("Không thể tải thông tin profile.");
-      } finally {
-        setFetching(false);
+  const load = async () => {
+    try {
+      const res = await axiosInstance.get("/client-profiles/me");
+      const data = res.data;
+
+      console.log("CLIENT PROFILE:", data);
+
+      const businessProfile = data.businessProfile || null;
+      const isBusiness = !!businessProfile;
+
+      const common = {
+        fullName: data.fullName || data.name || "",
+        phoneNumber: data.phoneNumber || "",
+        address: data.address || "",
+        aiNeeds: data.aiNeeds || "",
+        mainProblems: data.mainProblems || "",
+        expectedBudgetMin: data.expectedBudgetMin ?? "",
+        expectedBudgetMax: data.expectedBudgetMax ?? "",
+        avatarUrl: data.avatarUrl || "",
+      };
+
+      if (isBusiness) {
+        setClientType("business");
+
+        setBusiness({
+          ...common,
+          companyName: businessProfile.companyName || "",
+          taxCode: businessProfile.taxCode || "",
+          industry: businessProfile.industry || "",
+          companyAddress: businessProfile.companyAddress || "",
+          businessEmail: businessProfile.businessEmail || "",
+          businessPhone: businessProfile.businessPhone || "",
+        });
+      } else {
+        setClientType("individual");
+        setIndividual(common);
       }
-    };
-    load();
-  }, []);
+    } catch (err) {
+      console.error("Load profile error:", err);
+      setGlobalError("Không thể tải thông tin profile.");
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  load();
+}, []);
 
   const handleIndividualChange = (e) => {
     const { name, value } = e.target;
@@ -191,65 +219,66 @@ export default function EditProfilePage() {
 
   // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setGlobalError("");
+  e.preventDefault();
 
-    const feErrors = validateForm();
-    if (Object.keys(feErrors).length > 0) {
-      setFieldErrors(feErrors);
-      setGlobalError("Vui lòng kiểm tra và điền đúng các trường bên dưới.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
+  setGlobalError("");
+  setFieldErrors({});
+
+  const feErrors = validateForm();
+  if (Object.keys(feErrors).length > 0) {
+    setFieldErrors(feErrors);
+    setGlobalError("Thông tin đang vi phạm. Vui lòng kiểm tra lại.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    if (clientType === "individual") {
+      await axiosInstance.put("/client-profiles/individual/me", {
+        fullName: individual.fullName || "Client User",
+        phoneNumber: individual.phoneNumber,
+        address: individual.address,
+        aiNeeds: individual.aiNeeds,
+        mainProblems: individual.mainProblems,
+        expectedBudgetMin: Number(individual.expectedBudgetMin),
+        expectedBudgetMax: Number(individual.expectedBudgetMax),
+        avatarUrl: individual.avatarUrl || "",
+      });
+    } else {
+      await axiosInstance.put("/client-profiles/business/resubmit", {
+        phoneNumber: business.phoneNumber,
+        address: business.address,
+        aiNeeds: business.aiNeeds,
+        mainProblems: business.mainProblems,
+        expectedBudgetMin: Number(business.expectedBudgetMin),
+        expectedBudgetMax: Number(business.expectedBudgetMax),
+        companyName: business.companyName,
+        taxCode: business.taxCode,
+        industry: business.industry,
+        companyAddress: business.companyAddress,
+        businessEmail: business.businessEmail,
+        businessPhone: business.businessPhone,
+      });
     }
 
-    setLoading(true);
-    setFieldErrors({});
+    navigate("/client/profile");
+  } catch (err) {
+    const resData = err?.response?.data;
 
-    try {
-      if (clientType === "individual") {
-        // PUT /api/client-profiles/individual/me
-        await axiosInstance.put("/client-profiles/individual/me", {
-          phoneNumber:       individual.phoneNumber,
-          address:           individual.address,
-          aiNeeds:           individual.aiNeeds,
-          mainProblems:      individual.mainProblems,
-          expectedBudgetMin: Number(individual.expectedBudgetMin),
-          expectedBudgetMax: Number(individual.expectedBudgetMax),
-        });
-      } else {
-        // PUT /api/client-profiles/business/me
-        await axiosInstance.put("/client-profiles/business/me", {
-          phoneNumber:       business.phoneNumber,
-          address:           business.address,
-          aiNeeds:           business.aiNeeds,
-          mainProblems:      business.mainProblems,
-          expectedBudgetMin: Number(business.expectedBudgetMin),
-          expectedBudgetMax: Number(business.expectedBudgetMax),
-          companyName:       business.companyName,
-          taxCode:           business.taxCode,
-          industry:          business.industry,
-          companyAddress:    business.companyAddress,
-          businessEmail:     business.businessEmail,
-          businessPhone:     business.businessPhone,
-        });
-      }
-
-      // ✅ AI check pass → về profile
-      navigate("/client/profile");
-
-    } catch (err) {
-      const resData = err?.response?.data;
-      if (resData?.errors && typeof resData.errors === "object") {
-        setFieldErrors(resData.errors);
-        setGlobalError(resData.message || "Một số thông tin không hợp lệ. Vui lòng kiểm tra lại.");
-      } else {
-        setGlobalError(resData?.message || "Đã có lỗi xảy ra. Vui lòng thử lại.");
-      }
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } finally {
-      setLoading(false);
+    if (resData?.errors && typeof resData.errors === "object") {
+      setFieldErrors(resData.errors);
+      setGlobalError(resData.message || "Thông tin đang vi phạm. Vui lòng sửa lại.");
+    } else {
+      setGlobalError(resData?.message || "Thông tin đang vi phạm hoặc có lỗi xác minh.");
     }
-  };
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } finally {
+    setLoading(false);
+  }
+};
 
   if (fetching) return (
     <ClientLayout>
@@ -303,10 +332,29 @@ export default function EditProfilePage() {
             { key: "individual", icon: "person", label: "Individual" },
             { key: "business", icon: "corporate_fare", label: "Business" },
           ].map((t) => (
-            <button key={t.key} type="button"
-              onClick={() => {}}
-              style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 8, border: `1px solid ${clientType === t.key ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: clientType === t.key ? "rgba(0,240,255,0.05)" : "rgba(29,32,38,0.5)", color: clientType === t.key ? "#00F0FF" : "#8c90a0", cursor: "pointer", transition: "all 0.2s", fontWeight: 600, cursor: clientType === t.key ? "default" : "not-allowed", opacity: clientType === t.key ? 1 : 0.4 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{t.icon}</span>
+            <button
+              key={t.key}
+              type="button"
+              disabled
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                padding: "12px 16px",
+                borderRadius: 8,
+                border: `1px solid ${clientType === t.key ? "#00F0FF" : "rgba(255,255,255,0.12)"}`,
+                background: clientType === t.key ? "rgba(0,240,255,0.05)" : "rgba(29,32,38,0.5)",
+                color: clientType === t.key ? "#00F0FF" : "#8c90a0",
+                transition: "all 0.2s",
+                fontWeight: 600,
+                cursor: clientType === t.key ? "default" : "not-allowed",
+                opacity: clientType === t.key ? 1 : 0.4,
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+                {t.icon}
+              </span>
               {t.label}
             </button>
           ))}
