@@ -2,7 +2,7 @@ namespace AITasker.Application.DTOs.Responses;
 
 public class BusinessVerificationProviderResult
 {
-    public string Status { get; set; } = "PENDING_REVIEW";
+    public string Status { get; set; } = "NEEDS_CORRECTION";
 
     public decimal ConfidenceScore { get; set; }
 

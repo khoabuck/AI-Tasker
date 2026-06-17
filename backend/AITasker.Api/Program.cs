@@ -164,11 +164,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
 
-builder.Services.AddScoped<
-    IBusinessVerificationRepository,
-    BusinessVerificationRepository
->();
-
 builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 
 // =========================
@@ -181,11 +176,6 @@ builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
-
-builder.Services.AddScoped<
-    IBusinessVerificationService,
-    BusinessVerificationService
->();
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 

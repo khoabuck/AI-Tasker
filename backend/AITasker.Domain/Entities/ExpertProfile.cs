@@ -20,7 +20,8 @@ public class ExpertProfile
 
     public decimal ExperienceConfidenceScore { get; set; }
 
-    public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+    // VERIFIED / NEEDS_EVIDENCE / SUSPICIOUS
+    public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
 
     public string? ExperienceVerificationNote { get; set; }
 
@@ -39,7 +40,7 @@ public class ExpertProfile
     // FRESHER / JUNIOR / MID_LEVEL / SENIOR / LEAD
     public string Level { get; set; } = string.Empty;
 
-    // APPROVED / NEEDS_CORRECTION / REJECTED / LOCKED
+    // APPROVED / NEEDS_CORRECTION / LOCKED
     public string ProfileReviewStatus { get; set; } = string.Empty;
 
     public string? ProfileReviewNote { get; set; }

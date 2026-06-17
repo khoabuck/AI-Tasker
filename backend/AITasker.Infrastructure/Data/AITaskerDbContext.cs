@@ -285,7 +285,7 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.ExperienceVerificationStatus)
                 .HasMaxLength(30)
-                .HasDefaultValue("UNVERIFIED")
+                .HasDefaultValue("NEEDS_EVIDENCE")
                 .IsRequired();
 
             entity.Property(x => x.ExperienceVerificationNote)
@@ -388,7 +388,7 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerificationStatus)
                 .HasMaxLength(30)
-                .HasDefaultValue("UNVERIFIED")
+                .HasDefaultValue("NEEDS_EVIDENCE")
                 .IsRequired();
 
             entity.Property(x => x.VerificationScore)

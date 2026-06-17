@@ -61,6 +61,7 @@ public class CertificateVerificationService : ICertificateVerificationService
             CertificateName = NormalizeText(request.CertificateName),
             CertificateIssuer = NormalizeText(request.CertificateIssuer),
             CertificateUrl = NormalizeText(request.CertificateUrl),
+            VerificationStatus = "NEEDS_EVIDENCE",
             CheckedAt = checkedAt
         };
 
@@ -109,10 +110,14 @@ public class CertificateVerificationService : ICertificateVerificationService
 
             if (!response.IsSuccessStatusCode)
             {
-                result.VerificationStatus = "INVALID";
+                result.VerificationStatus = IsClearlyInvalidHttpStatus(response.StatusCode)
+                    ? "INVALID"
+                    : "NEEDS_EVIDENCE";
+
                 result.VerificationScore = CalculateScore(result, request);
-                result.VerificationNote =
-                    $"Certificate URL is not reachable. HTTP status code: {(int)response.StatusCode}.";
+                result.VerificationNote = result.VerificationStatus == "INVALID"
+                    ? $"Certificate URL is invalid or not found. HTTP status code: {(int)response.StatusCode}."
+                    : $"Certificate URL could not be fully verified. HTTP status code: {(int)response.StatusCode}. More evidence is required.";
 
                 return result;
             }
@@ -129,16 +134,26 @@ public class CertificateVerificationService : ICertificateVerificationService
         }
         catch (TaskCanceledException)
         {
+            result.VerificationStatus = "NEEDS_EVIDENCE";
+            result.VerificationScore = CalculateScore(result, request);
+            result.VerificationNote =
+                "Certificate URL request timed out. More evidence is required.";
+            return result;
+        }
+        catch (HttpRequestException ex)
+        {
             result.VerificationStatus = "INVALID";
             result.VerificationScore = CalculateScore(result, request);
-            result.VerificationNote = "Certificate URL request timed out.";
+            result.VerificationNote =
+                $"Certificate URL could not be checked: {ex.Message}";
             return result;
         }
         catch (Exception ex)
         {
-            result.VerificationStatus = "INVALID";
+            result.VerificationStatus = "NEEDS_EVIDENCE";
             result.VerificationScore = CalculateScore(result, request);
-            result.VerificationNote = $"Certificate URL could not be checked: {ex.Message}";
+            result.VerificationNote =
+                $"Certificate URL could not be fully verified: {ex.Message}. More evidence is required.";
             return result;
         }
 
@@ -239,7 +254,7 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (score >= 50m)
         {
-            return "NEEDS_REVIEW";
+            return "NEEDS_EVIDENCE";
         }
 
         if (score >= 20m)
@@ -248,6 +263,13 @@ public class CertificateVerificationService : ICertificateVerificationService
         }
 
         return "INVALID";
+    }
+
+    private static bool IsClearlyInvalidHttpStatus(HttpStatusCode statusCode)
+    {
+        return statusCode is HttpStatusCode.BadRequest
+            or HttpStatusCode.NotFound
+            or HttpStatusCode.Gone;
     }
 
     private static string BuildVerificationNote(
@@ -290,6 +312,11 @@ public class CertificateVerificationService : ICertificateVerificationService
         if (!result.IsIssuedAtReasonable)
         {
             notes.Add("Issued date is missing or unreasonable.");
+        }
+
+        if (result.VerificationStatus == "NEEDS_EVIDENCE")
+        {
+            notes.Add("More evidence is required to verify this certificate confidently.");
         }
 
         if (notes.Count == 0)

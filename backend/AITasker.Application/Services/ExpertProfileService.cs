@@ -591,9 +591,9 @@ public class ExpertProfileService : IExpertProfileService
             x.VerificationStatus == "VERIFIED"
         );
 
-        var hasNeedsReviewCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus == "NEEDS_REVIEW"
-        );
+        var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
+    x.VerificationStatus == "NEEDS_EVIDENCE"
+);
 
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
             x.VerificationStatus is "SUSPICIOUS" or "INVALID"
@@ -624,7 +624,7 @@ public class ExpertProfileService : IExpertProfileService
         {
             confidence += 35m;
         }
-        else if (hasNeedsReviewCertificate)
+        else if (hasNeedsEvidenceCertificate)
         {
             confidence += 20m;
         }
@@ -672,7 +672,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var gap = claimedYears - verifiedYears;
 
-        var status = "UNVERIFIED";
+        var status = "NEEDS_EVIDENCE";
 
         if (confidence >= 75m && gap <= 1)
         {
@@ -717,12 +717,6 @@ public class ExpertProfileService : IExpertProfileService
     )
     {
         var normalizedAiStatus = NormalizeReviewStatus(aiReviewStatus);
-
-        if (normalizedAiStatus == "REJECTED")
-        {
-            return "REJECTED";
-        }
-
         var claimedYears = Math.Clamp(claimedYearsOfExperience, 0, 50);
         var verifiedYears = Math.Clamp(
             experienceVerification.VerifiedYearsOfExperience,
@@ -889,28 +883,25 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-    private static string NormalizeReviewStatus(string? status)
+   private static string NormalizeReviewStatus(string? status)
+{
+    if (string.IsNullOrWhiteSpace(status))
     {
-        if (string.IsNullOrWhiteSpace(status))
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        var normalized = status.Trim()
-            .ToUpper()
-            .Replace("-", "_")
-            .Replace(" ", "_");
-
-        return normalized switch
-        {
-            "APPROVED" => "APPROVED",
-            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            "REJECTED" => "REJECTED",
-            "PENDING_REVIEW" => "NEEDS_CORRECTION",
-            "PENDING_AI_REVIEW" => "NEEDS_CORRECTION",
-            _ => "NEEDS_CORRECTION"
-        };
+        return "NEEDS_CORRECTION";
     }
+
+    var normalized = status.Trim()
+        .ToUpper()
+        .Replace("-", "_")
+        .Replace(" ", "_");
+
+    return normalized switch
+    {
+        "APPROVED" => "APPROVED",
+        "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+        _ => "NEEDS_CORRECTION"
+    };
+}
 
     private static string BuildFinalProfileReviewNote(
         string? aiReviewNote,
@@ -975,9 +966,9 @@ public class ExpertProfileService : IExpertProfileService
                 x.VerificationStatus == "VERIFIED"
             );
 
-            var needsReviewCount = certificateVerificationResults.Count(x =>
-                x.VerificationStatus == "NEEDS_REVIEW"
-            );
+            var needsEvidenceCount = certificateVerificationResults.Count(x =>
+    x.VerificationStatus == "NEEDS_EVIDENCE"
+);
 
             var suspiciousCount = certificateVerificationResults.Count(x =>
                 x.VerificationStatus == "SUSPICIOUS"
@@ -988,7 +979,7 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             notes.Add(
-                $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {suspiciousCount} suspicious, {invalidCount} invalid."
+              $"Certificate verification summary: {verifiedCount} verified, {needsEvidenceCount} needs evidence, {suspiciousCount} suspicious, {invalidCount} invalid."
             );
         }
 
@@ -1022,7 +1013,7 @@ public class ExpertProfileService : IExpertProfileService
                 IssuedAt = certificate.IssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "UNVERIFIED",
+                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
@@ -1054,7 +1045,7 @@ public class ExpertProfileService : IExpertProfileService
                 IssuedAt = certificate.IssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "UNVERIFIED",
+                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
@@ -1159,9 +1150,7 @@ public class ExpertProfileService : IExpertProfileService
         user.Status = reviewStatus switch
         {
             "LOCKED" => "EXPERT_PROFILE_LOCKED",
-            "NEEDS_CORRECTION" => "PENDING_PROFILE",
-            "REJECTED" => "PENDING_PROFILE",
-            _ => "PENDING_PROFILE"
+            "NEEDS_CORRECTION" => "PENDING_PROFILE",            _ => "PENDING_PROFILE"
         };
 
         user.UpdatedAt = now;
@@ -1176,7 +1165,7 @@ public class ExpertProfileService : IExpertProfileService
 
     private static bool IsFailedReviewStatus(string reviewStatus)
     {
-        return reviewStatus is "NEEDS_CORRECTION" or "REJECTED";
+        return reviewStatus == "NEEDS_CORRECTION";
     }
 
     private static bool ShouldLockBeforeNextExpertReviewAttempt(
@@ -1262,7 +1251,7 @@ public class ExpertProfileService : IExpertProfileService
         var normalizedProfileStatus = profileReviewStatus.Trim().ToUpperInvariant();
 
         return normalizedUserStatus == "PENDING_PROFILE"
-            && normalizedProfileStatus is "NEEDS_CORRECTION" or "REJECTED";
+            && normalizedProfileStatus == "NEEDS_CORRECTION";
     }
 
     private static void EnsureActiveExpertCanUpdate(User user)
@@ -1725,7 +1714,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
 
         public string? ExperienceVerificationNote { get; set; }
     }
@@ -1748,7 +1737,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
 
         public string? ExperienceVerificationNote { get; set; }
 
