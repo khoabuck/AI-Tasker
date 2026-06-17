@@ -13,6 +13,9 @@ public class RecommendationService : IRecommendationService
     private const string UserStatusActive = "ACTIVE";
     private const string ExpertReviewApproved = "APPROVED";
 
+    private const string ClientTypeBusiness = "BUSINESS";
+    private const string BusinessVerificationVerified = "VERIFIED";
+
     private readonly AITaskerDbContext _dbContext;
     private readonly IJobAssistantProvider _jobAssistantProvider;
 
@@ -38,6 +41,11 @@ public class RecommendationService : IRecommendationService
             throw new InvalidOperationException(
                 "Only CLIENT or ADMIN can find expert recommendations from prompt."
             );
+        }
+
+        if (role == "CLIENT")
+        {
+            await EnsureCurrentClientEligibleForRecommendationAsync(currentUserId);
         }
 
         if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -216,6 +224,9 @@ public class RecommendationService : IRecommendationService
         var job = await _dbContext.JobPostings
             .AsNoTracking()
             .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
             .FirstOrDefaultAsync(x => x.JobPostingId == jobPostingId);
@@ -235,6 +246,13 @@ public class RecommendationService : IRecommendationService
         if (job.ClientProfile == null)
         {
             throw new InvalidOperationException("Job client profile not found.");
+        }
+
+        if (!IsClientEligibleForRecommendation(job.ClientProfile))
+        {
+            throw new InvalidOperationException(
+                "Job owner must be active and verified before expert recommendations can be generated."
+            );
         }
 
         if (role != "ADMIN" && job.ClientProfile.UserId != currentUserId)
@@ -314,9 +332,23 @@ public class RecommendationService : IRecommendationService
             .AsNoTracking()
             .Include(x => x.ClientProfile!)
                 .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
-            .Where(x => x.Status == JobStatusOpen)
+            .Where(x =>
+                x.Status == JobStatusOpen &&
+                x.ClientProfile != null &&
+                x.ClientProfile.User != null &&
+                x.ClientProfile.User.Status == UserStatusActive &&
+                (
+                    x.ClientProfile.ClientType != ClientTypeBusiness ||
+                    (
+                        x.ClientProfile.BusinessProfile != null &&
+                        x.ClientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified
+                    )
+                )
+            )
             .ToListAsync();
 
         var recommendations = jobs
@@ -329,6 +361,46 @@ public class RecommendationService : IRecommendationService
             .ToList();
 
         return recommendations;
+    }
+
+    private async Task EnsureCurrentClientEligibleForRecommendationAsync(int userId)
+    {
+        var clientProfile = await _dbContext.ClientProfiles
+            .AsNoTracking()
+            .Include(x => x.User)
+            .Include(x => x.BusinessProfile)
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        if (!IsClientEligibleForRecommendation(clientProfile))
+        {
+            throw new InvalidOperationException(
+                "Your account must be active and verified before requesting expert recommendations."
+            );
+        }
+    }
+
+    private static bool IsClientEligibleForRecommendation(ClientProfile clientProfile)
+    {
+        if (clientProfile.User == null ||
+            clientProfile.User.Status != UserStatusActive)
+        {
+            return false;
+        }
+
+        var clientType = clientProfile.ClientType.Trim().ToUpperInvariant();
+
+        if (clientType != ClientTypeBusiness)
+        {
+            return true;
+        }
+
+        return clientProfile.BusinessProfile != null &&
+               clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
     }
 
     private static ExpertRecommendationResponse BuildExpertRecommendation(
