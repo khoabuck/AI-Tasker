@@ -16,6 +16,10 @@ public class JobService : IJobService
     private const string StatusDisputed = "DISPUTED";
     private const string StatusCancelled = "CANCELLED";
 
+    private const string UserStatusActive = "ACTIVE";
+    private const string ClientTypeBusiness = "BUSINESS";
+    private const string BusinessVerificationVerified = "VERIFIED";
+
     private readonly AITaskerDbContext _context;
 
     public JobService(AITaskerDbContext context)
@@ -25,13 +29,7 @@ public class JobService : IJobService
 
     public async Task<JobResponse> CreateDraftAsync(int userId, CreateJobRequest request)
     {
-        var clientProfile = await _context.ClientProfiles
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (clientProfile == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
 
         ValidateJobRequest(request, requireSkill: false);
 
@@ -69,13 +67,7 @@ public class JobService : IJobService
 
     public async Task<JobResponse> SubmitJobAsync(int userId, CreateJobRequest request)
     {
-        var clientProfile = await _context.ClientProfiles
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (clientProfile == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
 
         ValidateJobRequest(request, requireSkill: true);
 
@@ -113,13 +105,7 @@ public class JobService : IJobService
 
     public async Task<JobResponse?> SubmitDraftAsync(int userId, int jobPostingId)
     {
-        var clientProfile = await _context.ClientProfiles
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (clientProfile == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
 
         var job = await _context.JobPostings
             .Include(x => x.JobSkills)
@@ -140,6 +126,8 @@ public class JobService : IJobService
 
         ValidateDraftBeforeSubmit(job);
 
+        await EnsureJobSkillsAreStillActiveAsync(job.JobPostingId);
+
         job.Status = StatusOpen;
         job.UpdatedAt = DateTime.UtcNow;
 
@@ -152,9 +140,25 @@ public class JobService : IJobService
     {
         var query = _context.JobPostings
             .AsNoTracking()
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
-            .Where(x => x.Status == StatusOpen)
+            .Where(x =>
+                x.Status == StatusOpen &&
+                x.ClientProfile != null &&
+                x.ClientProfile.User != null &&
+                x.ClientProfile.User.Status == UserStatusActive &&
+                (
+                    x.ClientProfile.ClientType != ClientTypeBusiness ||
+                    (
+                        x.ClientProfile.BusinessProfile != null &&
+                        x.ClientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified
+                    )
+                )
+            )
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(keyword))
@@ -210,7 +214,10 @@ public class JobService : IJobService
     {
         var job = await _context.JobPostings
             .AsNoTracking()
-            .Include(x => x.ClientProfile)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
             .FirstOrDefaultAsync(x => x.JobPostingId == jobPostingId);
@@ -233,13 +240,7 @@ public class JobService : IJobService
         int jobPostingId,
         UpdateJobRequest request)
     {
-        var clientProfile = await _context.ClientProfiles
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (clientProfile == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
 
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
@@ -286,13 +287,7 @@ public class JobService : IJobService
 
     public async Task<bool> CancelJobAsync(int userId, int jobPostingId)
     {
-        var clientProfile = await _context.ClientProfiles
-            .FirstOrDefaultAsync(x => x.UserId == userId);
-
-        if (clientProfile == null)
-        {
-            throw new InvalidOperationException("Client profile not found.");
-        }
+        var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
 
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
@@ -316,6 +311,77 @@ public class JobService : IJobService
         await _context.SaveChangesAsync();
 
         return true;
+    }
+
+    private async Task<ClientProfile> GetEligibleClientProfileForJobAsync(int userId)
+    {
+        var clientProfile = await _context.ClientProfiles
+            .Include(x => x.User)
+            .Include(x => x.BusinessProfile)
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        if (clientProfile.User == null ||
+            clientProfile.User.Status != UserStatusActive)
+        {
+            throw new InvalidOperationException("Your account must be active before posting jobs.");
+        }
+
+        var clientType = clientProfile.ClientType.Trim().ToUpperInvariant();
+
+        if (clientType == ClientTypeBusiness)
+        {
+            if (clientProfile.BusinessProfile == null)
+            {
+                throw new InvalidOperationException("Business profile not found.");
+            }
+
+            if (clientProfile.BusinessProfile.VerificationStatus != BusinessVerificationVerified)
+            {
+                throw new InvalidOperationException("Business profile must be verified before posting jobs.");
+            }
+        }
+
+        return clientProfile;
+    }
+
+    private static bool IsClientEligibleForPublicJob(ClientProfile clientProfile)
+    {
+        if (clientProfile.User == null ||
+            clientProfile.User.Status != UserStatusActive)
+        {
+            return false;
+        }
+
+        var clientType = clientProfile.ClientType.Trim().ToUpperInvariant();
+
+        if (clientType != ClientTypeBusiness)
+        {
+            return true;
+        }
+
+        return clientProfile.BusinessProfile != null &&
+               clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
+    }
+
+    private async Task EnsureJobSkillsAreStillActiveAsync(int jobPostingId)
+    {
+        var hasInactiveSkill = await _context.JobSkills
+            .AnyAsync(x =>
+                x.JobPostingId == jobPostingId &&
+                (x.Skill == null || !x.Skill.IsActive)
+            );
+
+        if (hasInactiveSkill)
+        {
+            throw new InvalidOperationException(
+                "One or more job skills are inactive. Please update job skills before submitting."
+            );
+        }
     }
 
     private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int>? skillIds)
@@ -399,20 +465,24 @@ public class JobService : IJobService
 
     private static bool CanViewJob(JobPosting job, int? userId, string? role)
     {
-        if (job.Status == StatusOpen)
+        var normalizedRole = role?.Trim().ToUpperInvariant();
+
+        if (normalizedRole == "ADMIN")
         {
             return true;
         }
 
-        if (role == "ADMIN")
-        {
-            return true;
-        }
-
-        if (role == "CLIENT" &&
+        if (normalizedRole == "CLIENT" &&
             userId.HasValue &&
             job.ClientProfile != null &&
             job.ClientProfile.UserId == userId.Value)
+        {
+            return true;
+        }
+
+        if (job.Status == StatusOpen &&
+            job.ClientProfile != null &&
+            IsClientEligibleForPublicJob(job.ClientProfile))
         {
             return true;
         }
@@ -541,7 +611,7 @@ public class JobService : IJobService
             return "UNKNOWN";
         }
 
-        var normalized = complexity.Trim().ToUpper();
+        var normalized = complexity.Trim().ToUpperInvariant();
 
         if (normalized is "SIMPLE" or "MEDIUM" or "COMPLEX" or "UNKNOWN")
         {

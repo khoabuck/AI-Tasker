@@ -58,7 +58,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                         The backend has already inspected URLs using HttpClient.
                         Use the backend URL inspection evidence as the source of truth.
                         Be strict with claimed years of experience.
-                        The system does not use PENDING_REVIEW. If evidence is weak or unclear, return NEEDS_CORRECTION.
+                        Expert profile review status must be either APPROVED or NEEDS_CORRECTION.
+                        If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
                         Return JSON only. Do not return markdown. Do not add text outside JSON.
                         """
                     },
@@ -211,12 +212,12 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         - If proof links or certificate URLs are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION.
         - If a required proof URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION.
         - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION.
-        - If the expert claims 5+ years but has weak evidence, do not approve the profile.
-        - If the expert claims 7+ years but has no strong portfolio, GitHub, LinkedIn, reachable certificate, or detailed project evidence, do not approve the profile.
+        - If the expert claims 5+ years but has weak evidence, return NEEDS_CORRECTION.
+        - If the expert claims 7+ years but has no strong portfolio, GitHub, LinkedIn, reachable certificate, or detailed project evidence, return NEEDS_CORRECTION.
         - If claimed years are much higher than evidence, do not silently downgrade to MID_LEVEL and approve. Return NEEDS_CORRECTION.
         - Only approve SENIOR or LEAD when strong evidence supports that level.
-        - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return REJECTED.
-        - The system does not use PENDING_REVIEW. Never return PENDING_REVIEW.
+        - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return NEEDS_CORRECTION.
+        - Return only APPROVED or NEEDS_CORRECTION as status.
 
         Profile level must be one of:
         - FRESHER: 0-1 verified years, basic profile, little practical evidence.
@@ -234,7 +235,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         Return JSON only in this exact shape:
         {
-          "status": "APPROVED | NEEDS_CORRECTION | REJECTED",
+          "status": "APPROVED | NEEDS_CORRECTION",
           "profileScore": 0,
           "level": "FRESHER | JUNIOR | MID_LEVEL | SENIOR | LEAD",
           "expertCategory": "AI_AUTOMATION | CHATBOT_DEVELOPER | LLM_ENGINEER | DATA_ANALYST | COMPUTER_VISION | PROMPT_ENGINEER | AI_CONSULTANT | RPA_AUTOMATION | OTHER",
@@ -284,8 +285,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         var allowedStatuses = new HashSet<string>
         {
             "APPROVED",
-            "NEEDS_CORRECTION",
-            "REJECTED"
+            "NEEDS_CORRECTION"
         };
 
         var allowedCategories = new HashSet<string>
@@ -347,30 +347,25 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         return result;
     }
 
-    private static string NormalizeReviewStatus(string? status)
+   private static string NormalizeReviewStatus(string? status)
+{
+    if (string.IsNullOrWhiteSpace(status))
     {
-        if (string.IsNullOrWhiteSpace(status))
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        var normalized = status.Trim()
-            .ToUpper()
-            .Replace("-", "_")
-            .Replace(" ", "_");
-
-        return normalized switch
-        {
-            "APPROVED" => "APPROVED",
-            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            "REJECTED" => "REJECTED",
-
-            "PENDING_REVIEW" => "NEEDS_CORRECTION",
-            "PENDING_AI_REVIEW" => "NEEDS_CORRECTION",
-
-            _ => "NEEDS_CORRECTION"
-        };
+        return "NEEDS_CORRECTION";
     }
+
+    var normalized = status.Trim()
+        .ToUpper()
+        .Replace("-", "_")
+        .Replace(" ", "_");
+
+    return normalized switch
+    {
+        "APPROVED" => "APPROVED",
+        "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+        _ => "NEEDS_CORRECTION"
+    };
+}
 
     private static string NormalizeProfileLevel(
         string? level,

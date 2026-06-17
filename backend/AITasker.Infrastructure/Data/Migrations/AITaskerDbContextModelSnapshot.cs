@@ -460,7 +460,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
+                        .HasDefaultValue("NEEDS_EVIDENCE");
 
                     b.HasKey("ExpertCertificateId");
 
@@ -503,7 +503,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
+                        .HasDefaultValue("NEEDS_EVIDENCE");
 
                     b.Property<string>("ExpertCategory")
                         .IsRequired()
