@@ -14,6 +14,7 @@ using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
+
 // =========================
 // Controllers
 // =========================
@@ -211,7 +212,6 @@ builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
 
-
 // =========================
 // BE2 - AI Job Assistant
 // =========================
@@ -220,12 +220,15 @@ builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>(
 
 // =========================
 // Business Verification Provider
-// VietQR + Groq AI
+// VietQR only
 // =========================
 builder.Services.AddHttpClient<
     IBusinessVerificationProvider,
-    GroqBusinessVerificationProvider
->();
+    VietQrBusinessVerificationProvider
+>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 
 // =========================
 // Expert Profile AI Review Provider

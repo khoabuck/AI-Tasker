@@ -11,6 +11,9 @@ public class ClientProfileService : IClientProfileService
     private const decimal IndividualClientPlatformFeeRate = 5.00m;
     private const decimal BusinessClientPlatformFeeRate = 10.00m;
 
+    private const string PendingCompanyName = "Pending VietQR verification";
+    private const string PendingCompanyAddress = "Pending VietQR verification";
+
     private readonly IUserRepository _userRepository;
     private readonly IClientProfileRepository _clientProfileRepository;
     private readonly IBusinessVerificationProvider _businessVerificationProvider;
@@ -69,10 +72,18 @@ public class ClientProfileService : IClientProfileService
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
-        var companyName = request.CompanyName?.Trim() ?? string.Empty;
+
+        var representativeAddress = request.Address?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(representativeAddress))
+        {
+            throw new InvalidOperationException("Representative address is required.");
+        }
+
+        ValidateMaxLength(representativeAddress, 500, "Representative address");
+
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
-        var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
         var businessEmail = NormalizeNullableText(request.BusinessEmail);
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
@@ -80,10 +91,8 @@ public class ClientProfileService : IClientProfileService
         );
 
         ValidateBusinessVerificationInput(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail
         );
 
@@ -97,10 +106,8 @@ public class ClientProfileService : IClientProfileService
         }
 
         var verificationResult = await VerifyBusinessAsync(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail,
             businessPhone
         );
@@ -109,12 +116,24 @@ public class ClientProfileService : IClientProfileService
             verificationResult.Status
         );
 
+        var officialCompanyName = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName) ?? PendingCompanyName
+            : PendingCompanyName;
+
+        var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress) ?? PendingCompanyAddress
+            : PendingCompanyAddress;
+
+        var officialTaxCode = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.TaxCode) ?? taxCode
+            : taxCode;
+
         var businessProfile = new BusinessProfile
         {
-            CompanyName = companyName,
-            TaxCode = taxCode,
+            CompanyName = officialCompanyName,
+            TaxCode = officialTaxCode,
             Industry = industry,
-            CompanyAddress = companyAddress,
+            CompanyAddress = officialCompanyAddress,
             BusinessEmail = businessEmail,
             BusinessPhone = businessPhone,
             VerificationStatus = businessVerificationStatus,
@@ -130,7 +149,7 @@ public class ClientProfileService : IClientProfileService
             UserId = user.UserId,
             ClientType = "BUSINESS",
             PhoneNumber = phoneNumber,
-            Address = NormalizeNullableText(request.Address),
+            Address = representativeAddress,
             PlatformFeeRate = BusinessClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
@@ -201,10 +220,18 @@ public class ClientProfileService : IClientProfileService
         }
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
-        var companyName = request.CompanyName?.Trim() ?? string.Empty;
+
+        var representativeAddress = request.Address?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(representativeAddress))
+        {
+            throw new InvalidOperationException("Representative address is required.");
+        }
+
+        ValidateMaxLength(representativeAddress, 500, "Representative address");
+
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
-        var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
         var businessEmail = NormalizeNullableText(request.BusinessEmail);
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
@@ -212,10 +239,8 @@ public class ClientProfileService : IClientProfileService
         );
 
         ValidateBusinessVerificationInput(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail
         );
 
@@ -231,10 +256,8 @@ public class ClientProfileService : IClientProfileService
         }
 
         var verificationResult = await VerifyBusinessAsync(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail,
             businessPhone
         );
@@ -245,14 +268,26 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.ClientType = "BUSINESS";
         clientProfile.PhoneNumber = phoneNumber;
-        clientProfile.Address = NormalizeNullableText(request.Address);
+        clientProfile.Address = representativeAddress;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
-        businessProfile.CompanyName = companyName;
-        businessProfile.TaxCode = taxCode;
+        var officialCompanyName = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName) ?? PendingCompanyName
+            : PendingCompanyName;
+
+        var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress) ?? PendingCompanyAddress
+            : PendingCompanyAddress;
+
+        var officialTaxCode = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.TaxCode) ?? taxCode
+            : taxCode;
+
+        businessProfile.CompanyName = officialCompanyName;
+        businessProfile.TaxCode = officialTaxCode;
         businessProfile.Industry = industry;
-        businessProfile.CompanyAddress = companyAddress;
+        businessProfile.CompanyAddress = officialCompanyAddress;
         businessProfile.BusinessEmail = businessEmail;
         businessProfile.BusinessPhone = businessPhone;
         businessProfile.VerificationStatus = businessVerificationStatus;
@@ -465,20 +500,18 @@ public class ClientProfileService : IClientProfileService
     }
 
     private async Task<BusinessVerificationProviderResult> VerifyBusinessAsync(
-        string companyName,
         string taxCode,
         string industry,
-        string companyAddress,
         string? businessEmail,
         string? businessPhone)
     {
         return await _businessVerificationProvider.VerifyAsync(
             new BusinessVerificationProviderRequest
             {
-                CompanyName = companyName,
+                CompanyName = string.Empty,
                 TaxCode = taxCode,
                 Industry = industry,
-                CompanyAddress = companyAddress,
+                CompanyAddress = string.Empty,
                 BusinessEmail = businessEmail,
                 BusinessPhone = businessPhone
             }
@@ -591,24 +624,10 @@ public class ClientProfileService : IClientProfileService
     }
 
     private static void ValidateBusinessVerificationInput(
-        string companyName,
         string taxCode,
         string industry,
-        string companyAddress,
         string? businessEmail)
     {
-        if (string.IsNullOrWhiteSpace(companyName))
-        {
-            throw new InvalidOperationException("Company name is required.");
-        }
-
-        if (companyName.Length < 2 || companyName.Length > 255)
-        {
-            throw new InvalidOperationException(
-                "Company name length is invalid."
-            );
-        }
-
         if (string.IsNullOrWhiteSpace(taxCode))
         {
             throw new InvalidOperationException("Tax code is required.");
@@ -636,20 +655,6 @@ public class ClientProfileService : IClientProfileService
         if (industry.Length < 2 || industry.Length > 100)
         {
             throw new InvalidOperationException("Industry length is invalid.");
-        }
-
-        if (string.IsNullOrWhiteSpace(companyAddress))
-        {
-            throw new InvalidOperationException(
-                "Company address is required."
-            );
-        }
-
-        if (companyAddress.Length < 5 || companyAddress.Length > 500)
-        {
-            throw new InvalidOperationException(
-                "Company address length is invalid."
-            );
         }
 
         if (!string.IsNullOrWhiteSpace(businessEmail)
