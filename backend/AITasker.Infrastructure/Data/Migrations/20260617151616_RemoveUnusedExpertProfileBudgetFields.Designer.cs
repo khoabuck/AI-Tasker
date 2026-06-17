@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617151616_RemoveUnusedExpertProfileBudgetFields")]
+    partial class RemoveUnusedExpertProfileBudgetFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -308,9 +311,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<DateTime?>("ProfileReviewLockedUntil")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("ProfileReviewNote")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -319,11 +319,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
-
-                    b.Property<int>("ProfileReviewSubmissionCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
 
                     b.Property<decimal>("ProfileScore")
                         .HasColumnType("decimal(5,2)");

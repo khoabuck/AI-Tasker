@@ -43,12 +43,6 @@ public class ExpertDirectoryItemResponse
 
     public string? ExperienceVerificationNote { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; }
 
     public string? PortfolioUrl { get; set; }

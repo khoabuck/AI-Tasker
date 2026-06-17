@@ -20,10 +20,6 @@ public class ExpertRecommendationResponse
 
     public int YearsOfExperience { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
     public bool AvailableForWork { get; set; }
 
     public decimal ProfileScore { get; set; }

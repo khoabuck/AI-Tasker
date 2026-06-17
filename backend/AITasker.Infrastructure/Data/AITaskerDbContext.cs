@@ -291,17 +291,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.ExperienceVerificationNote)
                 .HasMaxLength(2000);
 
-            entity.Property(x => x.ExpectedProjectBudgetMin)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.ExpectedProjectBudgetMax)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.PreferredProjectDurationDays)
-                .IsRequired();
-
             entity.Property(x => x.AvailableForWork)
                 .IsRequired();
 
@@ -335,6 +324,12 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.MissingInformation)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.ProfileReviewSubmissionCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProfileReviewLockedUntil);
 
             entity.Property(x => x.VerifiedAt);
 
