@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using AITasker.Api.Models;
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -12,29 +13,39 @@ namespace AITasker.Api.Controllers;
 public class UploadsController : ControllerBase
 {
     private readonly IImageUploadService _imageUploadService;
+    private readonly IAuthService _authService;
 
-    public UploadsController(IImageUploadService imageUploadService)
+    public UploadsController(
+        IImageUploadService imageUploadService,
+        IAuthService authService)
     {
         _imageUploadService = imageUploadService;
+        _authService = authService;
     }
 
     [HttpPost("images")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(5 * 1024 * 1024)]
-    public async Task<IActionResult> UploadImage([FromForm] UploadImageFormRequest request)
+    public async Task<IActionResult> UploadImage(
+        [FromForm] UploadImageFormRequest request)
     {
         try
         {
             if (request.File == null)
             {
-                return BadRequest(new { message = "Image file is required." });
+                return BadRequest(new
+                {
+                    success = false,
+                    message = "Image file is required."
+                });
             }
 
-            var folder = ResolveFolder(request.Purpose);
+            var normalizedPurpose = NormalizePurpose(request.Purpose);
+            var folder = ResolveFolder(normalizedPurpose);
 
             await using var stream = request.File.OpenReadStream();
 
-            var result = await _imageUploadService.UploadImageAsync(
+            var uploadResult = await _imageUploadService.UploadImageAsync(
                 stream,
                 request.File.FileName,
                 request.File.ContentType,
@@ -42,21 +53,57 @@ public class UploadsController : ControllerBase
                 folder
             );
 
-            return Ok(result);
+            if (normalizedPurpose == "avatar")
+            {
+                var userId = GetCurrentUserId();
+
+                if (userId == null)
+                {
+                    return Unauthorized(new
+                    {
+                        success = false,
+                        message = "Invalid token."
+                    });
+                }
+
+                var updatedUser = await _authService.UpdateAvatarAsync(
+                    userId.Value,
+                    new UpdateAvatarRequest
+                    {
+                        AvatarUrl = uploadResult.Url
+                    }
+                );
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Avatar uploaded and updated successfully.",
+                    avatarUrl = uploadResult.Url,
+                    image = uploadResult,
+                    user = updatedUser
+                });
+            }
+
+            return Ok(new
+            {
+                success = true,
+                message = "Image uploaded successfully.",
+                image = uploadResult
+            });
         }
         catch (InvalidOperationException ex)
         {
-            return BadRequest(new { message = ex.Message });
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
         }
     }
 
-    private string ResolveFolder(string? purpose)
+    private string ResolveFolder(string normalizedPurpose)
     {
         var role = GetCurrentUserRole();
-
-        var normalizedPurpose = string.IsNullOrWhiteSpace(purpose)
-            ? "images"
-            : purpose.Trim().ToLower();
 
         if (normalizedPurpose == "avatar")
         {
@@ -81,6 +128,26 @@ public class UploadsController : ControllerBase
         return "images";
     }
 
+    private static string NormalizePurpose(string? purpose)
+    {
+        return string.IsNullOrWhiteSpace(purpose)
+            ? "images"
+            : purpose.Trim().ToLowerInvariant();
+    }
+
+    private int? GetCurrentUserId()
+    {
+        var userIdText = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("userId");
+
+        if (!int.TryParse(userIdText, out var userId))
+        {
+            return null;
+        }
+
+        return userId;
+    }
+
     private string? GetCurrentUserRole()
     {
         if (User.IsInRole("ADMIN"))
@@ -98,7 +165,7 @@ public class UploadsController : ControllerBase
             return "EXPERT";
         }
 
-        return User.FindFirstValue(ClaimTypes.Role) ??
-               User.FindFirstValue("role");
+        return User.FindFirstValue(ClaimTypes.Role)
+            ?? User.FindFirstValue("role");
     }
 }

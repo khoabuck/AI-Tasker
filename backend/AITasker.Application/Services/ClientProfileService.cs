@@ -32,19 +32,29 @@ public class ClientProfileService : IClientProfileService
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+        var address = request.Address?.Trim() ?? string.Empty;
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            throw new InvalidOperationException("Address is required.");
+        }
+
+        ValidateMaxLength(address, 500, "Address");
 
         var clientProfile = new ClientProfile
         {
             UserId = user.UserId,
             ClientType = "INDIVIDUAL",
             PhoneNumber = phoneNumber,
-            Address = NormalizeNullableText(request.Address),
-            AiNeeds = NormalizeNullableText(request.AiNeeds),
-            MainProblems = NormalizeNullableText(request.MainProblems),
-            ExpectedBudgetMin = request.ExpectedBudgetMin,
-            ExpectedBudgetMax = request.ExpectedBudgetMax,
+            Address = address,
+
+            // Individual không dùng các field này.
+            // Hiện tại để null vì entity/database vẫn còn cột.
+            AiNeeds = null,
+            MainProblems = null,
+            ExpectedBudgetMin = null,
+            ExpectedBudgetMax = null,
+
             PlatformFeeRate = IndividualClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow
         };
@@ -325,27 +335,24 @@ public class ClientProfileService : IClientProfileService
         }
 
         ValidateIndividualProfileUpdateRequest(request);
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
-
-        user.FullName = request.FullName!.Trim();
-
-        if (request.AvatarUrl != null)
-        {
-            user.AvatarUrl = NormalizeNullableText(request.AvatarUrl);
-        }
-
-        user.UpdatedAt = DateTime.UtcNow;
+        var address = request.Address!.Trim();
 
         clientProfile.PhoneNumber = phoneNumber;
-        clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
+        clientProfile.Address = address;
+
+        // Individual không dùng các field này.
+        // Hiện tại để null vì entity/database vẫn còn cột.
+        clientProfile.AiNeeds = null;
+        clientProfile.MainProblems = null;
+        clientProfile.ExpectedBudgetMin = null;
+        clientProfile.ExpectedBudgetMax = null;
+
         clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
+
+        user.UpdatedAt = DateTime.UtcNow;
 
         await _clientProfileRepository.SaveChangesAsync();
 
@@ -514,23 +521,14 @@ public class ClientProfileService : IClientProfileService
     private static void ValidateIndividualProfileUpdateRequest(
         UpdateIndividualClientProfileRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.FullName))
-        {
-            throw new InvalidOperationException("Full name is required.");
-        }
-
-        var fullName = request.FullName.Trim();
-
-        if (fullName.Length < 2 || fullName.Length > 255)
-        {
-            throw new InvalidOperationException("Full name length is invalid.");
-        }
-
         ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (string.IsNullOrWhiteSpace(request.Address))
+        {
+            throw new InvalidOperationException("Address is required.");
+        }
+
         ValidateMaxLength(request.Address, 500, "Address");
-        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
-        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
-        ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
     }
 
     private static void ValidateBusinessProfileUpdateRequest(
@@ -796,12 +794,26 @@ public class ClientProfileService : IClientProfileService
             ClientType = clientProfile.ClientType,
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,
-            AiNeeds = clientProfile.AiNeeds,
-            MainProblems = clientProfile.MainProblems,
-            ExpectedBudgetMin = clientProfile.ExpectedBudgetMin,
-            ExpectedBudgetMax = clientProfile.ExpectedBudgetMax,
+
+            AiNeeds = clientProfile.ClientType == "BUSINESS"
+                ? clientProfile.AiNeeds
+                : null,
+
+            MainProblems = clientProfile.ClientType == "BUSINESS"
+                ? clientProfile.MainProblems
+                : null,
+
+            ExpectedBudgetMin = clientProfile.ClientType == "BUSINESS"
+                ? clientProfile.ExpectedBudgetMin
+                : null,
+
+            ExpectedBudgetMax = clientProfile.ClientType == "BUSINESS"
+                ? clientProfile.ExpectedBudgetMax
+                : null,
+
             PlatformFeeRate = clientProfile.PlatformFeeRate,
             UserStatus = clientProfile.User.Status,
+
             BusinessProfile = clientProfile.BusinessProfile == null
                 ? null
                 : new BusinessProfileResponse

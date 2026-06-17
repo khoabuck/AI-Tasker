@@ -1,10 +1,12 @@
 using System.Security.Claims;
-using AITasker.Application.DTOs.Requests;
-using AITasker.Application.Interfaces;
+
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+
+using AITasker.Application.DTOs.Requests;
+using AITasker.Application.Interfaces;
 
 namespace AITasker.Api.Controllers;
 
@@ -246,6 +248,40 @@ public class AuthController : ControllerBase
         try
         {
             var result = await _authService.SelectRoleAsync(
+                userId.Value,
+                request
+            );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [Authorize]
+    [HttpPut("me/avatar")]
+    public async Task<IActionResult> UpdateMyAvatar(UpdateAvatarRequest request)
+    {
+        var userId = GetCurrentUserId();
+
+        if (userId == null)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _authService.UpdateAvatarAsync(
                 userId.Value,
                 request
             );
