@@ -45,12 +45,10 @@ public class VietQrBusinessVerificationProvider : IBusinessVerificationProvider
         {
             return new BusinessVerificationProviderResult
             {
-                Status = vietQrResult.IsSystemError
-                    ? "PENDING_REVIEW"
-                    : "NEEDS_CORRECTION",
+                Status = "NEEDS_CORRECTION",
                 ConfidenceScore = 0,
                 Note = vietQrResult.IsSystemError
-                    ? $"VietQR verification service issue. Detail: {vietQrResult.Message}"
+                    ? $"VietQR verification service issue. Please try again later. Detail: {vietQrResult.Message}"
                     : $"Tax code was not found on VietQR. Detail: {vietQrResult.Message}"
             };
         }
@@ -157,6 +155,17 @@ public class VietQrBusinessVerificationProvider : IBusinessVerificationProvider
                     Success = false,
                     IsSystemError = false,
                     Message = payload.Desc ?? "Tax code not found."
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(payload.Data.Id)
+                && string.IsNullOrWhiteSpace(payload.Data.Name))
+            {
+                return new VietQrLookupResult
+                {
+                    Success = false,
+                    IsSystemError = false,
+                    Message = "Tax code not found. VietQR returned empty business data."
                 };
             }
 

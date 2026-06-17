@@ -149,40 +149,40 @@ public class AITaskerDbContext : DbContext
         // =========================
         // ClientProfiles
         // =========================
-       modelBuilder.Entity<ClientProfile>(entity =>
-{
-    entity.ToTable("ClientProfiles");
+        modelBuilder.Entity<ClientProfile>(entity =>
+        {
+            entity.ToTable("ClientProfiles");
 
-    entity.HasKey(x => x.ClientProfileId);
+            entity.HasKey(x => x.ClientProfileId);
 
-    entity.HasIndex(x => x.UserId)
-        .IsUnique();
+            entity.HasIndex(x => x.UserId)
+                .IsUnique();
 
-    entity.Property(x => x.ClientType)
-        .HasMaxLength(20)
-        .IsRequired();
+            entity.Property(x => x.ClientType)
+                .HasMaxLength(20)
+                .IsRequired();
 
-    entity.Property(x => x.PhoneNumber)
-        .HasMaxLength(30)
-        .IsRequired();
+            entity.Property(x => x.PhoneNumber)
+                .HasMaxLength(30)
+                .IsRequired();
 
-    entity.Property(x => x.Address)
-        .HasMaxLength(500);
+            entity.Property(x => x.Address)
+                .HasMaxLength(500);
 
-    entity.Property(x => x.PlatformFeeRate)
-        .HasColumnType("decimal(5,2)")
-        .IsRequired();
+            entity.Property(x => x.PlatformFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
 
-    entity.Property(x => x.CreatedAt)
-        .IsRequired();
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
 
-    entity.Property(x => x.UpdatedAt);
+            entity.Property(x => x.UpdatedAt);
 
-    entity.HasOne(x => x.User)
-        .WithMany()
-        .HasForeignKey(x => x.UserId)
-        .OnDelete(DeleteBehavior.Cascade);
-});
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
 
         // =========================
         // BusinessProfiles
@@ -227,6 +227,12 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerificationNote)
                 .HasMaxLength(1000);
+
+            entity.Property(x => x.VerificationSubmissionCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.VerificationLockedUntil);
 
             entity.Property(x => x.VerifiedAt);
 

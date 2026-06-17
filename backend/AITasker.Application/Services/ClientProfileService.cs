@@ -11,6 +11,10 @@ public class ClientProfileService : IClientProfileService
     private const decimal IndividualClientPlatformFeeRate = 5.00m;
     private const decimal BusinessClientPlatformFeeRate = 10.00m;
 
+    private const int MaxBusinessVerificationSubmissions = 5;
+    private static readonly TimeSpan BusinessVerificationLockDuration =
+        TimeSpan.FromHours(24);
+
     private const string PendingCompanyName = "Pending VietQR verification";
     private const string PendingCompanyAddress = "Pending VietQR verification";
 
@@ -77,10 +81,16 @@ public class ClientProfileService : IClientProfileService
 
         if (string.IsNullOrWhiteSpace(representativeAddress))
         {
-            throw new InvalidOperationException("Representative address is required.");
+            throw new InvalidOperationException(
+                "Representative address is required."
+            );
         }
 
-        ValidateMaxLength(representativeAddress, 500, "Representative address");
+        ValidateMaxLength(
+            representativeAddress,
+            500,
+            "Representative address"
+        );
 
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
@@ -117,11 +127,13 @@ public class ClientProfileService : IClientProfileService
         );
 
         var officialCompanyName = businessVerificationStatus == "VERIFIED"
-            ? NormalizeNullableText(verificationResult.OfficialCompanyName) ?? PendingCompanyName
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName)
+                ?? PendingCompanyName
             : PendingCompanyName;
 
         var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
-            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress) ?? PendingCompanyAddress
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress)
+                ?? PendingCompanyAddress
             : PendingCompanyAddress;
 
         var officialTaxCode = businessVerificationStatus == "VERIFIED"
@@ -138,6 +150,10 @@ public class ClientProfileService : IClientProfileService
             BusinessPhone = businessPhone,
             VerificationStatus = businessVerificationStatus,
             VerificationNote = TruncateNote(verificationResult.Note),
+            VerificationSubmissionCount = businessVerificationStatus == "VERIFIED"
+                ? 0
+                : 1,
+            VerificationLockedUntil = null,
             VerifiedAt = businessVerificationStatus == "VERIFIED"
                 ? DateTime.UtcNow
                 : null,
@@ -204,18 +220,57 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        var canResubmitAfterCorrection =
+        var canResubmit =
             user.Status == "BUSINESS_NEEDS_CORRECTION"
-            && businessProfile.VerificationStatus == "NEEDS_CORRECTION";
+            || user.Status == "BUSINESS_VERIFICATION_LOCKED";
 
-        var canResubmitAfterAdminReject =
-            user.Status == "BUSINESS_REJECTED"
-            && businessProfile.VerificationStatus == "REJECTED";
-
-        if (!canResubmitAfterCorrection && !canResubmitAfterAdminReject)
+        if (!canResubmit)
         {
             throw new InvalidOperationException(
-                "Only business profiles needing correction or rejected can be resubmitted."
+                "Only business profiles needing correction or locked after too many submissions can be resubmitted."
+            );
+        }
+
+        var now = DateTime.UtcNow;
+
+        if (businessProfile.VerificationLockedUntil.HasValue)
+        {
+            if (businessProfile.VerificationLockedUntil.Value > now)
+            {
+                throw new InvalidOperationException(
+                    $"Business verification is locked until {businessProfile.VerificationLockedUntil.Value:yyyy-MM-dd HH:mm:ss} UTC."
+                );
+            }
+
+            businessProfile.VerificationSubmissionCount = 0;
+            businessProfile.VerificationLockedUntil = null;
+            businessProfile.VerificationStatus = "NEEDS_CORRECTION";
+            businessProfile.VerificationNote =
+                "Business verification lock expired. User can resubmit.";
+            businessProfile.UpdatedAt = now;
+
+            user.Status = "BUSINESS_NEEDS_CORRECTION";
+            user.UpdatedAt = now;
+        }
+
+        if (businessProfile.VerificationSubmissionCount
+            >= MaxBusinessVerificationSubmissions)
+        {
+            var lockedUntil = now.Add(BusinessVerificationLockDuration);
+
+            businessProfile.VerificationStatus = "LOCKED";
+            businessProfile.VerificationLockedUntil = lockedUntil;
+            businessProfile.VerificationNote =
+                $"Too many business verification submissions. Locked until {lockedUntil:yyyy-MM-dd HH:mm:ss} UTC.";
+            businessProfile.UpdatedAt = now;
+
+            user.Status = "BUSINESS_VERIFICATION_LOCKED";
+            user.UpdatedAt = now;
+
+            await _clientProfileRepository.SaveChangesAsync();
+
+            throw new InvalidOperationException(
+                $"You have reached the maximum of {MaxBusinessVerificationSubmissions} business verification submissions. Please try again after {lockedUntil:yyyy-MM-dd HH:mm:ss} UTC."
             );
         }
 
@@ -225,10 +280,16 @@ public class ClientProfileService : IClientProfileService
 
         if (string.IsNullOrWhiteSpace(representativeAddress))
         {
-            throw new InvalidOperationException("Representative address is required.");
+            throw new InvalidOperationException(
+                "Representative address is required."
+            );
         }
 
-        ValidateMaxLength(representativeAddress, 500, "Representative address");
+        ValidateMaxLength(
+            representativeAddress,
+            500,
+            "Representative address"
+        );
 
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
@@ -270,14 +331,16 @@ public class ClientProfileService : IClientProfileService
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = representativeAddress;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
-        clientProfile.UpdatedAt = DateTime.UtcNow;
+        clientProfile.UpdatedAt = now;
 
         var officialCompanyName = businessVerificationStatus == "VERIFIED"
-            ? NormalizeNullableText(verificationResult.OfficialCompanyName) ?? PendingCompanyName
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName)
+                ?? PendingCompanyName
             : PendingCompanyName;
 
         var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
-            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress) ?? PendingCompanyAddress
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress)
+                ?? PendingCompanyAddress
             : PendingCompanyAddress;
 
         var officialTaxCode = businessVerificationStatus == "VERIFIED"
@@ -292,16 +355,29 @@ public class ClientProfileService : IClientProfileService
         businessProfile.BusinessPhone = businessPhone;
         businessProfile.VerificationStatus = businessVerificationStatus;
         businessProfile.VerificationNote = TruncateNote(verificationResult.Note);
+
+        if (businessVerificationStatus == "VERIFIED")
+        {
+            businessProfile.VerificationSubmissionCount = 0;
+            businessProfile.VerificationLockedUntil = null;
+        }
+        else
+        {
+            businessProfile.VerificationSubmissionCount += 1;
+            businessProfile.VerificationLockedUntil = null;
+        }
+
         businessProfile.VerifiedAt = businessVerificationStatus == "VERIFIED"
-            ? DateTime.UtcNow
+            ? now
             : null;
-        businessProfile.UpdatedAt = DateTime.UtcNow;
+
+        businessProfile.UpdatedAt = now;
 
         user.Status = MapUserStatusFromBusinessVerification(
             businessVerificationStatus
         );
 
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = now;
 
         await _clientProfileRepository.SaveChangesAsync();
 
@@ -674,7 +750,8 @@ public class ClientProfileService : IClientProfileService
         {
             "VERIFIED" => "VERIFIED",
             "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            _ => "PENDING_REVIEW"
+            "LOCKED" => "LOCKED",
+            _ => "NEEDS_CORRECTION"
         };
     }
 
@@ -684,8 +761,8 @@ public class ClientProfileService : IClientProfileService
         return verificationStatus switch
         {
             "VERIFIED" => "ACTIVE",
-            "NEEDS_CORRECTION" => "BUSINESS_NEEDS_CORRECTION",
-            _ => "PENDING_BUSINESS_VERIFICATION"
+            "LOCKED" => "BUSINESS_VERIFICATION_LOCKED",
+            _ => "BUSINESS_NEEDS_CORRECTION"
         };
     }
 
@@ -766,6 +843,10 @@ public class ClientProfileService : IClientProfileService
                         clientProfile.BusinessProfile.VerificationStatus,
                     VerificationNote =
                         clientProfile.BusinessProfile.VerificationNote,
+                    VerificationSubmissionCount =
+                        clientProfile.BusinessProfile.VerificationSubmissionCount,
+                    VerificationLockedUntil =
+                        clientProfile.BusinessProfile.VerificationLockedUntil,
                     VerifiedAt =
                         clientProfile.BusinessProfile.VerifiedAt
                 }

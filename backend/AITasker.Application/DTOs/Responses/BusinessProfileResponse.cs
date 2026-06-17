@@ -22,5 +22,9 @@ public class BusinessProfileResponse
 
     public string? VerificationNote { get; set; }
 
+    public int VerificationSubmissionCount { get; set; }
+
+    public DateTime? VerificationLockedUntil { get; set; }
+
     public DateTime? VerifiedAt { get; set; }
 }
