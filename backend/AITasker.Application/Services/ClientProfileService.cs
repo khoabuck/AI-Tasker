@@ -47,14 +47,6 @@ public class ClientProfileService : IClientProfileService
             ClientType = "INDIVIDUAL",
             PhoneNumber = phoneNumber,
             Address = address,
-
-            // Individual không dùng các field này.
-            // Hiện tại để null vì entity/database vẫn còn cột.
-            AiNeeds = null,
-            MainProblems = null,
-            ExpectedBudgetMin = null,
-            ExpectedBudgetMax = null,
-
             PlatformFeeRate = IndividualClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow
         };
@@ -104,8 +96,6 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Tax code already exists.");
         }
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
-
         var verificationResult = await VerifyBusinessAsync(
             companyName,
             taxCode,
@@ -141,10 +131,6 @@ public class ClientProfileService : IClientProfileService
             ClientType = "BUSINESS",
             PhoneNumber = phoneNumber,
             Address = NormalizeNullableText(request.Address),
-            AiNeeds = NormalizeNullableText(request.AiNeeds),
-            MainProblems = NormalizeNullableText(request.MainProblems),
-            ExpectedBudgetMin = request.ExpectedBudgetMin,
-            ExpectedBudgetMax = request.ExpectedBudgetMax,
             PlatformFeeRate = BusinessClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
@@ -244,8 +230,6 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Tax code already exists.");
         }
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
-
         var verificationResult = await VerifyBusinessAsync(
             companyName,
             taxCode,
@@ -262,10 +246,6 @@ public class ClientProfileService : IClientProfileService
         clientProfile.ClientType = "BUSINESS";
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -341,14 +321,6 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = address;
-
-        // Individual không dùng các field này.
-        // Hiện tại để null vì entity/database vẫn còn cột.
-        clientProfile.AiNeeds = null;
-        clientProfile.MainProblems = null;
-        clientProfile.ExpectedBudgetMin = null;
-        clientProfile.ExpectedBudgetMax = null;
-
         clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -406,7 +378,6 @@ public class ClientProfileService : IClientProfileService
         }
 
         ValidateBusinessProfileUpdateRequest(request);
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
@@ -425,10 +396,6 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -562,8 +529,6 @@ public class ClientProfileService : IClientProfileService
         );
 
         ValidateMaxLength(request.Address, 500, "Address");
-        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
-        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
         ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
         ValidateMaxLength(request.BusinessEmail, 255, "Business email");
     }
@@ -696,30 +661,6 @@ public class ClientProfileService : IClientProfileService
         }
     }
 
-    private static void ValidateBudget(decimal? min, decimal? max)
-    {
-        if (min.HasValue && min.Value < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected budget min must be greater than or equal to 0."
-            );
-        }
-
-        if (max.HasValue && max.Value < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected budget max must be greater than or equal to 0."
-            );
-        }
-
-        if (min.HasValue && max.HasValue && min.Value > max.Value)
-        {
-            throw new InvalidOperationException(
-                "Expected budget min must be less than or equal to max."
-            );
-        }
-    }
-
     private static string NormalizeVerificationStatus(string? status)
     {
         var value = status?.Trim().ToUpperInvariant();
@@ -794,26 +735,8 @@ public class ClientProfileService : IClientProfileService
             ClientType = clientProfile.ClientType,
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,
-
-            AiNeeds = clientProfile.ClientType == "BUSINESS"
-                ? clientProfile.AiNeeds
-                : null,
-
-            MainProblems = clientProfile.ClientType == "BUSINESS"
-                ? clientProfile.MainProblems
-                : null,
-
-            ExpectedBudgetMin = clientProfile.ClientType == "BUSINESS"
-                ? clientProfile.ExpectedBudgetMin
-                : null,
-
-            ExpectedBudgetMax = clientProfile.ClientType == "BUSINESS"
-                ? clientProfile.ExpectedBudgetMax
-                : null,
-
             PlatformFeeRate = clientProfile.PlatformFeeRate,
             UserStatus = clientProfile.User.Status,
-
             BusinessProfile = clientProfile.BusinessProfile == null
                 ? null
                 : new BusinessProfileResponse
