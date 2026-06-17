@@ -43,6 +43,7 @@ const unwrapListData = (response) => {
   if (Array.isArray(data?.data?.result)) return data.data.result;
   if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
   if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
+
   if (Array.isArray(data?.data?.withdrawalRequests)) {
     return data.data.withdrawalRequests;
   }
@@ -61,6 +62,7 @@ const normalizeWallet = (wallet) => {
       pendingBalance: 0,
       totalEarning: 0,
       totalEarned: 0,
+      createdAt: "",
       updatedAt: "",
       raw: null,
     };
@@ -88,6 +90,10 @@ const normalizeWallet = (wallet) => {
     )
   );
 
+  const pendingBalance = Number(
+    getValue(wallet.pendingBalance, wallet.PendingBalance, 0)
+  );
+
   const totalEarning = Number(
     getValue(
       wallet.totalEarning,
@@ -107,15 +113,13 @@ const normalizeWallet = (wallet) => {
     balance: availableBalance,
     availableBalance,
     lockedBalance,
-    pendingBalance: Number(
-      getValue(wallet.pendingBalance, wallet.PendingBalance, 0)
-    ),
+    pendingBalance,
 
     totalEarning,
     totalEarned: totalEarning,
 
-    updatedAt: getValue(wallet.updatedAt, wallet.UpdatedAt, ""),
     createdAt: getValue(wallet.createdAt, wallet.CreatedAt, ""),
+    updatedAt: getValue(wallet.updatedAt, wallet.UpdatedAt, ""),
 
     raw: wallet,
   };
@@ -269,13 +273,11 @@ const buildWithdrawalPayload = (formData) => {
 const expertWalletService = {
   async getWalletOverview() {
     /*
-      Không gọi /wallets/me và /wallets/balance song song cho account mới.
-      Lý do: backend GetOrCreateWalletAsync có thể bị duplicate Wallet UserId.
+      Gọi /wallets/me trước để backend tạo wallet nếu account chưa có wallet.
+      Sau đó mới gọi balance / transactions / withdrawals song song.
+      Cách này tránh lỗi duplicate Wallet UserId khi account mới vào wallet lần đầu.
     */
     const walletResponse = await expertWalletApi.getMyWallet();
-
-    console.log("GET MY WALLET RESPONSE:", walletResponse?.data);
-
     const wallet = normalizeWallet(unwrapData(walletResponse));
 
     const [balanceResponse, transactionsResponse, withdrawalsResponse] =
@@ -284,10 +286,6 @@ const expertWalletService = {
         expertWalletApi.getMyTransactions(),
         expertWalletApi.getMyWithdrawals(),
       ]);
-
-    console.log("GET WALLET BALANCE RESPONSE:", balanceResponse?.data);
-    console.log("GET MY TRANSACTIONS RESPONSE:", transactionsResponse?.data);
-    console.log("GET MY WITHDRAWALS RESPONSE:", withdrawalsResponse?.data);
 
     const balance = normalizeBalance(unwrapData(balanceResponse));
 
@@ -303,6 +301,10 @@ const expertWalletService = {
       wallet: {
         ...wallet,
         ...balance,
+        lockedBalance: wallet.lockedBalance,
+        pendingBalance: wallet.pendingBalance,
+        totalEarning: wallet.totalEarning,
+        totalEarned: wallet.totalEarned,
       },
       transactions,
       withdrawals,
@@ -312,15 +314,11 @@ const expertWalletService = {
   async getMyWallet() {
     const response = await expertWalletApi.getMyWallet();
 
-    console.log("GET MY WALLET RESPONSE:", response?.data);
-
     return normalizeWallet(unwrapData(response));
   },
 
   async getWalletBalance() {
     const response = await expertWalletApi.getWalletBalance();
-
-    console.log("GET WALLET BALANCE RESPONSE:", response?.data);
 
     return normalizeBalance(unwrapData(response));
   },
@@ -328,29 +326,26 @@ const expertWalletService = {
   async getMyTransactions() {
     const response = await expertWalletApi.getMyTransactions();
 
-    console.log("GET MY TRANSACTIONS RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeTransaction).filter(Boolean);
   },
 
   async getMyWithdrawals() {
     const response = await expertWalletApi.getMyWithdrawals();
 
-    console.log("GET MY WITHDRAWALS RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeWithdrawal).filter(Boolean);
   },
 
   async requestWithdraw(formData) {
     const payload = buildWithdrawalPayload(formData);
-
-    console.log("CREATE WITHDRAWAL PAYLOAD:", payload);
-
     const response = await expertWalletApi.createWithdrawal(payload);
 
-    console.log("CREATE WITHDRAWAL RESPONSE:", response?.data);
-
     return normalizeWithdrawal(unwrapData(response));
+  },
+
+  async createDeposit(data) {
+    const response = await expertWalletApi.createDeposit(data);
+
+    return unwrapData(response);
   },
 
   normalizeWallet,

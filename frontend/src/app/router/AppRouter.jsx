@@ -64,6 +64,7 @@ import ManageDisputesPage from "../../modules/admin/pages/ManageDisputesPage";
 import ManageJobsPage from "../../modules/admin/pages/ManageJobsPage";
 import ManageUsersPage from "../../modules/admin/pages/ManageUsersPage";
 import ManageTransactionPage from "../../modules/admin/pages/ManageTransactionsPage";
+import NotFoundPage from "../../modules/error/pages/NotFoundPage";
 
 const RequireAuth = ({ children }) => {
   if (!authService.isAuthenticated()) {
@@ -153,14 +154,7 @@ export default function AppRouter() {
       <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageTransactionPage /></ProtectedRoute>} />
 
       {/* 404 */}
-      <Route
-        path="*"
-        element={
-          <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-            404 — Trang không tồn tại
-          </div>
-        }
-      />
-    </Routes>
+       <Route path="*" element={<NotFoundPage />} />
+</Routes>
   );
 }

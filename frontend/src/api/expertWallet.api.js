@@ -13,12 +13,12 @@ const expertWalletApi = {
     return axiosInstance.get("/transactions/me");
   },
 
-  createWithdrawal(data) {
-    return axiosInstance.post("/withdrawals", data);
-  },
-
   getMyWithdrawals() {
     return axiosInstance.get("/withdrawals/me");
+  },
+
+  createWithdrawal(data) {
+    return axiosInstance.post("/withdrawals", data);
   },
 
   createDeposit({ amount, transactionRef } = {}) {
