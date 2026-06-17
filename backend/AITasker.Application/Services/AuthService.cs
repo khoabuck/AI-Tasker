@@ -428,6 +428,53 @@ public class AuthService : IAuthService
         return user == null ? null : MapToUserResponse(user);
     }
 
+    public async Task<UserResponse> UpdateAvatarAsync(
+        int userId,
+        UpdateAvatarRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to update avatar."
+            );
+        }
+
+        var avatarUrl = request.AvatarUrl?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(avatarUrl))
+        {
+            throw new InvalidOperationException("Avatar URL is required.");
+        }
+
+        if (avatarUrl.Length > 500)
+        {
+            throw new InvalidOperationException(
+                "Avatar URL must be at most 500 characters."
+            );
+        }
+
+        if (!Uri.TryCreate(avatarUrl, UriKind.Absolute, out var uri)
+            || (uri.Scheme != Uri.UriSchemeHttp
+                && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException("Avatar URL format is invalid.");
+        }
+
+        user.AvatarUrl = avatarUrl;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return MapToUserResponse(user);
+    }
+
     private async Task CreateAndSendVerificationEmailAsync(User user)
     {
         var rawToken = GenerateSecureToken();

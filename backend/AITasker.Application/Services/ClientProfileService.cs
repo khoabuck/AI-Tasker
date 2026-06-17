@@ -11,6 +11,13 @@ public class ClientProfileService : IClientProfileService
     private const decimal IndividualClientPlatformFeeRate = 5.00m;
     private const decimal BusinessClientPlatformFeeRate = 10.00m;
 
+    private const int MaxBusinessVerificationSubmissions = 5;
+    private static readonly TimeSpan BusinessVerificationLockDuration =
+        TimeSpan.FromHours(24);
+
+    private const string PendingCompanyName = "Pending VietQR verification";
+    private const string PendingCompanyAddress = "Pending VietQR verification";
+
     private readonly IUserRepository _userRepository;
     private readonly IClientProfileRepository _clientProfileRepository;
     private readonly IBusinessVerificationProvider _businessVerificationProvider;
@@ -31,25 +38,22 @@ public class ClientProfileService : IClientProfileService
     {
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+        var address = request.Address?.Trim() ?? string.Empty;
 
-        if (string.IsNullOrWhiteSpace(phoneNumber))
+        if (string.IsNullOrWhiteSpace(address))
         {
-            throw new InvalidOperationException("Phone number is required.");
+            throw new InvalidOperationException("Address is required.");
         }
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
+        ValidateMaxLength(address, 500, "Address");
 
         var clientProfile = new ClientProfile
         {
             UserId = user.UserId,
             ClientType = "INDIVIDUAL",
             PhoneNumber = phoneNumber,
-            Address = NormalizeNullableText(request.Address),
-            AiNeeds = NormalizeNullableText(request.AiNeeds),
-            MainProblems = NormalizeNullableText(request.MainProblems),
-            ExpectedBudgetMin = request.ExpectedBudgetMin,
-            ExpectedBudgetMax = request.ExpectedBudgetMax,
+            Address = address,
             PlatformFeeRate = IndividualClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow
         };
@@ -71,24 +75,34 @@ public class ClientProfileService : IClientProfileService
     {
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
-        var companyName = request.CompanyName?.Trim() ?? string.Empty;
-        var taxCode = request.TaxCode?.Trim() ?? string.Empty;
-        var industry = request.Industry?.Trim() ?? string.Empty;
-        var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
-        var businessEmail = NormalizeNullableText(request.BusinessEmail);
-        var businessPhone = NormalizeNullableText(request.BusinessPhone);
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
-        if (string.IsNullOrWhiteSpace(phoneNumber))
+        var representativeAddress = request.Address?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(representativeAddress))
         {
-            throw new InvalidOperationException("Phone number is required.");
+            throw new InvalidOperationException(
+                "Representative address is required."
+            );
         }
 
+        ValidateMaxLength(
+            representativeAddress,
+            500,
+            "Representative address"
+        );
+
+        var taxCode = request.TaxCode?.Trim() ?? string.Empty;
+        var industry = request.Industry?.Trim() ?? string.Empty;
+        var businessEmail = NormalizeNullableText(request.BusinessEmail);
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
+
         ValidateBusinessVerificationInput(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail
         );
 
@@ -101,13 +115,9 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Tax code already exists.");
         }
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
-
         var verificationResult = await VerifyBusinessAsync(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail,
             businessPhone
         );
@@ -116,16 +126,34 @@ public class ClientProfileService : IClientProfileService
             verificationResult.Status
         );
 
+        var officialCompanyName = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName)
+                ?? PendingCompanyName
+            : PendingCompanyName;
+
+        var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress)
+                ?? PendingCompanyAddress
+            : PendingCompanyAddress;
+
+        var officialTaxCode = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.TaxCode) ?? taxCode
+            : taxCode;
+
         var businessProfile = new BusinessProfile
         {
-            CompanyName = companyName,
-            TaxCode = taxCode,
+            CompanyName = officialCompanyName,
+            TaxCode = officialTaxCode,
             Industry = industry,
-            CompanyAddress = companyAddress,
+            CompanyAddress = officialCompanyAddress,
             BusinessEmail = businessEmail,
             BusinessPhone = businessPhone,
             VerificationStatus = businessVerificationStatus,
             VerificationNote = TruncateNote(verificationResult.Note),
+            VerificationSubmissionCount = businessVerificationStatus == "VERIFIED"
+                ? 0
+                : 1,
+            VerificationLockedUntil = null,
             VerifiedAt = businessVerificationStatus == "VERIFIED"
                 ? DateTime.UtcNow
                 : null,
@@ -137,11 +165,7 @@ public class ClientProfileService : IClientProfileService
             UserId = user.UserId,
             ClientType = "BUSINESS",
             PhoneNumber = phoneNumber,
-            Address = NormalizeNullableText(request.Address),
-            AiNeeds = NormalizeNullableText(request.AiNeeds),
-            MainProblems = NormalizeNullableText(request.MainProblems),
-            ExpectedBudgetMin = request.ExpectedBudgetMin,
-            ExpectedBudgetMax = request.ExpectedBudgetMax,
+            Address = representativeAddress,
             PlatformFeeRate = BusinessClientPlatformFeeRate,
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
@@ -196,39 +220,88 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        var canResubmitAfterCorrection =
+        var canResubmit =
             user.Status == "BUSINESS_NEEDS_CORRECTION"
-            && businessProfile.VerificationStatus == "NEEDS_CORRECTION";
+            || user.Status == "BUSINESS_VERIFICATION_LOCKED";
 
-        var canResubmitAfterAdminReject =
-            user.Status == "BUSINESS_REJECTED"
-            && businessProfile.VerificationStatus == "REJECTED";
-
-        if (!canResubmitAfterCorrection && !canResubmitAfterAdminReject)
+        if (!canResubmit)
         {
             throw new InvalidOperationException(
-                "Only business profiles needing correction or rejected can be resubmitted."
+                "Only business profiles needing correction or locked after too many submissions can be resubmitted."
             );
         }
 
-        var phoneNumber = request.PhoneNumber?.Trim() ?? string.Empty;
-        var companyName = request.CompanyName?.Trim() ?? string.Empty;
-        var taxCode = request.TaxCode?.Trim() ?? string.Empty;
-        var industry = request.Industry?.Trim() ?? string.Empty;
-        var companyAddress = request.CompanyAddress?.Trim() ?? string.Empty;
-        var businessEmail = NormalizeNullableText(request.BusinessEmail);
-        var businessPhone = NormalizeNullableText(request.BusinessPhone);
+        var now = DateTime.UtcNow;
 
-        if (string.IsNullOrWhiteSpace(phoneNumber))
+        if (businessProfile.VerificationLockedUntil.HasValue)
         {
-            throw new InvalidOperationException("Phone number is required.");
+            if (businessProfile.VerificationLockedUntil.Value > now)
+            {
+                throw new InvalidOperationException(
+                    $"Business verification is locked until {businessProfile.VerificationLockedUntil.Value:yyyy-MM-dd HH:mm:ss} UTC."
+                );
+            }
+
+            businessProfile.VerificationSubmissionCount = 0;
+            businessProfile.VerificationLockedUntil = null;
+            businessProfile.VerificationStatus = "NEEDS_CORRECTION";
+            businessProfile.VerificationNote =
+                "Business verification lock expired. User can resubmit.";
+            businessProfile.UpdatedAt = now;
+
+            user.Status = "BUSINESS_NEEDS_CORRECTION";
+            user.UpdatedAt = now;
         }
 
+        if (businessProfile.VerificationSubmissionCount
+            >= MaxBusinessVerificationSubmissions)
+        {
+            var lockedUntil = now.Add(BusinessVerificationLockDuration);
+
+            businessProfile.VerificationStatus = "LOCKED";
+            businessProfile.VerificationLockedUntil = lockedUntil;
+            businessProfile.VerificationNote =
+                $"Too many business verification submissions. Locked until {lockedUntil:yyyy-MM-dd HH:mm:ss} UTC.";
+            businessProfile.UpdatedAt = now;
+
+            user.Status = "BUSINESS_VERIFICATION_LOCKED";
+            user.UpdatedAt = now;
+
+            await _clientProfileRepository.SaveChangesAsync();
+
+            throw new InvalidOperationException(
+                $"You have reached the maximum of {MaxBusinessVerificationSubmissions} business verification submissions. Please try again after {lockedUntil:yyyy-MM-dd HH:mm:ss} UTC."
+            );
+        }
+
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        var representativeAddress = request.Address?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(representativeAddress))
+        {
+            throw new InvalidOperationException(
+                "Representative address is required."
+            );
+        }
+
+        ValidateMaxLength(
+            representativeAddress,
+            500,
+            "Representative address"
+        );
+
+        var taxCode = request.TaxCode?.Trim() ?? string.Empty;
+        var industry = request.Industry?.Trim() ?? string.Empty;
+        var businessEmail = NormalizeNullableText(request.BusinessEmail);
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
+
         ValidateBusinessVerificationInput(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail
         );
 
@@ -243,13 +316,9 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Tax code already exists.");
         }
 
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
-
         var verificationResult = await VerifyBusinessAsync(
-            companyName,
             taxCode,
             industry,
-            companyAddress,
             businessEmail,
             businessPhone
         );
@@ -260,32 +329,55 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.ClientType = "BUSINESS";
         clientProfile.PhoneNumber = phoneNumber;
-        clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
+        clientProfile.Address = representativeAddress;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
-        clientProfile.UpdatedAt = DateTime.UtcNow;
+        clientProfile.UpdatedAt = now;
 
-        businessProfile.CompanyName = companyName;
-        businessProfile.TaxCode = taxCode;
+        var officialCompanyName = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyName)
+                ?? PendingCompanyName
+            : PendingCompanyName;
+
+        var officialCompanyAddress = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.OfficialCompanyAddress)
+                ?? PendingCompanyAddress
+            : PendingCompanyAddress;
+
+        var officialTaxCode = businessVerificationStatus == "VERIFIED"
+            ? NormalizeNullableText(verificationResult.TaxCode) ?? taxCode
+            : taxCode;
+
+        businessProfile.CompanyName = officialCompanyName;
+        businessProfile.TaxCode = officialTaxCode;
         businessProfile.Industry = industry;
-        businessProfile.CompanyAddress = companyAddress;
+        businessProfile.CompanyAddress = officialCompanyAddress;
         businessProfile.BusinessEmail = businessEmail;
         businessProfile.BusinessPhone = businessPhone;
         businessProfile.VerificationStatus = businessVerificationStatus;
         businessProfile.VerificationNote = TruncateNote(verificationResult.Note);
+
+        if (businessVerificationStatus == "VERIFIED")
+        {
+            businessProfile.VerificationSubmissionCount = 0;
+            businessProfile.VerificationLockedUntil = null;
+        }
+        else
+        {
+            businessProfile.VerificationSubmissionCount += 1;
+            businessProfile.VerificationLockedUntil = null;
+        }
+
         businessProfile.VerifiedAt = businessVerificationStatus == "VERIFIED"
-            ? DateTime.UtcNow
+            ? now
             : null;
-        businessProfile.UpdatedAt = DateTime.UtcNow;
+
+        businessProfile.UpdatedAt = now;
 
         user.Status = MapUserStatusFromBusinessVerification(
             businessVerificationStatus
         );
 
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = now;
 
         await _clientProfileRepository.SaveChangesAsync();
 
@@ -334,25 +426,16 @@ public class ClientProfileService : IClientProfileService
         }
 
         ValidateIndividualProfileUpdateRequest(request);
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
 
-        user.FullName = request.FullName!.Trim();
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+        var address = request.Address!.Trim();
 
-        if (request.AvatarUrl != null)
-        {
-            user.AvatarUrl = NormalizeNullableText(request.AvatarUrl);
-        }
-
-        user.UpdatedAt = DateTime.UtcNow;
-
-        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
-        clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
+        clientProfile.PhoneNumber = phoneNumber;
+        clientProfile.Address = address;
         clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
+
+        user.UpdatedAt = DateTime.UtcNow;
 
         await _clientProfileRepository.SaveChangesAsync();
 
@@ -406,7 +489,12 @@ public class ClientProfileService : IClientProfileService
         }
 
         ValidateBusinessProfileUpdateRequest(request);
-        ValidateBudget(request.ExpectedBudgetMin, request.ExpectedBudgetMax);
+
+        var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+        var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
 
         user.FullName = request.FullName!.Trim();
 
@@ -417,20 +505,15 @@ public class ClientProfileService : IClientProfileService
 
         user.UpdatedAt = DateTime.UtcNow;
 
-        clientProfile.PhoneNumber = request.PhoneNumber!.Trim();
+        clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.AiNeeds = NormalizeNullableText(request.AiNeeds);
-        clientProfile.MainProblems = NormalizeNullableText(request.MainProblems);
-        clientProfile.ExpectedBudgetMin = request.ExpectedBudgetMin;
-        clientProfile.ExpectedBudgetMax = request.ExpectedBudgetMax;
         clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
         clientProfile.BusinessProfile.BusinessEmail =
             NormalizeNullableText(request.BusinessEmail);
 
-        clientProfile.BusinessProfile.BusinessPhone =
-            NormalizeNullableText(request.BusinessPhone);
+        clientProfile.BusinessProfile.BusinessPhone = businessPhone;
 
         clientProfile.BusinessProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -493,20 +576,18 @@ public class ClientProfileService : IClientProfileService
     }
 
     private async Task<BusinessVerificationProviderResult> VerifyBusinessAsync(
-        string companyName,
         string taxCode,
         string industry,
-        string companyAddress,
         string? businessEmail,
         string? businessPhone)
     {
         return await _businessVerificationProvider.VerifyAsync(
             new BusinessVerificationProviderRequest
             {
-                CompanyName = companyName,
+                CompanyName = string.Empty,
                 TaxCode = taxCode,
                 Industry = industry,
-                CompanyAddress = companyAddress,
+                CompanyAddress = string.Empty,
                 BusinessEmail = businessEmail,
                 BusinessPhone = businessPhone
             }
@@ -516,28 +597,14 @@ public class ClientProfileService : IClientProfileService
     private static void ValidateIndividualProfileUpdateRequest(
         UpdateIndividualClientProfileRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.FullName))
+        ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (string.IsNullOrWhiteSpace(request.Address))
         {
-            throw new InvalidOperationException("Full name is required.");
+            throw new InvalidOperationException("Address is required.");
         }
 
-        var fullName = request.FullName.Trim();
-
-        if (fullName.Length < 2 || fullName.Length > 255)
-        {
-            throw new InvalidOperationException("Full name length is invalid.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
-
-        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
         ValidateMaxLength(request.Address, 500, "Address");
-        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
-        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
-        ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
     }
 
     private static void ValidateBusinessProfileUpdateRequest(
@@ -555,10 +622,7 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Full name length is invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
-        {
-            throw new InvalidOperationException("Phone number is required.");
-        }
+        ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
         if (!string.IsNullOrWhiteSpace(request.BusinessEmail)
             && !IsValidEmail(request.BusinessEmail.Trim()))
@@ -568,13 +632,57 @@ public class ClientProfileService : IClientProfileService
             );
         }
 
-        ValidateMaxLength(request.PhoneNumber, 30, "Phone number");
+        ValidateAndNormalizeOptionalPhoneNumber(
+            request.BusinessPhone,
+            "Business phone"
+        );
+
         ValidateMaxLength(request.Address, 500, "Address");
-        ValidateMaxLength(request.AiNeeds, 1000, "AI needs");
-        ValidateMaxLength(request.MainProblems, 1000, "Main problems");
         ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
         ValidateMaxLength(request.BusinessEmail, 255, "Business email");
-        ValidateMaxLength(request.BusinessPhone, 30, "Business phone");
+    }
+
+    private static string ValidateAndNormalizePhoneNumber(
+        string? value,
+        string fieldName = "Phone number")
+    {
+        var phoneNumber = value?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(phoneNumber))
+        {
+            throw new InvalidOperationException($"{fieldName} is required.");
+        }
+
+        if (phoneNumber.Length != 10 || phoneNumber[0] != '0')
+        {
+            throw new InvalidOperationException(
+                $"{fieldName} must start with 0 and contain exactly 10 digits."
+            );
+        }
+
+        foreach (var character in phoneNumber)
+        {
+            if (!char.IsDigit(character))
+            {
+                throw new InvalidOperationException(
+                    $"{fieldName} must start with 0 and contain exactly 10 digits."
+                );
+            }
+        }
+
+        return phoneNumber;
+    }
+
+    private static string? ValidateAndNormalizeOptionalPhoneNumber(
+        string? value,
+        string fieldName)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return ValidateAndNormalizePhoneNumber(value, fieldName);
     }
 
     private static void ValidateMaxLength(
@@ -592,24 +700,10 @@ public class ClientProfileService : IClientProfileService
     }
 
     private static void ValidateBusinessVerificationInput(
-        string companyName,
         string taxCode,
         string industry,
-        string companyAddress,
         string? businessEmail)
     {
-        if (string.IsNullOrWhiteSpace(companyName))
-        {
-            throw new InvalidOperationException("Company name is required.");
-        }
-
-        if (companyName.Length < 2 || companyName.Length > 255)
-        {
-            throw new InvalidOperationException(
-                "Company name length is invalid."
-            );
-        }
-
         if (string.IsNullOrWhiteSpace(taxCode))
         {
             throw new InvalidOperationException("Tax code is required.");
@@ -639,49 +733,11 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Industry length is invalid.");
         }
 
-        if (string.IsNullOrWhiteSpace(companyAddress))
-        {
-            throw new InvalidOperationException(
-                "Company address is required."
-            );
-        }
-
-        if (companyAddress.Length < 5 || companyAddress.Length > 500)
-        {
-            throw new InvalidOperationException(
-                "Company address length is invalid."
-            );
-        }
-
         if (!string.IsNullOrWhiteSpace(businessEmail)
             && !IsValidEmail(businessEmail))
         {
             throw new InvalidOperationException(
                 "Business email format is invalid."
-            );
-        }
-    }
-
-    private static void ValidateBudget(decimal? min, decimal? max)
-    {
-        if (min.HasValue && min.Value < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected budget min must be greater than or equal to 0."
-            );
-        }
-
-        if (max.HasValue && max.Value < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected budget max must be greater than or equal to 0."
-            );
-        }
-
-        if (min.HasValue && max.HasValue && min.Value > max.Value)
-        {
-            throw new InvalidOperationException(
-                "Expected budget min must be less than or equal to max."
             );
         }
     }
@@ -694,7 +750,8 @@ public class ClientProfileService : IClientProfileService
         {
             "VERIFIED" => "VERIFIED",
             "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            _ => "PENDING_REVIEW"
+            "LOCKED" => "LOCKED",
+            _ => "NEEDS_CORRECTION"
         };
     }
 
@@ -704,8 +761,8 @@ public class ClientProfileService : IClientProfileService
         return verificationStatus switch
         {
             "VERIFIED" => "ACTIVE",
-            "NEEDS_CORRECTION" => "BUSINESS_NEEDS_CORRECTION",
-            _ => "PENDING_BUSINESS_VERIFICATION"
+            "LOCKED" => "BUSINESS_VERIFICATION_LOCKED",
+            _ => "BUSINESS_NEEDS_CORRECTION"
         };
     }
 
@@ -760,10 +817,6 @@ public class ClientProfileService : IClientProfileService
             ClientType = clientProfile.ClientType,
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,
-            AiNeeds = clientProfile.AiNeeds,
-            MainProblems = clientProfile.MainProblems,
-            ExpectedBudgetMin = clientProfile.ExpectedBudgetMin,
-            ExpectedBudgetMax = clientProfile.ExpectedBudgetMax,
             PlatformFeeRate = clientProfile.PlatformFeeRate,
             UserStatus = clientProfile.User.Status,
             BusinessProfile = clientProfile.BusinessProfile == null
@@ -790,6 +843,10 @@ public class ClientProfileService : IClientProfileService
                         clientProfile.BusinessProfile.VerificationStatus,
                     VerificationNote =
                         clientProfile.BusinessProfile.VerificationNote,
+                    VerificationSubmissionCount =
+                        clientProfile.BusinessProfile.VerificationSubmissionCount,
+                    VerificationLockedUntil =
+                        clientProfile.BusinessProfile.VerificationLockedUntil,
                     VerifiedAt =
                         clientProfile.BusinessProfile.VerifiedAt
                 }

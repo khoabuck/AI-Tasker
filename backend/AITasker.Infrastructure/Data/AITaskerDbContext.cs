@@ -197,18 +197,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.Address)
                 .HasMaxLength(500);
 
-            entity.Property(x => x.AiNeeds)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.MainProblems)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.ExpectedBudgetMin)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.ExpectedBudgetMax)
-                .HasColumnType("decimal(18,2)");
-
             entity.Property(x => x.PlatformFeeRate)
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
@@ -268,6 +256,12 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.VerificationNote)
                 .HasMaxLength(1000);
 
+            entity.Property(x => x.VerificationSubmissionCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.VerificationLockedUntil);
+
             entity.Property(x => x.VerifiedAt);
 
             entity.Property(x => x.CreatedAt)
@@ -325,17 +319,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.ExperienceVerificationNote)
                 .HasMaxLength(2000);
 
-            entity.Property(x => x.ExpectedProjectBudgetMin)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.ExpectedProjectBudgetMax)
-                .HasColumnType("decimal(18,2)")
-                .IsRequired();
-
-            entity.Property(x => x.PreferredProjectDurationDays)
-                .IsRequired();
-
             entity.Property(x => x.AvailableForWork)
                 .IsRequired();
 
@@ -369,6 +352,12 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.MissingInformation)
                 .HasMaxLength(2000);
+
+            entity.Property(x => x.ProfileReviewSubmissionCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProfileReviewLockedUntil);
 
             entity.Property(x => x.VerifiedAt);
 

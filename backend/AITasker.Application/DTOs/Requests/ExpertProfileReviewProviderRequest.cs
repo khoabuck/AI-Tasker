@@ -12,12 +12,6 @@ public class ExpertProfileReviewProviderRequest
 
     public int YearsOfExperience { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; }
 
     public string? PortfolioUrl { get; set; }

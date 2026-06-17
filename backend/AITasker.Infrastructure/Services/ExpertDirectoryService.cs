@@ -141,9 +141,6 @@ public class ExpertDirectoryService : IExpertDirectoryService
             ExperienceVerificationStatus = expert.ExperienceVerificationStatus,
             ExperienceVerificationNote = expert.ExperienceVerificationNote,
 
-            ExpectedProjectBudgetMin = expert.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax = expert.ExpectedProjectBudgetMax,
-            PreferredProjectDurationDays = expert.PreferredProjectDurationDays,
             AvailableForWork = expert.AvailableForWork,
 
             PortfolioUrl = expert.PortfolioUrl,

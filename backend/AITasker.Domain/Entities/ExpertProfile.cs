@@ -24,12 +24,6 @@ public class ExpertProfile
 
     public string? ExperienceVerificationNote { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; }
 
     public string? PortfolioUrl { get; set; }
@@ -45,11 +39,18 @@ public class ExpertProfile
     // FRESHER / JUNIOR / MID_LEVEL / SENIOR / LEAD
     public string Level { get; set; } = string.Empty;
 
+    // APPROVED / NEEDS_CORRECTION / REJECTED / LOCKED
     public string ProfileReviewStatus { get; set; } = string.Empty;
 
     public string? ProfileReviewNote { get; set; }
 
     public string? MissingInformation { get; set; }
+
+    // Số lần submit/resubmit bị fail review
+    public int ProfileReviewSubmissionCount { get; set; }
+
+    // Thời điểm hết khóa nếu expert spam submit sai quá nhiều
+    public DateTime? ProfileReviewLockedUntil { get; set; }
 
     public DateTime? VerifiedAt { get; set; }
 

@@ -291,12 +291,15 @@ builder.Services.AddHttpClient();
 
 // =========================
 // Business Verification Provider
-// VietQR + Groq AI
+// VietQR only
 // =========================
 builder.Services.AddHttpClient<
     IBusinessVerificationProvider,
-    GroqBusinessVerificationProvider
->();
+    VietQrBusinessVerificationProvider
+>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 
 // =========================
 // Expert Profile AI Review Provider

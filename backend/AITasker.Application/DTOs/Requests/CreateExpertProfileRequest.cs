@@ -13,12 +13,6 @@ public class CreateExpertProfileRequest
 
     public int YearsOfExperience { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; } = true;
 
     public string? PortfolioUrl { get; set; }

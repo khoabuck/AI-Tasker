@@ -110,7 +110,10 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                 }
             );
 
-            var content = groqResponse?.Choices?.FirstOrDefault()?.Message?.Content;
+            var content = groqResponse?.Choices
+                ?.FirstOrDefault()
+                ?.Message
+                ?.Content;
 
             if (string.IsNullOrWhiteSpace(content))
             {
@@ -178,12 +181,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         Claimed Years of Experience:
         {{request.YearsOfExperience}}
-
-        Expected Project Budget:
-        {{request.ExpectedProjectBudgetMin}} - {{request.ExpectedProjectBudgetMax}}
-
-        Preferred Project Duration Days:
-        {{request.PreferredProjectDurationDays}}
 
         Available For Work:
         {{request.AvailableForWork}}
