@@ -67,6 +67,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<DateTime?>("VerificationLockedUntil")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("VerificationNote")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -75,6 +78,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("VerificationSubmissionCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime?>("VerifiedAt")
                         .HasColumnType("datetime2");
@@ -102,10 +110,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("AiNeeds")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<string>("ClientType")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -113,16 +117,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<decimal?>("ExpectedBudgetMax")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal?>("ExpectedBudgetMin")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("MainProblems")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
@@ -755,7 +749,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
+                        .HasDefaultValue("NEEDS_EVIDENCE");
 
                     b.HasKey("ExpertCertificateId");
 
@@ -784,12 +778,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<decimal>("ExpectedProjectBudgetMax")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("ExpectedProjectBudgetMin")
-                        .HasColumnType("decimal(18,2)");
-
                     b.Property<decimal>("ExperienceConfidenceScore")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(5,2)")
@@ -804,7 +792,7 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("UNVERIFIED");
+                        .HasDefaultValue("NEEDS_EVIDENCE");
 
                     b.Property<string>("ExpertCategory")
                         .IsRequired()
@@ -832,13 +820,13 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<int>("PreferredProjectDurationDays")
-                        .HasColumnType("int");
-
                     b.Property<string>("ProfessionalTitle")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("ProfileReviewLockedUntil")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("ProfileReviewNote")
                         .HasMaxLength(2000)
@@ -848,6 +836,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("ProfileReviewSubmissionCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
 
                     b.Property<decimal>("ProfileScore")
                         .HasColumnType("decimal(5,2)");

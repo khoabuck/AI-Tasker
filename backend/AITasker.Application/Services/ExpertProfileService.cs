@@ -7,6 +7,11 @@ namespace AITasker.Application.Services;
 
 public class ExpertProfileService : IExpertProfileService
 {
+    private const int MaxExpertProfileReviewSubmissions = 5;
+
+    private static readonly TimeSpan ExpertProfileReviewLockDuration =
+        TimeSpan.FromHours(24);
+
     private readonly IExpertProfileRepository _expertProfileRepository;
     private readonly IExpertProfileReviewProvider _expertProfileReviewProvider;
     private readonly IUrlInspectionService _urlInspectionService;
@@ -72,6 +77,8 @@ public class ExpertProfileService : IExpertProfileService
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
 
+        var now = DateTime.UtcNow;
+
         var reviewSnapshot = await ReviewFullProfileAsync(request);
 
         var expertProfile = new ExpertProfile
@@ -87,9 +94,6 @@ public class ExpertProfileService : IExpertProfileService
             ExperienceVerificationStatus = reviewSnapshot.ExperienceVerificationStatus,
             ExperienceVerificationNote = reviewSnapshot.ExperienceVerificationNote,
 
-            ExpectedProjectBudgetMin = request.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax = request.ExpectedProjectBudgetMax,
-            PreferredProjectDurationDays = request.PreferredProjectDurationDays,
             AvailableForWork = request.AvailableForWork,
             PortfolioUrl = NormalizeNullable(request.PortfolioUrl),
             LinkedInUrl = NormalizeNullable(request.LinkedInUrl),
@@ -101,18 +105,27 @@ public class ExpertProfileService : IExpertProfileService
             ProfileReviewStatus = reviewSnapshot.ProfileReviewStatus,
             ProfileReviewNote = reviewSnapshot.ProfileReviewNote,
             MissingInformation = reviewSnapshot.MissingInformation,
+            ProfileReviewSubmissionCount = GetInitialProfileReviewSubmissionCount(
+                reviewSnapshot.ProfileReviewStatus
+            ),
+            ProfileReviewLockedUntil = null,
             VerifiedAt = reviewSnapshot.ProfileReviewStatus == "APPROVED"
-                ? DateTime.UtcNow
+                ? now
                 : null,
 
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = now,
             Certificates = BuildCertificates(
                 request,
                 reviewSnapshot.CertificateVerificationResults
             )
         };
 
-        ApplyUserStatusByReview(user, reviewSnapshot.ProfileReviewStatus);
+        ApplyProfileReviewResultAndUserStatus(
+            expertProfile,
+            user,
+            reviewSnapshot.ProfileReviewStatus,
+            now
+        );
 
         await _expertProfileRepository.AddAsync(expertProfile);
         await _expertProfileRepository.SaveChangesAsync();
@@ -169,6 +182,28 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
+        var now = DateTime.UtcNow;
+
+        ResetExpiredProfileReviewLockIfNeeded(expertProfile, user, now);
+
+        if (IsProfileReviewLocked(expertProfile, now))
+        {
+            throw new InvalidOperationException(
+                $"Expert profile review is locked until {expertProfile.ProfileReviewLockedUntil:O}. Please try again later."
+            );
+        }
+
+        if (ShouldLockBeforeNextExpertReviewAttempt(expertProfile))
+        {
+            LockExpertProfileReview(expertProfile, user, now);
+
+            await _expertProfileRepository.SaveChangesAsync();
+
+            throw new InvalidOperationException(
+                $"Expert profile review is locked until {expertProfile.ProfileReviewLockedUntil:O} because too many failed submissions were made."
+            );
+        }
+
         if (!CanResubmit(user.Status, expertProfile.ProfileReviewStatus))
         {
             throw new InvalidOperationException(
@@ -197,12 +232,6 @@ public class ExpertProfileService : IExpertProfileService
         expertProfile.ExperienceVerificationNote =
             reviewSnapshot.ExperienceVerificationNote;
 
-        expertProfile.ExpectedProjectBudgetMin =
-            request.ExpectedProjectBudgetMin;
-        expertProfile.ExpectedProjectBudgetMax =
-            request.ExpectedProjectBudgetMax;
-        expertProfile.PreferredProjectDurationDays =
-            request.PreferredProjectDurationDays;
         expertProfile.AvailableForWork = request.AvailableForWork;
         expertProfile.PortfolioUrl = NormalizeNullable(request.PortfolioUrl);
         expertProfile.LinkedInUrl = NormalizeNullable(request.LinkedInUrl);
@@ -215,9 +244,9 @@ public class ExpertProfileService : IExpertProfileService
         expertProfile.ProfileReviewNote = reviewSnapshot.ProfileReviewNote;
         expertProfile.MissingInformation = reviewSnapshot.MissingInformation;
         expertProfile.VerifiedAt = reviewSnapshot.ProfileReviewStatus == "APPROVED"
-            ? DateTime.UtcNow
+            ? now
             : null;
-        expertProfile.UpdatedAt = DateTime.UtcNow;
+        expertProfile.UpdatedAt = now;
 
         _expertProfileRepository.RemoveCertificates(expertProfile.Certificates);
 
@@ -226,7 +255,12 @@ public class ExpertProfileService : IExpertProfileService
             reviewSnapshot.CertificateVerificationResults
         );
 
-        ApplyUserStatusByReview(user, reviewSnapshot.ProfileReviewStatus);
+        ApplyProfileReviewResultAndUserStatus(
+            expertProfile,
+            user,
+            reviewSnapshot.ProfileReviewStatus,
+            now
+        );
 
         await _expertProfileRepository.SaveChangesAsync();
 
@@ -276,10 +310,6 @@ public class ExpertProfileService : IExpertProfileService
 
         expertProfile.ProfessionalTitle = request.ProfessionalTitle.Trim();
         expertProfile.Bio = request.Bio.Trim();
-        expertProfile.ExpectedProjectBudgetMin = request.ExpectedProjectBudgetMin;
-        expertProfile.ExpectedProjectBudgetMax = request.ExpectedProjectBudgetMax;
-        expertProfile.PreferredProjectDurationDays =
-            request.PreferredProjectDurationDays;
         expertProfile.AvailableForWork = request.AvailableForWork;
         expertProfile.UpdatedAt = DateTime.UtcNow;
 
@@ -529,9 +559,6 @@ public class ExpertProfileService : IExpertProfileService
             Bio = request.Bio.Trim(),
             Skills = request.Skills.Trim(),
             YearsOfExperience = request.YearsOfExperience,
-            ExpectedProjectBudgetMin = request.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax = request.ExpectedProjectBudgetMax,
-            PreferredProjectDurationDays = request.PreferredProjectDurationDays,
             AvailableForWork = request.AvailableForWork,
             PortfolioUrl = NormalizeNullable(request.PortfolioUrl),
             LinkedInUrl = NormalizeNullable(request.LinkedInUrl),
@@ -564,9 +591,9 @@ public class ExpertProfileService : IExpertProfileService
             x.VerificationStatus == "VERIFIED"
         );
 
-        var hasNeedsReviewCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus == "NEEDS_REVIEW"
-        );
+        var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
+    x.VerificationStatus == "NEEDS_EVIDENCE"
+);
 
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
             x.VerificationStatus is "SUSPICIOUS" or "INVALID"
@@ -597,7 +624,7 @@ public class ExpertProfileService : IExpertProfileService
         {
             confidence += 35m;
         }
-        else if (hasNeedsReviewCertificate)
+        else if (hasNeedsEvidenceCertificate)
         {
             confidence += 20m;
         }
@@ -645,7 +672,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var gap = claimedYears - verifiedYears;
 
-        var status = "UNVERIFIED";
+        var status = "NEEDS_EVIDENCE";
 
         if (confidence >= 75m && gap <= 1)
         {
@@ -690,12 +717,6 @@ public class ExpertProfileService : IExpertProfileService
     )
     {
         var normalizedAiStatus = NormalizeReviewStatus(aiReviewStatus);
-
-        if (normalizedAiStatus == "REJECTED")
-        {
-            return "REJECTED";
-        }
-
         var claimedYears = Math.Clamp(claimedYearsOfExperience, 0, 50);
         var verifiedYears = Math.Clamp(
             experienceVerification.VerifiedYearsOfExperience,
@@ -732,10 +753,6 @@ public class ExpertProfileService : IExpertProfileService
             return "NEEDS_CORRECTION";
         }
 
-        // Demo/business override:
-        // AI có thể hơi gắt với portfolio/GitHub.
-        // Nếu backend verifier đã xác minh mạnh và số năm kinh nghiệm thấp/hợp lý
-        // thì cho APPROVED để user hoàn tất onboarding.
         if (normalizedAiStatus == "NEEDS_CORRECTION"
             && claimedYears <= 2
             && verifiedYears >= claimedYears
@@ -866,28 +883,25 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-    private static string NormalizeReviewStatus(string? status)
+   private static string NormalizeReviewStatus(string? status)
+{
+    if (string.IsNullOrWhiteSpace(status))
     {
-        if (string.IsNullOrWhiteSpace(status))
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        var normalized = status.Trim()
-            .ToUpper()
-            .Replace("-", "_")
-            .Replace(" ", "_");
-
-        return normalized switch
-        {
-            "APPROVED" => "APPROVED",
-            "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-            "REJECTED" => "REJECTED",
-            "PENDING_REVIEW" => "NEEDS_CORRECTION",
-            "PENDING_AI_REVIEW" => "NEEDS_CORRECTION",
-            _ => "NEEDS_CORRECTION"
-        };
+        return "NEEDS_CORRECTION";
     }
+
+    var normalized = status.Trim()
+        .ToUpper()
+        .Replace("-", "_")
+        .Replace(" ", "_");
+
+    return normalized switch
+    {
+        "APPROVED" => "APPROVED",
+        "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
+        _ => "NEEDS_CORRECTION"
+    };
+}
 
     private static string BuildFinalProfileReviewNote(
         string? aiReviewNote,
@@ -952,9 +966,9 @@ public class ExpertProfileService : IExpertProfileService
                 x.VerificationStatus == "VERIFIED"
             );
 
-            var needsReviewCount = certificateVerificationResults.Count(x =>
-                x.VerificationStatus == "NEEDS_REVIEW"
-            );
+            var needsEvidenceCount = certificateVerificationResults.Count(x =>
+    x.VerificationStatus == "NEEDS_EVIDENCE"
+);
 
             var suspiciousCount = certificateVerificationResults.Count(x =>
                 x.VerificationStatus == "SUSPICIOUS"
@@ -965,7 +979,7 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             notes.Add(
-                $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {suspiciousCount} suspicious, {invalidCount} invalid."
+              $"Certificate verification summary: {verifiedCount} verified, {needsEvidenceCount} needs evidence, {suspiciousCount} suspicious, {invalidCount} invalid."
             );
         }
 
@@ -999,7 +1013,7 @@ public class ExpertProfileService : IExpertProfileService
                 IssuedAt = certificate.IssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "UNVERIFIED",
+                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
@@ -1031,7 +1045,7 @@ public class ExpertProfileService : IExpertProfileService
                 IssuedAt = certificate.IssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "UNVERIFIED",
+                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
@@ -1054,10 +1068,6 @@ public class ExpertProfileService : IExpertProfileService
             Bio = expertProfile.Bio,
             Skills = request.Skills,
             YearsOfExperience = request.YearsOfExperience,
-            ExpectedProjectBudgetMin = expertProfile.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax = expertProfile.ExpectedProjectBudgetMax,
-            PreferredProjectDurationDays =
-                expertProfile.PreferredProjectDurationDays,
             AvailableForWork = expertProfile.AvailableForWork,
             PortfolioUrl = request.PortfolioUrl,
             LinkedInUrl = request.LinkedInUrl,
@@ -1115,17 +1125,124 @@ public class ExpertProfileService : IExpertProfileService
         return targets;
     }
 
-    private static void ApplyUserStatusByReview(User user, string reviewStatus)
+    private static void ApplyProfileReviewResultAndUserStatus(
+        ExpertProfile expertProfile,
+        User user,
+        string reviewStatus,
+        DateTime now
+    )
     {
+        if (reviewStatus == "APPROVED")
+        {
+            expertProfile.ProfileReviewSubmissionCount = 0;
+            expertProfile.ProfileReviewLockedUntil = null;
+            user.Status = "ACTIVE";
+            user.UpdatedAt = now;
+            return;
+        }
+
+        if (IsFailedReviewStatus(reviewStatus))
+        {
+            expertProfile.ProfileReviewSubmissionCount += 1;
+            expertProfile.ProfileReviewLockedUntil = null;
+        }
+
         user.Status = reviewStatus switch
         {
-            "APPROVED" => "ACTIVE",
-            "NEEDS_CORRECTION" => "PENDING_PROFILE",
-            "REJECTED" => "PENDING_PROFILE",
-            _ => "PENDING_PROFILE"
+            "LOCKED" => "EXPERT_PROFILE_LOCKED",
+            "NEEDS_CORRECTION" => "PENDING_PROFILE",            _ => "PENDING_PROFILE"
         };
 
-        user.UpdatedAt = DateTime.UtcNow;
+        user.UpdatedAt = now;
+    }
+
+    private static int GetInitialProfileReviewSubmissionCount(
+        string reviewStatus
+    )
+    {
+        return IsFailedReviewStatus(reviewStatus) ? 0 : 0;
+    }
+
+    private static bool IsFailedReviewStatus(string reviewStatus)
+    {
+        return reviewStatus == "NEEDS_CORRECTION";
+    }
+
+    private static bool ShouldLockBeforeNextExpertReviewAttempt(
+        ExpertProfile expertProfile
+    )
+    {
+        return IsFailedReviewStatus(expertProfile.ProfileReviewStatus)
+            && expertProfile.ProfileReviewSubmissionCount >=
+                MaxExpertProfileReviewSubmissions;
+    }
+
+    private static bool IsProfileReviewLocked(
+        ExpertProfile expertProfile,
+        DateTime now
+    )
+    {
+        return string.Equals(
+                expertProfile.ProfileReviewStatus,
+                "LOCKED",
+                StringComparison.OrdinalIgnoreCase
+            )
+            && expertProfile.ProfileReviewLockedUntil.HasValue
+            && expertProfile.ProfileReviewLockedUntil.Value > now;
+    }
+
+    private static void ResetExpiredProfileReviewLockIfNeeded(
+        ExpertProfile expertProfile,
+        User user,
+        DateTime now
+    )
+    {
+        if (!string.Equals(
+                expertProfile.ProfileReviewStatus,
+                "LOCKED",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            return;
+        }
+
+        if (!expertProfile.ProfileReviewLockedUntil.HasValue
+            || expertProfile.ProfileReviewLockedUntil.Value > now)
+        {
+            return;
+        }
+
+        expertProfile.ProfileReviewStatus = "NEEDS_CORRECTION";
+        expertProfile.ProfileReviewNote =
+            "Expert profile review lock expired. You can resubmit the profile.";
+        expertProfile.MissingInformation =
+            "Please update your profile with valid proof URLs and certificate evidence.";
+        expertProfile.ProfileReviewSubmissionCount = 0;
+        expertProfile.ProfileReviewLockedUntil = null;
+        expertProfile.UpdatedAt = now;
+
+        user.Status = "PENDING_PROFILE";
+        user.UpdatedAt = now;
+    }
+
+    private static void LockExpertProfileReview(
+        ExpertProfile expertProfile,
+        User user,
+        DateTime now
+    )
+    {
+        var lockedUntil = now.Add(ExpertProfileReviewLockDuration);
+
+        expertProfile.ProfileReviewStatus = "LOCKED";
+        expertProfile.ProfileReviewNote =
+            $"Expert profile review is locked until {lockedUntil:O} because too many failed submissions were made.";
+        expertProfile.MissingInformation =
+            "Please wait until the lock expires before resubmitting your expert profile.";
+        expertProfile.ProfileReviewLockedUntil = lockedUntil;
+        expertProfile.UpdatedAt = now;
+
+        user.Status = "EXPERT_PROFILE_LOCKED";
+        user.UpdatedAt = now;
     }
 
     private static bool CanResubmit(string userStatus, string profileReviewStatus)
@@ -1134,7 +1251,7 @@ public class ExpertProfileService : IExpertProfileService
         var normalizedProfileStatus = profileReviewStatus.Trim().ToUpperInvariant();
 
         return normalizedUserStatus == "PENDING_PROFILE"
-            && normalizedProfileStatus is "NEEDS_CORRECTION" or "REJECTED";
+            && normalizedProfileStatus == "NEEDS_CORRECTION";
     }
 
     private static void EnsureActiveExpertCanUpdate(User user)
@@ -1207,27 +1324,6 @@ public class ExpertProfileService : IExpertProfileService
         {
             throw new InvalidOperationException(
                 "Bio must be at least 50 characters."
-            );
-        }
-
-        if (request.ExpectedProjectBudgetMin < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected project budget min must be greater than or equal to 0."
-            );
-        }
-
-        if (request.ExpectedProjectBudgetMax < request.ExpectedProjectBudgetMin)
-        {
-            throw new InvalidOperationException(
-                "Expected project budget max must be greater than or equal to min budget."
-            );
-        }
-
-        if (request.PreferredProjectDurationDays <= 0)
-        {
-            throw new InvalidOperationException(
-                "Preferred project duration days must be greater than 0."
             );
         }
 
@@ -1394,27 +1490,6 @@ public class ExpertProfileService : IExpertProfileService
         {
             throw new InvalidOperationException(
                 "Years of experience must be greater than or equal to 0."
-            );
-        }
-
-        if (request.ExpectedProjectBudgetMin < 0)
-        {
-            throw new InvalidOperationException(
-                "Expected project budget min must be greater than or equal to 0."
-            );
-        }
-
-        if (request.ExpectedProjectBudgetMax < request.ExpectedProjectBudgetMin)
-        {
-            throw new InvalidOperationException(
-                "Expected project budget max must be greater than or equal to min budget."
-            );
-        }
-
-        if (request.PreferredProjectDurationDays <= 0)
-        {
-            throw new InvalidOperationException(
-                "Preferred project duration days must be greater than 0."
             );
         }
 
@@ -1596,12 +1671,6 @@ public class ExpertProfileService : IExpertProfileService
                 expertProfile.ExperienceVerificationStatus,
             ExperienceVerificationNote =
                 expertProfile.ExperienceVerificationNote,
-            ExpectedProjectBudgetMin =
-                expertProfile.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax =
-                expertProfile.ExpectedProjectBudgetMax,
-            PreferredProjectDurationDays =
-                expertProfile.PreferredProjectDurationDays,
             AvailableForWork = expertProfile.AvailableForWork,
             PortfolioUrl = expertProfile.PortfolioUrl,
             LinkedInUrl = expertProfile.LinkedInUrl,
@@ -1612,6 +1681,9 @@ public class ExpertProfileService : IExpertProfileService
             ProfileReviewStatus = expertProfile.ProfileReviewStatus,
             ProfileReviewNote = expertProfile.ProfileReviewNote,
             MissingInformation = expertProfile.MissingInformation,
+            ProfileReviewSubmissionCount =
+                expertProfile.ProfileReviewSubmissionCount,
+            ProfileReviewLockedUntil = expertProfile.ProfileReviewLockedUntil,
             VerifiedAt = expertProfile.VerifiedAt,
             UserStatus = expertProfile.User.Status,
             CreatedAt = expertProfile.CreatedAt,
@@ -1642,7 +1714,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
 
         public string? ExperienceVerificationNote { get; set; }
     }
@@ -1665,7 +1737,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "UNVERIFIED";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
 
         public string? ExperienceVerificationNote { get; set; }
 

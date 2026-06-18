@@ -18,14 +18,6 @@ public class ClientProfileResponse
 
     public string? Address { get; set; }
 
-    public string? AiNeeds { get; set; }
-
-    public string? MainProblems { get; set; }
-
-    public decimal? ExpectedBudgetMin { get; set; }
-
-    public decimal? ExpectedBudgetMax { get; set; }
-
     public decimal PlatformFeeRate { get; set; }
 
     public string UserStatus { get; set; } = string.Empty;
