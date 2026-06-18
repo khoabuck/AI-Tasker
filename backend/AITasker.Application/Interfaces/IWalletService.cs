@@ -1,3 +1,4 @@
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Domain.Entities;
 
@@ -12,6 +13,24 @@ namespace AITasker.Application.Interfaces
         Task<WalletResponse> GetMyWalletAsync(int userId);
 
         Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(int userId);
+
+        Task<IReadOnlyList<DepositOrderResponse>> GetMyDepositOrdersAsync(
+            int userId);
+
+        Task<DepositOrderResponse> ConfirmPayOsWebhookAsync(
+            PayOsWebhookRequest request);
+
+        Task<DepositOrderResponse> GetDepositOrderByIdAsync(
+            int currentUserId,
+            int depositOrderId);
+
+        Task<DepositOrderResponse> CreateDepositOrderAsync(
+            int userId,
+            CreateDepositOrderRequest request);
+
+        Task<DepositOrderResponse> SimulateDepositPaidAsync(
+            int currentUserId,
+            int depositOrderId);
 
         Task<IReadOnlyList<EscrowResponse>> GetProjectEscrowsAsync(
             int currentUserId,

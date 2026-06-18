@@ -223,8 +223,8 @@ public class ExpertProfilesController : ControllerBase
         return profileReviewStatus?.Trim().ToUpperInvariant() switch
         {
             "APPROVED" => "Expert profile approved successfully.",
+            "LOCKED" => "Expert profile review is locked.",
             "NEEDS_CORRECTION" => "Expert profile submitted but needs correction.",
-            "REJECTED" => "Expert profile rejected.",
             _ => "Expert profile submitted but needs correction."
         };
     }

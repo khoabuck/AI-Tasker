@@ -28,12 +28,6 @@ public class ExpertProfileResponse
 
     public string? ExperienceVerificationNote { get; set; }
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; }
 
     public string? PortfolioUrl { get; set; }
@@ -53,6 +47,10 @@ public class ExpertProfileResponse
     public string? ProfileReviewNote { get; set; }
 
     public string? MissingInformation { get; set; }
+
+    public int ProfileReviewSubmissionCount { get; set; }
+
+    public DateTime? ProfileReviewLockedUntil { get; set; }
 
     public DateTime? VerifiedAt { get; set; }
 

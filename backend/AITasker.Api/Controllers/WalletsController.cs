@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AITasker.Api.Controllers
@@ -92,49 +94,123 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("deposit")]
-        public async Task<IActionResult> Deposit(
-            [FromQuery] decimal amount,
-            [FromQuery] string? transactionRef)
+        [HttpPost("deposit-orders")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> CreateDepositOrder(
+            [FromBody] CreateDepositOrderRequest request)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                if (amount <= 0)
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = "Deposit amount must be greater than 0."
-                    });
-                }
-
-                var reference = string.IsNullOrWhiteSpace(transactionRef)
-                    ? $"SIM_DEPOSIT_{userId}_{DateTime.UtcNow:yyyyMMddHHmmssfff}"
-                    : transactionRef.Trim();
-
-                var result = await _walletService.DepositAsync(
+                var result = await _walletService.CreateDepositOrderAsync(
                     userId,
-                    amount,
-                    reference);
-
-                if (!result)
-                {
-                    return BadRequest(new
-                    {
-                        success = false,
-                        message = "Deposit failed."
-                    });
-                }
-
-                var wallet = await _walletService.GetMyWalletAsync(userId);
+                    request);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Deposit successful.",
-                    data = wallet
+                    message = "Deposit order created successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("deposit-orders/me")]
+        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
+        public async Task<IActionResult> GetMyDepositOrders()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _walletService.GetMyDepositOrdersAsync(userId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("deposit-orders/{depositOrderId:int}")]
+        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
+        public async Task<IActionResult> GetDepositOrderById(int depositOrderId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _walletService.GetDepositOrderByIdAsync(
+                    userId,
+                    depositOrderId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("deposit-orders/{depositOrderId:int}/simulate-paid")]
+        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
+        public async Task<IActionResult> SimulateDepositPaid(int depositOrderId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _walletService.SimulateDepositPaidAsync(
+                    userId,
+                    depositOrderId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Deposit order paid successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (InvalidOperationException ex)

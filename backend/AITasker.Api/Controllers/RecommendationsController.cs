@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -14,6 +15,35 @@ public class RecommendationsController : ControllerBase
     public RecommendationsController(IRecommendationService recommendationService)
     {
         _recommendationService = recommendationService;
+    }
+
+    [HttpPost("experts/from-prompt")]
+    [Authorize(Roles = "CLIENT,ADMIN")]
+    public async Task<IActionResult> GetRecommendedExpertsFromPrompt(
+        [FromBody] PromptExpertRecommendationRequest request
+    )
+    {
+        try
+        {
+            var userId = GetCurrentUserId();
+            var role = GetCurrentUserRole();
+
+            var result =
+                await _recommendationService.GetRecommendedExpertsFromPromptAsync(
+                    userId,
+                    role,
+                    request
+                );
+
+            return Ok(result.RecommendedExperts);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
     }
 
     [HttpGet("jobs/{jobPostingId:int}/experts")]

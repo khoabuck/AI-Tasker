@@ -4,7 +4,6 @@ namespace AITasker.Domain.Constants
     {
         // Proposal
         public const string ProposalSubmitted = "PROPOSAL_SUBMITTED";
-        public const string ProposalCounterOffer = "PROPOSAL_COUNTER_OFFER";
         public const string ProposalAccepted = "PROPOSAL_ACCEPTED";
         public const string ProposalRejected = "PROPOSAL_REJECTED";
         public const string ProposalWithdrawn = "PROPOSAL_WITHDRAWN";

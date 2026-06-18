@@ -10,12 +10,13 @@ namespace AITasker.Infrastructure.Proposals
     public class ProposalService : IProposalService
     {
         private const string StatusSubmitted = "SUBMITTED";
-        private const string StatusCounterOffer = "COUNTER_OFFER";
         private const string StatusAccepted = "ACCEPTED";
         private const string StatusRejected = "REJECTED";
         private const string StatusWithdrawn = "WITHDRAWN";
+        private const string StatusNotSelected = "NOT_SELECTED";
 
         private const string ContractStatusDraft = "DRAFT";
+        private const string JobStatusContracting = "CONTRACTING";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private readonly AITaskerDbContext _context;
@@ -173,38 +174,6 @@ namespace AITasker.Infrastructure.Proposals
             return await MapToProposalResponseAsync(proposal);
         }
 
-        public async Task<ProposalResponse> CounterOfferAsync(
-            int userId,
-            int proposalId,
-            CounterOfferRequest request)
-        {
-            ValidateCounterOfferRequest(request);
-
-            var proposal = await GetProposalByIdAsync(proposalId);
-            var job = await GetJobByIdAsync(proposal.JobId);
-
-            await EnsureClientOwnsJobAsync(userId, job);
-
-            EnsureProposalNotFinalized(proposal);
-
-            proposal.CounterPrice = request.CounterPrice;
-            proposal.CounterTimelineDays = request.CounterTimelineDays;
-            proposal.CounterMessage = request.CounterMessage.Trim();
-            proposal.Status = StatusCounterOffer;
-
-            await _context.SaveChangesAsync();
-
-            var expert = await GetExpertProfileByIdAsync(proposal.ExpertId);
-
-            await _notificationService.CreateNotificationAsync(
-                expert.UserId,
-                "Counter offer received",
-                $"The client sent a counter offer for job: {job.Title}.",
-                "PROPOSAL_COUNTER_OFFER");
-
-            return await MapToProposalResponseAsync(proposal);
-        }
-
         public async Task<ProposalResponse> ProcessProposalStatusAsync(
             int userId,
             int proposalId,
@@ -229,6 +198,16 @@ namespace AITasker.Infrastructure.Proposals
 
             EnsureProposalNotFinalized(proposal);
 
+            var jobAlreadyHasAcceptedProposal = await _context.Proposals.AnyAsync(x =>
+                x.JobId == job.JobPostingId &&
+                x.ProposalId != proposal.ProposalId &&
+                x.Status == StatusAccepted);
+
+            if (normalizedDecision == "ACCEPT" && jobAlreadyHasAcceptedProposal)
+            {
+                throw new InvalidOperationException("This job already has an accepted proposal.");
+            }
+
             if (normalizedDecision == "REJECT")
             {
                 proposal.Status = StatusRejected;
@@ -248,6 +227,9 @@ namespace AITasker.Infrastructure.Proposals
 
             proposal.Status = StatusAccepted;
 
+            job.Status = JobStatusContracting;
+            job.UpdatedAt = DateTime.UtcNow;
+
             var contractExists = await _context.ProjectContracts
                 .AnyAsync(x => x.ProposalId == proposalId);
 
@@ -255,9 +237,8 @@ namespace AITasker.Infrastructure.Proposals
             {
                 var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
-                var finalPrice = proposal.CounterPrice ?? proposal.ProposedPrice;
-                var finalTimelineDays =
-                    proposal.CounterTimelineDays ?? proposal.ProposedTimelineDays;
+                var finalPrice = proposal.ProposedPrice;
+                var finalTimelineDays = proposal.ProposedTimelineDays;
 
                 var platformFeeRate = ResolvePlatformFeeRate(clientProfile);
                 var platformFeeAmount = finalPrice * platformFeeRate / 100m;
@@ -382,29 +363,6 @@ namespace AITasker.Infrastructure.Proposals
             }
         }
 
-        private static void ValidateCounterOfferRequest(CounterOfferRequest request)
-        {
-            if (request == null)
-            {
-                throw new InvalidOperationException("Counter offer request is required.");
-            }
-
-            if (request.CounterPrice <= 0)
-            {
-                throw new InvalidOperationException("Counter price must be greater than 0.");
-            }
-
-            if (request.CounterTimelineDays <= 0)
-            {
-                throw new InvalidOperationException("Counter timeline must be greater than 0 days.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.CounterMessage))
-            {
-                throw new InvalidOperationException("Counter message is required.");
-            }
-        }
-
         private static void EnsureProposalNotFinalized(Proposal proposal)
         {
             if (proposal.Status == StatusAccepted)
@@ -420,6 +378,11 @@ namespace AITasker.Infrastructure.Proposals
             if (proposal.Status == StatusWithdrawn)
             {
                 throw new InvalidOperationException("Proposal already withdrawn.");
+            }
+
+            if (proposal.Status == StatusNotSelected)
+            {
+                throw new InvalidOperationException("Proposal was already marked as not selected.");
             }
         }
 
@@ -616,13 +579,333 @@ namespace AITasker.Infrastructure.Proposals
                 WorkingApproach = proposal.WorkingApproach,
                 PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
 
-                CounterPrice = proposal.CounterPrice,
-                CounterTimelineDays = proposal.CounterTimelineDays,
-                CounterMessage = proposal.CounterMessage,
-
                 Status = proposal.Status,
                 ContractId = contractId,
                 CreatedAt = proposal.CreatedAt
+            };
+        }
+
+        public async Task<IReadOnlyList<ProposalVersionResponse>> GetProposalVersionsAsync(
+            int userId,
+            int proposalId)
+        {
+            var proposal = await LoadProposalForVersionAsync(proposalId);
+
+            var canAccess = await CanAccessProposalVersionAsync(userId, proposal);
+
+            if (!canAccess)
+            {
+                throw new UnauthorizedAccessException("You do not have permission to view proposal versions.");
+            }
+
+            await EnsureProposalBaseVersionExistsAsync(proposal);
+
+            var versions = await _context.ProposalVersions
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposalId)
+                .OrderByDescending(x => x.VersionNumber)
+                .ToListAsync();
+
+            var result = new List<ProposalVersionResponse>();
+
+            foreach (var version in versions)
+            {
+                result.Add(await MapProposalVersionResponseAsync(version));
+            }
+
+            return result;
+        }
+
+        public async Task<ProposalResponse> ResubmitProposalAsync(
+            int userId,
+            int proposalId,
+            ResubmitProposalRequest request)
+        {
+            ValidateResubmitProposalRequestLocal(request);
+
+            var proposal = await LoadProposalForVersionAsync(proposalId);
+
+            await EnsureExpertOwnsProposalForVersionAsync(userId, proposal);
+
+            if (proposal.Status == "ACCEPTED")
+            {
+                throw new InvalidOperationException("Accepted proposal cannot be resubmitted.");
+            }
+
+            if (proposal.Status == "REJECTED")
+            {
+                throw new InvalidOperationException("Rejected proposal cannot be resubmitted.");
+            }
+
+            if (proposal.Status == "WITHDRAWN")
+            {
+                throw new InvalidOperationException("Withdrawn proposal cannot be resubmitted.");
+            }
+
+            if (proposal.Status == "NOT_SELECTED")
+            {
+                throw new InvalidOperationException("Not selected proposal cannot be resubmitted.");
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
+
+            if (job == null)
+            {
+                throw new InvalidOperationException("Job posting not found.");
+            }
+
+            if (!string.Equals(job.Status, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Cannot resubmit proposal because the job is no longer open.");
+            }
+
+            await EnsureProposalBaseVersionExistsAsync(proposal);
+
+            const int resubmitLimit = 3;
+            const int resubmitWindowHours = 8;
+
+            var windowStart = DateTime.UtcNow.AddHours(-resubmitWindowHours);
+
+            var resubmitCountInWindow = await _context.ProposalVersions.CountAsync(x =>
+                x.ProposalId == proposal.ProposalId &&
+                x.VersionNumber > 1 &&
+                x.CreatedAt >= windowStart);
+
+            if (resubmitCountInWindow >= resubmitLimit)
+            {
+                throw new InvalidOperationException(
+                    $"You can only resubmit {resubmitLimit} times within {resubmitWindowHours} hours. Please wait before resubmitting again.");
+            }
+
+            var latestVersionNumber = await _context.ProposalVersions
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .MaxAsync(x => x.VersionNumber);
+
+            proposal.CoverLetter = request.CoverLetter.Trim();
+            proposal.ProposedPrice = request.ProposedPrice;
+            proposal.ProposedTimelineDays = request.ProposedTimelineDays;
+            proposal.ExpectedOutputs = request.ExpectedOutputs.Trim();
+            proposal.WorkingApproach = request.WorkingApproach.Trim();
+            proposal.PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
+                ? null
+                : request.PreliminaryMilestonePlan.Trim();
+
+            proposal.Status = "SUBMITTED";
+
+            var newVersion = new ProposalVersion
+            {
+                ProposalId = proposal.ProposalId,
+                VersionNumber = latestVersionNumber + 1,
+                CoverLetter = proposal.CoverLetter,
+                ProposedPrice = proposal.ProposedPrice,
+                ProposedTimelineDays = proposal.ProposedTimelineDays,
+                ExpectedOutputs = proposal.ExpectedOutputs,
+                WorkingApproach = proposal.WorkingApproach,
+                PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                ResubmitNote = string.IsNullOrWhiteSpace(request.ResubmitNote)
+                    ? "Proposal resubmitted after negotiation."
+                    : request.ResubmitNote.Trim(),
+                CreatedByUserId = userId,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.ProposalVersions.Add(newVersion);
+
+            await _context.SaveChangesAsync();
+
+            var clientProfile = await _context.ClientProfiles
+                .FirstOrDefaultAsync(x => x.ClientProfileId == job.ClientProfileId);
+
+            if (clientProfile != null)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    clientProfile.UserId,
+                    "Proposal resubmitted",
+                    $"The expert resubmitted proposal version {newVersion.VersionNumber} for job: {job.Title}.",
+                    "PROPOSAL_RESUBMITTED");
+            }
+
+            return await MapToProposalResponseAsync(proposal);
+        }
+
+        private async Task<Proposal> LoadProposalForVersionAsync(int proposalId)
+        {
+            var proposal = await _context.Proposals
+                .FirstOrDefaultAsync(x => x.ProposalId == proposalId);
+
+            if (proposal == null)
+            {
+                throw new InvalidOperationException("Proposal not found.");
+            }
+
+            return proposal;
+        }
+
+        private async Task<bool> CanAccessProposalVersionAsync(
+            int userId,
+            Proposal proposal)
+        {
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (user == null)
+            {
+                return false;
+            }
+
+            if (string.Equals(user.Role, "ADMIN", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            var job = await _context.JobPostings
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
+
+            if (job == null)
+            {
+                return false;
+            }
+
+            var clientProfile = await _context.ClientProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ClientProfileId == job.ClientProfileId);
+
+            if (clientProfile != null && clientProfile.UserId == userId)
+            {
+                return true;
+            }
+
+            var expertProfile = await _context.ExpertProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+            return expertProfile != null && expertProfile.UserId == userId;
+        }
+
+        private async Task EnsureExpertOwnsProposalForVersionAsync(
+            int userId,
+            Proposal proposal)
+        {
+            var expertProfile = await _context.ExpertProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+            if (expertProfile == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            if (expertProfile.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Only the proposal owner can resubmit this proposal.");
+            }
+        }
+
+        private async Task EnsureProposalBaseVersionExistsAsync(Proposal proposal)
+        {
+            var exists = await _context.ProposalVersions
+                .AnyAsync(x => x.ProposalId == proposal.ProposalId);
+
+            if (exists)
+            {
+                return;
+            }
+
+            var expertProfile = await _context.ExpertProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+            if (expertProfile == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            var baseVersion = new ProposalVersion
+            {
+                ProposalId = proposal.ProposalId,
+                VersionNumber = 1,
+                CoverLetter = proposal.CoverLetter,
+                ProposedPrice = proposal.ProposedPrice,
+                ProposedTimelineDays = proposal.ProposedTimelineDays,
+                ExpectedOutputs = proposal.ExpectedOutputs,
+                WorkingApproach = proposal.WorkingApproach,
+                PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                ResubmitNote = "Initial proposal version generated from existing proposal.",
+                CreatedByUserId = expertProfile.UserId,
+                CreatedAt = proposal.CreatedAt == default
+                    ? DateTime.UtcNow
+                    : proposal.CreatedAt
+            };
+
+            _context.ProposalVersions.Add(baseVersion);
+
+            await _context.SaveChangesAsync();
+        }
+
+        private static void ValidateResubmitProposalRequestLocal(ResubmitProposalRequest request)
+        {
+            if (request == null)
+            {
+                throw new InvalidOperationException("Resubmit proposal request is required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.CoverLetter))
+            {
+                throw new InvalidOperationException("Cover letter is required.");
+            }
+
+            if (request.ProposedPrice <= 0)
+            {
+                throw new InvalidOperationException("Proposed price must be greater than 0.");
+            }
+
+            if (request.ProposedTimelineDays <= 0)
+            {
+                throw new InvalidOperationException("Proposed timeline must be greater than 0 days.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.ExpectedOutputs))
+            {
+                throw new InvalidOperationException("Expected outputs are required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(request.WorkingApproach))
+            {
+                throw new InvalidOperationException("Working approach is required.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.ResubmitNote) &&
+                request.ResubmitNote.Trim().Length > 1000)
+            {
+                throw new InvalidOperationException("Resubmit note cannot exceed 1000 characters.");
+            }
+        }
+
+        private async Task<ProposalVersionResponse> MapProposalVersionResponseAsync(
+            ProposalVersion version)
+        {
+            var createdBy = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == version.CreatedByUserId);
+
+            return new ProposalVersionResponse
+            {
+                ProposalVersionId = version.ProposalVersionId,
+                ProposalId = version.ProposalId,
+                VersionNumber = version.VersionNumber,
+                CoverLetter = version.CoverLetter,
+                ProposedPrice = version.ProposedPrice,
+                ProposedTimelineDays = version.ProposedTimelineDays,
+                ExpectedOutputs = version.ExpectedOutputs,
+                WorkingApproach = version.WorkingApproach,
+                PreliminaryMilestonePlan = version.PreliminaryMilestonePlan,
+                ResubmitNote = version.ResubmitNote,
+                CreatedByUserId = version.CreatedByUserId,
+                CreatedByName = createdBy?.FullName ?? string.Empty,
+                CreatedAt = version.CreatedAt
             };
         }
     }

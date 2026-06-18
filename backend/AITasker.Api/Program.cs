@@ -1,4 +1,5 @@
 using System.Text;
+using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
@@ -10,12 +11,14 @@ using AITasker.Infrastructure.Services;
 using AITasker.Infrastructure.Reviews;
 using AITasker.Infrastructure.Banking;
 using AITasker.Infrastructure.Dashboards;
+using AITasker.Infrastructure.Conversations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+//BE 1 => Phan Tien Phat
 
 // =========================
 // Controllers
@@ -187,11 +190,6 @@ builder.Services.AddScoped<
 
 builder.Services.AddScoped<IClientProfileRepository, ClientProfileRepository>();
 
-builder.Services.AddScoped<
-    IBusinessVerificationRepository,
-    BusinessVerificationRepository
->();
-
 builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 
 // =========================
@@ -206,11 +204,6 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 // Dependency Injection - Client / Business / Expert Profile
 // =========================
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
-
-builder.Services.AddScoped<
-    IBusinessVerificationService,
-    BusinessVerificationService
->();
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
@@ -253,6 +246,7 @@ builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>(
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================
 // BE2 - Review Flow
@@ -267,7 +261,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // =========================
 // BE3 - Wallet / Escrow / VNPay / Withdrawal
 // =========================
-builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddHttpClient<IWalletService, WalletService>();
 builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
@@ -290,12 +284,15 @@ builder.Services.AddHttpClient();
 
 // =========================
 // Business Verification Provider
-// VietQR + Groq AI
+// VietQR only
 // =========================
 builder.Services.AddHttpClient<
     IBusinessVerificationProvider,
-    GroqBusinessVerificationProvider
->();
+    VietQrBusinessVerificationProvider
+>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(12);
+});
 
 // =========================
 // Expert Profile AI Review Provider
@@ -353,6 +350,7 @@ app.MapControllers();
 // =======================================================
 app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
+app.MapHub<ConversationHub>("/hubs/conversations");
 
 // =========================
 // Test endpoints

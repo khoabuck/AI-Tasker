@@ -10,11 +10,5 @@ public class UpdateExpertBasicProfileRequest
 
     public string Bio { get; set; } = string.Empty;
 
-    public decimal ExpectedProjectBudgetMin { get; set; }
-
-    public decimal ExpectedProjectBudgetMax { get; set; }
-
-    public int PreferredProjectDurationDays { get; set; }
-
     public bool AvailableForWork { get; set; } = true;
 }

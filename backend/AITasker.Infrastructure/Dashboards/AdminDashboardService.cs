@@ -105,7 +105,6 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalProposals = proposals.Count,
                 SubmittedProposals = proposals.Count(p => IsStatus(p.Status, "SUBMITTED")),
-                CounterOfferProposals = proposals.Count(p => IsStatus(p.Status, "COUNTER_OFFER")),
                 AcceptedProposals = proposals.Count(p => IsStatus(p.Status, "ACCEPTED")),
                 RejectedProposals = proposals.Count(p => IsStatus(p.Status, "REJECTED")),
                 WithdrawnProposals = proposals.Count(p => IsStatus(p.Status, "WITHDRAWN")),
