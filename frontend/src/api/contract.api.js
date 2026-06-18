@@ -1,29 +1,40 @@
 import axiosInstance from "./axiosInstance";
 
 const contractApi = {
-  // CLIENT/FE1 thường dùng: tạo contract từ proposal đã accepted
-  createContractFromProposal(proposalId) {
-    return axiosInstance.post(`/contracts/from-proposal/${proposalId}`);
+  createContractFromProposal(proposalId, data = {}) {
+    return axiosInstance.post(`/contracts/from-proposal/${proposalId}`, data);
   },
 
-  // CLIENT/FE1 thường dùng: tạo contract draft thủ công
-  createDraftContract(data) {
+  createContractDraft(data) {
     return axiosInstance.post("/contracts/draft", data);
   },
 
-  // FE2 dùng: xem contract detail
-  getContractById(contractId) {
+  updateContractDraft(contractId, data) {
+    return axiosInstance.put(`/contracts/${contractId}/draft`, data);
+  },
+
+  getContractMilestoneDrafts(contractId) {
+    return axiosInstance.get(`/contracts/${contractId}/milestone-drafts`);
+  },
+
+  replaceContractMilestoneDrafts(contractId, data) {
+    return axiosInstance.put(`/contracts/${contractId}/milestone-drafts`, data);
+  },
+
+  getContract(contractId) {
     return axiosInstance.get(`/contracts/${contractId}`);
   },
 
-  // FE2 dùng: lấy contract từ proposal accepted
-  getContractByProposalId(proposalId) {
+  getContractByProposal(proposalId) {
     return axiosInstance.get(`/proposals/${proposalId}/contract`);
   },
 
-  // FE2 dùng: expert confirm contract
-  confirmContract(contractId) {
-    return axiosInstance.post(`/contracts/${contractId}/confirm`);
+  confirmContract(contractId, data = {}) {
+    return axiosInstance.post(`/contracts/${contractId}/confirm`, data);
+  },
+
+  cancelContract(contractId, data = {}) {
+    return axiosInstance.post(`/contracts/${contractId}/cancel`, data);
   },
 };
 
