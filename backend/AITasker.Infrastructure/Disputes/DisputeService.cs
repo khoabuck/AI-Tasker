@@ -639,7 +639,7 @@ namespace AITasker.Infrastructure.Disputes
                     : request.AdminDecision.Trim();
                 dispute.ResolvedAt = DateTime.UtcNow;
 
-                await UpdateProjectStatusAfterResolutionAsync(project);
+                await UpdateProjectStatusAfterResolutionAsync(project, dispute.DisputeId);
 
                 await _context.SaveChangesAsync();
 
@@ -729,13 +729,24 @@ namespace AITasker.Infrastructure.Disputes
 
         private static bool IsMilestoneFinished(Milestone milestone)
         {
-            return IsMilestoneFinal(milestone);
+            var status = milestone.Status?.Trim().ToUpperInvariant();
+            var paymentStatus = milestone.PaymentStatus?.Trim().ToUpperInvariant();
+
+            return status == MilestoneStatusApproved ||
+                status == MilestoneStatusResolved ||
+                status == MilestoneStatusDisputeResolved ||
+                status == MilestoneStatusReleased ||
+                status == MilestoneStatusRefunded ||
+                paymentStatus == PaymentStatusReleased ||
+                paymentStatus == PaymentStatusRefunded ||
+                paymentStatus == PaymentStatusPartialRefund;
         }
 
-        private async Task UpdateProjectStatusAfterResolutionAsync(Project project)
+        private async Task UpdateProjectStatusAfterResolutionAsync(Project project, int resolvedDisputeId)
         {
             var hasOpenDispute = await _context.Disputes.AnyAsync(d =>
                 d.ProjectId == project.ProjectId &&
+                d.DisputeId != resolvedDisputeId &&
                 d.Status == DisputeStatusOpen);
 
             if (hasOpenDispute)
@@ -756,6 +767,7 @@ namespace AITasker.Infrastructure.Disputes
             }
 
             project.Status = ProjectStatusActive;
+            project.EndDate = null;
         }
 
         private async Task NotifyAdminsAsync(

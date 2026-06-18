@@ -161,17 +161,52 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("{proposalId:int}/counter")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> CounterOffer(
-            int proposalId,
-            [FromBody] CounterOfferRequest request)
+        [HttpGet("{proposalId:int}/versions")]
+        public async Task<IActionResult> GetProposalVersions(int proposalId)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _proposalService.CounterOfferAsync(
+                var result = await _proposalService.GetProposalVersionsAsync(
+                    userId,
+                    proposalId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{proposalId:int}/resubmit")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> ResubmitProposal(
+            int proposalId,
+            [FromBody] ResubmitProposalRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.ResubmitProposalAsync(
                     userId,
                     proposalId,
                     request);
@@ -179,7 +214,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Counter offer submitted successfully.",
+                    message = "Proposal resubmitted successfully.",
                     data = result
                 });
             }

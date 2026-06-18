@@ -13,6 +13,11 @@ namespace AITasker.Application.Interfaces
             int userId,
             CreateContractRequest request);
 
+        Task<ProjectContractResponse> UpdateContractDraftAsync(
+            int userId,
+            int contractId,
+            UpdateContractDraftRequest request);
+
         Task<ProjectContractResponse> GetContractByIdAsync(
             int userId,
             int contractId);
@@ -24,5 +29,19 @@ namespace AITasker.Application.Interfaces
         Task<ProjectContractResponse> ConfirmContractAsync(
             int contractId,
             int userId);
+
+        Task<ProjectContractResponse> CancelContractAsync(
+            int userId,
+            int contractId,
+            CancelContractRequest request);
+
+        Task<IReadOnlyList<ContractMilestoneDraftResponse>> GetContractMilestoneDraftsAsync(
+            int userId,
+            int contractId);
+
+        Task<IReadOnlyList<ContractMilestoneDraftResponse>> ReplaceContractMilestoneDraftsAsync(
+            int userId,
+            int contractId,
+            ReplaceContractMilestoneDraftsRequest request);
     }
 }

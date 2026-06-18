@@ -1,4 +1,5 @@
 using System.Text;
+using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
@@ -10,6 +11,7 @@ using AITasker.Infrastructure.Services;
 using AITasker.Infrastructure.Reviews;
 using AITasker.Infrastructure.Banking;
 using AITasker.Infrastructure.Dashboards;
+using AITasker.Infrastructure.Conversations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -244,6 +246,7 @@ builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>(
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================
 // BE2 - Review Flow
@@ -258,7 +261,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // =========================
 // BE3 - Wallet / Escrow / VNPay / Withdrawal
 // =========================
-builder.Services.AddScoped<IWalletService, WalletService>();
+builder.Services.AddHttpClient<IWalletService, WalletService>();
 builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
@@ -347,6 +350,7 @@ app.MapControllers();
 // =======================================================
 app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
+app.MapHub<ConversationHub>("/hubs/conversations");
 
 // =========================
 // Test endpoints

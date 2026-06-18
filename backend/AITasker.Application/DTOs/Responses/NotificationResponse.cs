@@ -15,5 +15,9 @@ namespace AITasker.Application.DTOs.Responses
         public bool IsRead { get; set; }
 
         public DateTime CreatedAt { get; set; }
+
+        public DateTime CreatedAtUtc { get; set; }
+
+        public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
     }
 }

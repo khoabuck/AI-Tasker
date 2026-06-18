@@ -2,116 +2,47 @@ using System.Security.Claims;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AITasker.Api.Controllers
 {
     [ApiController]
-    [Route("api/wallets")]
+    [Route("api/conversations")]
     [Authorize]
-    public class WalletsController : ControllerBase
+    public class ConversationsController : ControllerBase
     {
-        private readonly IWalletService _walletService;
+        private readonly IConversationService _conversationService;
 
-        public WalletsController(IWalletService walletService)
+        public ConversationsController(IConversationService conversationService)
         {
-            _walletService = walletService;
+            _conversationService = conversationService;
         }
 
-        [HttpGet("me")]
-        public async Task<IActionResult> GetMyWallet()
+        [HttpPost]
+        public async Task<IActionResult> CreateOrGetConversation(
+            [FromBody] CreateConversationRequest request)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _walletService.GetMyWalletAsync(userId);
-
-                return Ok(new
-                {
-                    success = true,
-                    data = result
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpGet("balance")]
-        public async Task<IActionResult> GetBalance()
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var balance = await _walletService.GetBalanceAsync(userId);
-
-                return Ok(new
-                {
-                    success = true,
-                    balance
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpGet("/api/transactions/me")]
-        public async Task<IActionResult> GetMyTransactions()
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _walletService.GetMyTransactionsAsync(userId);
-
-                return Ok(new
-                {
-                    success = true,
-                    data = result
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPost("deposit-orders")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> CreateDepositOrder(
-            [FromBody] CreateDepositOrderRequest request)
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _walletService.CreateDepositOrderAsync(
+                var result = await _conversationService.CreateOrGetConversationAsync(
                     userId,
                     request);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Deposit order created successfully.",
+                    message = "Conversation retrieved successfully.",
                     data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
                 });
             }
             catch (InvalidOperationException ex)
@@ -124,15 +55,14 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpGet("deposit-orders/me")]
-        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public async Task<IActionResult> GetMyDepositOrders()
+        [HttpGet("me")]
+        public async Task<IActionResult> GetMyConversations()
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _walletService.GetMyDepositOrdersAsync(userId);
+                var result = await _conversationService.GetMyConversationsAsync(userId);
 
                 return Ok(new
                 {
@@ -150,17 +80,16 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpGet("deposit-orders/{depositOrderId:int}")]
-        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public async Task<IActionResult> GetDepositOrderById(int depositOrderId)
+        [HttpGet("{conversationId:int}")]
+        public async Task<IActionResult> GetConversationById(int conversationId)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _walletService.GetDepositOrderByIdAsync(
+                var result = await _conversationService.GetConversationByIdAsync(
                     userId,
-                    depositOrderId);
+                    conversationId);
 
                 return Ok(new
                 {
@@ -186,22 +115,59 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("deposit-orders/{depositOrderId:int}/simulate-paid")]
-        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public async Task<IActionResult> SimulateDepositPaid(int depositOrderId)
+        [HttpGet("{conversationId:int}/messages")]
+        public async Task<IActionResult> GetMessages(int conversationId)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _walletService.SimulateDepositPaidAsync(
+                var result = await _conversationService.GetMessagesAsync(
                     userId,
-                    depositOrderId);
+                    conversationId);
 
                 return Ok(new
                 {
                     success = true,
-                    message = "Deposit order paid successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{conversationId:int}/messages")]
+        public async Task<IActionResult> SendMessage(
+            int conversationId,
+            [FromBody] SendConversationMessageRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _conversationService.SendMessageAsync(
+                    userId,
+                    conversationId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Message sent successfully.",
                     data = result
                 });
             }
@@ -232,7 +198,7 @@ namespace AITasker.Api.Controllers
 
             if (!int.TryParse(userIdValue, out var userId))
             {
-                throw new InvalidOperationException("Authorization failed: Invalid token.");
+                throw new InvalidOperationException("Invalid user token.");
             }
 
             return userId;

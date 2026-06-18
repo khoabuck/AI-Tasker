@@ -22,10 +22,14 @@ namespace AITasker.Application.Interfaces
             int userId,
             int proposalId);
 
-        Task<ProposalResponse> CounterOfferAsync(
+        Task<IReadOnlyList<ProposalVersionResponse>> GetProposalVersionsAsync(
+            int userId,
+            int proposalId);
+
+        Task<ProposalResponse> ResubmitProposalAsync(
             int userId,
             int proposalId,
-            CounterOfferRequest request);
+            ResubmitProposalRequest request);
 
         Task<ProposalResponse> ProcessProposalStatusAsync(
             int userId,
