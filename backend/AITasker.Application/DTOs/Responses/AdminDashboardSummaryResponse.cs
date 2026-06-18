@@ -29,14 +29,18 @@ namespace AITasker.Application.DTOs.Responses
         public int OpenJobs { get; set; }
 
         public int DraftJobs { get; set; }
+        
+        public int ActiveJobs { get; set; }
 
-        public int ClosedJobs { get; set; }
+        public int CompletedJobs { get; set; }
+
+        public int DisputedJobs { get; set; }
+
+        public int CancelledJobs { get; set; }
 
         public int TotalProposals { get; set; }
 
         public int SubmittedProposals { get; set; }
-
-        public int CounterOfferProposals { get; set; }
 
         public int AcceptedProposals { get; set; }
 
