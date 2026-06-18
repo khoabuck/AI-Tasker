@@ -21,13 +21,22 @@ const expertWalletApi = {
     return axiosInstance.post("/withdrawals", data);
   },
 
-  createDeposit({ amount, transactionRef } = {}) {
-    return axiosInstance.post("/wallets/deposit", null, {
-      params: {
-        amount,
-        transactionRef,
-      },
-    });
+  createDepositOrder(data) {
+    return axiosInstance.post("/wallets/deposit-orders", data);
+  },
+
+  getMyDepositOrders() {
+    return axiosInstance.get("/wallets/deposit-orders/me");
+  },
+
+  getDepositOrder(depositOrderId) {
+    return axiosInstance.get(`/wallets/deposit-orders/${depositOrderId}`);
+  },
+
+  simulateDepositPaid(depositOrderId) {
+    return axiosInstance.post(
+      `/wallets/deposit-orders/${depositOrderId}/simulate-paid`
+    );
   },
 };
 

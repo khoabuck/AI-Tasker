@@ -17,12 +17,16 @@ const unwrapData = (response) => {
   if (data?.data?.balance !== undefined) return data.data.balance;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
+  if (data?.data?.depositOrder) return data.data.depositOrder;
+  if (data?.data?.withdrawal) return data.data.withdrawal;
   if (data?.data) return data.data;
 
   if (data?.wallet) return data.wallet;
   if (data?.balance !== undefined) return data.balance;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
+  if (data?.depositOrder) return data.depositOrder;
+  if (data?.withdrawal) return data.withdrawal;
 
   return data;
 };
@@ -34,18 +38,50 @@ const unwrapListData = (response) => {
 
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.Items)) return data.Items;
   if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.Result)) return data.Result;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.Results)) return data.Results;
+
   if (Array.isArray(data?.transactions)) return data.transactions;
+  if (Array.isArray(data?.Transactions)) return data.Transactions;
+
   if (Array.isArray(data?.withdrawals)) return data.withdrawals;
+  if (Array.isArray(data?.Withdrawals)) return data.Withdrawals;
   if (Array.isArray(data?.withdrawalRequests)) return data.withdrawalRequests;
+  if (Array.isArray(data?.WithdrawalRequests)) return data.WithdrawalRequests;
+
+  if (Array.isArray(data?.depositOrders)) return data.depositOrders;
+  if (Array.isArray(data?.DepositOrders)) return data.DepositOrders;
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.Items)) return data.data.Items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
+  if (Array.isArray(data?.data?.Result)) return data.data.Result;
+  if (Array.isArray(data?.data?.results)) return data.data.results;
+  if (Array.isArray(data?.data?.Results)) return data.data.Results;
+
   if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
+  if (Array.isArray(data?.data?.Transactions)) return data.data.Transactions;
+
   if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
+  if (Array.isArray(data?.data?.Withdrawals)) return data.data.Withdrawals;
 
   if (Array.isArray(data?.data?.withdrawalRequests)) {
     return data.data.withdrawalRequests;
+  }
+
+  if (Array.isArray(data?.data?.WithdrawalRequests)) {
+    return data.data.WithdrawalRequests;
+  }
+
+  if (Array.isArray(data?.data?.depositOrders)) {
+    return data.data.depositOrders;
+  }
+
+  if (Array.isArray(data?.data?.DepositOrders)) {
+    return data.data.DepositOrders;
   }
 
   return [];
@@ -195,6 +231,8 @@ const normalizeTransaction = (transaction) => {
     referenceId: getValue(
       transaction.referenceId,
       transaction.ReferenceId,
+      transaction.transactionRef,
+      transaction.TransactionRef,
       ""
     ),
 
@@ -261,12 +299,80 @@ const normalizeWithdrawal = (withdrawal) => {
   };
 };
 
+const normalizeDepositOrder = (depositOrder) => {
+  if (!depositOrder) return null;
+
+  const depositOrderId = getValue(
+    depositOrder.depositOrderId,
+    depositOrder.DepositOrderId,
+    depositOrder.orderId,
+    depositOrder.OrderId,
+    depositOrder.id,
+    depositOrder.Id
+  );
+
+  return {
+    depositOrderId,
+    id: depositOrderId,
+
+    walletId: getValue(depositOrder.walletId, depositOrder.WalletId),
+    userId: getValue(depositOrder.userId, depositOrder.UserId),
+
+    amount: Number(getValue(depositOrder.amount, depositOrder.Amount, 0)),
+
+    status: String(
+      getValue(depositOrder.status, depositOrder.Status, "PENDING")
+    )
+      .trim()
+      .toUpperCase(),
+
+    paymentUrl: getValue(
+      depositOrder.paymentUrl,
+      depositOrder.PaymentUrl,
+      depositOrder.checkoutUrl,
+      depositOrder.CheckoutUrl,
+      depositOrder.payUrl,
+      depositOrder.PayUrl,
+      ""
+    ),
+
+    transactionRef: getValue(
+      depositOrder.transactionRef,
+      depositOrder.TransactionRef,
+      depositOrder.referenceCode,
+      depositOrder.ReferenceCode,
+      depositOrder.orderCode,
+      depositOrder.OrderCode,
+      ""
+    ),
+
+    description: getValue(
+      depositOrder.description,
+      depositOrder.Description,
+      ""
+    ),
+
+    createdAt: getValue(depositOrder.createdAt, depositOrder.CreatedAt, ""),
+    paidAt: getValue(depositOrder.paidAt, depositOrder.PaidAt, ""),
+    expiredAt: getValue(depositOrder.expiredAt, depositOrder.ExpiredAt, ""),
+
+    raw: depositOrder,
+  };
+};
+
 const buildWithdrawalPayload = (formData) => {
   return {
     amount: Number(formData.amount),
     bankName: trim(formData.bankName),
     bankAccountNumber: trim(formData.bankAccountNumber),
     bankAccountHolder: trim(formData.bankAccountHolder),
+  };
+};
+
+const buildDepositOrderPayload = (formData = {}) => {
+  return {
+    amount: Number(formData.amount),
+    description: trim(formData.description),
   };
 };
 
@@ -342,16 +448,52 @@ const expertWalletService = {
     return normalizeWithdrawal(unwrapData(response));
   },
 
-  async createDeposit(data) {
-    const response = await expertWalletApi.createDeposit(data);
+  async createDepositOrder(formData) {
+    const payload = buildDepositOrderPayload(formData);
+    const response = await expertWalletApi.createDepositOrder(payload);
 
-    return unwrapData(response);
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  async getMyDepositOrders() {
+    const response = await expertWalletApi.getMyDepositOrders();
+
+    return unwrapListData(response).map(normalizeDepositOrder).filter(Boolean);
+  },
+
+  async getDepositOrder(depositOrderId) {
+    if (!depositOrderId) {
+      throw new Error("depositOrderId is required.");
+    }
+
+    const response = await expertWalletApi.getDepositOrder(depositOrderId);
+
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  async simulateDepositPaid(depositOrderId) {
+    if (!depositOrderId) {
+      throw new Error("depositOrderId is required.");
+    }
+
+    const response = await expertWalletApi.simulateDepositPaid(depositOrderId);
+
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  /*
+    Alias để nếu page cũ còn gọi createDeposit()
+    thì vẫn chạy qua API deposit-orders mới, không gọi endpoint cũ nữa.
+  */
+  async createDeposit(formData) {
+    return this.createDepositOrder(formData);
   },
 
   normalizeWallet,
   normalizeBalance,
   normalizeTransaction,
   normalizeWithdrawal,
+  normalizeDepositOrder,
 };
 
 export default expertWalletService;
