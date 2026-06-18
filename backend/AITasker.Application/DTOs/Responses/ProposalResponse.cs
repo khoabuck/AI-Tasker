@@ -32,15 +32,23 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? PreliminaryMilestonePlan { get; set; }
 
-        public decimal? CounterPrice { get; set; }
-
-        public int? CounterTimelineDays { get; set; }
-
-        public string? CounterMessage { get; set; }
-
         public string Status { get; set; } = string.Empty;
 
         public int? ContractId { get; set; }
+
+        public int LatestVersionNumber { get; set; }
+
+        public int TotalVersions { get; set; }
+
+        public DateTime? LastResubmittedAt { get; set; }
+
+        public int ResubmitLimit { get; set; }
+
+        public int ResubmitWindowHours { get; set; }
+
+        public int RemainingResubmitsInWindow { get; set; }
+
+        public ProposalVersionResponse? LatestVersion { get; set; }
 
         public DateTime CreatedAt { get; set; }
     }

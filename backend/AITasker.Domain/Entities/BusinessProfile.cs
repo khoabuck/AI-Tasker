@@ -22,6 +22,10 @@ public class BusinessProfile
 
     public string? VerificationNote { get; set; }
 
+    public int VerificationSubmissionCount { get; set; }
+
+    public DateTime? VerificationLockedUntil { get; set; }
+
     public DateTime? VerifiedAt { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

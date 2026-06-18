@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace AITasker.Domain.Entities
 {
@@ -53,5 +54,7 @@ namespace AITasker.Domain.Entities
         public ExpertProfile? ExpertProfile { get; set; }
 
         public Project? Project { get; set; }
+
+        public ICollection<ContractMilestoneDraft> MilestoneDrafts { get; set; } = new List<ContractMilestoneDraft>();
     }
 }

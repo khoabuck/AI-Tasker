@@ -29,4 +29,6 @@ public interface IAuthService
     Task<AuthResponse> SelectRoleAsync(int userId, SelectRoleRequest request);
 
     Task<UserResponse?> GetCurrentUserAsync(int userId);
+
+    Task<UserResponse> UpdateAvatarAsync(int userId, UpdateAvatarRequest request);
 }

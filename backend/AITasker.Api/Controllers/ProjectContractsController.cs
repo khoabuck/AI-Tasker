@@ -93,6 +93,122 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpPut("{contractId:int}/draft")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> UpdateDraft(
+            int contractId,
+            [FromBody] UpdateContractDraftRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _contractService.UpdateContractDraftAsync(
+                    userId,
+                    contractId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Contract draft updated successfully. Previous confirmations were reset if the draft changed.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("{contractId:int}/milestone-drafts")]
+        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
+        public async Task<IActionResult> GetMilestoneDrafts(int contractId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _contractService.GetContractMilestoneDraftsAsync(
+                    userId,
+                    contractId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPut("{contractId:int}/milestone-drafts")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> ReplaceMilestoneDrafts(
+            int contractId,
+            [FromBody] ReplaceContractMilestoneDraftsRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _contractService.ReplaceContractMilestoneDraftsAsync(
+                    userId,
+                    contractId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Contract milestone drafts updated successfully. Previous confirmations were reset.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpGet("{contractId:int}")]
         public async Task<IActionResult> GetContractById(int contractId)
         {
@@ -179,6 +295,46 @@ namespace AITasker.Api.Controllers
                 {
                     success = true,
                     message = "Contract confirmation updated successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{contractId:int}/cancel")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> Cancel(
+            int contractId,
+            [FromBody] CancelContractRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _contractService.CancelContractAsync(
+                    userId,
+                    contractId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Contract cancelled successfully. Job was reopened if the project had not started.",
                     data = result
                 });
             }

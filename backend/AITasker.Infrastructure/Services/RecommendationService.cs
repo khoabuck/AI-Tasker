@@ -13,6 +13,9 @@ public class RecommendationService : IRecommendationService
     private const string UserStatusActive = "ACTIVE";
     private const string ExpertReviewApproved = "APPROVED";
 
+    private const string ClientTypeBusiness = "BUSINESS";
+    private const string BusinessVerificationVerified = "VERIFIED";
+
     private readonly AITaskerDbContext _dbContext;
     private readonly IJobAssistantProvider _jobAssistantProvider;
 
@@ -38,6 +41,11 @@ public class RecommendationService : IRecommendationService
             throw new InvalidOperationException(
                 "Only CLIENT or ADMIN can find expert recommendations from prompt."
             );
+        }
+
+        if (role == "CLIENT")
+        {
+            await EnsureCurrentClientEligibleForRecommendationAsync(currentUserId);
         }
 
         if (string.IsNullOrWhiteSpace(request.Prompt))
@@ -215,6 +223,9 @@ public class RecommendationService : IRecommendationService
         var job = await _dbContext.JobPostings
             .AsNoTracking()
             .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
             .FirstOrDefaultAsync(x => x.JobPostingId == jobPostingId);
@@ -234,6 +245,13 @@ public class RecommendationService : IRecommendationService
         if (job.ClientProfile == null)
         {
             throw new InvalidOperationException("Job client profile not found.");
+        }
+
+        if (!IsClientEligibleForRecommendation(job.ClientProfile))
+        {
+            throw new InvalidOperationException(
+                "Job owner must be active and verified before expert recommendations can be generated."
+            );
         }
 
         if (role != "ADMIN" && job.ClientProfile.UserId != currentUserId)
@@ -313,9 +331,23 @@ public class RecommendationService : IRecommendationService
             .AsNoTracking()
             .Include(x => x.ClientProfile!)
                 .ThenInclude(x => x.User)
+            .Include(x => x.ClientProfile!)
+                .ThenInclude(x => x.BusinessProfile)
             .Include(x => x.JobSkills)
                 .ThenInclude(x => x.Skill)
-            .Where(x => x.Status == JobStatusOpen)
+            .Where(x =>
+                x.Status == JobStatusOpen &&
+                x.ClientProfile != null &&
+                x.ClientProfile.User != null &&
+                x.ClientProfile.User.Status == UserStatusActive &&
+                (
+                    x.ClientProfile.ClientType != ClientTypeBusiness ||
+                    (
+                        x.ClientProfile.BusinessProfile != null &&
+                        x.ClientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified
+                    )
+                )
+            )
             .ToListAsync();
 
         var recommendations = jobs
@@ -328,6 +360,46 @@ public class RecommendationService : IRecommendationService
             .ToList();
 
         return recommendations;
+    }
+
+    private async Task EnsureCurrentClientEligibleForRecommendationAsync(int userId)
+    {
+        var clientProfile = await _dbContext.ClientProfiles
+            .AsNoTracking()
+            .Include(x => x.User)
+            .Include(x => x.BusinessProfile)
+            .FirstOrDefaultAsync(x => x.UserId == userId);
+
+        if (clientProfile == null)
+        {
+            throw new InvalidOperationException("Client profile not found.");
+        }
+
+        if (!IsClientEligibleForRecommendation(clientProfile))
+        {
+            throw new InvalidOperationException(
+                "Your account must be active and verified before requesting expert recommendations."
+            );
+        }
+    }
+
+    private static bool IsClientEligibleForRecommendation(ClientProfile clientProfile)
+    {
+        if (clientProfile.User == null ||
+            clientProfile.User.Status != UserStatusActive)
+        {
+            return false;
+        }
+
+        var clientType = clientProfile.ClientType.Trim().ToUpperInvariant();
+
+        if (clientType != ClientTypeBusiness)
+        {
+            return true;
+        }
+
+        return clientProfile.BusinessProfile != null &&
+               clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
     }
 
     private static ExpertRecommendationResponse BuildExpertRecommendation(
@@ -355,15 +427,8 @@ public class RecommendationService : IRecommendationService
             expert.Level
         );
 
-        var budgetFitScorePart = CalculateBudgetFitScorePart(
-            job.BudgetMin,
-            job.BudgetMax,
-            expert.ExpectedProjectBudgetMin,
-            expert.ExpectedProjectBudgetMax
-        );
-
         var matchScore = Clamp(
-            skillMatchScore + profileScorePart + experienceScorePart + budgetFitScorePart,
+            skillMatchScore + profileScorePart + experienceScorePart,
             0m,
             100m
         );
@@ -381,8 +446,6 @@ public class RecommendationService : IRecommendationService
 
             YearsOfExperience = expert.YearsOfExperience,
 
-            ExpectedProjectBudgetMin = expert.ExpectedProjectBudgetMin,
-            ExpectedProjectBudgetMax = expert.ExpectedProjectBudgetMax,
             AvailableForWork = expert.AvailableForWork,
             ProfileScore = expert.ProfileScore,
             Level = expert.Level,
@@ -391,7 +454,6 @@ public class RecommendationService : IRecommendationService
             SkillMatchScore = Math.Round(skillMatchScore, 2),
             ProfileScorePart = Math.Round(profileScorePart, 2),
             ExperienceScorePart = Math.Round(experienceScorePart, 2),
-            BudgetFitScorePart = Math.Round(budgetFitScorePart, 2),
 
             MatchedSkillCount = matchedSkills.Count,
             RequiredSkillCount = requiredSkillIds.Count,
@@ -415,10 +477,6 @@ public class RecommendationService : IRecommendationService
             RiskNote = BuildExpertRiskNote(
                 matchedSkills.Count,
                 requiredSkillIds.Count,
-                job.BudgetMin,
-                job.BudgetMax,
-                expert.ExpectedProjectBudgetMin,
-                expert.ExpectedProjectBudgetMax,
                 expert.ExperienceConfidenceScore
             )
         };
@@ -452,13 +510,6 @@ public class RecommendationService : IRecommendationService
             expertSkillIds
         );
 
-        var budgetFitScorePart = CalculateBudgetFitScorePart(
-            job.BudgetMin,
-            job.BudgetMax,
-            expert.ExpectedProjectBudgetMin,
-            expert.ExpectedProjectBudgetMax
-        );
-
         var deadlineUrgencyPart = CalculateDeadlineUrgencyPart(job.Deadline);
 
         var complexityFitPart = CalculateComplexityFitPart(
@@ -468,7 +519,7 @@ public class RecommendationService : IRecommendationService
         );
 
         var matchScore = Clamp(
-            skillMatchScore + budgetFitScorePart + deadlineUrgencyPart + complexityFitPart,
+            skillMatchScore + deadlineUrgencyPart + complexityFitPart,
             0m,
             100m
         );
@@ -495,7 +546,6 @@ public class RecommendationService : IRecommendationService
 
             MatchScore = Math.Round(matchScore, 2),
             SkillMatchScore = Math.Round(skillMatchScore, 2),
-            BudgetFitScorePart = Math.Round(budgetFitScorePart, 2),
             DeadlineUrgencyPart = Math.Round(deadlineUrgencyPart, 2),
             ComplexityFitPart = Math.Round(complexityFitPart, 2),
 
@@ -521,11 +571,7 @@ public class RecommendationService : IRecommendationService
             RiskNote = BuildJobRiskNote(
                 matchedSkills.Count,
                 requiredSkills.Count,
-                job.Deadline,
-                job.BudgetMin,
-                job.BudgetMax,
-                expert.ExpectedProjectBudgetMin,
-                expert.ExpectedProjectBudgetMax
+                job.Deadline
             )
         };
 
@@ -624,41 +670,6 @@ public class RecommendationService : IRecommendationService
         var confidencePart = Clamp(confidenceScore, 0m, 100m) / 100m * 3m;
 
         return Clamp(yearsScore + levelScore + confidencePart, 0m, 20m);
-    }
-
-    private static decimal CalculateBudgetFitScorePart(
-        decimal jobBudgetMin,
-        decimal jobBudgetMax,
-        decimal expertBudgetMin,
-        decimal expertBudgetMax
-    )
-    {
-        if (expertBudgetMin <= jobBudgetMax && expertBudgetMax >= jobBudgetMin)
-        {
-            return 10m;
-        }
-
-        var jobAverage = (jobBudgetMin + jobBudgetMax) / 2m;
-        var expertAverage = (expertBudgetMin + expertBudgetMax) / 2m;
-
-        if (jobAverage <= 0 || expertAverage <= 0)
-        {
-            return 2m;
-        }
-
-        var differenceRate = Math.Abs(jobAverage - expertAverage) / jobAverage;
-
-        if (differenceRate <= 0.2m)
-        {
-            return 7m;
-        }
-
-        if (differenceRate <= 0.5m)
-        {
-            return 4m;
-        }
-
-        return 1m;
     }
 
     private static decimal CalculateDeadlineUrgencyPart(DateTime deadline)
@@ -760,7 +771,7 @@ public class RecommendationService : IRecommendationService
     {
         if (requiredSkillCount == 0)
         {
-            return "This job has no required skills, so matching is based on verified profile quality, budget fit, and availability.";
+            return "This job has no required skills, so matching is based on verified profile quality and availability.";
         }
 
         return
@@ -778,7 +789,7 @@ public class RecommendationService : IRecommendationService
     {
         if (requiredSkillCount == 0)
         {
-            return "This job has no required skills, so matching is based on budget, deadline, and complexity fit.";
+            return "This job has no required skills, so matching is based on deadline and complexity fit.";
         }
 
         return
@@ -789,10 +800,6 @@ public class RecommendationService : IRecommendationService
     private static string? BuildExpertRiskNote(
         int matchedSkillCount,
         int requiredSkillCount,
-        decimal jobBudgetMin,
-        decimal jobBudgetMax,
-        decimal expertBudgetMin,
-        decimal expertBudgetMax,
         decimal confidenceScore
     )
     {
@@ -801,11 +808,6 @@ public class RecommendationService : IRecommendationService
         if (requiredSkillCount > 0 && matchedSkillCount < requiredSkillCount)
         {
             notes.Add("Some required skills are missing.");
-        }
-
-        if (!(expertBudgetMin <= jobBudgetMax && expertBudgetMax >= jobBudgetMin))
-        {
-            notes.Add("Expert expected budget may not fit the job budget.");
         }
 
         if (confidenceScore < 60m)
@@ -821,11 +823,7 @@ public class RecommendationService : IRecommendationService
     private static string? BuildJobRiskNote(
         int matchedSkillCount,
         int requiredSkillCount,
-        DateTime deadline,
-        decimal jobBudgetMin,
-        decimal jobBudgetMax,
-        decimal expertBudgetMin,
-        decimal expertBudgetMax
+        DateTime deadline
     )
     {
         var notes = new List<string>();
@@ -842,11 +840,6 @@ public class RecommendationService : IRecommendationService
         else if ((deadline.Date - DateTime.UtcNow.Date).TotalDays <= 3)
         {
             notes.Add("Job deadline is very close.");
-        }
-
-        if (!(expertBudgetMin <= jobBudgetMax && expertBudgetMax >= jobBudgetMin))
-        {
-            notes.Add("Job budget may not fit your expected budget range.");
         }
 
         return notes.Count == 0
