@@ -57,6 +57,7 @@ import MyDisputesPage from "../../modules/expert/pages/MyDisputesPage";
 import DisputeDetailPage from "../../modules/expert/pages/DisputeDetailPage";
 import ExpertNotificationsPage from "../../modules/expert/pages/ExpertNotificationsPage";
 import ExpertReviewsPage from "../../modules/expert/pages/ExpertReviewsPage";
+import ExpertSkillsPage from "../../modules/expert/pages/ExpertSkillsPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -144,6 +145,8 @@ export default function AppRouter() {
       <Route path="/expert/reviews" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertReviewsPage /></ProtectedRoute>} />
       <Route path="/expert/disputes" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyDisputesPage /></ProtectedRoute>} />
       <Route path="/expert/disputes/:disputeId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputeDetailPage /></ProtectedRoute>} />
+      <Route path="/expert/skills" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ExpertSkillsPage /></ProtectedRoute>} />
+
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/dashboard" replace /></ProtectedRoute>} />

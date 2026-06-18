@@ -199,6 +199,14 @@ export default function ExpertNavbar() {
             Home
           </NavLink>
 
+          <NavLink to="/expert/profile" className={navLinkClass}>
+            Profile
+          </NavLink>
+
+          <NavLink to="/expert/skills" className={navLinkClass}>
+            Skills
+          </NavLink>
+
           <NavDropdown
             label="Jobs"
             active={isJobsActive}
@@ -316,6 +324,12 @@ export default function ExpertNavbar() {
                   to="/expert/profile"
                   icon="person"
                   label="Profile"
+                />
+
+                <DropdownLink
+                  to="/expert/skills"
+                  icon="psychology"
+                  label="Skills"
                 />
 
                 <DropdownLink
