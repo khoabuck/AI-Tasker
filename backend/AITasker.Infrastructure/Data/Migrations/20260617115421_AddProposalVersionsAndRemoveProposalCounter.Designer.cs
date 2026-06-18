@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617115421_AddProposalVersionsAndRemoveProposalCounter")]
+    partial class AddProposalVersionsAndRemoveProposalCounter
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -144,68 +147,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ClientProfiles", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ContractMilestoneDraft", b =>
-                {
-                    b.Property<int>("ContractMilestoneDraftId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ContractMilestoneDraftId"));
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ContractId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DeadlineOffsetDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ExpectedDeliverable")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RevisionLimit")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.HasKey("ContractMilestoneDraftId");
-
-                    b.HasIndex("ContractId");
-
-                    b.HasIndex("ContractId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("ContractMilestoneDrafts", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ContractMilestoneDrafts_Amount", "[Amount] > 0");
-
-                            t.HasCheckConstraint("CK_ContractMilestoneDrafts_DeadlineOffsetDays", "[DeadlineOffsetDays] > 0");
-
-                            t.HasCheckConstraint("CK_ContractMilestoneDrafts_OrderIndex", "[OrderIndex] > 0");
-
-                            t.HasCheckConstraint("CK_ContractMilestoneDrafts_RevisionLimit", "[RevisionLimit] >= 0");
-                        });
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Conversation", b =>
@@ -404,103 +345,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                             t.HasCheckConstraint("CK_Deliverables_Status", "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
 
                             t.HasCheckConstraint("CK_Deliverables_VersionNumber", "[VersionNumber] > 0");
-                        });
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DepositOrder", b =>
-                {
-                    b.Property<int>("DepositOrderId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DepositOrderId"));
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("CancelUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("CheckoutUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("OrderCode")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<long?>("PayOsOrderCode")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("PaymentContent")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("PaymentLinkId")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("ProviderReference")
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("QrContent")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("ReturnUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int");
-
-                    b.HasKey("DepositOrderId");
-
-                    b.HasIndex("OrderCode")
-                        .IsUnique();
-
-                    b.HasIndex("PayOsOrderCode")
-                        .IsUnique()
-                        .HasFilter("[PayOsOrderCode] IS NOT NULL");
-
-                    b.HasIndex("PaymentLinkId")
-                        .HasFilter("[PaymentLinkId] IS NOT NULL");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("UserId", "Status", "CreatedAt");
-
-                    b.ToTable("DepositOrders", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_DepositOrders_Amount", "[Amount] > 0");
-
-                            t.HasCheckConstraint("CK_DepositOrders_Status", "[Status] IN ('PENDING','PAID','EXPIRED','CANCELLED')");
                         });
                 });
 
@@ -1822,17 +1666,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ContractMilestoneDraft", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ProjectContract", "Contract")
-                        .WithMany("MilestoneDrafts")
-                        .HasForeignKey("ContractId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Contract");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Conversation", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "ClientUser")
@@ -1934,17 +1767,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Expert");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DepositOrder", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
@@ -2352,8 +2174,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.ProjectContract", b =>
                 {
-                    b.Navigation("MilestoneDrafts");
-
                     b.Navigation("Project");
                 });
 

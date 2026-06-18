@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260617142033_AddDepositOrders")]
+    partial class AddDepositOrders
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -418,14 +421,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<string>("CancelUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("CheckoutUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -440,15 +435,8 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<long?>("PayOsOrderCode")
-                        .HasColumnType("bigint");
-
                     b.Property<string>("PaymentContent")
                         .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.Property<string>("PaymentLinkId")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
@@ -466,10 +454,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
-                    b.Property<string>("ReturnUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -482,13 +466,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("OrderCode")
                         .IsUnique();
-
-                    b.HasIndex("PayOsOrderCode")
-                        .IsUnique()
-                        .HasFilter("[PayOsOrderCode] IS NOT NULL");
-
-                    b.HasIndex("PaymentLinkId")
-                        .HasFilter("[PaymentLinkId] IS NOT NULL");
 
                     b.HasIndex("Status");
 

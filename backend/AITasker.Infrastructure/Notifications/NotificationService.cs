@@ -9,6 +9,9 @@ namespace AITasker.Infrastructure.Notifications
 {
     public class NotificationService : INotificationService
     {
+        private const string VietnamTimeZoneId = "SE Asia Standard Time";
+        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
+
         private readonly AITaskerDbContext _context;
         private readonly INotificationRealtimeService _realtimeService;
         private readonly ILogger<NotificationService> _logger;
@@ -83,6 +86,8 @@ namespace AITasker.Infrastructure.Notifications
             _context.Notifications.Add(notification);
             await _context.SaveChangesAsync();
 
+            var response = MapToResponse(notification);
+
             try
             {
                 await _realtimeService.SendNotificationAsync(
@@ -102,7 +107,7 @@ namespace AITasker.Infrastructure.Notifications
                     userId);
             }
 
-            return MapToResponse(notification);
+            return response;
         }
 
         public async Task<NotificationResponse> MarkAsReadAsync(
@@ -205,6 +210,9 @@ namespace AITasker.Infrastructure.Notifications
 
         private static NotificationResponse MapToResponse(Notification notification)
         {
+            var createdAtUtc = SpecifyUtc(notification.CreatedAt);
+            var createdAtVietnam = ConvertUtcToVietnamTime(createdAtUtc);
+
             return new NotificationResponse
             {
                 NotificationId = notification.NotificationId,
@@ -213,8 +221,37 @@ namespace AITasker.Infrastructure.Notifications
                 Content = notification.Content,
                 Type = notification.Type,
                 IsRead = notification.IsRead,
-                CreatedAt = notification.CreatedAt
+                CreatedAt = createdAtVietnam,
+                CreatedAtUtc = createdAtUtc,
+                TimeZone = VietnamTimeZoneName
             };
+        }
+
+        private static DateTime SpecifyUtc(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Utc)
+            {
+                return value;
+            }
+
+            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+        }
+
+        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
+        {
+            try
+            {
+                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
+                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                return utcDateTime.AddHours(7);
+            }
+            catch (InvalidTimeZoneException)
+            {
+                return utcDateTime.AddHours(7);
+            }
         }
     }
 }
