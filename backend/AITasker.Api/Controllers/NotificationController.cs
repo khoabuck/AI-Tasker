@@ -12,11 +12,14 @@ namespace AITasker.Api.Controllers
     public class NotificationController : ControllerBase
     {
         private readonly INotificationService _notificationService;
+        private readonly IJobDigestNotificationService _jobDigestNotificationService;
 
         public NotificationController(
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IJobDigestNotificationService jobDigestNotificationService)
         {
             _notificationService = notificationService;
+            _jobDigestNotificationService = jobDigestNotificationService;
         }
 
         [HttpGet("me")]
@@ -35,6 +38,33 @@ namespace AITasker.Api.Controllers
                     data = result.Notifications,
                     totalCount = result.TotalCount,
                     unreadCount = result.UnreadCount
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("{notificationId:int}")]
+        public async Task<IActionResult> GetNotificationDetail(int notificationId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _notificationService.GetNotificationDetailAsync(
+                    notificationId,
+                    currentUserId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
                 });
             }
             catch (InvalidOperationException ex)
@@ -141,6 +171,31 @@ namespace AITasker.Api.Controllers
             }
 
             return userId;
+        }
+
+        [HttpPost("job-digest/trigger")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> TriggerJobDigest()
+        {
+            try
+            {
+                var result = await _jobDigestNotificationService.SendDailyJobDigestAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Job digest notification triggered successfully.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
         }
     }
 }

@@ -22,5 +22,9 @@ namespace AITasker.Application.Interfaces
 
         Task<int> MarkAllAsReadAsync(
             int userId);
+
+        Task<NotificationDetailResponse> GetNotificationDetailAsync(
+            int notificationId,
+            int userId);
     }
 }

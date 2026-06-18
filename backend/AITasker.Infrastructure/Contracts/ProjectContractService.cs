@@ -2,6 +2,7 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,7 @@ namespace AITasker.Infrastructure.Contracts
         private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusOpen = "OPEN";
+        private const string ContractSourceProposal = "PROPOSAL";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
@@ -426,7 +428,7 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract cancelled by Client",
                     $"The client cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    "CONTRACT_CANCELLED");
+                    NotificationTypes.ContractCancelled);
             }
             else
             {
@@ -434,7 +436,7 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract cancelled by Expert",
                     $"The expert cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    "CONTRACT_CANCELLED");
+                    NotificationTypes.ContractCancelled);
             }
 
             return await MapToContractResponseAsync(contract);

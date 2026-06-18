@@ -36,8 +36,6 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<ProposalVersion> ProposalVersions { get; set; }
 
-    public DbSet<ProposalMessage> ProposalMessages { get; set; }
-
     public DbSet<Conversation> Conversations { get; set; }
 
     public DbSet<ConversationMessage> ConversationMessages { get; set; }
@@ -767,51 +765,6 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
-        // ProposalMessage
-        // =========================
-        modelBuilder.Entity<ProposalMessage>(entity =>
-        {
-            entity.ToTable("ProposalMessages", t =>
-            {
-                t.HasCheckConstraint(
-                "CK_ProposalMessages_MessageType",
-                "[MessageType] IN ('TEXT','SYSTEM','AGREEMENT')");
-            });
-
-            entity.HasKey(e => e.ProposalMessageId);
-
-            entity.Property(e => e.Content)
-                .HasMaxLength(4000)
-                .IsRequired();
-
-            entity.Property(e => e.MessageType)
-                .HasMaxLength(50)
-                .IsRequired();
-
-            entity.Property(e => e.CreatedAt)
-                .IsRequired();
-
-            entity.HasIndex(e => e.ProposalId);
-
-            entity.HasIndex(e => new
-            {
-                e.ProposalId,
-                e.SenderUserId,
-                e.IsAgreementMarked
-            });
-
-            entity.HasOne(e => e.Proposal)
-                .WithMany()
-                .HasForeignKey(e => e.ProposalId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            entity.HasOne(e => e.SenderUser)
-                .WithMany()
-                .HasForeignKey(e => e.SenderUserId)
-                .OnDelete(DeleteBehavior.Restrict);
-        });
-
-        // =========================
         // Conversation
         // =========================
         modelBuilder.Entity<Conversation>(entity =>
@@ -1210,7 +1163,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Milestones_PaymentStatus",
-                "[PaymentStatus] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED','PARTIAL_REFUND')");
+                "[PaymentStatus] IN ('PENDING','LOCKED','FROZEN','RELEASED','REFUNDED')");
             });
 
             entity.HasKey(e => e.MilestoneId);
@@ -1590,7 +1543,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Disputes_ResolutionType",
-                "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT','PARTIAL_SPLIT')");
+                "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT')");
             });
 
             entity.HasKey(d => d.DisputeId);

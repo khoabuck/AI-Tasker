@@ -334,7 +334,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Contract cancelled successfully. Job was reopened if the project had not started.",
+                    message = "Contract cancelled successfully.",
                     data = result
                 });
             }

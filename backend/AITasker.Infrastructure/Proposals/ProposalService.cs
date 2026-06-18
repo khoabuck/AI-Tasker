@@ -15,8 +15,9 @@ namespace AITasker.Infrastructure.Proposals
         private const string StatusWithdrawn = "WITHDRAWN";
         private const string StatusNotSelected = "NOT_SELECTED";
 
+        private const string JobStatusActive = "ACTIVE";
+
         private const string ContractStatusDraft = "DRAFT";
-        private const string JobStatusContracting = "CONTRACTING";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private readonly AITaskerDbContext _context;
@@ -227,7 +228,7 @@ namespace AITasker.Infrastructure.Proposals
 
             proposal.Status = StatusAccepted;
 
-            job.Status = JobStatusContracting;
+            job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
 
             var contractExists = await _context.ProjectContracts
