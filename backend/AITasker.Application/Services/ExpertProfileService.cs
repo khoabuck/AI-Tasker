@@ -80,7 +80,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var now = DateTime.UtcNow;
 
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(request, user.FullName);
 
         var expertProfile = new ExpertProfile
         {
@@ -217,7 +217,7 @@ public class ExpertProfileService : IExpertProfileService
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
 
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(request, user.FullName);
 
         expertProfile.ProfessionalTitle = request.ProfessionalTitle.Trim();
         expertProfile.Bio = request.Bio.Trim();
@@ -349,7 +349,7 @@ public class ExpertProfileService : IExpertProfileService
 
         ValidateCreateOrResubmitRequest(reviewRequest);
 
-        var reviewSnapshot = await ReviewFullProfileAsync(reviewRequest);
+        var reviewSnapshot = await ReviewFullProfileAsync(reviewRequest, user.FullName);
 
         var proposedCertificates = BuildProposedCertificateResponses(
             reviewRequest,
@@ -465,10 +465,14 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<ReviewSnapshot> ReviewFullProfileAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName
     )
     {
-        var certificateVerificationResults = await VerifyCertificatesAsync(request);
+        var certificateVerificationResults = await VerifyCertificatesAsync(
+            request,
+            expertFullName
+        );
 
         var experienceVerification = BuildExperienceVerification(
             request,
@@ -478,6 +482,25 @@ public class ExpertProfileService : IExpertProfileService
         var reviewResult = await ReviewByAiAsync(request);
 
         var finalProfileScore = NormalizeProfileScore(reviewResult.ProfileScore);
+
+        var hasSubmittedCertificates = request.Certificates.Count > 0;
+
+        var hasUnverifiedCertificate = certificateVerificationResults.Any(x =>
+            !string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalProfileScore = Math.Min(
+                finalProfileScore,
+                ExpertProfilePassThreshold - 1
+            );
+        }
+
         var finalReviewStatus = ResolveFinalReviewStatus(finalProfileScore);
 
         var finalLevel = ResolveFinalLevel(
@@ -494,9 +517,17 @@ public class ExpertProfileService : IExpertProfileService
             finalProfileScore
         );
 
+        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} Certificate evidence is not fully verified. At least one submitted certificate requires stronger evidence, so the profile cannot be approved yet.";
+        }
+
         var finalMissingInformation = finalReviewStatus == "APPROVED"
             ? null
-            : NormalizeMissingInformation(reviewResult.MissingInformation);
+            : hasSubmittedCertificates && hasUnverifiedCertificate
+                ? "At least one submitted certificate requires stronger evidence. Please provide a certificate page that clearly shows certificate name, holder name, issuer, and issued date."
+                : NormalizeMissingInformation(reviewResult.MissingInformation);
 
         return new ReviewSnapshot
         {
@@ -521,7 +552,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<List<CertificateVerificationResult>> VerifyCertificatesAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName
     )
     {
         if (request.Certificates.Count == 0)
@@ -536,6 +568,7 @@ public class ExpertProfileService : IExpertProfileService
                 CertificateIssuer = x.CertificateIssuer.Trim(),
                 CertificateUrl = x.CertificateUrl.Trim(),
                 IssuedAt = x.IssuedAt,
+                ExpertFullName = expertFullName.Trim(),
                 ExpertBio = request.Bio.Trim(),
                 ExpertSkillsText = request.Skills.Trim()
             })
@@ -595,8 +628,8 @@ public class ExpertProfileService : IExpertProfileService
         );
 
         var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
+            x.VerificationStatus == "NEEDS_EVIDENCE"
+        );
 
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
             x.VerificationStatus is "SUSPICIOUS" or "INVALID"
@@ -822,8 +855,8 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-   private static string NormalizeReviewStatus(string? status)
-{
+    private static string NormalizeReviewStatus(string? status)
+    {
     if (string.IsNullOrWhiteSpace(status))
     {
         return "NEEDS_CORRECTION";
@@ -840,7 +873,7 @@ public class ExpertProfileService : IExpertProfileService
         "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
         _ => "NEEDS_CORRECTION"
     };
-}
+    }
 
     private static string BuildFinalProfileReviewNote(
         string? aiReviewNote,
@@ -923,8 +956,8 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             var needsEvidenceCount = certificateVerificationResults.Count(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
+                x.VerificationStatus == "NEEDS_EVIDENCE"
+            );
 
             var suspiciousCount = certificateVerificationResults.Count(x =>
                 x.VerificationStatus == "SUSPICIOUS"
