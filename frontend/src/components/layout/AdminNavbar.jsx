@@ -53,18 +53,18 @@ export default function AdminNavbar() {
           Dashboard
         </NavLink>
 
-        <NavLink to="/admin/business-verifications" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            business_center
-          </span>
-          Business Verification
-        </NavLink>
-
         <NavLink to="/admin/disputes" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">
             gavel
           </span>
           Disputes
+        </NavLink>
+
+        <NavLink to="/admin/withdrawals" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            account_balance
+          </span>
+          Withdrawals
         </NavLink>
       </nav>
 

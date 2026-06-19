@@ -63,8 +63,8 @@ export default function AdminDashboardPage() {
               </h1>
 
               <p className="mt-4 max-w-2xl text-sm leading-6 text-gray-400">
-                Monitor dashboard metrics, revenue, active projects, disputes
-                and pending business verifications.
+                Monitor dashboard metrics, revenue, active projects, disputes,
+                transactions and withdrawal status.
               </p>
             </div>
 
@@ -95,14 +95,6 @@ export default function AdminDashboardPage() {
                     summary?.totalExperts || 0
                   } experts`}
                   tone="cyan"
-                />
-
-                <SummaryCard
-                  icon="business_center"
-                  label="Pending Business"
-                  value={summary?.pendingBusinessVerifications}
-                  description="Business profiles need review"
-                  tone="yellow"
                 />
 
                 <SummaryCard
@@ -148,9 +140,17 @@ export default function AdminDashboardPage() {
                 <SummaryCard
                   icon="verified_user"
                   label="Admin Actions"
-                  value="3"
-                  description="Dashboard · Disputes · Verifications"
+                  value="2"
+                  description="Dashboard · Disputes"
                   tone="red"
+                />
+
+                <SummaryCard
+                  icon="monitoring"
+                  label="Revenue Items"
+                  value={latestRevenue.length}
+                  description="Revenue records returned"
+                  tone="cyan"
                 />
               </section>
 
@@ -162,7 +162,7 @@ export default function AdminDashboardPage() {
                     </h2>
 
                     <p className="mt-2 text-sm leading-6 text-cyan-100/80">
-                      Dashboard now uses Swagger endpoints:
+                      Dashboard uses Swagger endpoints:
                       /admin/dashboard/summary, /admin/dashboard/revenue and
                       /admin/dashboard/projects.
                     </p>
@@ -174,13 +174,6 @@ export default function AdminDashboardPage() {
                       className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                     >
                       Manage Disputes
-                    </Link>
-
-                    <Link
-                      to="/admin/business-verifications"
-                      className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
-                    >
-                      Business Verification
                     </Link>
                   </div>
                 </div>
@@ -219,7 +212,10 @@ export default function AdminDashboardPage() {
                     ) : (
                       <div className="space-y-4">
                         {latestRevenue.map((item, index) => (
-                          <RevenueItem key={`${item.label}-${index}`} item={item} />
+                          <RevenueItem
+                            key={`${item.label}-${index}`}
+                            item={item}
+                          />
                         ))}
                       </div>
                     )}
@@ -228,24 +224,17 @@ export default function AdminDashboardPage() {
                   <Card title="Admin Modules">
                     <div className="space-y-3">
                       <ModuleLink
-                        to="/admin/disputes"
-                        icon="gavel"
-                        title="Disputes"
-                        desc="Review and resolve project disputes."
-                      />
-
-                      <ModuleLink
-                        to="/admin/business-verifications"
-                        icon="business_center"
-                        title="Business Verifications"
-                        desc="Approve or reject pending business clients."
-                      />
-
-                      <ModuleLink
                         to="/admin/dashboard"
                         icon="dashboard"
                         title="Dashboard"
                         desc="View system overview and revenue metrics."
+                      />
+
+                      <ModuleLink
+                        to="/admin/disputes"
+                        icon="gavel"
+                        title="Disputes"
+                        desc="Review and resolve project disputes."
                       />
                     </div>
                   </Card>
@@ -279,9 +268,7 @@ function SummaryCard({ icon, label, value, description, tone }) {
 
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
 
-      <p className="mt-2 text-3xl font-bold text-white">
-        {value ?? 0}
-      </p>
+      <p className="mt-2 text-3xl font-bold text-white">{value ?? 0}</p>
 
       <p className="mt-2 text-xs text-gray-500">{description}</p>
     </div>

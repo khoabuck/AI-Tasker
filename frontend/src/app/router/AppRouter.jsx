@@ -68,6 +68,7 @@ import ManageJobsPage from "../../modules/admin/pages/ManageJobsPage";
 import ManageUsersPage from "../../modules/admin/pages/ManageUsersPage";
 import ManageTransactionPage from "../../modules/admin/pages/ManageTransactionsPage";
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
+import ManageWithdrawalsPage from "../../modules/admin/pages/ManageWithdrawalsPage";
 
 const RequireAuth = ({ children }) => {
   if (!authService.isAuthenticated()) {
@@ -157,8 +158,8 @@ export default function AppRouter() {
       <Route path="/admin/disputes" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageDisputesPage /></ProtectedRoute>} />
       <Route path="/admin/jobs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageJobsPage /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageUsersPage /></ProtectedRoute>} />
-      <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageTransactionPage /></ProtectedRoute>} />
-
+      <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/withdrawals" replace /></ProtectedRoute>} />
+      <Route path="/admin/withdrawals" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageWithdrawalsPage /></ProtectedRoute>} />
       {/* 404 */}
        <Route path="*" element={<NotFoundPage />} />
 </Routes>

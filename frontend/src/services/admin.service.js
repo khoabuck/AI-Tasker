@@ -52,7 +52,6 @@ const normalizeSummary = (summary) => {
       totalUsers: 0,
       totalClients: 0,
       totalExperts: 0,
-      pendingBusinessVerifications: 0,
       openDisputes: 0,
       activeProjects: 0,
       completedProjects: 0,
@@ -73,18 +72,6 @@ const normalizeSummary = (summary) => {
 
     totalExperts: Number(
       getValue(summary.totalExperts, summary.TotalExperts, summary.experts, 0)
-    ),
-
-    pendingBusinessVerifications: Number(
-      getValue(
-        summary.pendingBusinessVerifications,
-        summary.PendingBusinessVerifications,
-        summary.pendingBusinesses,
-        summary.PendingBusinesses,
-        summary.pendingVerifications,
-        summary.PendingVerifications,
-        0
-      )
     ),
 
     openDisputes: Number(
