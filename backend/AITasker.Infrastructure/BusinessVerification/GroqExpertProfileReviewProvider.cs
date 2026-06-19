@@ -10,6 +10,8 @@ namespace AITasker.Infrastructure.BusinessVerification;
 
 public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 {
+    private const decimal ExpertProfilePassThreshold = 70m;
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
@@ -57,10 +59,27 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                         You review whether an expert profile is credible, AI-related, and supported by URL evidence.
                         The backend has already inspected URLs using HttpClient.
                         Use the backend URL inspection evidence as the source of truth.
+
+                        Score the whole Expert Profile on a 100-point scale:
+                        - Profile completeness: 15 points
+                        - AI skill relevance: 15 points
+                        - Experience credibility: 20 points
+                        - Portfolio/GitHub/LinkedIn evidence: 25 points
+                        - Certificate evidence: 15 points
+                        - Trust and risk check: 10 points
+
+                        Skill relevance is only one criterion in the total profile score.
+                        Do not approve only because many skills are listed.
                         Be strict with claimed years of experience.
-                        Expert profile review status must be either APPROVED or NEEDS_CORRECTION.
+
+                        Expert profile review status returned by AI must be either APPROVED or NEEDS_CORRECTION.
+                        APPROVED means profileScore is 70 or higher.
+                        NEEDS_CORRECTION means profileScore is below 70.
+                        LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
+
                         If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
                         Return JSON only. Do not return markdown. Do not add text outside JSON.
+
                         """
                     },
                     new
@@ -202,11 +221,20 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         {{urlEvidenceText}}
 
         Evaluation rules:
+        - Score the whole Expert Profile on a 100-point scale:
+          1. Profile completeness: 15 points
+          2. AI skill relevance: 15 points
+          3. Experience credibility: 20 points
+          4. Portfolio/GitHub/LinkedIn evidence: 25 points
+          5. Certificate evidence: 15 points
+          6. Trust and risk check: 10 points.
+        - Skill relevance is only 15/100 points and is not a separate pass condition.
+        - Do not approve only because many skills are listed.
         - Use Backend URL Inspection Evidence as the source of truth for whether links are reachable.
         - The yearsOfExperience field is claimed by the expert. Do not automatically trust it.
         - The frontend and backend require at least 2 of these 3 proof links: Portfolio URL, LinkedIn URL, GitHub URL.
         - At least one certificate is required.
-        - APPROVED only if the profile is AI-related and has credible proof from at least 2 valid proof URLs and at least 1 relevant certificate.
+        - APPROVED only if profileScore is at least 70 and the profile is AI-related with credible supporting evidence.
         - Do not approve based only on user-written text.
         - Even if the URL format is valid, only approve the profile when the proof links and certificate evidence are reachable and relevant.
         - If proof links or certificate URLs are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION.
@@ -218,6 +246,9 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         - Only approve SENIOR or LEAD when strong evidence supports that level.
         - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return NEEDS_CORRECTION.
         - Return only APPROVED or NEEDS_CORRECTION as status.
+        - Return APPROVED only when profileScore is 70 or higher.
+        - Return NEEDS_CORRECTION when profileScore is below 70.
+        - Do not return LOCKED. LOCKED is set by backend only after too many failed submissions or violations.
 
         Profile level must be one of:
         - FRESHER: 0-1 verified years, basic profile, little practical evidence.
@@ -232,6 +263,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         AI_AUTOMATION, CHATBOT_DEVELOPER, LLM_ENGINEER, DATA_ANALYST, COMPUTER_VISION, PROMPT_ENGINEER, AI_CONSULTANT, RPA_AUTOMATION, OTHER.
 
         Profile score must be from 0 to 100.
+        Profile score is the final score of the whole Expert Profile, not the score of a single skill.
 
         Return JSON only in this exact shape:
         {
@@ -282,12 +314,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         int claimedYearsOfExperience
     )
     {
-        var allowedStatuses = new HashSet<string>
-        {
-            "APPROVED",
-            "NEEDS_CORRECTION"
-        };
-
         var allowedCategories = new HashSet<string>
         {
             "AI_AUTOMATION",
@@ -301,7 +327,17 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             "OTHER"
         };
 
-        result.Status = NormalizeReviewStatus(result.Status);
+        result.ProfileScore = Math.Clamp(result.ProfileScore, 0m, 100m);
+
+        // Final backend policy for the AI provider result:
+        // - ProfileScore >= 70 => APPROVED
+        // - ProfileScore < 70  => NEEDS_CORRECTION
+        // LOCKED is not returned by AI. LOCKED is handled in ExpertProfileService
+        // when the expert fails verification too many times or violates policy.
+        result.Status = result.ProfileScore >= ExpertProfilePassThreshold
+            ? "APPROVED"
+            : "NEEDS_CORRECTION";
+
         result.Level = NormalizeProfileLevel(
             result.Level,
             claimedYearsOfExperience
@@ -312,60 +348,47 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             "OTHER"
         ).ToUpperInvariant();
 
-        if (!allowedStatuses.Contains(result.Status))
-        {
-            result.Status = "NEEDS_CORRECTION";
-        }
-
         if (!allowedCategories.Contains(result.ExpertCategory))
         {
             result.ExpertCategory = "OTHER";
         }
 
-        if (result.ProfileScore < 0)
-        {
-            result.ProfileScore = 0;
-        }
-
-        if (result.ProfileScore > 100)
-        {
-            result.ProfileScore = 100;
-        }
-
         if (string.IsNullOrWhiteSpace(result.ReviewNote))
         {
-            result.ReviewNote = "AI profile review completed.";
+            result.ReviewNote = result.Status == "APPROVED"
+                ? "AI profile review completed. The profile meets the minimum score threshold."
+                : "AI profile review completed. The profile is below the minimum score threshold.";
         }
 
-        if (result.Status == "NEEDS_CORRECTION" &&
-            string.IsNullOrWhiteSpace(result.MissingInformation))
+        if (result.Status == "APPROVED")
+        {
+            result.MissingInformation = null;
+        }
+        else if (string.IsNullOrWhiteSpace(result.MissingInformation))
         {
             result.MissingInformation =
-                "Please update your profile with valid proof URLs and certificate evidence.";
+                "ProfileScore is below 70. Please improve profile completeness, AI skill relevance, experience evidence, portfolio/GitHub/LinkedIn proof, certificate evidence, or trust/risk issues.";
         }
 
         return result;
     }
 
-   private static string NormalizeReviewStatus(string? status)
-{
-    if (string.IsNullOrWhiteSpace(status))
+    private static string NormalizeReviewStatus(string? status)
     {
-        return "NEEDS_CORRECTION";
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "NEEDS_CORRECTION";
+        }
+
+        var normalized = status.Trim()
+            .ToUpper()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized == "APPROVED"
+            ? "APPROVED"
+            : "NEEDS_CORRECTION";
     }
-
-    var normalized = status.Trim()
-        .ToUpper()
-        .Replace("-", "_")
-        .Replace(" ", "_");
-
-    return normalized switch
-    {
-        "APPROVED" => "APPROVED",
-        "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
-        _ => "NEEDS_CORRECTION"
-    };
-}
 
     private static string NormalizeProfileLevel(
         string? level,
