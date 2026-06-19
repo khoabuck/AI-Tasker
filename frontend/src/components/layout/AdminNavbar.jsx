@@ -66,6 +66,13 @@ export default function AdminNavbar() {
           </span>
           Withdrawals
         </NavLink>
+
+        <NavLink to="/admin/skills" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            psychology
+          </span>
+          Skills
+        </NavLink>
       </nav>
 
       <div className="mt-6 border-t border-white/10 pt-4">
