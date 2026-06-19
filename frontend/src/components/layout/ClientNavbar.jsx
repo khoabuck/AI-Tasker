@@ -34,7 +34,7 @@ function NavItem({ label, to, dropdown, active }) {
       <li>
         <Link
           to={to}
-          className=" relative flex items-center gap-2 h-full 
+          className="relative flex items-center gap-2 h-full 
                       text-xs font-mono tracking-widest
                       text-gray-400 hover:text-cyan-400
                       transition-all duration-300
@@ -43,8 +43,7 @@ function NavItem({ label, to, dropdown, active }) {
                       after:bg-cyan-400
                       after:shadow-[0_0_10px_#00F0FF]
                       after:transition-all after:duration-300
-                      hover:after:w-full
-                "
+                      hover:after:w-full"
         >
           {label}
         </Link>
@@ -53,29 +52,25 @@ function NavItem({ label, to, dropdown, active }) {
   }
 
   return (
-    <li className="relative h-full" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <li
+      className="relative h-full"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
       <button
-            className={`
-              relative flex items-center gap-2 h-full
-              text-xs font-mono tracking-widest
-              transition-all duration-300
-              ${
-                active
-                  ? "text-cyan-400"
-                  : "text-gray-400 hover:text-cyan-400"
-              }
-              after:absolute after:-bottom-4 after:left-0
-              after:h-[2px]
-              after:bg-cyan-400
-              after:shadow-[0_0_12px_#00F0FF]
-              after:transition-all after:duration-300
-              ${
-                active
-                  ? "after:w-full"
-                  : "after:w-0 hover:after:w-full"
-              }
-            `}
-          >
+        className={`
+          relative flex items-center gap-2 h-full
+          text-xs font-mono tracking-widest
+          transition-all duration-300
+          ${active ? "text-cyan-400" : "text-gray-400 hover:text-cyan-400"}
+          after:absolute after:-bottom-4 after:left-0
+          after:h-[2px]
+          after:bg-cyan-400
+          after:shadow-[0_0_12px_#00F0FF]
+          after:transition-all after:duration-300
+          ${active ? "after:w-full" : "after:w-0 hover:after:w-full"}
+        `}
+      >
         {label}
         <span className="material-symbols-outlined text-sm">expand_more</span>
       </button>
@@ -116,26 +111,28 @@ export default function ClientNavbar() {
   const [avatarOpen, setAvatarOpen] = useState(false);
 
   const initials = user?.fullName
-    ? user.fullName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+    ? user.fullName
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase()
     : "CL";
 
   const handleLogout = async () => {
-  await authService.logout();
-  window.location.href = "/";
-};
+    await authService.logout();
+    navigate("/", { replace: true });
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-[#101319]/90 backdrop-blur-xl border-b border-white/10 flex justify-between items-center w-full px-4 md:px-12 py-4">
-
       {/* Logo */}
       <Link to="/client/dashboard">
         <h1 className="text-xl font-bold tracking-tight">
           <span className="text-cyan-400 drop-shadow-[0_0_10px_#00F0FF]">
             AI
           </span>
-          <span className="ml-1 text-white">
-            Tasker
-          </span>
+          <span className="ml-1 text-white">Tasker</span>
         </h1>
       </Link>
 
@@ -146,14 +143,12 @@ export default function ClientNavbar() {
         ))}
       </ul>
 
-      {/* Phải: notification + avatar */}
+      {/* Right: notification + avatar */}
       <div className="flex items-center gap-8">
         <div className="h-8 w-px bg-white/10 mx-2 hidden sm:block" />
 
-        {/* Notification bell */}
         <NotificationDropdown />
 
-        {/* Avatar + dropdown */}
         <div className="relative">
           <button
             type="button"
@@ -165,9 +160,8 @@ export default function ClientNavbar() {
             </div>
 
             <span
-              className={`material-symbols-outlined text-[18px] text-gray-400 transition-transform duration-200 ${
-                avatarOpen ? "rotate-180 text-cyan-400" : ""
-              }`}
+              className={`material-symbols-outlined text-[18px] text-gray-400 transition-transform duration-200 ${avatarOpen ? "rotate-180 text-cyan-400" : ""
+                }`}
             >
               expand_more
             </span>
@@ -181,9 +175,7 @@ export default function ClientNavbar() {
                 <p className="truncate text-sm font-semibold text-white">
                   {user?.fullName || "Client"}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  Client Account
-                </p>
+                <p className="mt-1 text-xs text-gray-500">Client Account</p>
               </div>
 
               <Link
@@ -191,7 +183,9 @@ export default function ClientNavbar() {
                 onClick={() => setAvatarOpen(false)}
                 className="mt-2 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-300 transition-all hover:bg-cyan-400/10 hover:text-cyan-400"
               >
-                <span className="material-symbols-outlined text-[18px]">person</span>
+                <span className="material-symbols-outlined text-[18px]">
+                  person
+                </span>
                 Profile
               </Link>
 
@@ -200,7 +194,9 @@ export default function ClientNavbar() {
                 onClick={handleLogout}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-gray-300 transition-all hover:bg-red-500/10 hover:text-red-400"
               >
-                <span className="material-symbols-outlined text-[18px]">logout</span>
+                <span className="material-symbols-outlined text-[18px]">
+                  logout
+                </span>
                 Logout
               </button>
             </div>

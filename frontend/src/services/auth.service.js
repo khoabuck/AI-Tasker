@@ -1,111 +1,376 @@
-// src/services/auth.service.js
+import {
+  loginApi,
+  loginWithGoogleApi,
+  getMeApi,
+  updateMyAvatarApi,
+} from "../api/auth.api";
 
-import { loginApi, loginWithGoogleApi, getMeApi } from "../api/auth.api";
-
-// ─── Mock data để test khi chưa có BE ────────────────
-const MOCK_USERS = [
-  { email: "client@test.com", password: "123456", role: "CLIENT", status: "ACTIVE", userId: 1, fullName: "Test Client" },
-  { email: "expert@test.com", password: "123456", role: "EXPERT", status: "ACTIVE", userId: 2, fullName: "Test Expert" },
-  { email: "admin@test.com",  password: "123456", role: "ADMIN",  status: "ACTIVE", userId: 3, fullName: "Test Admin"  },
-];
-
-// ⚠️ Đổi thành false khi BE xong
 const USE_MOCK = false;
 
+const MOCK_USERS = [
+  {
+    email: "client@test.com",
+    password: "123456",
+    role: "CLIENT",
+    status: "ACTIVE",
+    userId: 1,
+    fullName: "Test Client",
+  },
+  {
+    email: "expert@test.com",
+    password: "123456",
+    role: "EXPERT",
+    status: "ACTIVE",
+    userId: 2,
+    fullName: "Test Expert",
+  },
+  {
+    email: "admin@test.com",
+    password: "123456",
+    role: "ADMIN",
+    status: "ACTIVE",
+    userId: 3,
+    fullName: "Test Admin",
+  },
+];
+
+const getValue = (...values) => {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
+};
+
+const unwrapUserData = (data) => {
+  if (!data) return null;
+
+  if (data?.data?.user) return data.data.user;
+  if (data?.data?.User) return data.data.User;
+  if (data?.data?.item) return data.data.item;
+  if (data?.data?.result) return data.data.result;
+
+  if (data?.user) return data.user;
+  if (data?.User) return data.User;
+  if (data?.item) return data.item;
+  if (data?.result) return data.result;
+
+  if (data?.data) return data.data;
+
+  return data;
+};
+
+const normalizeUser = (user) => {
+  if (!user) return null;
+
+  return {
+    userId: getValue(user.userId, user.UserId, user.id, user.Id, 0),
+    email: getValue(user.email, user.Email, ""),
+    fullName: getValue(
+      user.fullName,
+      user.FullName,
+      user.displayName,
+      user.DisplayName,
+      user.name,
+      user.Name,
+      ""
+    ),
+    role: getValue(user.role, user.Role, ""),
+    status: getValue(user.status, user.Status, ""),
+    authProvider: getValue(
+      user.authProvider,
+      user.AuthProvider,
+      user.provider,
+      user.Provider,
+      "LOCAL"
+    ),
+    avatarUrl: getValue(
+      user.avatarUrl,
+      user.AvatarUrl,
+      user.avatar,
+      user.Avatar,
+      user.photoUrl,
+      user.PhotoUrl,
+      null
+    ),
+  };
+};
+
+const extractAccessToken = (data) => {
+  return getValue(
+    data?.accessToken,
+    data?.AccessToken,
+    data?.token,
+    data?.Token,
+    data?.data?.accessToken,
+    data?.data?.AccessToken,
+    data?.data?.token,
+    data?.data?.Token
+  );
+};
+
+const decodeJwtPayload = (token) => {
+  try {
+    if (!token || !token.includes(".")) return null;
+
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((char) => {
+          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
+        })
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const getRoleFromToken = (token) => {
+  const payload = decodeJwtPayload(token);
+
+  return getValue(
+    payload?.role,
+    payload?.Role,
+    payload?.[
+      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+    ],
+    payload?.[
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"
+    ],
+    ""
+  );
+};
+
+const getCurrentUserFromStorage = () => {
+  try {
+    const user = localStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveUserToLocalStorage = (user) => {
+  if (!user) return null;
+
+  const normalizedUser = normalizeUser(user);
+
+  if (normalizedUser) {
+    localStorage.setItem("user", JSON.stringify(normalizedUser));
+  }
+
+  return normalizedUser;
+};
+
+const mergeUserToLocalStorage = (newUserData) => {
+  const currentUser = getCurrentUserFromStorage();
+
+  const mergedUser = normalizeUser({
+    ...(currentUser || {}),
+    ...(newUserData || {}),
+  });
+
+  if (mergedUser) {
+    localStorage.setItem("user", JSON.stringify(mergedUser));
+  }
+
+  return mergedUser;
+};
+
+const getFriendlyError = (error, fallback) => {
+  const data = error?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  return data?.message || data?.title || error?.message || fallback;
+};
+
 const authService = {
-  // ─── Login thường ────────────────────────────────────
   login: async (credentials) => {
     if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 800));
+      await new Promise((res) => setTimeout(res, 500));
+
       const user = MOCK_USERS.find(
-        (u) => u.email === credentials.email && u.password === credentials.password
+        (item) =>
+          item.email === credentials.email &&
+          item.password === credentials.password
       );
-      if (user) {
-        const { password, ...userInfo } = user;
-        localStorage.setItem("accessToken", "mock-token-" + user.role);
-        localStorage.setItem("user", JSON.stringify(userInfo));
-        return { success: true, role: user.role, status: user.status };
+
+      if (!user) {
+        return {
+          success: false,
+          message: "Invalid email or password.",
+        };
       }
-      return { success: false, message: "Invalid email or password." };
+
+      const { password, ...userInfo } = user;
+      const accessToken = "mock-token-" + userInfo.role;
+
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("user", JSON.stringify(userInfo));
+
+      return {
+        success: true,
+        accessToken,
+        user: userInfo,
+        role: userInfo.role,
+        status: userInfo.status,
+      };
     }
 
-    // REAL MODE
-try {
-  const data = await loginApi(credentials);
-  const { accessToken } = data;
+    try {
+      const data = await loginApi(credentials);
 
-  localStorage.setItem("accessToken", accessToken);
+      const accessToken = extractAccessToken(data);
 
-  let user = data.user;
+      if (!accessToken) {
+        return {
+          success: false,
+          message: "Login response does not contain accessToken.",
+        };
+      }
 
-  if (!user) {
-    user = await getMeApi();
-  }
+      localStorage.setItem("accessToken", accessToken);
 
-  if (!user?.role || !user?.status) {
-    const payload = JSON.parse(atob(accessToken.split(".")[1]));
+      let user = normalizeUser(unwrapUserData(data));
 
-    const tokenRole =
-      payload.role ||
-      payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
+      try {
+        const freshUser = await getMeApi();
+        const freshNormalizedUser = normalizeUser(unwrapUserData(freshUser));
 
-    user = {
-      ...user,
-      role: user?.role || tokenRole || null,
-      status: user?.status || "ACTIVE",
-    };
-  }
+        if (freshNormalizedUser) {
+          user = freshNormalizedUser;
+        }
+      } catch {
+        // Nếu /auth/me lỗi thì dùng user từ login response.
+      }
 
-  localStorage.setItem("user", JSON.stringify(user));
+      const tokenRole = getRoleFromToken(accessToken);
 
-  return {
-    success: true,
-    role: user.role,
-    status: user.status,
-  };
-} catch (error) {
-  return {
-    success: false,
-    message: error.response?.data?.message || "Login failed.",
-  };
-}
+      if (!user) {
+        user = normalizeUser({
+          role: tokenRole,
+          status: "ACTIVE",
+        });
+      }
+
+      if (!user?.role || !user?.status) {
+        user = normalizeUser({
+          ...user,
+          role: user?.role || tokenRole || "",
+          status: user?.status || "ACTIVE",
+        });
+      }
+
+      if (!user) {
+        return {
+          success: false,
+          message: "Login response does not contain user information.",
+        };
+      }
+
+      localStorage.setItem("user", JSON.stringify(user));
+
+      return {
+        success: true,
+        accessToken,
+        user,
+        role: user.role,
+        status: user.status,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: getFriendlyError(error, "Login failed."),
+      };
+    }
   },
 
-  // ─── Login với Google ─────────────────────────────────
   loginWithGoogle: async () => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 800));
-      const userInfo = { userId: 99, fullName: "Google User", role: "CLIENT", status: "ACTIVE" };
-      localStorage.setItem("accessToken", "mock-token-google");
-      localStorage.setItem("user", JSON.stringify(userInfo));
-      return { success: true, role: "CLIENT", status: "ACTIVE" };
-    }
-    // REAL MODE — redirect browser về backend
     loginWithGoogleApi();
   },
 
-  // ─── Logout ──────────────────────────────────────────
   logout: async () => {
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("user");
-  localStorage.removeItem("token");
-  localStorage.removeItem("currentUser");
-  sessionStorage.clear();
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("currentUser");
+
+    localStorage.removeItem("aitasker_expert_profile_setup_draft");
+    localStorage.removeItem("aitasker_expert_profile_edit_draft");
+    localStorage.removeItem("aitasker_expert_profile_correction_draft");
+
+    sessionStorage.clear();
   },
 
-  // ─── Helpers ─────────────────────────────────────────
   getCurrentUser: () => {
-  const user = localStorage.getItem("user");
-  return user ? JSON.parse(user) : null;
+    return getCurrentUserFromStorage();
   },
 
-  getToken: () => localStorage.getItem("accessToken"),
+  getToken: () => {
+    return localStorage.getItem("accessToken");
+  },
 
-  isAuthenticated: () => !!localStorage.getItem("accessToken"),
+  refreshCurrentUser: async () => {
+    const data = await getMeApi();
+    const user = normalizeUser(unwrapUserData(data));
 
-  getRole: () => authService.getCurrentUser()?.role || null,
+    if (user) {
+      localStorage.setItem("user", JSON.stringify(user));
+    }
 
-  getStatus: () => authService.getCurrentUser()?.status || null,
+    return user;
+  },
+
+  updateMyAvatar: async (avatarUrlOrPayload) => {
+    const payload =
+      typeof avatarUrlOrPayload === "string"
+        ? {
+            avatarUrl: avatarUrlOrPayload,
+          }
+        : avatarUrlOrPayload;
+
+    if (!payload?.avatarUrl) {
+      throw new Error("Avatar URL is required.");
+    }
+
+    const data = await updateMyAvatarApi(payload);
+
+    let updatedUser = normalizeUser(unwrapUserData(data));
+
+    if (updatedUser?.userId) {
+      return saveUserToLocalStorage(updatedUser);
+    }
+
+    try {
+      updatedUser = await authService.refreshCurrentUser();
+
+      if (updatedUser) return updatedUser;
+    } catch {
+      // Nếu refresh lỗi thì merge avatarUrl vào user hiện tại.
+    }
+
+    return mergeUserToLocalStorage({
+      avatarUrl: payload.avatarUrl,
+    });
+  },
+
+  isAuthenticated: () => {
+    return Boolean(localStorage.getItem("accessToken"));
+  },
+
+  getRole: () => {
+    return authService.getCurrentUser()?.role || null;
+  },
+
+  getStatus: () => {
+    return authService.getCurrentUser()?.status || null;
+  },
+
+  normalizeUser,
 };
 
 export default authService;

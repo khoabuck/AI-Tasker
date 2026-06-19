@@ -6,23 +6,46 @@ export default function GuestRoute({ children }) {
 
   if (loading) return null;
 
+  // Logic của Minh: nếu chưa login hoặc chưa có user thì cho vào guest page
   if (!isAuthenticated || !user) {
     return children;
   }
 
-  if (user.status === "PENDING_ROLE" || !user.role) {
+  // Chuẩn hóa role/status để tránh lỗi viết hoa viết thường
+  const role = String(user?.role || "").toUpperCase();
+  const status = String(user?.status || "").toUpperCase();
+
+  // Nếu chưa chọn role
+  if (status === "PENDING_ROLE" || !role) {
     return <Navigate to="/select-role" replace />;
   }
 
-  if (user.status === "PENDING_PROFILE") {
-    return <Navigate to="/setup-profile" replace />;
+  // Nếu chưa setup profile
+  if (status === "PENDING_PROFILE") {
+    // Logic của Huy: Expert đi setup expert profile
+    if (role === "EXPERT") {
+      return <Navigate to="/expert/setup-profile" replace />;
+    }
+
+    // Logic của Minh + Huy: Client đi setup client profile
+    if (role === "CLIENT") {
+      return <Navigate to="/setup-profile" replace />;
+    }
+
+    return <Navigate to="/select-role" replace />;
   }
 
-  if (user.status === "ACTIVE") {
-    if (user.role === "CLIENT") return <Navigate to="/client/dashboard" replace />;
-    if (user.role === "EXPERT") return <Navigate to="/expert/dashboard" replace />;
-    if (user.role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
+  // Nếu đã active thì redirect theo role
+  if (status === "ACTIVE") {
+    if (role === "CLIENT") return <Navigate to="/client/dashboard" replace />;
+    if (role === "EXPERT") return <Navigate to="/expert/dashboard" replace />;
+    if (role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
   }
 
-  return children;
+  // Trường hợp login rồi nhưng status khác ACTIVE/PENDING_PROFILE/PENDING_ROLE
+  if (role === "CLIENT") return <Navigate to="/client/dashboard" replace />;
+  if (role === "EXPERT") return <Navigate to="/expert/dashboard" replace />;
+  if (role === "ADMIN") return <Navigate to="/admin/dashboard" replace />;
+
+  return <Navigate to="/" replace />;
 }

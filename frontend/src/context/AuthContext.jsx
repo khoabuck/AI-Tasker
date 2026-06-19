@@ -15,6 +15,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
       }
+
       try {
         const freshUser = await getMeApi();
         setUser(freshUser);
@@ -26,6 +27,7 @@ export function AuthProvider({ children }) {
         setLoading(false);
       }
     };
+
     restore();
   }, []);
 
@@ -35,7 +37,7 @@ export function AuthProvider({ children }) {
     setUser(authData.user);
   };
 
-  // Gọi để lấy lại user mới nhất từ server (vd: sau select role)
+  // Gọi để lấy lại user mới nhất từ server
   const refreshUser = async () => {
     try {
       const freshUser = await getMeApi();
@@ -54,6 +56,11 @@ export function AuthProvider({ children }) {
 
   const handleLogout = () => {
     clearAuth();
+
+    localStorage.removeItem("aitasker_expert_profile_setup_draft");
+    localStorage.removeItem("aitasker_expert_profile_edit_draft");
+    localStorage.removeItem("aitasker_expert_profile_correction_draft");
+
     setUser(null);
   };
 
