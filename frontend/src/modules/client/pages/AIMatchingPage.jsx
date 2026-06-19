@@ -184,8 +184,6 @@ export default function AIMatchingPage() {
     }
   };
 
-  const [recentPrompts, setRecentPrompts] = useState([]);
-
   return (
     <ClientLayout>
       <div style={{ paddingTop: 48, paddingBottom: 64, paddingLeft: 24, paddingRight: 24 }}>
