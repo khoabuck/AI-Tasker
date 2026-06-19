@@ -92,6 +92,20 @@ public class CertificateVerificationService : ICertificateVerificationService
         result.IsHttps = uri.Scheme == Uri.UriSchemeHttps;
         result.IsTrustedDomain = IsTrustedDomain(uri.Host, request.CertificateIssuer);
 
+        var nonCertificateEvidenceReason = DetectNonCertificateEvidenceUrl(uri);
+
+        if (!string.IsNullOrWhiteSpace(nonCertificateEvidenceReason))
+        {
+            result.VerificationStatus = "NEEDS_EVIDENCE";
+            result.VerificationScore = 40;
+            result.VerificationNote = nonCertificateEvidenceReason;
+            result.IsReachable = false;
+            result.DetectedIssuer = DetectIssuer(string.Empty, request.CertificateIssuer, uri.Host);
+            result.DetectedCertificateName = string.Empty;
+
+            return result;
+        }
+
         string pageContent;
         string plainText;
 
@@ -325,6 +339,64 @@ public class CertificateVerificationService : ICertificateVerificationService
         }
 
         return string.Join(" ", notes);
+    }
+
+    private static string? DetectNonCertificateEvidenceUrl(Uri uri)
+    {
+        var host = uri.Host.ToLowerInvariant();
+        var path = uri.AbsolutePath.Trim('/').ToLowerInvariant();
+
+        if (host.EndsWith("coursera.org"))
+        {
+            var isPersonalCredentialUrl =
+                path.StartsWith("account/accomplishments/verify/") ||
+                path.StartsWith("account/accomplishments/certificate/") ||
+                path.StartsWith("account/accomplishments/specialization/") ||
+                path.StartsWith("verify/");
+
+            var isCourseOrCatalogUrl =
+                path.StartsWith("specializations/") ||
+                path.StartsWith("learn/") ||
+                path.StartsWith("professional-certificates/") ||
+                path.StartsWith("browse/") ||
+                path.StartsWith("collections/");
+
+            if (!isPersonalCredentialUrl && isCourseOrCatalogUrl)
+            {
+                return "This Coursera URL is a course, specialization, professional certificate, or catalog page, not a personal certificate verification URL. Please provide a Coursera accomplishment or verify URL.";
+            }
+        }
+
+        if (host.EndsWith("udemy.com") && path.StartsWith("course/"))
+        {
+            return "This Udemy URL is a course landing page, not a personal certificate verification URL. Please provide the expert's personal certificate URL.";
+        }
+
+        if (host.EndsWith("edx.org") &&
+            (path.StartsWith("learn/") || path.StartsWith("course/")))
+        {
+            return "This edX URL is a course page, not a personal certificate verification URL. Please provide the expert's personal certificate or credential URL.";
+        }
+
+        if (host.EndsWith("linkedin.com") &&
+            (path.StartsWith("learning/") || path.StartsWith("learning-login/")))
+        {
+            return "This LinkedIn URL is a learning course page, not a personal certificate or credential URL. Please provide the expert's personal certificate evidence.";
+        }
+
+        if (host.EndsWith("learn.microsoft.com") &&
+            (path.StartsWith("training/") || path.StartsWith("en-us/training/")))
+        {
+            return "This Microsoft Learn URL is a training or course page, not a personal certification credential URL. Please provide a Microsoft certification credential or transcript URL.";
+        }
+
+        if (host.EndsWith("aws.amazon.com") &&
+            (path.Contains("/training/") || path.Contains("/certification/")))
+        {
+            return "This AWS URL appears to be a public training or certification information page, not the expert's personal certificate verification URL. Please provide personal credential evidence.";
+        }
+
+        return null;
     }
 
     private static bool IsTrustedDomain(string host, string certificateIssuer)
