@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
+import authService from "../../../services/auth.service";
 
 const emptyBasicForm = {
   fullName: "",
@@ -45,6 +46,7 @@ export default function UpdateExpertProfilePage() {
   const [savingBasic, setSavingBasic] = useState(false);
   const [savingVerification, setSavingVerification] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [syncingAvatar, setSyncingAvatar] = useState(false);
 
   const [basicSubmitted, setBasicSubmitted] = useState(false);
   const [verificationSubmitted, setVerificationSubmitted] = useState(false);
@@ -200,6 +202,7 @@ export default function UpdateExpertProfilePage() {
 
     try {
       setUploadingAvatar(true);
+      setSyncingAvatar(false);
       setError("");
       setMessage("");
       setModal(null);
@@ -207,11 +210,35 @@ export default function UpdateExpertProfilePage() {
       const imageUrl = await uploadService.uploadImage(file, "avatar");
 
       updateBasicField("avatarUrl", imageUrl);
+
+      try {
+        setSyncingAvatar(true);
+
+        await authService.updateMyAvatar(imageUrl);
+
+        setMessage(
+          "Avatar uploaded successfully. Your account avatar was updated."
+        );
+      } catch (avatarErr) {
+        console.error(
+          "SYNC AUTH AVATAR ERROR:",
+          avatarErr?.response?.data || avatarErr
+        );
+
+        setError(
+          getFriendlyError(
+            avatarErr,
+            "Avatar was uploaded, but account avatar could not be updated. Please click Save Basic Information to keep it in your expert profile."
+          )
+        );
+      }
     } catch (err) {
       console.error("UPLOAD AVATAR ERROR:", err?.response?.data || err);
+
       setError(getFriendlyError(err, "Cannot upload avatar."));
     } finally {
       setUploadingAvatar(false);
+      setSyncingAvatar(false);
       event.target.value = "";
     }
   };
@@ -240,6 +267,20 @@ export default function UpdateExpertProfilePage() {
 
       await expertProfileService.updateBasicExpertProfile(payload);
 
+      if (payload.avatarUrl) {
+        try {
+          setSyncingAvatar(true);
+          await authService.updateMyAvatar(payload.avatarUrl);
+        } catch (avatarErr) {
+          console.error(
+            "SYNC AUTH AVATAR ON SAVE ERROR:",
+            avatarErr?.response?.data || avatarErr
+          );
+        } finally {
+          setSyncingAvatar(false);
+        }
+      }
+
       updateLocalUserStatus("ACTIVE");
 
       setModal({
@@ -256,6 +297,7 @@ export default function UpdateExpertProfilePage() {
       setError(getFriendlyError(err, "Cannot update basic profile."));
     } finally {
       setSavingBasic(false);
+      setSyncingAvatar(false);
     }
   };
 
@@ -425,6 +467,7 @@ export default function UpdateExpertProfilePage() {
               errors={basicSubmitted ? basicErrors : {}}
               saving={savingBasic}
               uploadingAvatar={uploadingAvatar}
+              syncingAvatar={syncingAvatar}
               onChange={updateBasicField}
               onSubmit={handleSaveBasic}
               onAvatarUpload={handleAvatarUpload}
@@ -464,6 +507,7 @@ function BasicProfileForm({
   errors,
   saving,
   uploadingAvatar,
+  syncingAvatar,
   onChange,
   onSubmit,
   onAvatarUpload,
@@ -510,12 +554,16 @@ function BasicProfileForm({
 
           <div className="mt-4 flex flex-col gap-3 md:flex-row">
             <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
-              {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
+              {uploadingAvatar
+                ? "Uploading..."
+                : syncingAvatar
+                ? "Updating..."
+                : "Upload Avatar"}
 
               <input
                 type="file"
                 accept="image/*"
-                disabled={saving || uploadingAvatar}
+                disabled={saving || uploadingAvatar || syncingAvatar}
                 onChange={onAvatarUpload}
                 className="hidden"
               />
@@ -524,7 +572,7 @@ function BasicProfileForm({
             <input
               type="url"
               value={formData.avatarUrl}
-              disabled={saving || uploadingAvatar}
+              disabled={saving || uploadingAvatar || syncingAvatar}
               onChange={(event) => onChange("avatarUrl", event.target.value)}
               placeholder="https://avatar-url..."
               className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
@@ -619,7 +667,7 @@ function BasicProfileForm({
         <button
           type="button"
           onClick={onCancel}
-          disabled={saving || uploadingAvatar}
+          disabled={saving || uploadingAvatar || syncingAvatar}
           className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
         >
           Cancel
@@ -627,7 +675,7 @@ function BasicProfileForm({
 
         <button
           type="submit"
-          disabled={saving || uploadingAvatar}
+          disabled={saving || uploadingAvatar || syncingAvatar}
           className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
           {saving ? "Saving..." : "Save Basic Information"}

@@ -39,9 +39,6 @@ const buildCreatePayload = (formData) => ({
   bio: trim(formData.bio),
   skills: trim(formData.skills),
   yearsOfExperience: toNumber(formData.yearsOfExperience),
-  expectedProjectBudgetMin: toNumber(formData.expectedProjectBudgetMin),
-  expectedProjectBudgetMax: toNumber(formData.expectedProjectBudgetMax),
-  preferredProjectDurationDays: toNumber(formData.preferredProjectDurationDays),
   availableForWork: Boolean(formData.availableForWork),
   portfolioUrl: trim(formData.portfolioUrl),
   linkedInUrl: trim(formData.linkedInUrl),
@@ -54,9 +51,6 @@ const buildBasicPayload = (formData) => ({
   avatarUrl: trim(formData.avatarUrl),
   professionalTitle: trim(formData.professionalTitle),
   bio: trim(formData.bio),
-  expectedProjectBudgetMin: toNumber(formData.expectedProjectBudgetMin),
-  expectedProjectBudgetMax: toNumber(formData.expectedProjectBudgetMax),
-  preferredProjectDurationDays: toNumber(formData.preferredProjectDurationDays),
   availableForWork: Boolean(formData.availableForWork),
 });
 
@@ -77,32 +71,27 @@ const expertProfileService = {
 
   async createExpertProfile(formData) {
     const payload = buildCreatePayload(formData);
-    console.log("CREATE EXPERT PROFILE PAYLOAD:", payload);
-
     const response = await expertProfileApi.createExpertProfile(payload);
+
     return normalizeData(response);
   },
 
   async resubmitExpertProfile(formData) {
     const payload = buildCreatePayload(formData);
-    console.log("RESUBMIT EXPERT PROFILE PAYLOAD:", payload);
-
     const response = await expertProfileApi.resubmitExpertProfile(payload);
+
     return normalizeData(response);
   },
 
   async updateBasicExpertProfile(formData) {
     const payload = buildBasicPayload(formData);
-    console.log("UPDATE BASIC EXPERT PROFILE PAYLOAD:", payload);
-
     const response = await expertProfileApi.updateBasicExpertProfile(payload);
+
     return normalizeData(response);
   },
 
   async updateVerificationExpertProfile(formData) {
     const payload = buildVerificationPayload(formData);
-    console.log("UPDATE VERIFICATION EXPERT PROFILE PAYLOAD:", payload);
-
     const response =
       await expertProfileApi.updateVerificationExpertProfile(payload);
 
