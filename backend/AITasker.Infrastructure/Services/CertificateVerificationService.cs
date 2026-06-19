@@ -1,4 +1,6 @@
+using System.Globalization;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
@@ -34,6 +36,13 @@ public class CertificateVerificationService : ICertificateVerificationService
     {
         _httpClient = httpClient;
     }
+
+    private sealed record CourseraCertificateData(
+        string? CertificateName,
+        string? HolderName,
+        DateTime? IssuedAt,
+        string? PartnerName
+    );
 
     public async Task<List<CertificateVerificationResult>> VerifyManyAsync(
         List<CertificateVerificationRequest> requests
@@ -129,16 +138,16 @@ public class CertificateVerificationService : ICertificateVerificationService
                     : "NEEDS_EVIDENCE";
 
                 result.VerificationScore = CalculateScore(result, request);
-                result.VerificationNote = result.VerificationStatus == "INVALID"
-                    ? $"Certificate URL is invalid or not found. HTTP status code: {(int)response.StatusCode}."
-                    : $"Certificate URL could not be fully verified. HTTP status code: {(int)response.StatusCode}. More evidence is required.";
+                result.VerificationNote = response.StatusCode == HttpStatusCode.Forbidden
+                    ? "Certificate URL is protected or blocks automated verification. More evidence is required."
+                    : $"Certificate URL returned HTTP {(int)response.StatusCode}. More evidence is required.";
 
                 return result;
             }
 
             pageContent = await response.Content.ReadAsStringAsync();
 
-            pageContent = LimitText(pageContent, 120_000);
+            pageContent = LimitText(pageContent, 1_000_000);
 
             result.PageTitle = ExtractTitle(pageContent);
 
@@ -173,6 +182,18 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         var searchableText = $"{result.PageTitle} {plainText}";
 
+        CourseraCertificateData? courseraData = null;
+
+        if (IsCourseraPersonalCredentialUrl(uri))
+        {
+            courseraData = ExtractCourseraCertificateData(pageContent);
+
+            if (courseraData is not null)
+            {
+                searchableText = $"{searchableText} {BuildCourseraStructuredText(courseraData)}";
+            }
+        }
+
         result.ContainsCertificateName = ContainsMeaningfulText(
             searchableText,
             request.CertificateName
@@ -183,6 +204,16 @@ public class CertificateVerificationService : ICertificateVerificationService
             request.CertificateIssuer
         );
 
+        result.ContainsHolderName = ContainsPersonName(
+            searchableText,
+            request.ExpertFullName
+        );
+
+        result.ContainsIssuedDate = ContainsIssuedDate(
+            searchableText,
+            request.IssuedAt
+        );
+
         result.IsRelatedToExpertSkills = IsRelatedToSkills(
             searchableText,
             request.ExpertSkillsText,
@@ -191,18 +222,31 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         result.IsIssuedAtReasonable = IsIssuedAtReasonable(request.IssuedAt);
 
-        result.DetectedIssuer = DetectIssuer(searchableText, request.CertificateIssuer, uri.Host);
+        result.DetectedIssuer = courseraData is not null
+            ? "Coursera"
+            : DetectIssuer(searchableText, request.CertificateIssuer, uri.Host);
 
-        result.DetectedCertificateName = result.ContainsCertificateName
-            ? request.CertificateName.Trim()
-            : result.PageTitle;
+        result.DetectedCertificateName = !string.IsNullOrWhiteSpace(courseraData?.CertificateName)
+            ? courseraData.CertificateName
+            : result.ContainsCertificateName
+                ? request.CertificateName.Trim()
+                : result.PageTitle;
+
+        result.DetectedHolderName = !string.IsNullOrWhiteSpace(courseraData?.HolderName)
+            ? courseraData.HolderName
+            : result.ContainsHolderName
+                ? request.ExpertFullName.Trim()
+                : null;
+
+        result.DetectedIssuedDateText = courseraData?.IssuedAt is not null
+            ? BuildDetectedIssuedDateText(courseraData.IssuedAt.Value)
+            : result.ContainsIssuedDate && request.IssuedAt.HasValue
+                ? BuildDetectedIssuedDateText(request.IssuedAt.Value)
+                : null;
 
         result.VerificationScore = CalculateScore(result, request);
 
-        result.VerificationStatus = DetermineStatus(
-            result.VerificationScore,
-            result.IsReachable
-        );
+        result.VerificationStatus = DetermineStatus(result);
 
         result.VerificationNote = BuildVerificationNote(result, request);
 
@@ -218,17 +262,17 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (result.IsReachable)
         {
-            score += 20m;
+            score += 10m;
         }
 
         if (result.IsHttps)
         {
-            score += 10m;
+            score += 5m;
         }
 
         if (result.IsTrustedDomain)
         {
-            score += 20m;
+            score += 10m;
         }
 
         if (result.ContainsCertificateName)
@@ -241,12 +285,17 @@ public class CertificateVerificationService : ICertificateVerificationService
             score += 15m;
         }
 
-        if (result.IsRelatedToExpertSkills)
+        if (result.ContainsHolderName)
         {
-            score += 10m;
+            score += 20m;
         }
 
-        if (result.IsIssuedAtReasonable)
+        if (result.ContainsIssuedDate)
+        {
+            score += 15m;
+        }
+
+        if (result.IsRelatedToExpertSkills)
         {
             score += 5m;
         }
@@ -254,24 +303,43 @@ public class CertificateVerificationService : ICertificateVerificationService
         return Math.Clamp(score, 0m, 100m);
     }
 
-    private static string DetermineStatus(decimal score, bool isReachable)
+    private static string DetermineStatus(CertificateVerificationResult result)
     {
-        if (!isReachable)
+        if (!result.IsReachable)
         {
             return "INVALID";
         }
 
-        if (score >= 80m)
+        if (!result.IsTrustedDomain)
+        {
+            return result.VerificationScore >= 50m
+                ? "NEEDS_EVIDENCE"
+                : "SUSPICIOUS";
+        }
+
+        var hasRequiredIdentityEvidence =
+            result.ContainsCertificateName &&
+            result.ContainsIssuer &&
+            result.ContainsHolderName &&
+            result.ContainsIssuedDate;
+
+        if (hasRequiredIdentityEvidence && result.VerificationScore >= 80m)
         {
             return "VERIFIED";
         }
 
-        if (score >= 50m)
+        if (!result.ContainsCertificateName ||
+            !result.ContainsHolderName)
         {
             return "NEEDS_EVIDENCE";
         }
 
-        if (score >= 20m)
+        if (result.VerificationScore >= 50m)
+        {
+            return "NEEDS_EVIDENCE";
+        }
+
+        if (result.VerificationScore >= 20m)
         {
             return "SUSPICIOUS";
         }
@@ -310,12 +378,62 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (!result.ContainsCertificateName)
         {
-            notes.Add("Page content does not clearly contain the claimed certificate name.");
+            if (HasUsefulDetectedValue(result.DetectedCertificateName, result.PageTitle))
+            {
+                notes.Add(
+                    $"Claimed certificate name does not match detected certificate name. Claimed: '{NormalizeText(request.CertificateName)}'. Detected: '{NormalizeText(result.DetectedCertificateName!)}'."
+                );
+            }
+            else
+            {
+                notes.Add("Page content does not clearly contain the claimed certificate name.");
+            }
         }
 
         if (!result.ContainsIssuer)
         {
-            notes.Add("Page content does not clearly contain the claimed issuer.");
+            if (HasUsefulDetectedValue(result.DetectedIssuer, null))
+            {
+                notes.Add(
+                    $"Claimed certificate issuer does not match detected issuer. Claimed: '{NormalizeText(request.CertificateIssuer)}'. Detected: '{NormalizeText(result.DetectedIssuer!)}'."
+                );
+            }
+            else
+            {
+                notes.Add("Page content does not clearly contain the claimed issuer.");
+            }
+        }
+
+        if (!result.ContainsHolderName)
+        {
+            if (HasUsefulDetectedValue(result.DetectedHolderName, null))
+            {
+                notes.Add(
+                    $"Expert full name does not match detected certificate holder. Profile name: '{NormalizeText(request.ExpertFullName)}'. Detected holder: '{NormalizeText(result.DetectedHolderName!)}'."
+                );
+            }
+            else
+            {
+                notes.Add("Page content does not clearly contain the expert full name shown on the user profile.");
+            }
+        }
+
+        if (!result.ContainsIssuedDate)
+        {
+            if (HasUsefulDetectedValue(result.DetectedIssuedDateText, null))
+            {
+                var claimedDate = request.IssuedAt.HasValue
+                    ? BuildDetectedIssuedDateText(request.IssuedAt.Value)
+                    : "missing";
+
+                notes.Add(
+                    $"Claimed issued date does not match detected issued date. Claimed: '{claimedDate}'. Detected: '{NormalizeText(result.DetectedIssuedDateText!)}'."
+                );
+            }
+            else
+            {
+                notes.Add("Page content does not clearly contain the claimed certificate issued date.");
+            }
         }
 
         if (!result.IsRelatedToExpertSkills)
@@ -335,68 +453,40 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (notes.Count == 0)
         {
-            notes.Add("Certificate URL is reachable and evidence matches the claimed certificate information.");
+            notes.Add("Certificate URL is reachable and evidence matches certificate name, issuer, holder name, issued date, and expert skills.");
         }
 
         return string.Join(" ", notes);
     }
 
-    private static string? DetectNonCertificateEvidenceUrl(Uri uri)
+    private static bool HasUsefulDetectedValue(string? detectedValue, string? pageTitle)
     {
-        var host = uri.Host.ToLowerInvariant();
-        var path = uri.AbsolutePath.Trim('/').ToLowerInvariant();
-
-        if (host.EndsWith("coursera.org"))
+        if (string.IsNullOrWhiteSpace(detectedValue))
         {
-            var isPersonalCredentialUrl =
-                path.StartsWith("account/accomplishments/verify/") ||
-                path.StartsWith("account/accomplishments/certificate/") ||
-                path.StartsWith("account/accomplishments/specialization/") ||
-                path.StartsWith("verify/");
-
-            var isCourseOrCatalogUrl =
-                path.StartsWith("specializations/") ||
-                path.StartsWith("learn/") ||
-                path.StartsWith("professional-certificates/") ||
-                path.StartsWith("browse/") ||
-                path.StartsWith("collections/");
-
-            if (!isPersonalCredentialUrl && isCourseOrCatalogUrl)
-            {
-                return "This Coursera URL is a course, specialization, professional certificate, or catalog page, not a personal certificate verification URL. Please provide a Coursera accomplishment or verify URL.";
-            }
+            return false;
         }
 
-        if (host.EndsWith("udemy.com") && path.StartsWith("course/"))
+        var normalizedDetected = NormalizeForCompare(detectedValue);
+
+        if (string.IsNullOrWhiteSpace(normalizedDetected))
         {
-            return "This Udemy URL is a course landing page, not a personal certificate verification URL. Please provide the expert's personal certificate URL.";
+            return false;
         }
 
-        if (host.EndsWith("edx.org") &&
-            (path.StartsWith("learn/") || path.StartsWith("course/")))
+        if (!string.IsNullOrWhiteSpace(pageTitle) &&
+            normalizedDetected == NormalizeForCompare(pageTitle))
         {
-            return "This edX URL is a course page, not a personal certificate verification URL. Please provide the expert's personal certificate or credential URL.";
+            return false;
         }
 
-        if (host.EndsWith("linkedin.com") &&
-            (path.StartsWith("learning/") || path.StartsWith("learning-login/")))
+        if (normalizedDetected.Contains("online courses") ||
+            normalizedDetected.Contains("join for free") ||
+            normalizedDetected.Contains("credentials from top educators"))
         {
-            return "This LinkedIn URL is a learning course page, not a personal certificate or credential URL. Please provide the expert's personal certificate evidence.";
+            return false;
         }
 
-        if (host.EndsWith("learn.microsoft.com") &&
-            (path.StartsWith("training/") || path.StartsWith("en-us/training/")))
-        {
-            return "This Microsoft Learn URL is a training or course page, not a personal certification credential URL. Please provide a Microsoft certification credential or transcript URL.";
-        }
-
-        if (host.EndsWith("aws.amazon.com") &&
-            (path.Contains("/training/") || path.Contains("/certification/")))
-        {
-            return "This AWS URL appears to be a public training or certification information page, not the expert's personal certificate verification URL. Please provide personal credential evidence.";
-        }
-
-        return null;
+        return true;
     }
 
     private static bool IsTrustedDomain(string host, string certificateIssuer)
@@ -454,7 +544,97 @@ public class CertificateVerificationService : ICertificateVerificationService
             normalizedSource.Contains(token)
         );
 
-        return matchedTokens >= Math.Ceiling(expectedTokens.Count * 0.6);
+        return matchedTokens >= Math.Ceiling(expectedTokens.Count * 0.7);
+    }
+
+    private static bool ContainsPersonName(string source, string fullName)
+    {
+        if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(fullName))
+        {
+            return false;
+        }
+
+        var normalizedName = NormalizeForCompare(fullName);
+
+        if (string.IsNullOrWhiteSpace(normalizedName) ||
+            normalizedName is "string" or "test" or "user" or "unknown")
+        {
+            return false;
+        }
+
+        var normalizedSource = NormalizeForCompare(source);
+
+        if (normalizedSource.Contains(normalizedName))
+        {
+            return true;
+        }
+
+        var nameTokens = normalizedName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => x.Length >= 2)
+            .Distinct()
+            .ToList();
+
+        if (nameTokens.Count < 2)
+        {
+            return false;
+        }
+
+        var matchedTokens = nameTokens.Count(token =>
+            normalizedSource.Contains(token)
+        );
+
+        // Vietnamese names and English names may have middle names omitted on certificates.
+        // Require at least two name parts and at least 70% token match.
+        return matchedTokens >= 2 &&
+               matchedTokens >= Math.Ceiling(nameTokens.Count * 0.7);
+    }
+
+    private static bool ContainsIssuedDate(string source, DateTime? issuedAt)
+    {
+        if (string.IsNullOrWhiteSpace(source) || !issuedAt.HasValue)
+        {
+            return false;
+        }
+
+        var normalizedSource = NormalizeForCompare(source);
+        var date = issuedAt.Value.Date;
+
+        var monthName = CultureInfo.InvariantCulture.DateTimeFormat.GetMonthName(date.Month).ToLowerInvariant();
+        var shortMonthName = CultureInfo.InvariantCulture.DateTimeFormat.GetAbbreviatedMonthName(date.Month).ToLowerInvariant();
+
+        var candidates = new List<string>
+        {
+            date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            date.ToString("yyyy/MM/dd", CultureInfo.InvariantCulture),
+            date.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture),
+            date.ToString("MM/dd/yyyy", CultureInfo.InvariantCulture),
+            date.ToString("yyyyMMdd", CultureInfo.InvariantCulture),
+            $"{monthName} {date.Year}",
+            $"{shortMonthName} {date.Year}",
+            $"{date.Month} {date.Year}",
+            $"{date.Month:D2} {date.Year}",
+            $"{date.Year}"
+        };
+
+        var normalizedCandidates = candidates
+            .Select(NormalizeForCompare)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .ToList();
+
+        // Exact day/month/year or month/year match is strong.
+        if (normalizedCandidates
+            .Where(x => x != date.Year.ToString(CultureInfo.InvariantCulture))
+            .Any(normalizedSource.Contains))
+        {
+            return true;
+        }
+
+        // Year-only is too weak by itself, but acceptable when the certificate also has month words nearby.
+        var year = date.Year.ToString(CultureInfo.InvariantCulture);
+        return normalizedSource.Contains(year) &&
+               (normalizedSource.Contains(monthName) || normalizedSource.Contains(shortMonthName));
     }
 
     private static bool IsRelatedToSkills(
@@ -624,7 +804,9 @@ public class CertificateVerificationService : ICertificateVerificationService
             return string.Empty;
         }
 
-        var normalized = value
+        var withoutDiacritics = RemoveDiacritics(value);
+
+        var normalized = withoutDiacritics
             .Trim()
             .ToLowerInvariant()
             .Replace("-", " ")
@@ -635,9 +817,40 @@ public class CertificateVerificationService : ICertificateVerificationService
             .Replace("|", " ")
             .Replace(",", " ")
             .Replace("(", " ")
-            .Replace(")", " ");
+            .Replace(")", " ")
+            .Replace("[", " ")
+            .Replace("]", " ")
+            .Replace("{", " ")
+            .Replace("}", " ");
 
         return Regex.Replace(normalized, @"\s+", " ").Trim();
+    }
+
+    private static string RemoveDiacritics(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var normalizedString = value.Normalize(NormalizationForm.FormD);
+        var stringBuilder = new StringBuilder();
+
+        foreach (var character in normalizedString)
+        {
+            var unicodeCategory = CharUnicodeInfo.GetUnicodeCategory(character);
+
+            if (unicodeCategory != UnicodeCategory.NonSpacingMark)
+            {
+                stringBuilder.Append(character);
+            }
+        }
+
+        return stringBuilder
+            .ToString()
+            .Normalize(NormalizationForm.FormC)
+            .Replace('đ', 'd')
+            .Replace('Đ', 'D');
     }
 
     private static string NormalizeText(string value)
@@ -657,5 +870,216 @@ public class CertificateVerificationService : ICertificateVerificationService
         return value.Length <= maxLength
             ? value
             : value[..maxLength];
+    }
+
+    private static string BuildDetectedIssuedDateText(DateTime issuedAt)
+    {
+        return issuedAt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    private static bool IsCourseraPersonalCredentialUrl(Uri uri)
+    {
+        var host = uri.Host.ToLowerInvariant();
+        var path = uri.AbsolutePath.Trim('/').ToLowerInvariant();
+
+        return host.EndsWith("coursera.org") &&
+               (
+                   path.StartsWith("account/accomplishments/verify/") ||
+                   path.StartsWith("account/accomplishments/certificate/") ||
+                   path.StartsWith("account/accomplishments/specialization/") ||
+                   path.StartsWith("verify/")
+               );
+    }
+
+    private static CourseraCertificateData? ExtractCourseraCertificateData(string html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return null;
+        }
+
+        var decoded = WebUtility.HtmlDecode(html)
+            .Replace("\\u002F", "/")
+            .Replace("\\/", "/");
+
+        var firstName = MatchJsonString(decoded, "firstName");
+        var middleName = MatchJsonString(decoded, "middleName");
+        var lastName = MatchJsonString(decoded, "lastName");
+
+        var holderName = string.Join(" ", new[]
+        {
+            firstName,
+            middleName,
+            lastName
+        }.Where(x => !string.IsNullOrWhiteSpace(x)));
+
+        var grantedAtText = MatchJsonNumber(decoded, "grantedAt");
+
+        DateTime? issuedAt = null;
+
+        if (long.TryParse(grantedAtText, out var grantedAtMilliseconds))
+        {
+            issuedAt = DateTimeOffset
+                .FromUnixTimeMilliseconds(grantedAtMilliseconds)
+                .UtcDateTime
+                .Date;
+        }
+
+        var certificateName = ExtractCourseraCourseName(decoded);
+        var partnerName = ExtractCourseraPartnerName(decoded);
+
+        if (string.IsNullOrWhiteSpace(certificateName) &&
+            string.IsNullOrWhiteSpace(holderName) &&
+            issuedAt is null)
+        {
+            return null;
+        }
+
+        return new CourseraCertificateData(
+            certificateName,
+            holderName,
+            issuedAt,
+            partnerName
+        );
+    }
+
+    private static string BuildCourseraStructuredText(CourseraCertificateData data)
+    {
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(data.CertificateName))
+        {
+            parts.Add(data.CertificateName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(data.HolderName))
+        {
+            parts.Add(data.HolderName);
+        }
+
+        if (data.IssuedAt.HasValue)
+        {
+            parts.Add(data.IssuedAt.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+            parts.Add(data.IssuedAt.Value.ToString("MMMM d, yyyy", CultureInfo.InvariantCulture));
+            parts.Add(data.IssuedAt.Value.ToString("MMM d, yyyy", CultureInfo.InvariantCulture));
+        }
+
+        if (!string.IsNullOrWhiteSpace(data.PartnerName))
+        {
+            parts.Add(data.PartnerName);
+        }
+
+        parts.Add("Coursera");
+
+        return string.Join(" ", parts);
+    }
+
+    private static string? MatchJsonString(string text, string key)
+    {
+        var match = Regex.Match(
+            text,
+            $"\\\"{Regex.Escape(key)}\\\"\\s*:\\s*\\\"(?<value>(?:\\\\.|[^\\\"])*)\\\"",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline
+        );
+
+        return match.Success
+            ? Regex.Unescape(match.Groups["value"].Value).Trim()
+            : null;
+    }
+
+    private static string? MatchJsonNumber(string text, string key)
+    {
+        var match = Regex.Match(
+            text,
+            $"\\\"{Regex.Escape(key)}\\\"\\s*:\\s*(?<value>\\d+)",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline
+        );
+
+        return match.Success
+            ? match.Groups["value"].Value.Trim()
+            : null;
+    }
+
+    private static string? ExtractCourseraCourseName(string text)
+    {
+        var courseMatch = Regex.Match(
+            text,
+            "\\\"__typename\\\"\\s*:\\s*\\\"Course_Course\\\".*?\\\"name\\\"\\s*:\\s*\\\"(?<name>(?:\\\\.|[^\\\"])*)\\\"",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline
+        );
+
+        if (courseMatch.Success)
+        {
+            return Regex.Unescape(courseMatch.Groups["name"].Value).Trim();
+        }
+
+        var xdpMatch = Regex.Match(
+            text,
+            "\\\"__typename\\\"\\s*:\\s*\\\"XdpV1\\\".*?\\\"name\\\"\\s*:\\s*\\\"(?<name>(?:\\\\.|[^\\\"])*)\\\"",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline
+        );
+
+        if (xdpMatch.Success)
+        {
+            return Regex.Unescape(xdpMatch.Groups["name"].Value).Trim();
+        }
+
+        return null;
+    }
+
+    private static string? ExtractCourseraPartnerName(string text)
+    {
+        var partnerMatch = Regex.Match(
+            text,
+            "\\\"__typename\\\"\\s*:\\s*\\\"Partner_Partner\\\".*?\\\"name\\\"\\s*:\\s*\\\"(?<name>(?:\\\\.|[^\\\"])*)\\\"",
+            RegexOptions.IgnoreCase | RegexOptions.Singleline
+        );
+
+        if (partnerMatch.Success)
+        {
+            return Regex.Unescape(partnerMatch.Groups["name"].Value).Trim();
+        }
+
+        return null;
+    }
+
+    private static string? DetectNonCertificateEvidenceUrl(Uri uri)
+    {
+        var host = uri.Host.ToLowerInvariant();
+        var path = uri.AbsolutePath.Trim('/').ToLowerInvariant();
+
+        if (host.EndsWith("coursera.org"))
+        {
+            var isPersonalCredentialUrl =
+                path.StartsWith("account/accomplishments/verify/") ||
+                path.StartsWith("account/accomplishments/certificate/") ||
+                path.StartsWith("account/accomplishments/specialization/") ||
+                path.StartsWith("verify/");
+
+            var isCourseOrCatalogUrl =
+                path.StartsWith("specializations/") ||
+                path.StartsWith("learn/") ||
+                path.StartsWith("professional-certificates/") ||
+                path.StartsWith("browse/") ||
+                path.StartsWith("collections/");
+
+            if (!isPersonalCredentialUrl && isCourseOrCatalogUrl)
+            {
+                return "This Coursera URL is a course, specialization, professional certificate, or catalog page, not a personal certificate verification URL. Please provide a Coursera accomplishment or verify URL.";
+            }
+        }
+
+        if (host.EndsWith("udemy.com") && path.StartsWith("course/"))
+        {
+            return "This Udemy URL is a course landing page, not a personal certificate verification URL. Please provide the expert's personal certificate URL.";
+        }
+
+        if (host.EndsWith("edx.org") &&
+            (path.StartsWith("learn/") || path.StartsWith("course/")))
+        {
+            return "This edX URL is a course page, not a personal certificate verification URL. Please provide the expert's personal certificate or credential URL.";
+        }
+
+        return null;
     }
 }
