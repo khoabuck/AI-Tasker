@@ -1,66 +1,126 @@
 // src/modules/auth/pages/SetupProfilePage.jsx
-// Individual: POST /api/client-profiles/individual
-// Business:   POST /api/client-profiles/business
-// Edit mode:  PUT  /api/client-profiles/business/resubmit
+// Individual: POST /api/client-profiles/individual  { phoneNumber, address }
+// Business:   POST /api/client-profiles/business    { phoneNumber, address, taxCode, industry, businessEmail, businessPhone }
+//             PUT  /api/client-profiles/business/resubmit (khi NEEDS_CORRECTION)
+//             PUT  /api/client-profiles/business/me (khi đã VERIFIED, chỉnh sửa thường)
 // GET data:   GET  /api/client-profiles/me
+//
+// Flow:
+// 1. User nhập đủ field hợp lệ (FE validate) → submit
+// 2. BE verify qua VietQR tax code lookup
+//    - VERIFIED → hiện companyName + companyAddress (readonly) do AI trả về
+//    - NEEDS_CORRECTION → hiện lỗi + tăng verificationSubmissionCount
+// 3. Đạt MAX_ATTEMPTS (5) lần sai → BE trả verificationLockedUntil → BAN 15s
+//    - Trong lúc ban: ẨN nút Submit, hiện alert "Account is banned", hiện nút quay về dashboard
+//    - Hết 15s: tự động unlock, cho submit lại
 
-import { useState, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useEffect, useState, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
 
-const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
+const BG_IMAGE =
+  "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const inputStyle = {
-  background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8,
-  padding: "12px 16px", color: "#e1e2eb", width: "100%", outline: "none",
-  fontFamily: "Inter, sans-serif", fontSize: 14, boxSizing: "border-box",
-};
+const MAX_ATTEMPTS = 5;
 
-const labelStyle = {
-  display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11,
-  textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6,
-};
+function FieldError({ name, errors }) {
+  if (!errors[name]) return null;
+  return (
+    <p className="mt-1 flex items-center gap-1 text-xs text-red-400">
+      <span className="material-symbols-outlined text-[13px]">error</span>
+      {errors[name]}
+    </p>
+  );
+}
+
+function parseApiError(err) {
+  const status = err?.response?.status;
+  const resData = err?.response?.data;
+
+  if (!resData) {
+    return { fieldErrors: {}, message: "Could not connect to the server.", businessProfile: null };
+  }
+
+  const fieldErrors = {};
+  if (resData.errors && typeof resData.errors === "object" && !Array.isArray(resData.errors)) {
+    Object.assign(fieldErrors, resData.errors);
+  }
+
+  const businessProfile = resData.businessProfile || null;
+
+  const message =
+    resData.message ||
+    resData.title ||
+    businessProfile?.verificationNote ||
+    (status === 401 && "Your session has expired. Please log in again.") ||
+    (status === 403 && "You do not have permission.") ||
+    (status === 409 && "Tax code or email already exists.") ||
+    (status === 423 && "Too many failed attempts. Please wait.") ||
+    (status >= 500 && "Server error. Please try again later.") ||
+    "Some information is invalid.";
+
+  return { fieldErrors, message, businessProfile };
+}
 
 export default function SetupProfilePage() {
   const navigate = useNavigate();
+
   const [clientType, setClientType] = useState("individual");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
-  const [error, setError] = useState("");
+  const [globalError, setGlobalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isEdit, setIsEdit] = useState(false);
+  const [verifiedBusiness, setVerifiedBusiness] = useState(null);
 
-  const [individual, setIndividual] = useState({
-    phoneNumber: "", address: "", aiNeeds: "", mainProblems: "",
-    expectedBudgetMin: "", expectedBudgetMax: "",
-  });
+  // Countdown khi bị ban
+  const [lockSecondsLeft, setLockSecondsLeft] = useState(0);
+  const lockIntervalRef = useRef(null);
+  const hasAlertedRef = useRef(false); // tránh alert lặp lại nhiều lần
+
+  const [individual, setIndividual] = useState({ phoneNumber: "", address: "" });
 
   const [business, setBusiness] = useState({
-    phoneNumber: "", address: "", aiNeeds: "", mainProblems: "",
-    expectedBudgetMin: "", expectedBudgetMax: "",
-    companyName: "", taxCode: "", industry: "",
-    companyAddress: "", businessEmail: "", businessPhone: "",
+    phoneNumber: "",
+    address: "",
+    taxCode: "",
+    industry: "",
+    businessEmail: "",
+    businessPhone: "",
+    verificationStatus: "",
+    verificationNote: "",
+    verificationSubmissionCount: 0,
+    verificationLockedUntil: null,
   });
 
+  // ── Prefill ──────────────────────────────────────────────────────
   useEffect(() => {
     const loadProfile = async () => {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
         const data = res.data;
-        setIsEdit(true);
-        const isBusiness = !!data.companyName;
+        const bp = data?.businessProfile || null;
+        const isBusiness = data?.clientType === "BUSINESS" || Boolean(bp);
+
+        setIsEdit(Boolean(data?.clientProfileId || data?.phoneNumber));
         setClientType(isBusiness ? "business" : "individual");
-        const commonFields = {
-          phoneNumber: data.phoneNumber || "",
-          address: data.address || "",
-          aiNeeds: data.aiNeeds || "",
-          mainProblems: data.mainProblems || "",
-          expectedBudgetMin: data.expectedBudgetMin || "",
-          expectedBudgetMax: data.expectedBudgetMax || "",
-        };
+
         if (isBusiness) {
-          setBusiness({ ...commonFields, companyName: data.companyName || "", taxCode: data.taxCode || "", industry: data.industry || "", companyAddress: data.companyAddress || "", businessEmail: data.businessEmail || "", businessPhone: data.businessPhone || "" });
+          setBusiness({
+            phoneNumber: data?.phoneNumber || "",
+            address: data?.address || "",
+            taxCode: bp?.taxCode || "",
+            industry: bp?.industry || "",
+            businessEmail: bp?.businessEmail || "",
+            businessPhone: bp?.businessPhone || "",
+            verificationStatus: bp?.verificationStatus || "",
+            verificationNote: bp?.verificationNote || "",
+            verificationSubmissionCount: bp?.verificationSubmissionCount || 0,
+            verificationLockedUntil: bp?.verificationLockedUntil || null,
+          });
+          if (bp?.verificationStatus === "VERIFIED") setVerifiedBusiness(bp);
         } else {
-          setIndividual(commonFields);
+          setIndividual({ phoneNumber: data?.phoneNumber || "", address: data?.address || "" });
         }
       } catch {
         setIsEdit(false);
@@ -71,51 +131,257 @@ export default function SetupProfilePage() {
     loadProfile();
   }, []);
 
-  const handleIndividualChange = (e) => { setIndividual((prev) => ({ ...prev, [e.target.name]: e.target.value })); setError(""); };
-  const handleBusinessChange = (e) => { setBusiness((prev) => ({ ...prev, [e.target.name]: e.target.value })); setError(""); };
+  // ── Ban countdown — tự update mỗi giây, tự unlock khi hết ─────────
+  useEffect(() => {
+    if (lockIntervalRef.current) {
+      clearInterval(lockIntervalRef.current);
+      lockIntervalRef.current = null;
+    }
+
+    if (!business.verificationLockedUntil) {
+      setLockSecondsLeft(0);
+      hasAlertedRef.current = false;
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remainMs = new Date(business.verificationLockedUntil).getTime() - Date.now();
+      const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
+      setLockSecondsLeft(remainSec);
+
+      if (remainSec <= 0) {
+        clearInterval(lockIntervalRef.current);
+        lockIntervalRef.current = null;
+        setBusiness((prev) => ({ ...prev, verificationLockedUntil: null, verificationSubmissionCount: 0 }));
+        setGlobalError("");
+        setFieldErrors({});
+        hasAlertedRef.current = false;
+      }
+    };
+
+    updateCountdown();
+    lockIntervalRef.current = setInterval(updateCountdown, 1000);
+
+    return () => {
+      if (lockIntervalRef.current) clearInterval(lockIntervalRef.current);
+    };
+  }, [business.verificationLockedUntil]);
+
+  const locked = clientType === "business" && lockSecondsLeft > 0;
+  const attempts = business.verificationSubmissionCount || 0;
+  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - attempts);
+
+  const inputClass = (name) =>
+    `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+      fieldErrors[name] ? "border-red-500 focus:border-red-500" : "border-white/10 focus:border-cyan-400"
+    }`;
+
+  const clearError = (name) => {
+    if (fieldErrors[name]) setFieldErrors((prev) => ({ ...prev, [name]: null }));
+    setGlobalError("");
+  };
+
+  const clearVerifiedBusiness = () => {
+    if (verifiedBusiness) setVerifiedBusiness(null);
+  };
+
+  const handleIndividualChange = (e) => {
+    const { name, value } = e.target;
+    setIndividual((prev) => ({ ...prev, [name]: value }));
+    clearError(name);
+  };
+
+  const handleBusinessChange = (e) => {
+    const { name, value } = e.target;
+    setBusiness((prev) => ({ ...prev, [name]: value }));
+    clearError(name);
+    clearVerifiedBusiness();
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    const f = clientType === "individual" ? individual : business;
+
+    const phoneClean = f.phoneNumber.replace(/[\s-.]/g, "");
+    if (!f.phoneNumber.trim()) {
+      errors.phoneNumber = "Phone number is required.";
+    } else if (
+      !/^(0[3-9]\d{8})$/.test(phoneClean) &&
+      !/^(\+84[3-9]\d{8})$/.test(phoneClean) &&
+      !/^(84[3-9]\d{8})$/.test(phoneClean)
+    ) {
+      errors.phoneNumber = "Invalid VN phone number. Example: 0912345678.";
+    }
+
+    if (!f.address.trim()) errors.address = "Address is required.";
+
+    if (clientType === "business") {
+      const taxClean = business.taxCode.replace(/-/g, "");
+      if (!business.taxCode.trim()) {
+        errors.taxCode = "Tax code is required.";
+      } else if (!/^\d{10}$/.test(taxClean) && !/^\d{13}$/.test(taxClean)) {
+        errors.taxCode = "Tax code must have 10 or 13 digits.";
+      }
+
+      if (!business.industry.trim()) errors.industry = "Industry is required.";
+
+      if (!business.businessEmail.trim()) {
+        errors.businessEmail = "Business email is required.";
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(business.businessEmail.trim())) {
+        errors.businessEmail = "Invalid email format.";
+      }
+
+      const bizPhoneClean = business.businessPhone.replace(/[\s-.]/g, "");
+      if (!business.businessPhone.trim()) {
+        errors.businessPhone = "Business phone is required.";
+      } else if (
+        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
+        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
+        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
+      ) {
+        errors.businessPhone = "Invalid business phone.";
+      }
+    }
+
+    return errors;
+  };
+
+  // ── Áp kết quả verify (cả success path và error path đều gọi hàm này) ──
+  const applyBusinessVerificationResult = (data) => {
+    const bp = data?.businessProfile;
+    if (!bp) return false;
+    setIsEdit(true);
+
+    setBusiness((prev) => ({
+      ...prev,
+      verificationStatus: bp.verificationStatus || "",
+      verificationNote: bp.verificationNote || "",
+      verificationSubmissionCount: bp.verificationSubmissionCount || 0,
+      verificationLockedUntil: bp.verificationLockedUntil || null,
+    }));
+
+    if (bp.verificationStatus === "VERIFIED") {
+      setVerifiedBusiness(bp);
+      setGlobalError("");
+      setFieldErrors({});
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return true;
+    }
+
+    const count = bp.verificationSubmissionCount || 0;
+    const remaining = Math.max(0, MAX_ATTEMPTS - count);
+    const msg = bp.verificationNote || "Business verification failed. Please check your tax code.";
+
+    if (bp.verificationLockedUntil) {
+      const secondsLeft = Math.max(
+        0,
+        Math.ceil((new Date(bp.verificationLockedUntil).getTime() - Date.now()) / 1000)
+      );
+
+      setGlobalError(`Too many failed attempts. Your account has been banned for ${secondsLeft} seconds.`);
+
+      // Alert riêng — chỉ bắn 1 lần khi vừa chạm ngưỡng ban
+      if (!hasAlertedRef.current) {
+        hasAlertedRef.current = true;
+        alert("Account is banned. Too many failed verification attempts. Please wait 15 seconds.");
+      }
+    } else {
+      setGlobalError(`${msg} Attempts left: ${remaining}/${MAX_ATTEMPTS}.`);
+    }
+
+    setFieldErrors({ taxCode: msg });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return true;
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    const feErrors = validateForm();
+    if (Object.keys(feErrors).length > 0) {
+      setFieldErrors(feErrors);
+      setGlobalError("Please check the highlighted fields.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if (clientType === "business" && locked) {
+      setGlobalError(`Account is banned. Try again in ${lockSecondsLeft}s.`);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     setLoading(true);
-    setError("");
+    setGlobalError("");
+    setFieldErrors({});
+    setVerifiedBusiness(null);
+
     try {
+      let res;
+
       if (clientType === "individual") {
-        // POST /api/client-profiles/individual
-        // TODO (BE): nếu BE có PUT để update individual thì dùng PUT khi isEdit
-        await axiosInstance.post("/client-profiles/individual", {
-          phoneNumber: individual.phoneNumber, address: individual.address,
-          aiNeeds: individual.aiNeeds, mainProblems: individual.mainProblems,
-          expectedBudgetMin: Number(individual.expectedBudgetMin),
-          expectedBudgetMax: Number(individual.expectedBudgetMax),
-        });
-      } else {
-        if (isEdit) {
-          // PUT /api/client-profiles/business/resubmit
-          await axiosInstance.put("/client-profiles/business/resubmit", {
-            phoneNumber: business.phoneNumber, address: business.address,
-            aiNeeds: business.aiNeeds, mainProblems: business.mainProblems,
-            expectedBudgetMin: Number(business.expectedBudgetMin),
-            expectedBudgetMax: Number(business.expectedBudgetMax),
-            companyName: business.companyName, taxCode: business.taxCode,
-            industry: business.industry, companyAddress: business.companyAddress,
-            businessEmail: business.businessEmail, businessPhone: business.businessPhone,
-          });
-        } else {
-          // POST /api/client-profiles/business
-          await axiosInstance.post("/client-profiles/business", {
-            phoneNumber: business.phoneNumber, address: business.address,
-            aiNeeds: business.aiNeeds, mainProblems: business.mainProblems,
-            expectedBudgetMin: Number(business.expectedBudgetMin),
-            expectedBudgetMax: Number(business.expectedBudgetMax),
-            companyName: business.companyName, taxCode: business.taxCode,
-            industry: business.industry, companyAddress: business.companyAddress,
-            businessEmail: business.businessEmail, businessPhone: business.businessPhone,
-          });
-        }
+        const payload = { phoneNumber: individual.phoneNumber.trim(), address: individual.address.trim() };
+        res = isEdit
+          ? await axiosInstance.put("/client-profiles/individual/me", payload)
+          : await axiosInstance.post("/client-profiles/individual", payload);
+        navigate("/client/dashboard");
+        return;
       }
-      navigate("/client/dashboard");
+
+      const payload = {
+        phoneNumber: business.phoneNumber.trim(),
+        address: business.address.trim(),
+        taxCode: business.taxCode.trim(),
+        industry: business.industry.trim(),
+        businessEmail: business.businessEmail.trim(),
+        businessPhone: business.businessPhone.trim(),
+      };
+
+      const shouldResubmit = ["NEEDS_CORRECTION", "REJECTED", "FAILED"].includes(business.verificationStatus);
+
+      if (shouldResubmit) {
+        res = await axiosInstance.put("/client-profiles/business/resubmit", payload);
+      } else if (!isEdit) {
+        res = await axiosInstance.post("/client-profiles/business", payload);
+      } else {
+        res = await axiosInstance.put("/client-profiles/business/me", payload);
+      }
+
+      applyBusinessVerificationResult(res.data);
     } catch (err) {
-      setError(err?.response?.data?.message || "Something went wrong. Please try again.");
+      const { fieldErrors: beErrors, message, businessProfile } = parseApiError(err);
+
+      if (businessProfile) {
+        applyBusinessVerificationResult({ businessProfile });
+        return;
+      }
+
+      // BE trả lock message dạng text, không có businessProfile object
+      // Ví dụ: "...Please try again after 2026-06-18 09:51:59 UTC."
+      const lockMatch = message?.match(/after\s+([\d-]+\s[\d:]+)\s*UTC/i);
+      if (lockMatch) {
+        const lockedUntilUtc = lockMatch[1].replace(" ", "T") + "Z";
+        setBusiness((prev) => ({
+          ...prev,
+          verificationSubmissionCount: MAX_ATTEMPTS,
+          verificationLockedUntil: lockedUntilUtc,
+        }));
+        setGlobalError(message);
+        if (!hasAlertedRef.current) {
+          hasAlertedRef.current = true;
+          alert("Account is banned. Too many failed verification attempts. Please wait.");
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      setGlobalError(message);
+      if (Object.keys(beErrors).length > 0) {
+        setFieldErrors(beErrors);
+      } else if (clientType === "business") {
+        setFieldErrors({ taxCode: message });
+      }
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
     }
@@ -123,214 +389,213 @@ export default function SetupProfilePage() {
 
   if (fetching) {
     return (
-      <div style={{ background: "#12151B", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#8c90a0", fontFamily: "Inter, sans-serif" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 40 }}>hourglass_empty</span>
+      <div className="flex min-h-screen items-center justify-center bg-[#12151B] text-gray-400">
+        <span className="material-symbols-outlined animate-spin text-4xl">autorenew</span>
       </div>
     );
   }
 
-  return (
-    <div style={{ background: "#12151B", color: "#e1e2eb", minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "Inter, sans-serif" }}>
+  const form = clientType === "individual" ? individual : business;
+  const handleChange = clientType === "individual" ? handleIndividualChange : handleBusinessChange;
 
-      {/* Navbar */}
-      <nav style={{ position: "fixed", top: 0, width: "100%", zIndex: 50, background: "rgba(18,21,27,0.8)", backdropFilter: "blur(20px)", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px", height: 80, display: "flex", alignItems: "center", gap: 16 }}>
-          {/* Back arrow — quay về select-role */}
-          <Link to="/select-role"
-            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 36, height: 36, borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#8c90a0", textDecoration: "none", transition: "all 0.2s" }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = "#e1e2eb"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = "#8c90a0"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>arrow_back</span>
+  return (
+    <div className="min-h-screen bg-[#12151B] text-[#e1e2eb]">
+      <nav className="fixed top-0 z-50 w-full border-b border-white/10 bg-[#12151B]/80 backdrop-blur-xl">
+        <div className="mx-auto flex h-20 max-w-7xl items-center gap-4 px-6 md:px-12">
+          <Link to="/select-role" className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-gray-400 hover:text-white">
+            <span className="material-symbols-outlined text-xl">arrow_back</span>
           </Link>
-          <span style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em" }}>
-            <span style={{ color: "#00F0FF" }}>AI</span>{" "}
-            <span style={{ color: "#e1e2eb" }}>Tasker</span>
-          </span>
+          <span className="text-2xl font-bold"><span className="text-cyan-400">AI</span> Tasker</span>
         </div>
       </nav>
 
-      {/* Main */}
-      <main style={{ flex: 1, paddingTop: 128, paddingBottom: 96, backgroundImage: `linear-gradient(rgba(18,21,27,0.7), rgba(18,21,27,0.7)), url('${BG_IMAGE}')`, backgroundSize: "cover", backgroundPosition: "center" }}>
-        <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 16px" }}>
-
-          {/* Header */}
-          <div style={{ textAlign: "center", marginBottom: 40 }}>
-            <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 36, fontWeight: 700, color: "#e1e2eb", marginBottom: 8 }}>
-              {isEdit ? "Edit Profile" : "Complete Your Profile"}
+      <main
+        className="min-h-screen bg-cover bg-center px-4 pb-24 pt-32"
+        style={{ backgroundImage: `linear-gradient(rgba(18,21,27,0.72), rgba(18,21,27,0.72)), url('${BG_IMAGE}')` }}
+      >
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-10 text-center">
+            <h1 className="mb-2 text-4xl font-bold">
+              {verifiedBusiness ? "Business Verified" : locked ? "Account Banned" : isEdit ? "Update Your Profile" : "Complete Your Profile"}
             </h1>
-            <p style={{ color: "#c2c6d6", fontSize: 15 }}>
-              {isEdit ? "Update your information" : "Help us understand your needs better"}
+            <p className="text-sm text-gray-300">
+              {clientType === "business" ? "Tax code will be verified automatically by VietQR" : "Help us verify your identity"}
             </p>
           </div>
 
+          {/* Ban banner — ưu tiên cao nhất, có countdown live */}
+          {locked && (
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/40 bg-red-500/10 p-4">
+              <span className="material-symbols-outlined text-2xl text-red-400">block</span>
+              <div className="flex-1">
+                <p className="font-semibold text-red-300">Account is banned</p>
+                <p className="text-sm text-red-200/80">Too many failed verification attempts. Please wait before trying again.</p>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-red-400 text-lg font-bold text-red-300">
+                {lockSecondsLeft}
+              </div>
+            </div>
+          )}
+
+          {/* Error banner (không hiện khi đang ban — ban banner đã đủ rõ) */}
+          {globalError && !locked && (
+            <div className="mb-6 flex gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4">
+              <span className="material-symbols-outlined text-red-400">gpp_bad</span>
+              <div>
+                <p className="font-semibold text-red-400">Verification Failed</p>
+                <p className="text-sm text-red-300">{globalError}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Attempts warning */}
+          {clientType === "business" && !verifiedBusiness && !locked && attempts > 0 && (
+            <div className="mb-6 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-yellow-300">
+                  <span className="material-symbols-outlined">warning</span>
+                  <span className="font-semibold">Failed verification attempts</span>
+                </div>
+                <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-sm font-bold text-yellow-200">
+                  {attempts}/{MAX_ATTEMPTS}
+                </span>
+              </div>
+              <p className="mt-2 text-sm text-yellow-100/80">Attempts left: {remainingAttempts}/{MAX_ATTEMPTS}</p>
+            </div>
+          )}
+
+          {/* Verified success banner */}
+          {verifiedBusiness && (
+            <div className="mb-6 flex gap-3 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4">
+              <span className="material-symbols-outlined text-emerald-300">verified</span>
+              <div>
+                <p className="font-semibold text-emerald-300">Business verified successfully</p>
+                <p className="text-sm text-emerald-100/80">Please review your company information before entering the dashboard.</p>
+              </div>
+            </div>
+          )}
+
           {/* Client Type Toggle */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 32 }}>
+          <div className="mb-8 grid grid-cols-2 gap-3">
             {[
-              { key: "individual", icon: "person", label: "Individual" },
-              { key: "business", icon: "corporate_fare", label: "Business" },
-            ].map((t) => (
-              <button key={t.key} type="button" onClick={() => setClientType(t.key)}
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 16px", borderRadius: 8, border: `1px solid ${clientType === t.key ? "#00F0FF" : "rgba(255,255,255,0.12)"}`, background: clientType === t.key ? "rgba(0,240,255,0.05)" : "rgba(29,32,38,0.5)", color: clientType === t.key ? "#00F0FF" : "#8c90a0", cursor: "pointer", transition: "all 0.2s", fontWeight: 600 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20 }}>{t.icon}</span>
-                {t.label}
+              { key: "individual", label: "Individual", icon: "person" },
+              { key: "business", label: "Business", icon: "corporate_fare" },
+            ].map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                disabled={isEdit || Boolean(verifiedBusiness)}
+                onClick={() => setClientType(item.key)}
+                className={`flex items-center justify-center gap-2 rounded-lg border px-4 py-3 font-semibold transition ${
+                  clientType === item.key ? "border-cyan-400 bg-cyan-400/10 text-cyan-400" : "border-white/10 bg-[#1D2026]/70 text-gray-400"
+                } ${isEdit || verifiedBusiness ? "cursor-not-allowed opacity-60" : "hover:border-cyan-400"}`}
+              >
+                <span className="material-symbols-outlined text-xl">{item.icon}</span>
+                {item.label}
               </button>
             ))}
           </div>
 
-          {/* Form Card */}
-          <div style={{ background: "rgba(18,21,27,0.8)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: 40, boxShadow: "0 8px 32px rgba(0,0,0,0.8)" }}>
-            <form onSubmit={handleSubmit}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-                {/* Common fields */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <div>
-                    <label style={labelStyle}>Phone Number</label>
-                    <input type="text" name="phoneNumber"
-                      value={clientType === "individual" ? individual.phoneNumber : business.phoneNumber}
-                      onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="e.g. +84 912 345 678" style={inputStyle}
-                      onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                      onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Address</label>
-                    <input type="text" name="address"
-                      value={clientType === "individual" ? individual.address : business.address}
-                      onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="e.g. Ho Chi Minh City" style={inputStyle}
-                      onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                      onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                  </div>
-                </div>
-
+          <div className="rounded-2xl border border-white/10 bg-[#12151B]/85 p-6 shadow-2xl backdrop-blur-xl md:p-10">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label style={labelStyle}>AI Needs</label>
-                  <textarea name="aiNeeds"
-                    value={clientType === "individual" ? individual.aiNeeds : business.aiNeeds}
-                    onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                    placeholder="Describe what you need AI to do for you..." rows={3}
-                    style={{ ...inputStyle, resize: "none" }}
-                    onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                    onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Phone Number</label>
+                  <input name="phoneNumber" value={form.phoneNumber} onChange={handleChange} placeholder="0912345678"
+                    disabled={Boolean(verifiedBusiness) || locked} className={inputClass("phoneNumber")} />
+                  <FieldError name="phoneNumber" errors={fieldErrors} />
                 </div>
-
                 <div>
-                  <label style={labelStyle}>Main Problems</label>
-                  <textarea name="mainProblems"
-                    value={clientType === "individual" ? individual.mainProblems : business.mainProblems}
-                    onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                    placeholder="Describe the main problems you're facing..." rows={3}
-                    style={{ ...inputStyle, resize: "none" }}
-                    onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                    onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Address</label>
+                  <input name="address" value={form.address} onChange={handleChange} placeholder="Đà Nẵng"
+                    disabled={Boolean(verifiedBusiness) || locked} className={inputClass("address")} />
+                  <FieldError name="address" errors={fieldErrors} />
                 </div>
+              </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                  <div>
-                    <label style={labelStyle}>Min Budget (USD)</label>
-                    <input type="number" name="expectedBudgetMin"
-                      value={clientType === "individual" ? individual.expectedBudgetMin : business.expectedBudgetMin}
-                      onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="500" style={inputStyle}
-                      onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                      onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                  </div>
-                  <div>
-                    <label style={labelStyle}>Max Budget (USD)</label>
-                    <input type="number" name="expectedBudgetMax"
-                      value={clientType === "individual" ? individual.expectedBudgetMax : business.expectedBudgetMax}
-                      onChange={clientType === "individual" ? handleIndividualChange : handleBusinessChange}
-                      placeholder="5000" style={inputStyle}
-                      onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                      onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                  </div>
-                </div>
+              {clientType === "business" && (
+                <div className="border-t border-white/10 pt-5">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-cyan-400">Business Information</p>
+                  <p className="mb-5 text-xs leading-6 text-gray-400">
+                    Company name and official company address are checked automatically from the tax code via VietQR lookup.
+                  </p>
 
-                {/* Business only */}
-                {clientType === "business" && (
-                  <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 20 }}>
-                    <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#00F0FF", marginBottom: 16 }}>
-                      Business Information
-                    </p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <div>
-                          <label style={labelStyle}>Company Name</label>
-                          <input type="text" name="companyName" value={business.companyName} onChange={handleBusinessChange}
-                            placeholder="AITasker Inc." style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Tax Code</label>
-                          <input type="text" name="taxCode" value={business.taxCode} onChange={handleBusinessChange}
-                            placeholder="0123456789" style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                        </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Tax Code</label>
+                      <input name="taxCode" value={business.taxCode} onChange={handleBusinessChange} placeholder="0101243150"
+                        disabled={locked || Boolean(verifiedBusiness)} className={inputClass("taxCode")} />
+                      <FieldError name="taxCode" errors={fieldErrors} />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Industry</label>
+                      <input name="industry" value={business.industry} onChange={handleBusinessChange} placeholder="Software Development"
+                        disabled={locked || Boolean(verifiedBusiness)} className={inputClass("industry")} />
+                      <FieldError name="industry" errors={fieldErrors} />
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <div>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Business Email</label>
+                        <input name="businessEmail" type="email" value={business.businessEmail} onChange={handleBusinessChange}
+                          placeholder="business@example.com" disabled={locked || Boolean(verifiedBusiness)} className={inputClass("businessEmail")} />
+                        <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
                       <div>
-                        <label style={labelStyle}>Industry</label>
-                        <input type="text" name="industry" value={business.industry} onChange={handleBusinessChange}
-                          placeholder="e.g. Information Technology, Finance..." style={inputStyle}
-                          onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                          onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                      </div>
-                      <div>
-                        <label style={labelStyle}>Company Address</label>
-                        <input type="text" name="companyAddress" value={business.companyAddress} onChange={handleBusinessChange}
-                          placeholder="123 Nguyen Hue, District 1, HCMC" style={inputStyle}
-                          onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                          onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                        <div>
-                          <label style={labelStyle}>Business Email</label>
-                          <input type="email" name="businessEmail" value={business.businessEmail} onChange={handleBusinessChange}
-                            placeholder="contact@company.com" style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                        </div>
-                        <div>
-                          <label style={labelStyle}>Business Phone</label>
-                          <input type="text" name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange}
-                            placeholder="+84 28 1234 5678" style={inputStyle}
-                            onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
-                        </div>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Business Phone</label>
+                        <input name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange} placeholder="0243768900"
+                          disabled={locked || Boolean(verifiedBusiness)} className={inputClass("businessPhone")} />
+                        <FieldError name="businessPhone" errors={fieldErrors} />
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* Error */}
-                {error && (
-                  <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, padding: "12px 16px", color: "#f87171", fontSize: 14 }}>
-                    {error}
+                    {/* Company info — chỉ hiện sau khi VERIFIED, readonly */}
+                    {verifiedBusiness && (
+                      <div className="mt-5 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-4">
+                        <div className="mb-4 flex items-center gap-2 text-emerald-300">
+                          <span className="material-symbols-outlined">verified</span>
+                          <span className="font-semibold">Verified Company Information</span>
+                        </div>
+                        <div className="space-y-4">
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Company Name</label>
+                            <input value={verifiedBusiness.companyName || ""} readOnly
+                              className="w-full rounded-lg border border-emerald-400/30 bg-[#1F2937] px-4 py-3 text-sm text-emerald-200 outline-none" />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Company Address</label>
+                            <textarea value={verifiedBusiness.companyAddress || ""} readOnly rows={3}
+                              className="w-full resize-none rounded-lg border border-emerald-400/30 bg-[#1F2937] px-4 py-3 text-sm text-emerald-200 outline-none" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* Buttons */}
-                <div style={{ display: "flex", gap: 12 }}>
-                  {isEdit && (
-                    <button type="button" onClick={() => navigate("/client/profile")}
-                      style={{ flex: 1, padding: "16px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#e1e2eb", cursor: "pointer", fontWeight: 600, fontFamily: "Inter, sans-serif", fontSize: 15 }}>
-                      Cancel
-                    </button>
-                  )}
-                  <button type="submit" disabled={loading}
-                    style={{ flex: 2, background: "#00F0FF", color: "#002022", fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 16, padding: "16px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.7 : 1, boxShadow: "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              <div className="flex gap-3 pt-2">
+                {verifiedBusiness ? (
+                  <button type="button" onClick={() => navigate("/client/dashboard")}
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-4 font-bold text-[#002022] shadow-[0_0_20px_rgba(52,211,153,0.35)] hover:bg-emerald-300">
+                    Go to Dashboard
+                    <span className="material-symbols-outlined">arrow_forward</span>
+                  </button>
+                ) : (
+                  <button type="submit" disabled={loading || locked}
+                    className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-4 font-bold transition ${
+                      loading || locked ? "cursor-not-allowed bg-[#1D2026] text-gray-500" : "bg-cyan-400 text-[#002022] shadow-[0_0_20px_rgba(34,211,238,0.35)] hover:bg-cyan-300"
+                    }`}>
                     {loading ? (
-                      <><span className="material-symbols-outlined">progress_activity</span><span>Saving...</span></>
-                    ) : isEdit ? (
-                      <><span>Save Changes</span><span className="material-symbols-outlined">save</span></>
+                      <><span className="material-symbols-outlined animate-spin">autorenew</span>Verifying...</>
+                    ) : locked ? (
+                      <><span className="material-symbols-outlined">lock</span>Locked {lockSecondsLeft}s</>
                     ) : (
-                      <><span>Complete & Go to Dashboard</span><span className="material-symbols-outlined">arrow_forward</span></>
+                      <>Submit & Verify<span className="material-symbols-outlined">verified</span></>
                     )}
                   </button>
-                </div>
-
+                )}
               </div>
             </form>
           </div>

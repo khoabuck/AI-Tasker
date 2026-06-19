@@ -1,6 +1,6 @@
 // src/modules/client/pages/PostJobPage.jsx
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -59,16 +59,25 @@ const buildPayload = (form) => ({
   aiGeneratedDescription: form.aiGeneratedDescription || null,
   budgetMin: Number(form.budgetMin),
   budgetMax: Number(form.budgetMax),
-  deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  deadline: form.deadline
+    ? new Date(form.deadline).toISOString()
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
   isAiAssisted: !!form.aiGeneratedDescription,
-  skillIds: form.skills.map((s) => s.id),
+  skillIds: form.skills
+    .map((s) => Number(s.id))
+    .filter((id) => Number.isInteger(id) && id > 0),
 });
 
 export default function PostJobPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const editId = new URLSearchParams(location.search).get("editId");
+  const isEditMode = !!editId;
+
   const [mode, setMode] = useState("manual"); // "manual" | "ai"
   const [form, setForm] = useState(DEFAULT_FORM);
   const [generating, setGenerating] = useState(false);
@@ -76,6 +85,42 @@ export default function PostJobPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
+
+  useEffect(() => {
+  if (!editId) return;
+
+  const loadJobForEdit = async () => {
+    try {
+      const res = await axiosInstance.get(`/jobs/${editId}`);
+      const job = res.data;
+
+      setForm({
+        title: job.title || "",
+        budgetMin: job.budgetMin || "",
+        budgetMax: job.budgetMax || "",
+        projectType: job.projectType || "",
+        complexity: job.complexity || "",
+        description: job.description || "",
+        aiGeneratedDescription: job.aiGeneratedDescription || "",
+        expectedDeliverables: job.expectedDeliverables || "",
+        deadline: job.deadline ? job.deadline.split("T")[0] : "",
+        skills: (job.skills || [])
+          .map((s) => ({
+            id: Number(s.skillId ?? s.id),
+            name: s.skillName ?? s.name,
+          }))
+          .filter((s) => Number.isInteger(s.id) && s.id > 0),
+      });
+
+      setMode(job.aiGeneratedDescription ? "ai" : "manual");
+    } catch (err) {
+      console.error("Load job edit failed:", err);
+      setError("Không tải được dữ liệu job để chỉnh sửa.");
+    }
+  };
+
+  loadJobForEdit();
+}, [editId]);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -125,7 +170,12 @@ export default function PostJobPage() {
         projectType: data.suggestedProjectType || prev.projectType,
         complexity: data.suggestedComplexity || "",
         expectedDeliverables: data.expectedDeliverables || "",
-        skills: (data.suggestedSkills || []).map(s => ({ id: s.skillId, name: s.skillName })),
+        skills: (data.suggestedSkills || [])
+        .map((s) => ({
+          id: Number(s.skillId ?? s.SkillId ?? s.id),
+          name: s.skillName ?? s.SkillName ?? s.name,
+        }))
+        .filter((s) => Number.isInteger(s.id) && s.id > 0),
       }));
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to generate. Please try again.");
@@ -136,37 +186,68 @@ export default function PostJobPage() {
 
   // POST /api/jobs/draft
   const handleSaveDraft = async () => {
-    if (!form.title.trim()) {
-      setError("Please enter a job title before saving draft.");
-      return;
+  if (!form.title.trim()) {
+    setError("Please enter a job title before saving draft.");
+    return;
+  }
+
+  setSavingDraft(true);
+  setError("");
+
+  try {
+    if (isEditMode) {
+      await axiosInstance.put(
+        `/jobs/${editId}`,
+        buildPayload(form)
+      );
+    } else {
+      await axiosInstance.post(
+        "/jobs/draft",
+        buildPayload(form)
+      );
     }
-    setSavingDraft(true);
-    setError("");
-    try {
-      await axiosInstance.post("/jobs/draft", buildPayload(form));
-      setDraftSaved(true);
-    } catch (err) {
-      setError(err?.response?.data?.message || "Failed to save draft.");
-    } finally {
-      setSavingDraft(false);
-    }
-  };
+
+    setDraftSaved(true);
+  } catch (err) {
+    setError(
+      err?.response?.data?.message ||
+      "Failed to save draft."
+    );
+  } finally {
+    setSavingDraft(false);
+  }
+};
 
   // POST /api/jobs/submit
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await axiosInstance.post("/jobs/submit", buildPayload(form));
-      setForm(DEFAULT_FORM);
-      navigate("/client/projects");
-    } catch (err) {
-      setError(err?.response?.data?.message || "Failed to post job.");
-    } finally {
-      setSubmitting(false);
+  e.preventDefault();
+  setSubmitting(true);
+  setError("");
+
+  try {
+    if (isEditMode) {
+      await axiosInstance.put(
+        `/jobs/${editId}`,
+        buildPayload(form)
+      );
+    } else {
+      await axiosInstance.post(
+        "/jobs/submit",
+        buildPayload(form)
+      );
     }
-  };
+
+    setForm(DEFAULT_FORM);
+    navigate("/client/projects");
+  } catch (err) {
+    setError(
+      err?.response?.data?.message ||
+      "Failed to save job."
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const [customSkill, setCustomSkill] = useState("");
 

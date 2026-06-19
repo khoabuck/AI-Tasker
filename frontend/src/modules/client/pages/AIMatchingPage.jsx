@@ -1,4 +1,7 @@
 // src/modules/client/pages/AIMatchingPage.jsx
+// POST /api/recommendations/experts/from-prompt   { prompt }  →  Expert[]
+// Response là array trực tiếp, đã sort theo matchScore giảm dần — không còn dùng GET /experts?keyword=
+
 import { useState } from "react";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -20,7 +23,7 @@ function ExpertCard({ expert }) {
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.transform = "translateY(0)"; }}>
 
       {/* Match score badge */}
-      {matchScore && (
+      {matchScore !== null && (
         <div style={{ position: "absolute", top: 0, right: 0, padding: "4px 12px", background: "rgba(0,240,255,0.1)", borderLeft: "1px solid rgba(0,240,255,0.3)", borderBottom: "1px solid rgba(0,240,255,0.3)", borderRadius: "0 16px 0 12px" }}>
           <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#00F0FF", fontWeight: 700 }}>{matchScore}% MATCH</span>
         </div>
@@ -53,7 +56,7 @@ function ExpertCard({ expert }) {
                 Available
               </span>
             )}
-            {expert.profileScore && (
+            {expert.profileScore != null && (
               <span style={{ fontSize: 11, color: "#8c90a0" }}>
                 Score: <span style={{ color: "#facc15" }}>{expert.profileScore}</span>/100
               </span>
@@ -69,6 +72,13 @@ function ExpertCard({ expert }) {
         </p>
       )}
 
+      {/* Matched skill count */}
+      {expert.requiredSkillCount > 0 && (
+        <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>
+          Matched <span style={{ color: "#00F0FF", fontWeight: 700 }}>{expert.matchedSkillCount}</span>/{expert.requiredSkillCount} required skills
+        </p>
+      )}
+
       {/* Match reason */}
       {expert.matchReason && (
         <div style={{ background: "rgba(0,240,255,0.04)", border: "1px solid rgba(0,240,255,0.12)", borderRadius: 8, padding: "10px 12px" }}>
@@ -80,10 +90,10 @@ function ExpertCard({ expert }) {
       )}
 
       {/* Skills */}
-      {(expert.matchedSkills || expert.expertSkills) && (
+      {(expert.matchedSkills?.length > 0 || expert.expertSkills?.length > 0) && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {(expert.matchedSkills || expert.expertSkills || []).slice(0, 6).map((s) => (
-            <span key={s.skillId} style={{ padding: "3px 10px", background: expert.matchedSkills ? "rgba(0,240,255,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${expert.matchedSkills ? "rgba(0,240,255,0.2)" : "rgba(255,255,255,0.1)"}`, borderRadius: 999, fontSize: 11, color: expert.matchedSkills ? "#00F0FF" : "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
+          {(expert.matchedSkills?.length > 0 ? expert.matchedSkills : expert.expertSkills || []).slice(0, 6).map((s) => (
+            <span key={s.skillId} style={{ padding: "3px 10px", background: expert.matchedSkills?.length > 0 ? "rgba(0,240,255,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${expert.matchedSkills?.length > 0 ? "rgba(0,240,255,0.2)" : "rgba(255,255,255,0.1)"}`, borderRadius: 999, fontSize: 11, color: expert.matchedSkills?.length > 0 ? "#00F0FF" : "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
               {s.skillName}
             </span>
           ))}
@@ -129,22 +139,23 @@ function ExpertCard({ expert }) {
 }
 
 export default function AIMatchingPage() {
-      const [query, setQuery] = useState("");
-      const [searching, setSearching] = useState(false);
-      const [experts, setExperts] = useState([]);
-      const [total, setTotal] = useState(0);
-      const [hasSearched, setHasSearched] = useState(false);
-      const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [experts, setExperts] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [error, setError] = useState("");
+  const [recentPrompts, setRecentPrompts] = useState([]);
 
-      const handleSearch = async (searchText) => {
-      const keyword = (searchText ?? query).trim();
+  const handleSearch = async (searchText) => {
+    const prompt = (searchText ?? query).trim();
 
-    if (!keyword) return;
+    if (!prompt) return;
 
-    setQuery(keyword);
+    setQuery(prompt);
 
     setRecentPrompts((prev) => {
-      const updated = [keyword, ...prev.filter((item) => item !== keyword)];
+      const updated = [prompt, ...prev.filter((item) => item !== prompt)];
       return updated.slice(0, 4);
     });
 
@@ -153,8 +164,8 @@ export default function AIMatchingPage() {
     setHasSearched(false);
 
     try {
-      const res = await axiosInstance.get("/experts", {
-        params: { keyword: keyword, availableOnly: true, page: 1, pageSize: 12, },
+      const res = await axiosInstance.post("/recommendations/experts/from-prompt", {
+        prompt,
       });
 
       const data = res.data;
@@ -166,7 +177,7 @@ export default function AIMatchingPage() {
     } catch (err) {
       setError(
         err?.response?.data?.message ||
-          "Failed to search experts. Please try again."
+          "Failed to find experts. Please try again."
       );
     } finally {
       setSearching(false);
@@ -219,26 +230,24 @@ export default function AIMatchingPage() {
           </div>
 
           {/* Example prompts */}
-          <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Try:</span>
-            {recentPrompts.map((prompt) => {
-              const shortPrompt =
-                prompt.length > 32
-                  ? `${prompt.slice(0, 32)}...`
-                  : prompt;
-
-              return (
-                <button
-                  key={prompt}
-                  onClick={() => handleSearch(prompt)}
-                  title={prompt}
-                  className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
-                >
-                  {shortPrompt}
-                </button>
-              );
-            })}
-          </div>
+          {recentPrompts.length > 0 && (
+            <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Try:</span>
+              {recentPrompts.map((p) => {
+                const shortPrompt = p.length > 32 ? `${p.slice(0, 32)}...` : p;
+                return (
+                  <button
+                    key={p}
+                    onClick={() => handleSearch(p)}
+                    title={p}
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                  >
+                    {shortPrompt}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Empty state */}
@@ -276,7 +285,7 @@ export default function AIMatchingPage() {
                 <p style={{ fontSize: 13, color: "#8c90a0" }}>
                   {experts.length > 0
                     ? `Showing ${experts.length} of ${total} experts matching "${query}"`
-                    : `No experts found for "${query}". Try a different keyword.`}
+                    : `No experts found for "${query}". Try a different prompt.`}
                 </p>
               </div>
               {experts.length > 0 && (
@@ -296,7 +305,7 @@ export default function AIMatchingPage() {
             ) : (
               <div style={{ textAlign: "center", padding: "40px 0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 56, color: "#272a30", display: "block", marginBottom: 16 }}>person_search</span>
-                <p style={{ color: "#8c90a0", fontSize: 15 }}>Try different keywords like "chatbot", "NLP", "Python"...</p>
+                <p style={{ color: "#8c90a0", fontSize: 15 }}>Try describing your needs differently, e.g. "I need a chatbot AI"...</p>
               </div>
             )}
           </div>

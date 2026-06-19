@@ -107,6 +107,52 @@ const extractAccessToken = (data) => {
   );
 };
 
+const decodeJwtPayload = (token) => {
+  try {
+    if (!token || !token.includes(".")) return null;
+
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((char) => {
+          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
+        })
+        .join("")
+    );
+
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+};
+
+const getRoleFromToken = (token) => {
+  const payload = decodeJwtPayload(token);
+
+  return getValue(
+    payload?.role,
+    payload?.Role,
+    payload?.[
+      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
+    ],
+    payload?.[
+      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"
+    ],
+    ""
+  );
+};
+
+const getCurrentUserFromStorage = () => {
+  try {
+    const user = localStorage.getItem("user");
+    return user ? JSON.parse(user) : null;
+  } catch {
+    return null;
+  }
+};
+
 const saveUserToLocalStorage = (user) => {
   if (!user) return null;
 
@@ -120,7 +166,7 @@ const saveUserToLocalStorage = (user) => {
 };
 
 const mergeUserToLocalStorage = (newUserData) => {
-  const currentUser = authService.getCurrentUser();
+  const currentUser = getCurrentUserFromStorage();
 
   const mergedUser = normalizeUser({
     ...(currentUser || {}),
@@ -193,9 +239,30 @@ const authService = {
 
       try {
         const freshUser = await getMeApi();
-        user = normalizeUser(unwrapUserData(freshUser));
+        const freshNormalizedUser = normalizeUser(unwrapUserData(freshUser));
+
+        if (freshNormalizedUser) {
+          user = freshNormalizedUser;
+        }
       } catch {
         // Nếu /auth/me lỗi thì dùng user từ login response.
+      }
+
+      const tokenRole = getRoleFromToken(accessToken);
+
+      if (!user) {
+        user = normalizeUser({
+          role: tokenRole,
+          status: "ACTIVE",
+        });
+      }
+
+      if (!user?.role || !user?.status) {
+        user = normalizeUser({
+          ...user,
+          role: user?.role || tokenRole || "",
+          status: user?.status || "ACTIVE",
+        });
       }
 
       if (!user) {
@@ -229,20 +296,22 @@ const authService = {
   logout: async () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("currentUser");
 
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
     localStorage.removeItem("aitasker_expert_profile_edit_draft");
     localStorage.removeItem("aitasker_expert_profile_correction_draft");
+
+    sessionStorage.clear();
   },
 
   getCurrentUser: () => {
-    try {
-      const user = localStorage.getItem("user");
+    return getCurrentUserFromStorage();
+  },
 
-      return user ? JSON.parse(user) : null;
-    } catch {
-      return null;
-    }
+  getToken: () => {
+    return localStorage.getItem("accessToken");
   },
 
   refreshCurrentUser: async () => {
