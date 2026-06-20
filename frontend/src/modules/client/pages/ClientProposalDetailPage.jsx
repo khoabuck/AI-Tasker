@@ -37,7 +37,7 @@ const sectionLabel = {
 };
 
 // ── Message Modal ─────────────────────────────────────────────────────
-function MessageModal({ proposal, onClose }) {
+function MessageModal({ proposal, onClose, navigate }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -50,12 +50,51 @@ function MessageModal({ proposal, onClose }) {
     setSending(true);
     setSendError("");
     try {
-      await axiosInstance.post("/messages", {
-        recipientId: proposal.expertId || proposal.expertProfileId,
-        content: message,
-      });
+      // Kiểm tra đã có conversation nào gắn với proposal này chưa, tránh tạo trùng
+      // mỗi lần bấm gửi từ trang Proposal/Job Detail.
+      let conversationId = null;
+      try {
+        const listRes = await axiosInstance.get("/conversations/me");
+        const listRaw = listRes.data?.data ?? listRes.data;
+        const list = Array.isArray(listRaw) ? listRaw : listRaw?.items ?? [];
+        const existing = list.find((c) => c.relatedProposalId === proposal.proposalId);
+        if (existing) conversationId = existing.conversationId;
+      } catch {
+        // Nếu check lỗi, vẫn tiếp tục thử tạo mới ở bước dưới
+      }
+
+      if (conversationId) {
+        // Đã có conversation — gửi tiếp vào đó, không tạo mới
+        await axiosInstance.post(`/conversations/${conversationId}/messages`, {
+          content: message,
+          messageType: "TEXT",
+          attachmentUrl: null,
+        });
+      } else {
+        // Chưa có — tạo conversation mới kèm tin nhắn đầu
+        const res = await axiosInstance.post("/conversations", {
+          conversationType: "JOB_INQUIRY",
+          clientUserId: proposal.clientUserId,
+          expertUserId: proposal.expertUserId,
+          clientProfileId: proposal.clientProfileId,
+          expertProfileId: proposal.expertProfileId,
+          relatedJobId: proposal.jobId,
+          relatedProposalId: proposal.proposalId,
+          initialMessage: message,
+        });
+        const conv = res.data?.data ?? res.data;
+        conversationId = conv?.conversationId;
+      }
+
       setSent(true);
-      setTimeout(() => { setSent(false); setMessage(""); onClose(); }, 1500);
+      setTimeout(() => {
+        setSent(false);
+        setMessage("");
+        onClose();
+        if (conversationId) {
+          navigate(`/client/messages?conversationId=${conversationId}`);
+        }
+      }, 1200);
     } catch (err) {
       setSendError(err?.response?.data?.message || "Gửi tin nhắn thất bại.");
     } finally {
@@ -130,7 +169,21 @@ export default function ClientProposalDetailPage() {
     setError("");
     try {
       const res = await axiosInstance.get(`/proposals/${proposalId}`, { signal });
-      setProposal(res.data);
+      const raw = res.data;
+
+      // BE bọc response dạng { success, data }. "data" có thể là object proposal
+      // trực tiếp, hoặc 1 array chứa đúng 1 proposal (như đã thấy thực tế) — xử lý cả 2.
+      let proposalData = raw?.data ?? raw;
+      if (Array.isArray(proposalData)) {
+        proposalData = proposalData[0] ?? null;
+      }
+
+      if (!proposalData) {
+        setError("Không tìm thấy proposal này.");
+        return;
+      }
+
+      setProposal(proposalData);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(
@@ -154,7 +207,7 @@ export default function ClientProposalDetailPage() {
     if (!confirm("Chấp nhận proposal này?")) return;
     setActionLoading("accept");
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision`, { decision: "ACCEPT" });
+      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
       setProposal((prev) => ({ ...prev, status: "ACCEPTED" }));
     } catch (err) {
       alert(err?.response?.data?.message || "Accept thất bại.");
@@ -168,7 +221,7 @@ export default function ClientProposalDetailPage() {
     if (!confirm("Từ chối proposal này?")) return;
     setActionLoading("decline");
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision`, { decision: "REJECT" });
+      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
       setProposal((prev) => ({ ...prev, status: "REJECTED" }));
     } catch (err) {
       alert(err?.response?.data?.message || "Decline thất bại.");
@@ -398,7 +451,7 @@ export default function ClientProposalDetailPage() {
       </div>
 
       {showMessage && (
-        <MessageModal proposal={proposal} onClose={() => setShowMessage(false)} />
+        <MessageModal proposal={proposal} onClose={() => setShowMessage(false)} navigate={navigate} />
       )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
