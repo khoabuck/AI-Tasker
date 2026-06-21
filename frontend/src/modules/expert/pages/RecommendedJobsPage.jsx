@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
+import { JobDetailModal } from "./JobDetailPage";
 
 export default function RecommendedJobsPage() {
   const navigate = useNavigate();
 
   const [jobs, setJobs] = useState([]);
+  const [selectedJobId, setSelectedJobId] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -63,7 +65,7 @@ export default function RecommendedJobsPage() {
       return;
     }
 
-    navigate(`/expert/jobs/${job.id}`);
+    setSelectedJobId(job.id);
   };
 
   if (loading) {
@@ -96,9 +98,8 @@ export default function RecommendedJobsPage() {
                   </h1>
 
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400">
-                    Review projects selected for your skills, experience, and
-                    profile signals. Focus on the highest match opportunities
-                    first.
+                    Review projects selected for your skills and experience.
+                    Open details only when you want to see the full scope.
                   </p>
                 </div>
 
@@ -177,13 +178,23 @@ export default function RecommendedJobsPage() {
           )}
         </div>
       </div>
+
+      {selectedJobId && (
+        <JobDetailModal
+          jobId={selectedJobId}
+          onClose={() => setSelectedJobId(null)}
+        />
+      )}
     </ExpertLayout>
   );
 }
 
 function RecommendedJobCard({ job, onViewDetail }) {
+  const visibleSkills = job.skills.slice(0, 3);
+  const hiddenSkillCount = Math.max(job.skills.length - visibleSkills.length, 0);
+
   return (
-    <article className="group rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.25)] transition hover:border-cyan-400/40 hover:bg-[#171d26]">
+    <article className="group rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.25)] transition hover:-translate-y-1 hover:border-cyan-400/40 hover:bg-[#171d26]">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="flex flex-wrap gap-2">
           <Badge tone="green">{Math.round(job.matchScore || 0)}% match</Badge>
@@ -202,11 +213,11 @@ function RecommendedJobCard({ job, onViewDetail }) {
         </div>
       </div>
 
-      <h2 className="text-xl font-extrabold leading-snug text-white transition group-hover:text-cyan-200">
+      <h2 className="line-clamp-2 text-xl font-extrabold leading-snug text-white transition group-hover:text-cyan-200">
         {job.title}
       </h2>
 
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-gray-400">
+      <p className="mt-3 line-clamp-2 text-sm leading-6 text-gray-400">
         {job.description || "No description provided."}
       </p>
 
@@ -222,20 +233,30 @@ function RecommendedJobCard({ job, onViewDetail }) {
             </p>
           </div>
 
-          <p className="text-sm leading-6 text-cyan-50">{job.matchReason}</p>
+          <p className="line-clamp-2 text-sm leading-6 text-cyan-50">
+            {job.matchReason}
+          </p>
         </div>
       )}
 
       <div className="mt-5 flex flex-wrap gap-2">
-        {job.skills.length > 0 ? (
-          job.skills.slice(0, 6).map((skill) => (
-            <span
-              key={skill}
-              className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-300"
-            >
-              {skill}
-            </span>
-          ))
+        {visibleSkills.length > 0 ? (
+          <>
+            {visibleSkills.map((skill) => (
+              <span
+                key={skill}
+                className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-300"
+              >
+                {skill}
+              </span>
+            ))}
+
+            {hiddenSkillCount > 0 && (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-500">
+                +{hiddenSkillCount} more
+              </span>
+            )}
+          </>
         ) : (
           <span className="text-xs text-gray-500">No skills listed</span>
         )}
@@ -256,9 +277,9 @@ function RecommendedJobCard({ job, onViewDetail }) {
         onClick={onViewDetail}
         className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
       >
-        View Project Details
+        View Details
         <span className="material-symbols-outlined text-[18px]">
-          arrow_forward
+          visibility
         </span>
       </button>
     </article>
@@ -340,7 +361,13 @@ function EmptyState() {
 function normalizeJob(job) {
   return {
     ...job,
-    id: job?.id || job?.jobId || job?.JobId || job?.Id,
+    id:
+      job?.id ||
+      job?.jobId ||
+      job?.JobId ||
+      job?.jobPostingId ||
+      job?.JobPostingId ||
+      job?.Id,
     title:
       job?.title ||
       job?.Title ||

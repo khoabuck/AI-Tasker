@@ -1,7 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import conversationService from "../../../services/conversation.service";
+import authService from "../../../services/auth.service";
+
+const MESSAGE_POLL_INTERVAL_MS = 2000;
+const CONVERSATION_POLL_INTERVAL_MS = 6000;
 
 export default function MessagesPage() {
   const user = authService.getCurrentUser?.();
@@ -21,6 +25,12 @@ export default function MessagesPage() {
   const [sending, setSending] = useState(false);
 
   const [error, setError] = useState("");
+
+  const messagesEndRef = useRef(null);
+  const pollingMessagesRef = useRef(false);
+  const pollingConversationsRef = useRef(false);
+
+  const selectedConversationId = getConversationId(selectedConversation || {});
 
   const filteredConversations = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -42,28 +52,91 @@ export default function MessagesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [requestedConversationId]);
 
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  useEffect(() => {
+    if (!selectedConversationId) return;
+
+    const intervalId = setInterval(() => {
+      refreshSelectedMessages(selectedConversationId);
+    }, MESSAGE_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      refreshConversationsOnly();
+    }, CONVERSATION_POLL_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversationId]);
+
   const loadConversations = async (preferredConversationId = "") => {
     try {
       setLoadingConversations(true);
       setError("");
 
-      const data = await chatService.getConversations();
-      setConversations(data);
+      const data = await conversationService.getConversations();
 
-      if (data.length === 0) {
+      let nextConversations = Array.isArray(data) ? data : [];
+
+      let conversationToSelect =
+        nextConversations.find(
+          (item) =>
+            String(getConversationId(item)) === String(preferredConversationId)
+        ) || null;
+
+      if (!conversationToSelect && preferredConversationId) {
+        try {
+          const conversation = await conversationService.getConversationById(
+            preferredConversationId
+          );
+
+          if (conversation) {
+            conversationToSelect = conversation;
+
+            const existed = nextConversations.some(
+              (item) =>
+                String(getConversationId(item)) ===
+                String(getConversationId(conversation))
+            );
+
+            if (!existed) {
+              nextConversations = [conversation, ...nextConversations];
+            }
+          }
+        } catch (err) {
+          console.error(
+            "LOAD PREFERRED CONVERSATION ERROR:",
+            err?.response?.data || err
+          );
+        }
+      }
+
+      if (!conversationToSelect && nextConversations.length > 0) {
+        conversationToSelect = nextConversations[0];
+      }
+
+      setConversations(nextConversations);
+
+      if (!conversationToSelect) {
         setSelectedConversation(null);
         setMessages([]);
         return;
       }
 
-      const conversationToSelect =
-        data.find(
-          (item) =>
-            String(getConversationId(item)) === String(preferredConversationId)
-        ) || data[0];
-
       setSelectedConversation(conversationToSelect);
-      await loadMessages(getConversationId(conversationToSelect));
+
+      const conversationId = getConversationId(conversationToSelect);
+
+      if (conversationId) {
+        await loadMessages(conversationId, { silent: false });
+      }
     } catch (err) {
       console.error("LOAD CONVERSATIONS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load conversations."));
@@ -75,21 +148,92 @@ export default function MessagesPage() {
     }
   };
 
-  const loadMessages = async (conversationId) => {
+  const loadMessages = async (conversationId, options = {}) => {
     if (!conversationId) return;
 
-    try {
-      setLoadingMessages(true);
-      setError("");
+    const silent = Boolean(options.silent);
 
-      const data = await chatService.getMessages(conversationId);
-      setMessages(data);
+    try {
+      if (!silent) {
+        setLoadingMessages(true);
+      }
+
+      const data = await conversationService.getMessages(conversationId);
+      const nextMessages = Array.isArray(data) ? data : [];
+
+      setMessages((prevMessages) => {
+        if (isSameMessageList(prevMessages, nextMessages)) {
+          return prevMessages;
+        }
+
+        return nextMessages;
+      });
     } catch (err) {
       console.error("LOAD MESSAGES ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load messages."));
-      setMessages([]);
+
+      if (!silent) {
+        setError(getFriendlyError(err, "Cannot load messages."));
+        setMessages([]);
+      }
     } finally {
-      setLoadingMessages(false);
+      if (!silent) {
+        setLoadingMessages(false);
+      }
+    }
+  };
+
+  const refreshSelectedMessages = async (conversationId) => {
+    if (!conversationId) return;
+
+    if (pollingMessagesRef.current) return;
+
+    try {
+      pollingMessagesRef.current = true;
+
+      const data = await conversationService.getMessages(conversationId);
+      const nextMessages = Array.isArray(data) ? data : [];
+
+      setMessages((prevMessages) => {
+        if (isSameMessageList(prevMessages, nextMessages)) {
+          return prevMessages;
+        }
+
+        return nextMessages;
+      });
+    } catch (err) {
+      console.error("POLL MESSAGES ERROR:", err?.response?.data || err);
+    } finally {
+      pollingMessagesRef.current = false;
+    }
+  };
+
+  const refreshConversationsOnly = async () => {
+    if (pollingConversationsRef.current) return;
+
+    try {
+      pollingConversationsRef.current = true;
+
+      const latestConversations = await conversationService.getConversations();
+      const nextConversations = Array.isArray(latestConversations)
+        ? latestConversations
+        : [];
+
+      setConversations(nextConversations);
+
+      if (selectedConversationId) {
+        const updatedSelected = nextConversations.find(
+          (item) =>
+            String(getConversationId(item)) === String(selectedConversationId)
+        );
+
+        if (updatedSelected) {
+          setSelectedConversation(updatedSelected);
+        }
+      }
+    } catch (err) {
+      console.error("POLL CONVERSATIONS ERROR:", err?.response?.data || err);
+    } finally {
+      pollingConversationsRef.current = false;
     }
   };
 
@@ -97,9 +241,11 @@ export default function MessagesPage() {
     const conversationId = getConversationId(conversation);
 
     setSelectedConversation(conversation);
-    setSearchParams({ conversationId: String(conversationId) });
 
-    await loadMessages(conversationId);
+    if (conversationId) {
+      setSearchParams({ conversationId: String(conversationId) });
+      await loadMessages(conversationId, { silent: false });
+    }
   };
 
   const handleSendMessage = async (event) => {
@@ -120,20 +266,12 @@ export default function MessagesPage() {
 
       const conversationId = getConversationId(selectedConversation);
 
-      await chatService.sendMessage(conversationId, content);
+      await conversationService.sendMessage(conversationId, content);
 
       setMessageInput("");
-      await loadMessages(conversationId);
 
-      const latestConversations = await chatService.getConversations();
-      setConversations(latestConversations);
-
-      const updatedSelected =
-        latestConversations.find(
-          (item) => String(getConversationId(item)) === String(conversationId)
-        ) || selectedConversation;
-
-      setSelectedConversation(updatedSelected);
+      await loadMessages(conversationId, { silent: true });
+      await refreshConversationsOnly();
     } catch (err) {
       console.error("SEND MESSAGE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot send message."));
@@ -142,7 +280,14 @@ export default function MessagesPage() {
     }
   };
 
-  const selectedConversationId = getConversationId(selectedConversation || {});
+  const scrollToBottom = () => {
+    requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    });
+  };
 
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
@@ -220,14 +365,14 @@ export default function MessagesPage() {
                 )}
 
                 {!loadingConversations &&
-                  filteredConversations.map((conversation) => {
+                  filteredConversations.map((conversation, index) => {
                     const conversationId = getConversationId(conversation);
                     const isActive =
                       String(selectedConversationId) === String(conversationId);
 
                     return (
                       <button
-                        key={conversationId}
+                        key={conversationId || index}
                         type="button"
                         onClick={() => handleSelectConversation(conversation)}
                         className={`flex w-full items-start gap-4 border-b border-white/10 p-5 text-left transition ${
@@ -245,7 +390,9 @@ export default function MessagesPage() {
                             </h3>
 
                             <span className="shrink-0 text-xs text-gray-500">
-                              {formatTime(getConversationUpdatedAt(conversation))}
+                              {formatTime(
+                                getConversationUpdatedAt(conversation)
+                              )}
                             </span>
                           </div>
 
@@ -333,12 +480,12 @@ export default function MessagesPage() {
                     )}
 
                     {!loadingMessages &&
-                      messages.map((message) => {
+                      messages.map((message, index) => {
                         const mine = isMyMessage(message, user);
 
                         return (
                           <div
-                            key={getMessageId(message)}
+                            key={getMessageId(message) || index}
                             className={`flex ${
                               mine ? "justify-end" : "justify-start"
                             }`}
@@ -371,6 +518,8 @@ export default function MessagesPage() {
                           </div>
                         );
                       })}
+
+                    <div ref={messagesEndRef} />
                   </div>
 
                   <form
@@ -381,7 +530,9 @@ export default function MessagesPage() {
                       <input
                         type="text"
                         value={messageInput}
-                        onChange={(event) => setMessageInput(event.target.value)}
+                        onChange={(event) =>
+                          setMessageInput(event.target.value)
+                        }
                         placeholder="Type your message..."
                         className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                       />
@@ -477,13 +628,7 @@ function getConversationUpdatedAt(conversation) {
 }
 
 function getMessageId(message) {
-  return (
-    message?.messageId ||
-    message?.MessageId ||
-    message?.id ||
-    message?.Id ||
-    `${message?.senderId || "sender"}-${message?.createdAt || Math.random()}`
-  );
+  return message?.messageId || message?.MessageId || message?.id || message?.Id;
 }
 
 function getMessageContent(message) {
@@ -532,6 +677,10 @@ function isMyMessage(message, user) {
     return String(senderId) === String(user.id);
   }
 
+  if (senderId && user?.userId) {
+    return String(senderId) === String(user.userId);
+  }
+
   const senderRole = String(message?.senderRole || message?.SenderRole || "")
     .trim()
     .toUpperCase();
@@ -561,6 +710,26 @@ function getInitials(name) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function isSameMessageList(currentMessages, nextMessages) {
+  if (!Array.isArray(currentMessages) || !Array.isArray(nextMessages)) {
+    return false;
+  }
+
+  if (currentMessages.length !== nextMessages.length) {
+    return false;
+  }
+
+  const currentLast = currentMessages[currentMessages.length - 1];
+  const nextLast = nextMessages[nextMessages.length - 1];
+
+  return (
+    String(getMessageId(currentLast)) === String(getMessageId(nextLast)) &&
+    String(getMessageContent(currentLast)) === String(getMessageContent(nextLast)) &&
+    String(getMessageCreatedAt(currentLast)) ===
+      String(getMessageCreatedAt(nextLast))
+  );
 }
 
 function getFriendlyError(err, fallback) {

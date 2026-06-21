@@ -16,7 +16,7 @@ namespace AITasker.Infrastructure.Contracts
         private const string ContractStatusDraft = "DRAFT";
         private const string ContractStatusConfirmed = "CONFIRMED";
         private const string ContractStatusCancelled = "CANCELLED";
-        private const string ContractSourceProposal = "PROPOSAL";
+       
 
         private const string JobStatusOpen = "OPEN";
 
