@@ -284,19 +284,6 @@ export default function ExpertProfilePage() {
                 />
 
                 <Summary
-                  label="Budget"
-                  value={formatBudget(
-                    profile?.expectedProjectBudgetMin,
-                    profile?.expectedProjectBudgetMax
-                  )}
-                />
-
-                <Summary
-                  label="Duration"
-                  value={`${profile?.preferredProjectDurationDays ?? 0} days`}
-                />
-
-                <Summary
                   label="Available"
                   value={profile?.availableForWork ? "Yes" : "No"}
                 />
@@ -415,15 +402,4 @@ function toArray(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-}
-
-function formatBudget(min, max) {
-  const minValue = Number(min || 0);
-  const maxValue = Number(max || 0);
-
-  if (!minValue && !maxValue) return "Negotiable";
-  if (minValue && !maxValue) return `From $${minValue}`;
-  if (!minValue && maxValue) return `Up to $${maxValue}`;
-
-  return `$${minValue} - $${maxValue}`;
 }

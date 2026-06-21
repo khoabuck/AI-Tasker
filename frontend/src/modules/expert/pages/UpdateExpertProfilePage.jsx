@@ -10,9 +10,6 @@ const emptyBasicForm = {
   avatarUrl: "",
   professionalTitle: "",
   bio: "",
-  expectedProjectBudgetMin: "",
-  expectedProjectBudgetMax: "",
-  preferredProjectDurationDays: "",
   availableForWork: true,
 };
 
@@ -81,18 +78,6 @@ export default function UpdateExpertProfilePage() {
         professionalTitle:
           profile?.professionalTitle || profile?.ProfessionalTitle || "",
         bio: profile?.bio || profile?.Bio || "",
-        expectedProjectBudgetMin:
-          profile?.expectedProjectBudgetMin ??
-          profile?.ExpectedProjectBudgetMin ??
-          "",
-        expectedProjectBudgetMax:
-          profile?.expectedProjectBudgetMax ??
-          profile?.ExpectedProjectBudgetMax ??
-          "",
-        preferredProjectDurationDays:
-          profile?.preferredProjectDurationDays ??
-          profile?.PreferredProjectDurationDays ??
-          "",
         availableForWork:
           profile?.availableForWork ??
           profile?.AvailableForWork ??
@@ -432,7 +417,7 @@ export default function UpdateExpertProfilePage() {
               >
                 <p className="font-bold">Basic Information</p>
                 <p className="mt-1 text-xs">
-                  Name, avatar, title, bio, budget and availability.
+                  Name, avatar, title, bio and availability.
                 </p>
               </button>
 
@@ -602,34 +587,6 @@ function BasicProfileForm({
           required
         />
 
-        <NumberInput
-          label="Expected Budget Min"
-          value={formData.expectedProjectBudgetMin}
-          error={errors.expectedProjectBudgetMin}
-          onChange={(value) => onChange("expectedProjectBudgetMin", value)}
-          placeholder="100"
-          required
-        />
-
-        <NumberInput
-          label="Expected Budget Max"
-          value={formData.expectedProjectBudgetMax}
-          error={errors.expectedProjectBudgetMax}
-          onChange={(value) => onChange("expectedProjectBudgetMax", value)}
-          placeholder="1000"
-          required
-        />
-
-        <NumberInput
-          label="Preferred Project Duration Days"
-          value={formData.preferredProjectDurationDays}
-          error={errors.preferredProjectDurationDays}
-          onChange={(value) =>
-            onChange("preferredProjectDurationDays", value)
-          }
-          placeholder="14"
-          required
-        />
 
         <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
           <div>
@@ -1094,39 +1051,6 @@ function validateBasicForm(formData) {
     errors.bio = "Bio must be at least 50 characters.";
   }
 
-  if (isEmpty(formData.expectedProjectBudgetMin)) {
-    errors.expectedProjectBudgetMin = "Minimum budget is required.";
-  }
-
-  if (isEmpty(formData.expectedProjectBudgetMax)) {
-    errors.expectedProjectBudgetMax = "Maximum budget is required.";
-  }
-
-  if (isEmpty(formData.preferredProjectDurationDays)) {
-    errors.preferredProjectDurationDays = "Preferred duration is required.";
-  }
-
-  const minBudget = Number(formData.expectedProjectBudgetMin || 0);
-  const maxBudget = Number(formData.expectedProjectBudgetMax || 0);
-  const duration = Number(formData.preferredProjectDurationDays || 0);
-
-  if (minBudget < 0) {
-    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
-  }
-
-  if (maxBudget < 0) {
-    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
-  }
-
-  if (minBudget && maxBudget && minBudget > maxBudget) {
-    errors.expectedProjectBudgetMax =
-      "Maximum budget must be greater than minimum budget.";
-  }
-
-  if (duration <= 0) {
-    errors.preferredProjectDurationDays =
-      "Preferred duration must be greater than 0.";
-  }
 
   if (!isEmpty(formData.avatarUrl) && !isValidUrl(formData.avatarUrl)) {
     errors.avatarUrl = "Avatar URL must start with http:// or https://";
@@ -1221,11 +1145,6 @@ function buildBasicPayload(formData) {
     avatarUrl: String(formData.avatarUrl || "").trim() || null,
     professionalTitle: String(formData.professionalTitle || "").trim(),
     bio: String(formData.bio || "").trim(),
-    expectedProjectBudgetMin: Number(formData.expectedProjectBudgetMin || 0),
-    expectedProjectBudgetMax: Number(formData.expectedProjectBudgetMax || 0),
-    preferredProjectDurationDays: Number(
-      formData.preferredProjectDurationDays || 0
-    ),
     availableForWork: Boolean(formData.availableForWork),
   };
 }
