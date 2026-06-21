@@ -20,9 +20,11 @@ const LEVEL_CONFIG = {
 };
 const PROPOSAL_STATUS = {
   PENDING:   { label: "Pending",   color: "#facc15" },
+  SUBMITTED: { label: "Pending",   color: "#facc15" },
   ACCEPTED:  { label: "Accepted",  color: "#22c55e" },
   REJECTED:  { label: "Rejected",  color: "#ef4444" },
   WITHDRAWN: { label: "Withdrawn", color: "#8c90a0" },
+  COUNTERED: { label: "Countered", color: "#c0c1ff" },
 };
 const cardStyle = {
   background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)",
@@ -34,7 +36,7 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6,
 };
 
-function MessageModal({ proposal, onClose }) {
+function MessageModal({ proposal, onClose, navigate }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -45,12 +47,44 @@ function MessageModal({ proposal, onClose }) {
     if (!message.trim()) return;
     setSending(true); setSendError("");
     try {
-      await axiosInstance.post("/messages", {
-        recipientId: proposal.expertProfileId || proposal.expertId,
-        content: message,
-      });
+      // Kiểm tra đã có conversation nào gắn với proposal này chưa, tránh tạo trùng.
+      let conversationId = null;
+      try {
+        const listRes = await axiosInstance.get("/conversations/me");
+        const listRaw = listRes.data?.data ?? listRes.data;
+        const list = Array.isArray(listRaw) ? listRaw : listRaw?.items ?? [];
+        const existing = list.find((c) => c.relatedProposalId === proposal.proposalId);
+        if (existing) conversationId = existing.conversationId;
+      } catch {
+        // tiếp tục thử tạo mới nếu check lỗi
+      }
+
+      if (conversationId) {
+        await axiosInstance.post(`/conversations/${conversationId}/messages`, {
+          content: message,
+          messageType: "TEXT",
+          attachmentUrl: null,
+        });
+      } else {
+        const res = await axiosInstance.post("/conversations", {
+          conversationType: "JOB_INQUIRY",
+          clientUserId: proposal.clientUserId,
+          expertUserId: proposal.expertUserId,
+          clientProfileId: proposal.clientProfileId,
+          expertProfileId: proposal.expertProfileId,
+          relatedJobId: proposal.jobId,
+          relatedProposalId: proposal.proposalId,
+          initialMessage: message,
+        });
+        const conv = res.data?.data ?? res.data;
+        conversationId = conv?.conversationId;
+      }
+
       setSent(true);
-      setTimeout(() => { setSent(false); setMessage(""); onClose(); }, 1500);
+      setTimeout(() => {
+        setSent(false); setMessage(""); onClose();
+        if (conversationId) navigate(`/client/messages?conversationId=${conversationId}`);
+      }, 1200);
     } catch (err) {
       setSendError(err?.response?.data?.message || "Gửi tin nhắn thất bại.");
     } finally { setSending(false); }
@@ -143,8 +177,8 @@ export default function ClientJobDetailPage() {
     if (!confirm("Chấp nhận proposal này? Các proposal khác sẽ bị từ chối.")) return;
     setActionLoading(proposalId + "_accept");
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision`, { decision: "ACCEPT" });
-      setProposals((prev) => prev.map((p) => ({ ...p, status: p.proposalId === proposalId ? "ACCEPTED" : p.status === "PENDING" ? "REJECTED" : p.status })));
+      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
+      setProposals((prev) => prev.map((p) => ({ ...p, status: p.proposalId === proposalId ? "ACCEPTED" : (p.status === "PENDING" || p.status === "SUBMITTED") ? "REJECTED" : p.status })));
     } catch (err) { alert(err?.response?.data?.message || "Accept thất bại."); }
     finally { setActionLoading(null); }
   };
@@ -153,7 +187,7 @@ export default function ClientJobDetailPage() {
     if (!confirm("Từ chối proposal này?")) return;
     setActionLoading(proposalId + "_decline");
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision`, { decision: "REJECT" });
+      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
       setProposals((prev) => prev.map((p) => p.proposalId === proposalId ? { ...p, status: "REJECTED" } : p));
     } catch (err) { alert(err?.response?.data?.message || "Decline thất bại."); }
     finally { setActionLoading(null); }
@@ -176,7 +210,7 @@ export default function ClientJobDetailPage() {
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
           <button onClick={() => fetchData(new AbortController().signal)} style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Thử lại</button>
-          <button onClick={() => navigate("/client/projects")} style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Back to Projects</button>
+          <button onClick={() => navigate("/client/jobs")} style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Back to Jobs</button>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
@@ -192,12 +226,12 @@ export default function ClientJobDetailPage() {
   return (
     <ClientLayout>
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
-        <button onClick={() => navigate("/client/projects")}
+        <button onClick={() => navigate("/client/jobs")}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to Projects
+          Back to Jobs
         </button>
 
         <div style={{ ...cardStyle, marginBottom: 24 }}>
@@ -229,7 +263,7 @@ export default function ClientJobDetailPage() {
             </div>
           </div>
           <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <button onClick={() => navigate(`/client/projects/${id}/recommendations`)}
+            <button onClick={() => navigate(`/client/jobs/${id}/recommendations`)}
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.15)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.3)"; }}>
@@ -299,13 +333,21 @@ export default function ClientJobDetailPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                 {proposals.map((proposal) => {
                   const pStatus = PROPOSAL_STATUS[proposal.status] || PROPOSAL_STATUS.PENDING;
-                  const level = LEVEL_CONFIG[proposal.level] || { label: proposal.level, color: "#8c90a0" };
-                  const submittedDate = proposal.submittedAt ? new Date(proposal.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-                  const isPending = proposal.status === "PENDING";
+                  const level = LEVEL_CONFIG[proposal.level] || { label: proposal.level || "—", color: "#8c90a0" };
+                  const submittedDate = (proposal.createdAt || proposal.submittedAt)
+                    ? new Date(proposal.createdAt || proposal.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                    : "—";
+                  const isPending = proposal.status === "PENDING" || proposal.status === "SUBMITTED";
                   const isAccepting = actionLoading === proposal.proposalId + "_accept";
                   const isDeclining = actionLoading === proposal.proposalId + "_decline";
                   const isProcessing = isAccepting || isDeclining;
                   const expertName = proposal.expertName || proposal.fullName || "Expert";
+
+                  // FIX: field thật từ BE là proposedPrice / proposedTimelineDays
+                  // (theo schema SubmitProposalRequest), không phải bidAmount/estimatedDays.
+                  // Giữ fallback cho cả 2 tên để không vỡ nếu BE đổi lại.
+                  const price = proposal.proposedPrice ?? proposal.bidAmount;
+                  const timelineDays = proposal.proposedTimelineDays ?? proposal.estimatedDays;
 
                   return (
                     <div key={proposal.proposalId}
@@ -320,13 +362,19 @@ export default function ClientJobDetailPage() {
                             <div>
                               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
                                 <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, color: "#e1e2eb", margin: 0 }}>{expertName}</h4>
-                                <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>{level.label}</span>
+                                {proposal.level && (
+                                  <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>{level.label}</span>
+                                )}
                               </div>
                               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{proposal.expertTitle || proposal.professionalTitle}</p>
                             </div>
                             <div style={{ textAlign: "right" }}>
-                              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>${proposal.bidAmount?.toLocaleString()}</div>
-                              <div style={{ fontSize: 11, color: "#8c90a0" }}>{proposal.estimatedDays} days</div>
+                              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>
+                                {price != null ? `$${price.toLocaleString()}` : "—"}
+                              </div>
+                              <div style={{ fontSize: 11, color: "#8c90a0" }}>
+                                {timelineDays != null ? `${timelineDays} days` : "—"}
+                              </div>
                             </div>
                           </div>
 
@@ -387,7 +435,7 @@ export default function ClientJobDetailPage() {
       </div>
 
       {messagingProposal && (
-        <MessageModal proposal={messagingProposal} onClose={() => setMessagingProposal(null)} />
+        <MessageModal proposal={messagingProposal} onClose={() => setMessagingProposal(null)} navigate={navigate} />
       )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>

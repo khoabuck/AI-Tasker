@@ -122,6 +122,11 @@ export default function ClientProjectDetailPage() {
     ? new Date(project.startDate || project.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
+  // Milestone "đang làm" = milestone đầu tiên chưa APPROVED (đã submit chờ review,
+  // đang in progress, hoặc còn pending) — đây là điểm Expert đang dừng lại.
+  const currentMilestoneIndex = milestones.findIndex((m) => m.status !== "APPROVED");
+  const currentMilestone = currentMilestoneIndex >= 0 ? milestones[currentMilestoneIndex] : null;
+
   return (
     <ClientLayout>
       <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
@@ -169,6 +174,13 @@ export default function ClientProjectDetailPage() {
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
             </div>
 
+            {/* Nhắn tin — dẫn sang Messages, ưu tiên đúng conversation nếu có */}
+            <button onClick={() => navigate(project.conversationId ? `/client/messages?conversationId=${project.conversationId}` : "/client/messages")}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
+              Nhắn tin
+            </button>
+
             {project.status === "COMPLETED" && (
               <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
@@ -186,6 +198,40 @@ export default function ClientProjectDetailPage() {
             )}
           </div>
         </div>
+
+        {/* Banner milestone hiện tại — Expert đang làm tới đâu */}
+        {currentMilestone && (
+          <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(250,204,21,0.25)", background: "rgba(250,204,21,0.03)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 28, color: "#facc15" }}>flag</span>
+                <div>
+                  <p style={{ fontSize: 11, color: "#8c90a0", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px", fontFamily: "JetBrains Mono, monospace" }}>
+                    Expert đang làm tới
+                  </p>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
+                    {currentMilestone.title || `Milestone ${currentMilestoneIndex + 1}`}
+                  </p>
+                </div>
+              </div>
+              <span style={{ padding: "5px 14px", borderRadius: 999, fontSize: 12, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: "#facc15", background: "rgba(250,204,21,0.12)", border: "1px solid rgba(250,204,21,0.3)" }}>
+                {currentMilestoneIndex + 1} / {milestones.length}
+              </span>
+            </div>
+
+            {milestones.length > 0 && (
+              <div style={{ marginTop: 16, display: "flex", gap: 4 }}>
+                {milestones.map((m, i) => {
+                  const done = m.status === "APPROVED";
+                  const active = i === currentMilestoneIndex;
+                  return (
+                    <div key={m.milestoneId ?? i} style={{ flex: 1, height: 6, borderRadius: 3, background: done ? "#22c55e" : active ? "#facc15" : "rgba(255,255,255,0.08)" }} />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Description */}
         {project.description && (
@@ -221,13 +267,18 @@ export default function ClientProjectDetailPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
                 const mCfg = MILESTONE_STATUS[m.status] || MILESTONE_STATUS.PENDING;
+                const isCurrent = index === currentMilestoneIndex;
+                const hasSubmittedDeliverable = m.status === "SUBMITTED";
                 return (
                   <div key={m.milestoneId ?? index}
-                    style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 12, padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    style={{ background: isCurrent ? "rgba(250,204,21,0.04)" : "rgba(255,255,255,0.02)", border: `1px solid ${isCurrent ? "rgba(250,204,21,0.3)" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: "#e1e2eb", margin: "0 0 4px" }}>
-                        {m.title || `Milestone ${index + 1}`}
-                      </p>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {isCurrent && <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#facc15" }}>arrow_right</span>}
+                        <p style={{ fontSize: 14, fontWeight: 600, color: "#e1e2eb", margin: "0 0 4px" }}>
+                          {m.title || `Milestone ${index + 1}`}
+                        </p>
+                      </div>
                       {m.description && (
                         <p style={{ fontSize: 13, color: "#8c90a0", margin: 0 }}>{m.description}</p>
                       )}
@@ -241,6 +292,13 @@ export default function ClientProjectDetailPage() {
                       <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: mCfg.color, background: mCfg.color + "15", border: `1px solid ${mCfg.color}40` }}>
                         {mCfg.label}
                       </span>
+                      {hasSubmittedDeliverable && (
+                        <button onClick={() => navigate(`/client/milestones/${m.milestoneId}/deliverables`)}
+                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.1)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
+                          Review
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

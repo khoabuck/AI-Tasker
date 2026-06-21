@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import chatService from "../../../services/chat.service";
-import authService from "../../../services/auth.service";
+import conversationService from "../../../services/conversation.service";
 
 export default function MessagesPage() {
   const user = authService.getCurrentUser?.();
