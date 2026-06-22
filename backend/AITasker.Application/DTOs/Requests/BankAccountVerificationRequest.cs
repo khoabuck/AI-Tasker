@@ -1,9 +1,7 @@
 namespace AITasker.Application.DTOs.Requests
 {
-    public class CreateWithdrawalRequest
+    public class BankAccountVerificationRequest
     {
-        public decimal Amount { get; set; }
-
         public string BankCode { get; set; } = string.Empty;
 
         public string BankBin { get; set; } = string.Empty;

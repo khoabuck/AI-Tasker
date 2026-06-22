@@ -38,6 +38,9 @@ namespace AITasker.Infrastructure.Disputes
         private const string DisputeStatusOpen = "OPEN";
         private const string DisputeStatusResolved = "RESOLVED";
 
+        private const string DeliverableStatusSubmitted = "SUBMITTED";
+        private const string DeliverableStatusApproved = "APPROVED";
+
         private const string ResolutionReleaseToExpert = "RELEASE_TO_EXPERT";
         private const string ResolutionRefundToClient = "REFUND_TO_CLIENT";
 
@@ -573,6 +576,10 @@ namespace AITasker.Infrastructure.Disputes
                         projectMilestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
                             ? PaymentStatusReleased
                             : PaymentStatusRefunded;
+
+                        await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                            projectMilestone.MilestoneId,
+                            normalizedResolutionType);
                     }
                 }
 
@@ -582,6 +589,10 @@ namespace AITasker.Infrastructure.Disputes
                     milestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
                         ? PaymentStatusReleased
                         : PaymentStatusRefunded;
+
+                    await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                        milestone.MilestoneId,
+                        normalizedResolutionType);
                 }
 
                 dispute.Status = DisputeStatusResolved;
@@ -623,6 +634,36 @@ namespace AITasker.Infrastructure.Disputes
                 throw;
             }
         }
+
+        private async Task MarkLatestDeliverableAfterDisputeResolutionAsync(
+            int milestoneId,
+            string normalizedResolutionType)
+        {
+            var latestDeliverable = await _context.Deliverables
+                .Where(d =>
+                    d.MilestoneId == milestoneId &&
+                    d.Status == DeliverableStatusSubmitted)
+                .OrderByDescending(d => d.VersionNumber)
+                .FirstOrDefaultAsync();
+
+            if (latestDeliverable == null)
+            {
+                return;
+            }
+
+            latestDeliverable.ReviewedAt ??= DateTime.UtcNow;
+
+            if (normalizedResolutionType == ResolutionReleaseToExpert)
+            {
+                latestDeliverable.Status = DeliverableStatusApproved;
+                latestDeliverable.ClientFeedback = null;
+            }
+            else if (normalizedResolutionType == ResolutionRefundToClient)
+            {
+                latestDeliverable.ClientFeedback = "Dispute resolved with refund to Client.";
+            }
+        }
+
         private static void ValidateOpenRequest(OpenDisputeRequest request)
         {
             if (request == null)
@@ -721,7 +762,7 @@ namespace AITasker.Infrastructure.Disputes
 
                 await UpdateJobStatusByProjectAsync(
                     project,
-                    JobStatusDisputed);
+                    JobStatusCompleted);
 
                 return;
             }

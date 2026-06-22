@@ -28,6 +28,12 @@ namespace AITasker.Domain.Entities
         
         public DateTime SubmittedAt { get; set; }
 
+        public DateTime? ReviewDeadlineAt { get; set; }
+
+        public DateTime? ReviewedAt { get; set; }
+
+        public DateTime? OverdueNotifiedAt { get; set; }
+
         public virtual ExpertProfile Expert { get; set; } = null!;
     }
 }

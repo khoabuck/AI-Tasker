@@ -248,6 +248,7 @@ builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>(
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================
@@ -264,12 +265,14 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
+builder.Services.AddHttpClient<IBankAccountVerificationService, VietQrBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
 // =========================
 // BE3 - Deliverables / Disputes
 // =========================
 builder.Services.AddScoped<IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
+builder.Services.AddHostedService<AITasker.Infrastructure.Deliverables.DeliverableReviewDeadlineHostedService>();
 builder.Services.AddScoped<IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
 
 // =========================

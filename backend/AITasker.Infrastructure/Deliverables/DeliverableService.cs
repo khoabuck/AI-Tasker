@@ -16,6 +16,7 @@ namespace AITasker.Infrastructure.Deliverables
 
         private const string MilestoneStatusFunded = "FUNDED";
         private const string MilestoneStatusInProgress = "IN_PROGRESS";
+        private const string MilestoneStatusOverdue = "OVERDUE";
         private const string MilestoneStatusSubmitted = "SUBMITTED";
         private const string MilestoneStatusRevisionRequested = "REVISION_REQUESTED";
         private const string MilestoneStatusApproved = "APPROVED";
@@ -30,7 +31,10 @@ namespace AITasker.Infrastructure.Deliverables
 
         private const string DeliverableStatusSubmitted = "SUBMITTED";
         private const string DeliverableStatusApproved = "APPROVED";
+        private const string DeliverableStatusAutoApproved = "AUTO_APPROVED";
         private const string DeliverableStatusRevisionRequested = "REVISION_REQUESTED";
+
+        private const int ClientReviewWindowHours = 24;
 
         private readonly AITaskerDbContext _context;
         private readonly IWalletService _walletService;
@@ -70,7 +74,7 @@ namespace AITasker.Infrastructure.Deliverables
 
             if (!CanSubmitForMilestone(milestone))
             {
-                throw new InvalidOperationException("Deliverable can only be submitted for FUNDED, IN_PROGRESS, or REVISION_REQUESTED milestones.");
+                throw new InvalidOperationException("Deliverable can only be submitted for FUNDED, IN_PROGRESS, OVERDUE, or REVISION_REQUESTED milestones.");
             }
 
             if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
@@ -90,6 +94,8 @@ namespace AITasker.Infrastructure.Deliverables
             var latestVersion = await _context.Deliverables
                 .Where(d => d.MilestoneId == milestone.MilestoneId)
                 .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
+
+            var now = DateTime.UtcNow;
 
             var deliverable = new Deliverable
             {
@@ -111,7 +117,10 @@ namespace AITasker.Infrastructure.Deliverables
                 ClientFeedback = null,
                 VersionNumber = latestVersion + 1,
                 Status = DeliverableStatusSubmitted,
-                SubmittedAt = DateTime.UtcNow
+                SubmittedAt = now,
+                ReviewDeadlineAt = now.AddHours(ClientReviewWindowHours),
+                ReviewedAt = null,
+                OverdueNotifiedAt = null
             };
 
             milestone.Status = MilestoneStatusSubmitted;
@@ -123,7 +132,7 @@ namespace AITasker.Infrastructure.Deliverables
             await _notificationService.CreateNotificationAsync(
                 clientProfile.UserId,
                 "Deliverable submitted",
-                $"Expert submitted deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'.",
+                $"Expert submitted deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'. Please review before {deliverable.ReviewDeadlineAt:yyyy-MM-dd HH:mm:ss} UTC.",
                 "DELIVERABLE_SUBMITTED");
 
             return await MapToDeliverableResponseAsync(deliverable);
@@ -216,7 +225,7 @@ namespace AITasker.Infrastructure.Deliverables
                 throw new InvalidOperationException("Milestone escrow must be LOCKED before approval.");
             }
 
-            deliverable.Status = DeliverableStatusApproved;
+            deliverable.ReviewedAt = DateTime.UtcNow;
             deliverable.ClientFeedback = null;
 
             var escrowResult = await _walletService.ReleaseEscrowAsync(
@@ -286,7 +295,7 @@ namespace AITasker.Infrastructure.Deliverables
 
                 deliverable.Status = DeliverableStatusRevisionRequested;
                 deliverable.ClientFeedback = request.Feedback.Trim();
-
+                deliverable.ReviewedAt = DateTime.UtcNow;
                 milestone.Status = MilestoneStatusRevisionRequested;
                 milestone.RevisionUsed += 1;
 
@@ -349,6 +358,7 @@ namespace AITasker.Infrastructure.Deliverables
         {
             return string.Equals(milestone.Status, MilestoneStatusFunded, StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(milestone.Status, MilestoneStatusInProgress, StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(milestone.Status, MilestoneStatusOverdue, StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(milestone.Status, MilestoneStatusRevisionRequested, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -575,7 +585,9 @@ namespace AITasker.Infrastructure.Deliverables
                 RevisionLimit = milestone.RevisionLimit,
                 RevisionUsed = milestone.RevisionUsed,
 
-                SubmittedAt = deliverable.SubmittedAt
+                SubmittedAt = deliverable.SubmittedAt,
+                ReviewDeadlineAt = deliverable.ReviewDeadlineAt,
+                ReviewedAt = deliverable.ReviewedAt
             };
         }
 

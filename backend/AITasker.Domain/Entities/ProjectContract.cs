@@ -9,6 +9,8 @@ namespace AITasker.Domain.Entities
 
         public int ProposalId { get; set; }
 
+        public int SourceProposalVersionNumber { get; set; } = 1;
+
         public int ClientId { get; set; }
 
         public int ExpertId { get; set; }

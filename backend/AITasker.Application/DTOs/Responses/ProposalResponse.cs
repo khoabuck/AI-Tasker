@@ -32,6 +32,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? PreliminaryMilestonePlan { get; set; }
 
+        public List<ProposalMilestoneDraftResponse> Milestones { get; set; } = new();
+
         public string Status { get; set; } = string.Empty;
 
         public int? ContractId { get; set; }

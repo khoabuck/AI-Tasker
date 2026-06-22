@@ -49,5 +49,9 @@ namespace AITasker.Application.DTOs.Responses
         public int RevisionUsed { get; set; }
 
         public DateTime SubmittedAt { get; set; }
+        
+        public DateTime? ReviewDeadlineAt { get; set; }
+
+        public DateTime? ReviewedAt { get; set; }
     }
 }

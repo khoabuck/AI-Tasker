@@ -49,6 +49,15 @@ namespace AITasker.Infrastructure.Reviews
             var alreadyReviewed = await _context.Reviews
                 .AnyAsync(r => r.ProjectId == projectId);
 
+            var hasOpenDispute = await _context.Disputes.AnyAsync(d =>
+                d.ProjectId == projectId &&
+                d.Status == "OPEN");
+
+            if (hasOpenDispute)
+            {
+                throw new InvalidOperationException("Project still has an open dispute and cannot be reviewed.");
+            }
+
             if (alreadyReviewed)
             {
                 throw new InvalidOperationException("This project has already been reviewed.");
@@ -60,9 +69,6 @@ namespace AITasker.Infrastructure.Reviews
             {
                 ProjectId = project.ProjectId,
 
-                // Important:
-                // Review.ClientId and Review.ExpertId are UserId foreign keys.
-                // ProjectContract.ClientId and ProjectContract.ExpertId are ProfileId values.
                 ClientId = clientProfile.UserId,
                 ExpertId = expertProfile.UserId,
 
