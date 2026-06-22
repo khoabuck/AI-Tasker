@@ -1,32 +1,24 @@
-namespace AITasker.Domain.Entities;
+namespace AITasker.Application.DTOs.Responses;
 
-public class User
+public class AdminUserResponse
 {
     public int UserId { get; set; }
 
     public string Email { get; set; } = string.Empty;
 
-    public string? PasswordHash { get; set; }
-
     public string FullName { get; set; } = string.Empty;
 
     public string? Role { get; set; }
 
-    public string AuthProvider { get; set; } = "LOCAL";
-
-    public string? GoogleId { get; set; }
-
-    public string? AvatarUrl { get; set; }
-
-    public string Status { get; set; } = "PENDING_ROLE";
+    public string Status { get; set; } = string.Empty;
 
     public string? StatusBeforeSuspension { get; set; }
 
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public string AuthProvider { get; set; } = string.Empty;
 
-    public DateTime? UpdatedAt { get; set; }
+    public string? AvatarUrl { get; set; }
 
-    public int LockoutCount { get; set; } = 0;
+    public int LockoutCount { get; set; }
 
     public DateTime? LockoutEnd { get; set; }
 
@@ -37,4 +29,10 @@ public class User
     public DateTime? BannedAt { get; set; }
 
     public string? BanReason { get; set; }
+
+    public long LockoutRemainingSeconds { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 }

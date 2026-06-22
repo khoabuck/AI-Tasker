@@ -12,6 +12,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
 
+    public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -62,6 +64,8 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.Role)
                 .HasMaxLength(20);
 
+            entity.HasIndex(x => x.Role);
+
             entity.Property(x => x.AuthProvider)
                 .HasMaxLength(20)
                 .IsRequired();
@@ -80,10 +84,79 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(30)
                 .IsRequired();
 
+            entity.HasIndex(x => x.Status);
+
+            entity.Property(x => x.StatusBeforeSuspension)
+                .HasMaxLength(30);
+
+            // Admin user lock / ban management
+            entity.Property(x => x.LockoutCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.LockoutEnd);
+
+            entity.Property(x => x.LastLockedAt);
+
+            entity.Property(x => x.LockReason)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.BannedAt);
+
+            entity.Property(x => x.BanReason)
+                .HasMaxLength(500);
+
+            entity.HasIndex(x => x.LockoutEnd);
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
             entity.Property(x => x.UpdatedAt);
+        });
+
+        // =========================
+        // AdminAuditLogs
+        // =========================
+        modelBuilder.Entity<AdminAuditLog>(entity =>
+        {
+            entity.ToTable("AdminAuditLogs");
+
+            entity.HasKey(x => x.AdminAuditLogId);
+
+            entity.Property(x => x.Action)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.EntityName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.OldValue)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.NewValue)
+                .HasMaxLength(4000);
+
+            entity.Property(x => x.Reason)
+                .HasMaxLength(500);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.Admin)
+                .WithMany()
+                .HasForeignKey(x => x.AdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.AdminId);
+
+            entity.HasIndex(x => x.Action);
+
+            entity.HasIndex(x => x.EntityName);
+
+            entity.HasIndex(x => x.EntityId);
+
+            entity.HasIndex(x => x.CreatedAt);
         });
 
         // =========================

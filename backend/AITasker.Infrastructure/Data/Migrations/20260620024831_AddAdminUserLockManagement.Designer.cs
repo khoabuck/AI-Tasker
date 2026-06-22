@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620024831_AddAdminUserLockManagement")]
+    partial class AddAdminUserLockManagement
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,60 +24,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
-                {
-                    b.Property<int>("AdminAuditLogId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AdminAuditLogId"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("AdminId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("EntityId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EntityName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("NewValue")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("OldValue")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.HasKey("AdminAuditLogId");
-
-                    b.HasIndex("Action");
-
-                    b.HasIndex("AdminId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("EntityId");
-
-                    b.HasIndex("EntityName");
-
-                    b.ToTable("AdminAuditLogs", (string)null);
-                });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
@@ -699,10 +648,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
-                    b.Property<string>("StatusBeforeSuspension")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
 
@@ -722,16 +667,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("Users", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "Admin")
-                        .WithMany()
-                        .HasForeignKey("AdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Admin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>

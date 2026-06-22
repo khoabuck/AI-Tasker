@@ -152,6 +152,8 @@ builder.Services.AddAuthorization();
 // =========================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
+builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
+
 builder.Services.AddScoped<
     IEmailVerificationTokenRepository,
     EmailVerificationTokenRepository
@@ -178,6 +180,12 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
+
+// =========================
+// Admin User Management + Audit Log
+// =========================
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
+builder.Services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
 
 // =========================
 // Upload Images - Cloudinary
