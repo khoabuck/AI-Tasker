@@ -16,6 +16,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<PlatformFeePolicy> PlatformFeePolicies => Set<PlatformFeePolicy>();
 
+    public DbSet<ExpertProfileScoringPolicy> ExpertProfileScoringPolicies => Set<ExpertProfileScoringPolicy>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -178,6 +180,90 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.BusinessClientFeeRate)
                 .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+
+        // =========================
+        // ExpertProfileScoringPolicies
+        // =========================
+        modelBuilder.Entity<ExpertProfileScoringPolicy>(entity =>
+        {
+            entity.ToTable("ExpertProfileScoringPolicies");
+
+            entity.HasKey(x => x.ExpertProfileScoringPolicyId);
+
+            entity.Property(x => x.PassThreshold)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.MaxReviewSubmissions)
+                .IsRequired();
+
+            entity.Property(x => x.ReviewLockDurationHours)
+                .IsRequired();
+
+            entity.Property(x => x.ProfileCompletenessMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.AiSkillMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.ExperienceMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.PortfolioMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.GitHubMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.LinkedInMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.CertificateMaxScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.RiskMaxPenalty)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.CertificateUnverifiedMaxProfileScore)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.BioMinimumLength)
+                .IsRequired();
+
+            entity.Property(x => x.SkillsMinimumLength)
+                .IsRequired();
+
+            entity.Property(x => x.MaxCertificates)
                 .IsRequired();
 
             entity.Property(x => x.IsActive)

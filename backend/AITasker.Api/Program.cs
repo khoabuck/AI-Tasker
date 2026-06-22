@@ -156,6 +156,8 @@ builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
 
 builder.Services.AddScoped<IPlatformFeePolicyRepository, PlatformFeePolicyRepository>();
 
+builder.Services.AddScoped<IExpertProfileScoringPolicyRepository, ExpertProfileScoringPolicyRepository>();
+
 builder.Services.AddScoped<
     IEmailVerificationTokenRepository,
     EmailVerificationTokenRepository
@@ -190,6 +192,8 @@ builder.Services.AddScoped<IAdminUserService, AdminUserService>();
 builder.Services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
 
 builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>();
+
+builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
 // =========================
 // Upload Images - Cloudinary
