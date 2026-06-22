@@ -14,9 +14,13 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? ClientName { get; set; }
 
+        public string? ClientAvatarUrl { get; set; }
+
         public int? ExpertUserId { get; set; }
 
         public string? ExpertName { get; set; }
+
+        public string? ExpertAvatarUrl { get; set; }
 
         public int? RelatedJobId { get; set; }
 
