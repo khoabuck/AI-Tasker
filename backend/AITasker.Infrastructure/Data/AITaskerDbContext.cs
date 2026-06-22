@@ -36,6 +36,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<ProposalVersion> ProposalVersions { get; set; }
 
+    public DbSet<ProposalMilestoneDraft> ProposalMilestoneDrafts { get; set; }
+
     public DbSet<Conversation> Conversations { get; set; }
 
     public DbSet<ConversationMessage> ConversationMessages { get; set; }
@@ -701,6 +703,75 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // ProposalMilestoneDraft
+        // =========================
+        modelBuilder.Entity<ProposalMilestoneDraft>(entity =>
+        {
+            entity.ToTable("ProposalMilestoneDrafts", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProposalMilestoneDrafts_Amount",
+                    "[Amount] > 0");
+
+                table.HasCheckConstraint(
+                    "CK_ProposalMilestoneDrafts_OrderIndex",
+                    "[OrderIndex] > 0");
+
+                table.HasCheckConstraint(
+                    "CK_ProposalMilestoneDrafts_DeadlineOffsetDays",
+                    "[DeadlineOffsetDays] > 0");
+
+                table.HasCheckConstraint(
+                    "CK_ProposalMilestoneDrafts_RevisionLimit",
+                    "[RevisionLimit] >= 0");
+            });
+
+            entity.HasKey(e => e.ProposalMilestoneDraftId);
+
+            entity.Property(e => e.Title)
+                .IsRequired()
+                .HasMaxLength(255);
+
+            entity.Property(e => e.Description)
+                .IsRequired();
+
+            entity.Property(e => e.ExpectedDeliverable)
+                .IsRequired();
+
+            entity.Property(e => e.AcceptanceCriteria)
+                .IsRequired();
+
+            entity.Property(e => e.Amount)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.OrderIndex)
+                .IsRequired();
+
+            entity.Property(e => e.DeadlineOffsetDays)
+                .IsRequired();
+
+            entity.Property(e => e.RevisionLimit)
+                .IsRequired();
+
+            entity.Property(e => e.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(e => e.ProposalId);
+
+            entity.HasIndex(e => new
+            {
+                e.ProposalId,
+                e.OrderIndex
+            }).IsUnique();
+
+            entity.HasOne(e => e.Proposal)
+                .WithMany(e => e.MilestoneDrafts)
+                .HasForeignKey(e => e.ProposalId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
         // ProposalVersion
         // =========================
         modelBuilder.Entity<ProposalVersion>(entity =>
@@ -729,6 +800,8 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.ResubmitNote)
                 .HasMaxLength(1000);
+
+            entity.Property(e => e.MilestonePlanJson);
 
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
@@ -956,6 +1029,16 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.ProposalId)
                 .IsUnique();
 
+            entity.HasIndex(e => new
+            {
+                e.ProposalId,
+                e.SourceProposalVersionNumber
+            });
+
+            entity.Property(e => e.SourceProposalVersionNumber)
+                .HasDefaultValue(1)
+                .IsRequired();
+
             entity.Property(e => e.ProjectScope)
                 .IsRequired();
 
@@ -1159,7 +1242,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Milestones_Status",
-                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
+                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','OVERDUE','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
 
                 t.HasCheckConstraint(
                 "CK_Milestones_PaymentStatus",
@@ -1193,6 +1276,8 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.SubmissionOverdueNotifiedAt);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -1205,6 +1290,15 @@ public class AITaskerDbContext : DbContext
             }).IsUnique();
 
             entity.HasIndex(e => e.Status);
+
+            entity.HasIndex(e => e.Deadline);
+
+            entity.HasIndex(e => new
+            {
+                e.Status,
+                e.Deadline,
+                e.SubmissionOverdueNotifiedAt
+            });
 
             entity.HasIndex(e => e.PaymentStatus);
         });
@@ -1472,7 +1566,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Deliverables_Status",
-                "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
+                "[Status] IN ('SUBMITTED','APPROVED','AUTO_APPROVED','REVISION_REQUESTED')");
             });
 
             entity.HasKey(d => d.DeliverableId);
@@ -1503,11 +1597,26 @@ public class AITaskerDbContext : DbContext
             entity.Property(d => d.SubmittedAt)
                 .IsRequired();
 
+            entity.Property(d => d.ReviewDeadlineAt);
+            
+            entity.Property(d => d.ReviewedAt);
+            
+            entity.Property(d => d.OverdueNotifiedAt);
+
             entity.HasIndex(d => d.MilestoneId);
 
             entity.HasIndex(d => d.ExpertId);
 
             entity.HasIndex(d => d.Status);
+
+            entity.HasIndex(d => d.ReviewDeadlineAt);
+
+            entity.HasIndex(d => new
+            {
+                d.Status,
+                d.ReviewDeadlineAt,
+                d.ReviewedAt
+            });
 
             entity.HasIndex(d => new
             {
@@ -1743,6 +1852,21 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
 
+            entity.Property(w => w.FeeAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(w => w.NetAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(w => w.BankCode)
+                .HasMaxLength(30)
+                .HasDefaultValue(string.Empty)
+                .IsRequired();
+
             entity.Property(w => w.BankName)
                 .HasMaxLength(100)
                 .IsRequired();
@@ -1754,6 +1878,17 @@ public class AITaskerDbContext : DbContext
             entity.Property(w => w.BankAccountHolder)
                 .HasMaxLength(100)
                 .IsRequired();
+
+            entity.Property(w => w.BankVerificationStatus)
+                .HasMaxLength(30)
+                .HasDefaultValue("NOT_VERIFIED")
+                .IsRequired();
+
+            entity.Property(w => w.BankVerificationMessage)
+                .HasMaxLength(500);
+
+            entity.Property(w => w.PayoutReferenceCode)
+                .HasMaxLength(100);
 
             entity.Property(w => w.Status)
                 .HasMaxLength(30)
@@ -1768,6 +1903,10 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(w => w.UserId);
 
             entity.HasIndex(w => w.Status);
+
+            entity.HasIndex(w => w.BankVerificationStatus);
+
+            entity.HasIndex(w => w.PayoutReferenceCode);
 
             entity.HasIndex(w => w.CreatedAt);
 

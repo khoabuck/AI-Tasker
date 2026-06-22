@@ -111,7 +111,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Contract draft updated successfully. Previous confirmations were reset if the draft changed.",
+                    message = "Contract draft updated successfully.",
                     data = result
                 });
             }
@@ -187,7 +187,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Contract milestone drafts updated successfully. Previous confirmations were reset.",
+                    message = "Contract milestone drafts updated successfully.",
                     data = result
                 });
             }
@@ -294,7 +294,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Contract confirmation updated successfully.",
+                    message = "Contract signature updated successfully.",
                     data = result
                 });
             }

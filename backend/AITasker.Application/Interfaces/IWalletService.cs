@@ -56,10 +56,6 @@ namespace AITasker.Application.Interfaces
             int currentUserId,
             int projectId);
 
-        Task<EscrowOperationResponse> HoldEscrowAsync(
-            int currentUserId,
-            int milestoneId);
-
         Task<EscrowOperationResponse> ReleaseEscrowAsync(
             int currentUserId,
             int milestoneId);

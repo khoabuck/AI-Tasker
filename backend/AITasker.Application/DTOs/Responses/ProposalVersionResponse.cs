@@ -20,6 +20,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? PreliminaryMilestonePlan { get; set; }
 
+        public string? MilestonePlanJson { get; set; }
+
         public string? ResubmitNote { get; set; }
 
         public int CreatedByUserId { get; set; }

@@ -6,6 +6,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public int ProposalId { get; set; }
 
+        public int SourceProposalVersionNumber { get; set; }
+
         public int JobId { get; set; }
 
         public string JobTitle { get; set; } = string.Empty;

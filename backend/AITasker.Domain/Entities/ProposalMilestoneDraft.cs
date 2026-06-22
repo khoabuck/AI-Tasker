@@ -2,11 +2,11 @@ using System;
 
 namespace AITasker.Domain.Entities
 {
-    public class Milestone
+    public class ProposalMilestoneDraft
     {
-        public int MilestoneId { get; set; }
+        public int ProposalMilestoneDraftId { get; set; }
 
-        public int ProjectId { get; set; }
+        public int ProposalId { get; set; }
 
         public string Title { get; set; } = string.Empty;
 
@@ -20,20 +20,12 @@ namespace AITasker.Domain.Entities
 
         public int OrderIndex { get; set; }
 
-        public DateTime Deadline { get; set; }
-
-        public DateTime? SubmissionOverdueNotifiedAt { get; set; }
+        public int DeadlineOffsetDays { get; set; }
 
         public int RevisionLimit { get; set; }
 
-        public int RevisionUsed { get; set; }
-
-        public string PaymentStatus { get; set; } = "PENDING";
-
-        public string Status { get; set; } = "PENDING";
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public Project? Project { get; set; }
+        public Proposal? Proposal { get; set; }
     }
 }

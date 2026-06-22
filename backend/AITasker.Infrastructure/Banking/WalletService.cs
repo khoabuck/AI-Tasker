@@ -227,7 +227,7 @@ namespace AITasker.Infrastructure.Banking
                 CancelUrl = cancelUrl,
                 Status = DepositOrderPending,
                 CreatedAt = now,
-                ExpiresAt = now.AddMinutes(30),
+                ExpiresAt = now.AddMinutes(2),
                 PaidAt = null,
                 ProviderReference = payOsResult.PaymentLinkId
             };
@@ -286,6 +286,15 @@ namespace AITasker.Infrastructure.Banking
                 if (!string.Equals(order.Status, DepositOrderPending, StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException("Only PENDING deposit orders can be confirmed.");
+                }
+
+                if (order.ExpiresAt < DateTime.UtcNow)
+                {
+                    order.Status = DepositOrderExpired;
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    throw new InvalidOperationException("Deposit order expired.");
                 }
 
                 var existingDepositTransaction = await _context.Transactions.AnyAsync(x =>
@@ -584,6 +593,11 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Contract must be CONFIRMED by both parties before locking escrow.");
                 }
 
+                if (!contract.ClientConfirmed || !contract.ExpertConfirmed)
+                {
+                    throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
+                }
+
                 var proposal = await GetProposalAsync(contract.ProposalId);
                 var job = await GetJobAsync(proposal.JobId);
 
@@ -593,7 +607,7 @@ namespace AITasker.Infrastructure.Banking
                     .ThenBy(m => m.MilestoneId)
                     .ToListAsync();
 
-                if (!milestones.Any())
+                if (milestones.Count == 0)
                 {
                     throw new InvalidOperationException("Project must have at least one milestone before locking escrow.");
                 }
@@ -604,6 +618,17 @@ namespace AITasker.Infrastructure.Banking
                 {
                     throw new InvalidOperationException(
                         $"Milestone total amount ({milestoneTotal}) must equal contract final price ({contract.FinalPrice}).");
+                }
+
+                var invalidMilestones = milestones
+                    .Where(m =>
+                        !string.Equals(m.Status, MilestoneStatusPending, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(m.PaymentStatus, PaymentStatusPending, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (invalidMilestones.Count > 0)
+                {
+                    throw new InvalidOperationException("All milestones must be PENDING and payment status PENDING before locking project escrow.");
                 }
 
                 var existingEscrows = await _context.Escrows
@@ -631,12 +656,15 @@ namespace AITasker.Infrastructure.Banking
 
                 if (clientWallet.AvailableBalance < contract.TotalClientPayment)
                 {
-                    throw new InvalidOperationException("Client wallet balance is not enough to lock escrow.");
+                    throw new InvalidOperationException(
+                        $"Client wallet balance is not enough to lock escrow. Required: {contract.TotalClientPayment:N0}, Available: {clientWallet.AvailableBalance:N0}.");
                 }
+
+                var now = DateTime.UtcNow;
 
                 clientWallet.AvailableBalance -= contract.TotalClientPayment;
                 clientWallet.LockedBalance += contract.FinalPrice;
-                clientWallet.UpdatedAt = DateTime.UtcNow;
+                clientWallet.UpdatedAt = now;
 
                 foreach (var milestone in milestones)
                 {
@@ -647,8 +675,8 @@ namespace AITasker.Infrastructure.Banking
                         ClientProfileId = clientProfile.ClientProfileId,
                         Amount = milestone.Amount,
                         Status = EscrowStatusLocked,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
+                        CreatedAt = now,
+                        UpdatedAt = now
                     });
 
                     milestone.Status = MilestoneStatusFunded;
@@ -656,12 +684,12 @@ namespace AITasker.Infrastructure.Banking
                 }
 
                 project.Status = ProjectStatusActive;
-                project.StartDate ??= DateTime.UtcNow;
+                project.StartDate ??= now;
 
                 proposal.Status = ProposalStatusAccepted;
 
                 job.Status = JobStatusActive;
-                job.UpdatedAt = DateTime.UtcNow;
+                job.UpdatedAt = now;
 
                 var competingProposals = await _context.Proposals
                     .Where(p =>
@@ -688,7 +716,7 @@ namespace AITasker.Infrastructure.Banking
                     Status = TransactionStatusSuccess,
                     Description = $"[Escrow Lock] Locked project amount for Project ID {project.ProjectId}",
                     ReferenceId = $"PROJECT_{project.ProjectId}",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = now
                 });
 
                 if (contract.PlatformFeeAmount > 0)
@@ -704,7 +732,7 @@ namespace AITasker.Infrastructure.Banking
                         Status = TransactionStatusSuccess,
                         Description = $"[Platform Fee] Platform fee for Project ID {project.ProjectId}",
                         ReferenceId = $"PROJECT_{project.ProjectId}_PLATFORM_FEE",
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = now
                     });
                 }
 
@@ -727,132 +755,6 @@ namespace AITasker.Infrastructure.Banking
                     project,
                     null,
                     "Project escrow locked successfully.");
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
-        }
-
-        public async Task<EscrowOperationResponse> HoldEscrowAsync(
-            int currentUserId,
-            int milestoneId)
-        {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
-                var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
-
-                if (clientProfile.UserId != currentUserId)
-                {
-                    throw new UnauthorizedAccessException("Only the project Client can lock milestone escrow.");
-                }
-
-                if (!string.Equals(contract.Status, ContractStatusConfirmed, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Contract must be CONFIRMED before locking milestone escrow.");
-                }
-
-                if (!string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase) &&
-                    !string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Project status does not allow milestone escrow lock.");
-                }
-
-                if (!string.Equals(milestone.Status, MilestoneStatusPending, StringComparison.OrdinalIgnoreCase) ||
-                    !string.Equals(milestone.PaymentStatus, PaymentStatusPending, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Milestone must be pending before escrow lock.");
-                }
-
-                var existingEscrow = await _context.Escrows
-                    .FirstOrDefaultAsync(e => e.MilestoneId == milestoneId);
-
-                if (existingEscrow != null)
-                {
-                    if (string.Equals(existingEscrow.Status, EscrowStatusLocked, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return await BuildProjectEscrowResponseAsync(
-                            project,
-                            milestone,
-                            "Milestone escrow is already locked.");
-                    }
-
-                    throw new InvalidOperationException("Milestone already has an escrow record.");
-                }
-
-                var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
-
-                if (clientWallet.AvailableBalance < milestone.Amount)
-                {
-                    throw new InvalidOperationException("Client wallet balance is not enough to lock milestone escrow.");
-                }
-
-                var escrow = new Escrow
-                {
-                    ProjectId = project.ProjectId,
-                    MilestoneId = milestone.MilestoneId,
-                    ClientProfileId = clientProfile.ClientProfileId,
-                    Amount = milestone.Amount,
-                    Status = EscrowStatusLocked,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
-                };
-
-                _context.Escrows.Add(escrow);
-
-                clientWallet.AvailableBalance -= milestone.Amount;
-                clientWallet.LockedBalance += milestone.Amount;
-                clientWallet.UpdatedAt = DateTime.UtcNow;
-
-                milestone.Status = MilestoneStatusFunded;
-                milestone.PaymentStatus = PaymentStatusLocked;
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = clientProfile.UserId,
-                    ProjectId = project.ProjectId,
-                    MilestoneId = milestone.MilestoneId,
-                    EscrowId = null,
-                    Amount = -milestone.Amount,
-                    Type = TxEscrowLock,
-                    Status = TransactionStatusSuccess,
-                    Description = $"[Escrow Lock] Locked funds for Milestone ID {milestone.MilestoneId}",
-                    ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                var allMilestones = await _context.Milestones
-                    .Where(m => m.ProjectId == project.ProjectId)
-                    .ToListAsync();
-
-                if (allMilestones.All(m =>
-                        m.MilestoneId == milestone.MilestoneId ||
-                        string.Equals(m.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase)))
-                {
-                    project.Status = ProjectStatusActive;
-                    project.StartDate ??= DateTime.UtcNow;
-                }
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Milestone escrow locked",
-                    $"Client locked escrow for milestone: {milestone.Title}.",
-                    "MILESTONE_ESCROW_LOCKED");
-
-                return await BuildProjectEscrowResponseAsync(
-                    project,
-                    milestone,
-                    "Milestone escrow locked successfully.");
             }
             catch
             {
@@ -890,9 +792,9 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Milestone must have a submitted deliverable before escrow release.");
                 }
 
-                if (await HasOpenMilestoneDisputeAsync(milestoneId))
+                if (await HasOpenDisputeForMilestoneAsync(project.ProjectId, milestoneId))
                 {
-                    throw new InvalidOperationException("This milestone has an open dispute. Resolve the dispute instead of releasing escrow directly.");
+                    throw new InvalidOperationException("This milestone or project has an open dispute. Resolve the dispute instead of releasing escrow directly.");
                 }
 
                 var latestSubmittedDeliverable = await _context.Deliverables
@@ -1124,11 +1026,17 @@ namespace AITasker.Infrastructure.Banking
             throw new UnauthorizedAccessException("You do not have permission to access this project.");
         }
 
-        private async Task<bool> HasOpenMilestoneDisputeAsync(int milestoneId)
+        private async Task<bool> HasOpenDisputeForMilestoneAsync(
+            int projectId,
+            int milestoneId)
         {
             return await _context.Disputes.AnyAsync(d =>
-                d.MilestoneId == milestoneId &&
-                d.Status == DisputeStatusOpen);
+                d.Status == DisputeStatusOpen &&
+                d.ProjectId == projectId &&
+                (
+                    d.MilestoneId == null ||
+                    d.MilestoneId == milestoneId
+                ));
         }
 
         private async Task<Escrow> GetLockedEscrowByMilestoneAsync(int milestoneId)
@@ -1325,9 +1233,9 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("Deposit amount must be greater than 0.");
             }
 
-            if (request.Amount < 10000)
+            if (request.Amount < 1000)
             {
-                throw new InvalidOperationException("Minimum deposit amount is 10,000.");
+                throw new InvalidOperationException("Minimum deposit amount is 1,000.");
             }
 
             if (request.Amount > 500000000)

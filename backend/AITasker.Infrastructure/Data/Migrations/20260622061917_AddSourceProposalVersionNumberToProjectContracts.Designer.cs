@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622061917_AddSourceProposalVersionNumberToProjectContracts")]
+    partial class AddSourceProposalVersionNumberToProjectContracts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -367,15 +370,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<int>("MilestoneId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("OverdueNotifiedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ReviewDeadlineAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -397,18 +391,14 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("MilestoneId");
 
-                    b.HasIndex("ReviewDeadlineAt");
-
                     b.HasIndex("Status");
 
                     b.HasIndex("MilestoneId", "VersionNumber")
                         .IsUnique();
 
-                    b.HasIndex("Status", "ReviewDeadlineAt", "ReviewedAt");
-
                     b.ToTable("Deliverables", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Deliverables_Status", "[Status] IN ('SUBMITTED','APPROVED','AUTO_APPROVED','REVISION_REQUESTED')");
+                            t.HasCheckConstraint("CK_Deliverables_Status", "[Status] IN ('SUBMITTED','APPROVED','REVISION_REQUESTED')");
 
                             t.HasCheckConstraint("CK_Deliverables_VersionNumber", "[VersionNumber] > 0");
                         });
@@ -1085,17 +1075,12 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("SubmissionOverdueNotifiedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
                     b.HasKey("MilestoneId");
-
-                    b.HasIndex("Deadline");
 
                     b.HasIndex("PaymentStatus");
 
@@ -1105,8 +1090,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("ProjectId", "OrderIndex")
                         .IsUnique();
-
-                    b.HasIndex("Status", "Deadline", "SubmissionOverdueNotifiedAt");
 
                     b.ToTable("Milestones", null, t =>
                         {
@@ -1118,7 +1101,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                             t.HasCheckConstraint("CK_Milestones_Revision", "[RevisionLimit] >= 0 AND [RevisionUsed] >= 0 AND [RevisionUsed] <= [RevisionLimit]");
 
-                            t.HasCheckConstraint("CK_Milestones_Status", "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','OVERDUE','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
+                            t.HasCheckConstraint("CK_Milestones_Status", "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
                         });
                 });
 
@@ -1416,68 +1399,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalMilestoneDraft", b =>
-                {
-                    b.Property<int>("ProposalMilestoneDraftId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalMilestoneDraftId"));
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DeadlineOffsetDays")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ExpectedDeliverable")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProposalId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("RevisionLimit")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
-
-                    b.HasKey("ProposalMilestoneDraftId");
-
-                    b.HasIndex("ProposalId");
-
-                    b.HasIndex("ProposalId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("ProposalMilestoneDrafts", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProposalMilestoneDrafts_Amount", "[Amount] > 0");
-
-                            t.HasCheckConstraint("CK_ProposalMilestoneDrafts_DeadlineOffsetDays", "[DeadlineOffsetDays] > 0");
-
-                            t.HasCheckConstraint("CK_ProposalMilestoneDrafts_OrderIndex", "[OrderIndex] > 0");
-
-                            t.HasCheckConstraint("CK_ProposalMilestoneDrafts_RevisionLimit", "[RevisionLimit] >= 0");
-                        });
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ProposalVersion", b =>
                 {
                     b.Property<int>("ProposalVersionId")
@@ -1498,9 +1419,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("ExpectedOutputs")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("MilestonePlanJson")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PreliminaryMilestonePlan")
@@ -1806,45 +1724,13 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("BankCode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("");
-
                     b.Property<string>("BankName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("BankVerificationMessage")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("BankVerificationStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("NOT_VERIFIED");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<decimal>("FeeAmount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<decimal>("NetAmount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(18,2)")
-                        .HasDefaultValue(0m);
-
-                    b.Property<string>("PayoutReferenceCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<DateTime?>("ProcessedAt")
                         .HasColumnType("datetime2");
@@ -1862,11 +1748,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("WithdrawalRequestId");
 
-                    b.HasIndex("BankVerificationStatus");
-
                     b.HasIndex("CreatedAt");
-
-                    b.HasIndex("PayoutReferenceCode");
 
                     b.HasIndex("ProcessedByAdminId");
 
@@ -2275,17 +2157,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("JobPosting");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalMilestoneDraft", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Proposal", "Proposal")
-                        .WithMany("MilestoneDrafts")
-                        .HasForeignKey("ProposalId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Proposal");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ProposalVersion", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "CreatedByUser")
@@ -2428,8 +2299,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.Proposal", b =>
                 {
-                    b.Navigation("MilestoneDrafts");
-
                     b.Navigation("ProjectContract");
 
                     b.Navigation("ProposalVersions");
