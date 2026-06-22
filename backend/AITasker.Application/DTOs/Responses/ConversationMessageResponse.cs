@@ -12,6 +12,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public string SenderRole { get; set; } = string.Empty;
 
+        public string? SenderAvatarUrl { get; set; }
+
         public string Content { get; set; } = string.Empty;
 
         public string MessageType { get; set; } = string.Empty;

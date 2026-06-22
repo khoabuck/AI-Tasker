@@ -1,6 +1,5 @@
 import contractApi from "../api/contract.api";
 
-
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""

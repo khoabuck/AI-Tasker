@@ -26,13 +26,16 @@ namespace AITasker.Infrastructure.Contracts
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IWalletService _walletService;
 
         public ProjectContractService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IWalletService walletService)
         {
             _context = context;
             _notificationService = notificationService;
+            _walletService = walletService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -336,6 +339,10 @@ namespace AITasker.Infrastructure.Contracts
 
                 await EnsureContractMilestoneDraftsReadyAsync(contract);
 
+                await EnsureClientWalletCanCoverContractAsync(
+                    clientProfile.UserId,
+                    contract);
+
                 contract.ClientConfirmed = true;
 
                 await _notificationService.CreateNotificationAsync(
@@ -377,25 +384,29 @@ namespace AITasker.Infrastructure.Contracts
                     contract,
                     project);
 
+                await _context.SaveChangesAsync();
+
+                var escrowResult = await _walletService.LockProjectEscrowAsync(
+                    clientProfile.UserId,
+                    project.ProjectId);
+
+                if (!escrowResult.Success)
+                {
+                    throw new InvalidOperationException(
+                        escrowResult.Message ?? "Failed to automatically lock project escrow.");
+                }
+
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
-                    "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Please confirm escrow to start the project.",
-                    "CONTRACT_CONFIRMED");
+                    "Contract fully confirmed and escrow locked",
+                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically and the project has started.",
+                    "CONTRACT_CONFIRMED_ESCROW_LOCKED");
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Waiting for Client escrow confirmation.",
-                    "CONTRACT_CONFIRMED");
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow request created",
-                    $"Please lock {contract.TotalClientPayment} in simulated escrow for project: {project.Title}.",
-                    "ESCROW_REQUEST_CREATED");
-
-                await _context.SaveChangesAsync();
+                    "Project started",
+                    $"The contract for job '{job.Title}' is fully confirmed. Client escrow was locked automatically. You can start working on milestones.",
+                    "PROJECT_STARTED");
 
                 return await MapToContractResponseAsync(contract);
             }
@@ -1323,6 +1334,23 @@ namespace AITasker.Infrastructure.Contracts
             if (activeProjectCount >= 3)
             {
                 throw new InvalidOperationException("Expert has reached the maximum limit of 3 active projects.");
+            }
+        }
+
+        private async Task EnsureClientWalletCanCoverContractAsync(
+            int clientUserId,
+            ProjectContract contract)
+        {
+            var wallet = await _context.Wallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(w => w.UserId == clientUserId);
+
+            var availableBalance = wallet?.AvailableBalance ?? 0m;
+
+            if (availableBalance < contract.TotalClientPayment)
+            {
+                throw new InvalidOperationException(
+                    $"Client wallet balance is not enough to sign this contract. Required: {contract.TotalClientPayment:N0} VND, Available: {availableBalance:N0} VND. Please deposit more before signing.");
             }
         }
     }
