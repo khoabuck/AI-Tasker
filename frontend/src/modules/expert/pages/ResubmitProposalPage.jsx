@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import jobService from "../../../services/job.service";
 import proposalService from "../../../services/proposal.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
@@ -24,13 +23,14 @@ const emptyForm = {
   workingApproach: "",
   preliminaryMilestonePlan: "",
   milestones: [{ ...emptyMilestone }],
+  resubmitNote: "",
 };
 
-export default function SubmitProposalPage() {
-  const { jobId } = useParams();
+export default function ResubmitProposalPage() {
+  const { proposalId } = useParams();
   const navigate = useNavigate();
 
-  const [job, setJob] = useState(null);
+  const [proposal, setProposal] = useState(null);
   const [formData, setFormData] = useState(emptyForm);
 
   const [loading, setLoading] = useState(true);
@@ -42,23 +42,29 @@ export default function SubmitProposalPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const formErrors = useMemo(() => validateProposalForm(formData), [formData]);
+  const formErrors = useMemo(
+    () => validateProposalForm(formData, { isResubmit: true }),
+    [formData]
+  );
 
   useEffect(() => {
-    loadJobDetail();
-  }, [jobId]);
+    loadProposal();
+  }, [proposalId]);
 
-  const loadJobDetail = async () => {
+  const loadProposal = async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
-      const data = await jobService.getJobById(jobId);
-      setJob(data);
+      const data = await proposalService.getProposalById(proposalId);
+
+      setProposal(data);
+      setFormData(buildFormFromProposal(data));
     } catch (err) {
-      console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load job detail."));
-      setJob(null);
+      console.error("LOAD PROPOSAL FOR RESUBMIT ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load proposal for resubmit."));
+      setProposal(null);
     } finally {
       setLoading(false);
     }
@@ -157,10 +163,10 @@ export default function SubmitProposalPage() {
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData);
+    const errors = validateProposalForm(formData, { isResubmit: true });
 
     if (Object.keys(errors).length > 0) {
-      setError("Please check the highlighted fields before submitting.");
+      setError("Please check the highlighted fields before resubmitting.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -168,28 +174,50 @@ export default function SubmitProposalPage() {
     try {
       setSubmitting(true);
 
-      await proposalService.submitProposal(jobId, formData);
+      await proposalService.resubmitProposal(proposalId, formData);
 
-      setMessage("Proposal submitted successfully.");
+      setMessage("Proposal resubmitted successfully.");
 
       setTimeout(() => {
-        navigate("/expert/proposals", { replace: true });
+        navigate(`/expert/proposals/${proposalId}`, { replace: true });
       }, 900);
     } catch (err) {
-      console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot submit proposal."));
+      console.error("RESUBMIT PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot resubmit proposal."));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const isJobOpen = String(job?.status || "").toUpperCase() === "OPEN";
-
   if (loading) {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job information...
+          Loading proposal...
+        </div>
+      </ExpertLayout>
+    );
+  }
+
+  if (!proposal) {
+    return (
+      <ExpertLayout>
+        <div className="px-5 py-10 md:px-8">
+          <div className="mx-auto max-w-5xl">
+            <Alert
+              type="danger"
+              title="Cannot load proposal"
+              message={error || "Proposal not found."}
+            />
+
+            <button
+              type="button"
+              onClick={() => navigate("/expert/proposals")}
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+            >
+              Back to Proposals
+            </button>
+          </div>
         </div>
       </ExpertLayout>
     );
@@ -201,240 +229,270 @@ export default function SubmitProposalPage() {
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
-            onClick={() => navigate(`/expert/jobs/${jobId}`)}
+            onClick={() => navigate(`/expert/proposals/${proposalId}`)}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
             <span className="material-symbols-outlined text-sm">
               arrow_back
             </span>
-            Back to job detail
+            Back to proposal detail
           </button>
 
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Submit Proposal
+              Resubmit Proposal
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Send proposal to client
+              Update and resubmit proposal
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in price, timeline, outputs, working approach, and milestone
-              plan based on the backend proposal API.
+              Edit your proposal content, milestone plan, detailed milestones,
+              and add a note explaining what changed.
             </p>
           </div>
 
           {error && (
-            <Alert type="danger" title="Proposal error" message={error} />
+            <Alert type="danger" title="Resubmit error" message={error} />
           )}
 
           {message && (
             <Alert type="success" title="Success" message={message} />
           )}
 
-          {!job && (
-            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
-              <p className="text-gray-400">Job not found.</p>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <Card title="Resubmit Note" icon="edit_note">
+                <TextArea
+                  label="Resubmit Note"
+                  required
+                  value={formData.resubmitNote}
+                  onChange={(value) => updateField("resubmitNote", value)}
+                  onBlur={() => markTouched("resubmitNote")}
+                  error={getFieldError("resubmitNote")}
+                  placeholder="Explain what you changed in this resubmission..."
+                  rows={4}
+                />
+              </Card>
 
-              <button
-                type="button"
-                onClick={() => navigate("/expert/jobs")}
-                className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-              >
-                Back to Jobs
-              </button>
-            </div>
-          )}
+              <Card title="Proposal Content" icon="description">
+                <TextArea
+                  label="Cover Letter"
+                  required
+                  value={formData.coverLetter}
+                  onChange={(value) => updateField("coverLetter", value)}
+                  onBlur={() => markTouched("coverLetter")}
+                  error={getFieldError("coverLetter")}
+                  placeholder="Introduce yourself and explain why you are suitable for this job..."
+                  rows={6}
+                />
+              </Card>
 
-          {job && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                {!isJobOpen && (
-                  <Alert
-                    type="warning"
-                    title="Job is not open"
-                    message="This job is not OPEN, so backend may reject proposal submission."
-                  />
-                )}
-
-                <Card title="Proposal Content" icon="description">
-                  <TextArea
-                    label="Cover Letter"
+              <Card title="Price & Timeline" icon="payments">
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                  <NumberInput
+                    label="Proposed Price"
                     required
-                    value={formData.coverLetter}
-                    onChange={(value) => updateField("coverLetter", value)}
-                    onBlur={() => markTouched("coverLetter")}
-                    error={getFieldError("coverLetter")}
-                    placeholder="Introduce yourself and explain why you are suitable for this job..."
-                    rows={6}
+                    value={formData.proposedPrice}
+                    onChange={(value) => updateField("proposedPrice", value)}
+                    onBlur={() => markTouched("proposedPrice")}
+                    error={getFieldError("proposedPrice")}
+                    placeholder="500"
                   />
-                </Card>
 
-                <Card title="Price & Timeline" icon="payments">
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <NumberInput
-                      label="Proposed Price"
-                      required
-                      value={formData.proposedPrice}
-                      onChange={(value) => updateField("proposedPrice", value)}
-                      onBlur={() => markTouched("proposedPrice")}
-                      error={getFieldError("proposedPrice")}
-                      placeholder="500"
+                  <NumberInput
+                    label="Proposed Timeline Days"
+                    required
+                    value={formData.proposedTimelineDays}
+                    onChange={(value) =>
+                      updateField("proposedTimelineDays", value)
+                    }
+                    onBlur={() => markTouched("proposedTimelineDays")}
+                    error={getFieldError("proposedTimelineDays")}
+                    placeholder="14"
+                  />
+                </div>
+              </Card>
+
+              <Card title="Delivery Plan" icon="task_alt">
+                <div className="space-y-5">
+                  <TextArea
+                    label="Expected Outputs"
+                    required
+                    value={formData.expectedOutputs}
+                    onChange={(value) => updateField("expectedOutputs", value)}
+                    onBlur={() => markTouched("expectedOutputs")}
+                    error={getFieldError("expectedOutputs")}
+                    placeholder="List the final outputs you will deliver to the client..."
+                    rows={5}
+                  />
+
+                  <TextArea
+                    label="Working Approach"
+                    required
+                    value={formData.workingApproach}
+                    onChange={(value) => updateField("workingApproach", value)}
+                    onBlur={() => markTouched("workingApproach")}
+                    error={getFieldError("workingApproach")}
+                    placeholder="Explain your working method, communication plan, and implementation steps..."
+                    rows={5}
+                  />
+
+                  <TextArea
+                    label="Preliminary Milestone Plan"
+                    required
+                    value={formData.preliminaryMilestonePlan}
+                    onChange={(value) =>
+                      updateField("preliminaryMilestonePlan", value)
+                    }
+                    onBlur={() => markTouched("preliminaryMilestonePlan")}
+                    error={getFieldError("preliminaryMilestonePlan")}
+                    placeholder="Example: Milestone 1: analysis, Milestone 2: implementation, Milestone 3: testing..."
+                    rows={4}
+                  />
+                </div>
+              </Card>
+
+              <Card title="Milestones" icon="flag">
+                <div className="space-y-5">
+                  {formData.milestones.map((milestone, index) => (
+                    <MilestoneEditor
+                      key={index}
+                      index={index}
+                      milestone={milestone}
+                      canRemove={formData.milestones.length > 1}
+                      onChange={updateMilestone}
+                      onBlur={markMilestoneTouched}
+                      onRemove={removeMilestone}
+                      getError={getMilestoneFieldError}
                     />
+                  ))}
 
-                    <NumberInput
-                      label="Proposed Timeline Days"
-                      required
-                      value={formData.proposedTimelineDays}
-                      onChange={(value) =>
-                        updateField("proposedTimelineDays", value)
-                      }
-                      onBlur={() => markTouched("proposedTimelineDays")}
-                      error={getFieldError("proposedTimelineDays")}
-                      placeholder="14"
-                    />
-                  </div>
-                </Card>
-
-                <Card title="Delivery Plan" icon="task_alt">
-                  <div className="space-y-5">
-                    <TextArea
-                      label="Expected Outputs"
-                      required
-                      value={formData.expectedOutputs}
-                      onChange={(value) =>
-                        updateField("expectedOutputs", value)
-                      }
-                      onBlur={() => markTouched("expectedOutputs")}
-                      error={getFieldError("expectedOutputs")}
-                      placeholder="List the final outputs you will deliver to the client..."
-                      rows={5}
-                    />
-
-                    <TextArea
-                      label="Working Approach"
-                      required
-                      value={formData.workingApproach}
-                      onChange={(value) =>
-                        updateField("workingApproach", value)
-                      }
-                      onBlur={() => markTouched("workingApproach")}
-                      error={getFieldError("workingApproach")}
-                      placeholder="Explain your working method, communication plan, and implementation steps..."
-                      rows={5}
-                    />
-
-                    <TextArea
-                      label="Preliminary Milestone Plan"
-                      required
-                      value={formData.preliminaryMilestonePlan}
-                      onChange={(value) =>
-                        updateField("preliminaryMilestonePlan", value)
-                      }
-                      onBlur={() => markTouched("preliminaryMilestonePlan")}
-                      error={getFieldError("preliminaryMilestonePlan")}
-                      placeholder="Example: Milestone 1: analysis, Milestone 2: implementation, Milestone 3: testing..."
-                      rows={4}
-                    />
-                  </div>
-                </Card>
-
-                <Card title="Milestones" icon="flag">
-                  <div className="space-y-5">
-                    {formData.milestones.map((milestone, index) => (
-                      <MilestoneEditor
-                        key={index}
-                        index={index}
-                        milestone={milestone}
-                        canRemove={formData.milestones.length > 1}
-                        onChange={updateMilestone}
-                        onBlur={markMilestoneTouched}
-                        onRemove={removeMilestone}
-                        getError={getMilestoneFieldError}
-                      />
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={addMilestone}
-                      className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        add
-                      </span>
-                      Add Milestone
-                    </button>
-                  </div>
-                </Card>
-
-                <div className="flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => navigate(`/expert/jobs/${jobId}`)}
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
+                    onClick={addMilestone}
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={submitting || !isJobOpen}
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submitting ? "Submitting..." : "Submit Proposal"}
+                    <span className="material-symbols-outlined text-[18px]">
+                      add
+                    </span>
+                    Add Milestone
                   </button>
                 </div>
-              </form>
+              </Card>
 
-              <aside className="space-y-6">
-                <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
-                    Job Summary
-                  </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate(`/expert/proposals/${proposalId}`)}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
+                >
+                  Cancel
+                </button>
 
-                  <h2 className="text-xl font-bold text-white">
-                    {job.title || "Untitled Job"}
-                  </h2>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="rounded-xl border border-yellow-400/60 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? "Resubmitting..." : "Resubmit Proposal"}
+                </button>
+              </div>
+            </form>
 
-                  <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {job.description || "No description."}
-                  </p>
+            <aside className="space-y-6">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
+                  Current Proposal
+                </p>
 
-                  <div className="mt-5 space-y-3">
-                    <Info label="Client" value={job.clientName || "Client"} />
+                <h2 className="text-xl font-bold text-white">
+                  {proposal.jobTitle || "Untitled Job"}
+                </h2>
 
-                    <Info
-                      label="Budget"
-                      value={formatBudget(job.budgetMin, job.budgetMax)}
-                    />
+                <div className="mt-5 space-y-3">
+                  <Info label="Client" value={proposal.clientName || "Client"} />
 
-                    <Info
-                      label="Duration"
-                      value={
-                        job.durationDays ? `${job.durationDays} days` : "N/A"
-                      }
-                    />
+                  <Info
+                    label="Current Price"
+                    value={formatMoney(proposal.proposedPrice)}
+                  />
 
-                    <Info label="Status" value={job.status || "OPEN"} />
-                  </div>
-                </section>
+                  <Info
+                    label="Timeline"
+                    value={`${proposal.proposedTimelineDays || 0} days`}
+                  />
 
-                <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
-                  <p className="font-bold">Backend rule</p>
+                  <Info label="Status" value={proposal.status || "N/A"} />
 
-                  <p className="mt-2 text-sm leading-6">
-                    Expert profile must be approved and available for work.
-                    Proposal submission must include at least one milestone.
-                  </p>
-                </section>
-              </aside>
-            </div>
-          )}
+                  {proposal.version && (
+                    <Info label="Version" value={`${proposal.version}`} />
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
+                <p className="font-bold">Backend rule</p>
+
+                <p className="mt-2 text-sm leading-6">
+                  Resubmit uses proposalId in the URL. The request body does not
+                  include jobId, but it must include the updated proposal fields,
+                  milestones, and resubmitNote.
+                </p>
+              </section>
+            </aside>
+          </div>
         </div>
       </div>
     </ExpertLayout>
   );
+}
+
+function buildFormFromProposal(proposal) {
+  const milestones = Array.isArray(proposal?.milestones)
+    ? proposal.milestones
+    : [];
+
+  return {
+    coverLetter: proposal?.coverLetter || "",
+    proposedPrice:
+      proposal?.proposedPrice !== undefined && proposal?.proposedPrice !== null
+        ? String(proposal.proposedPrice)
+        : "",
+    proposedTimelineDays:
+      proposal?.proposedTimelineDays !== undefined &&
+      proposal?.proposedTimelineDays !== null
+        ? String(proposal.proposedTimelineDays)
+        : "",
+    expectedOutputs: proposal?.expectedOutputs || "",
+    workingApproach: proposal?.workingApproach || "",
+    preliminaryMilestonePlan: proposal?.preliminaryMilestonePlan || "",
+    milestones:
+      milestones.length > 0
+        ? milestones.map((item, index) => ({
+            title: item.title || "",
+            description: item.description || "",
+            expectedDeliverable: item.expectedDeliverable || "",
+            acceptanceCriteria: item.acceptanceCriteria || "",
+            amount:
+              item.amount !== undefined && item.amount !== null
+                ? String(item.amount)
+                : "",
+            orderIndex: index + 1,
+            deadlineOffsetDays:
+              item.deadlineOffsetDays !== undefined &&
+              item.deadlineOffsetDays !== null
+                ? String(item.deadlineOffsetDays)
+                : "",
+            revisionLimit:
+              item.revisionLimit !== undefined && item.revisionLimit !== null
+                ? String(item.revisionLimit)
+                : "1",
+          }))
+        : [{ ...emptyMilestone }],
+    resubmitNote: "",
+  };
 }
 
 function Card({ title, icon, children }) {
@@ -471,6 +529,7 @@ function MilestoneEditor({
           <p className="text-sm font-extrabold text-white">
             Milestone {index + 1}
           </p>
+
           <p className="mt-1 text-xs text-gray-500">
             Define scope, deliverable, payment, deadline, and revision limit.
           </p>
@@ -667,7 +726,7 @@ function Info({ label, value }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 font-bold text-white">{value}</p>
+      <p className="mt-1 break-words font-bold text-white">{value || "N/A"}</p>
     </div>
   );
 }
@@ -676,8 +735,6 @@ function Alert({ type, title, message }) {
   const style =
     type === "success"
       ? "border-green-500/30 bg-green-500/10 text-green-300"
-      : type === "warning"
-      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
       : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
@@ -688,15 +745,12 @@ function Alert({ type, title, message }) {
   );
 }
 
-function formatBudget(min, max) {
-  const minValue = Number(min || 0);
-  const maxValue = Number(max || 0);
+function formatMoney(value) {
+  const number = Number(value || 0);
 
-  if (minValue && maxValue) return `$${minValue} - $${maxValue}`;
-  if (minValue) return `From $${minValue}`;
-  if (maxValue) return `Up to $${maxValue}`;
+  if (!number) return "$0";
 
-  return "Budget not set";
+  return `$${number.toLocaleString()}`;
 }
 
 function getFriendlyError(err, fallback) {

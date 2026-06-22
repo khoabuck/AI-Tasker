@@ -8,19 +8,30 @@ const getValue = (...values) => {
 
 const trim = (value) => String(value || "").trim();
 
+const toNumber = (value) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? 0 : number;
+};
+
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [];
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
   if (!data) return null;
 
-  if (data?.data?.proposal) return data.data.proposal;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
+  if (data?.data?.proposal) return data.data.proposal;
   if (data?.data) return data.data;
 
-  if (data?.proposal) return data.proposal;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
+  if (data?.proposal) return data.proposal;
 
   return data;
 };
@@ -32,410 +43,457 @@ const unwrapListData = (response) => {
 
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.Items)) return data.Items;
   if (Array.isArray(data?.result)) return data.result;
-  if (Array.isArray(data?.Result)) return data.Result;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.Results)) return data.Results;
-
   if (Array.isArray(data?.proposals)) return data.proposals;
-  if (Array.isArray(data?.Proposals)) return data.Proposals;
   if (Array.isArray(data?.versions)) return data.versions;
-  if (Array.isArray(data?.Versions)) return data.Versions;
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
-  if (Array.isArray(data?.data?.Items)) return data.data.Items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
-  if (Array.isArray(data?.data?.Result)) return data.data.Result;
-  if (Array.isArray(data?.data?.results)) return data.data.results;
-  if (Array.isArray(data?.data?.Results)) return data.data.Results;
-
   if (Array.isArray(data?.data?.proposals)) return data.data.proposals;
-  if (Array.isArray(data?.data?.Proposals)) return data.data.Proposals;
   if (Array.isArray(data?.data?.versions)) return data.data.versions;
-  if (Array.isArray(data?.data?.Versions)) return data.data.Versions;
+  if (Array.isArray(data?.data?.proposalVersions)) {
+    return data.data.proposalVersions;
+  }
 
   return [];
 };
 
-const cleanPayload = (payload = {}) => {
-  return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => {
-      if (value === undefined || value === null) return false;
-      if (typeof value === "string" && value.trim() === "") return false;
-      return true;
-    })
+export const normalizeMilestone = (milestone = {}, index = 0) => {
+  const milestoneId = getValue(
+    milestone.milestoneId,
+    milestone.MilestoneId,
+    milestone.proposalMilestoneId,
+    milestone.ProposalMilestoneId,
+    milestone.id,
+    milestone.Id,
+    null
   );
+
+  return {
+    milestoneId,
+    id: milestoneId,
+
+    title: trim(getValue(milestone.title, milestone.Title, "")),
+
+    description: trim(
+      getValue(milestone.description, milestone.Description, "")
+    ),
+
+    expectedDeliverable: trim(
+      getValue(
+        milestone.expectedDeliverable,
+        milestone.ExpectedDeliverable,
+        milestone.deliverable,
+        milestone.Deliverable,
+        ""
+      )
+    ),
+
+    acceptanceCriteria: trim(
+      getValue(
+        milestone.acceptanceCriteria,
+        milestone.AcceptanceCriteria,
+        milestone.criteria,
+        milestone.Criteria,
+        ""
+      )
+    ),
+
+    amount: Number(getValue(milestone.amount, milestone.Amount, 0)),
+
+    orderIndex: Number(
+      getValue(milestone.orderIndex, milestone.OrderIndex, index + 1)
+    ),
+
+    deadlineOffsetDays: Number(
+      getValue(
+        milestone.deadlineOffsetDays,
+        milestone.DeadlineOffsetDays,
+        milestone.durationDays,
+        milestone.DurationDays,
+        0
+      )
+    ),
+
+    revisionLimit: Number(
+      getValue(milestone.revisionLimit, milestone.RevisionLimit, 0)
+    ),
+
+    status: String(getValue(milestone.status, milestone.Status, ""))
+      .trim()
+      .toUpperCase(),
+
+    createdAt: getValue(milestone.createdAt, milestone.CreatedAt, ""),
+    updatedAt: getValue(milestone.updatedAt, milestone.UpdatedAt, ""),
+
+    raw: milestone,
+  };
 };
 
-const normalizeStatus = (status) => {
-  return String(status || "SUBMITTED").trim().toUpperCase();
+export const normalizeMilestones = (milestones = []) => {
+  return toArray(milestones).map(normalizeMilestone).filter(Boolean);
 };
 
-const normalizeProposal = (item) => {
-  if (!item) return null;
+const buildMilestonesPayload = (milestones = []) => {
+  return toArray(milestones)
+    .map((item, index) => ({
+      title: trim(item.title),
+      description: trim(item.description),
+      expectedDeliverable: trim(item.expectedDeliverable),
+      acceptanceCriteria: trim(item.acceptanceCriteria),
+      amount: toNumber(item.amount),
+      orderIndex: toNumber(item.orderIndex || index + 1),
+      deadlineOffsetDays: toNumber(item.deadlineOffsetDays),
+      revisionLimit: toNumber(item.revisionLimit),
+    }))
+    .filter((item) => {
+      return (
+        item.title ||
+        item.description ||
+        item.expectedDeliverable ||
+        item.acceptanceCriteria ||
+        item.amount > 0 ||
+        item.deadlineOffsetDays > 0
+      );
+    });
+};
+
+export const normalizeProposal = (proposal) => {
+  if (!proposal) return null;
 
   const proposalId = getValue(
-    item.proposalId,
-    item.ProposalId,
-    item.id,
-    item.Id
+    proposal.proposalId,
+    proposal.ProposalId,
+    proposal.id,
+    proposal.Id
   );
 
   const jobId = getValue(
-    item.jobId,
-    item.JobId,
-    item.jobPostingId,
-    item.JobPostingId
+    proposal.jobId,
+    proposal.JobId,
+    proposal.jobPostingId,
+    proposal.JobPostingId,
+    proposal.job?.jobId,
+    proposal.Job?.JobId,
+    proposal.job?.jobPostingId,
+    proposal.Job?.JobPostingId
   );
 
-  const expertProfileId = getValue(
-    item.expertProfileId,
-    item.ExpertProfileId,
-    item.expertId,
-    item.ExpertId
-  );
+  const status = String(getValue(proposal.status, proposal.Status, "SUBMITTED"))
+    .trim()
+    .toUpperCase();
 
-  const proposedBudget = Number(
+  const milestones = normalizeMilestones(
     getValue(
-      item.proposedBudget,
-      item.ProposedBudget,
-      item.budget,
-      item.Budget,
-      item.price,
-      item.Price,
-      0
-    )
-  );
-
-  const estimatedDurationDays = Number(
-    getValue(
-      item.estimatedDurationDays,
-      item.EstimatedDurationDays,
-      item.durationDays,
-      item.DurationDays,
-      item.timelineDays,
-      item.TimelineDays,
-      0
+      proposal.milestones,
+      proposal.Milestones,
+      proposal.proposalMilestones,
+      proposal.ProposalMilestones,
+      []
     )
   );
 
   return {
-    ...item,
-
     proposalId,
     id: proposalId,
 
     jobId,
     jobPostingId: jobId,
 
-    expertProfileId,
-
-    expertName: getValue(
-      item.expertName,
-      item.ExpertName,
-      item.expertFullName,
-      item.ExpertFullName,
-      ""
-    ),
-
-    expertAvatarUrl: getValue(
-      item.expertAvatarUrl,
-      item.ExpertAvatarUrl,
-      item.avatarUrl,
-      item.AvatarUrl,
-      ""
-    ),
+    version: getValue(proposal.version, proposal.Version, null),
 
     jobTitle: getValue(
-      item.jobTitle,
-      item.JobTitle,
-      item.projectTitle,
-      item.ProjectTitle,
-      item.title,
-      item.Title,
-      "Project"
+      proposal.jobTitle,
+      proposal.JobTitle,
+      proposal.title,
+      proposal.Title,
+      proposal.job?.title,
+      proposal.Job?.Title,
+      "Untitled Project"
     ),
 
     clientName: getValue(
-      item.clientName,
-      item.ClientName,
-      item.customerName,
-      item.CustomerName,
+      proposal.clientName,
+      proposal.ClientName,
+      proposal.client?.fullName,
+      proposal.Client?.FullName,
+      proposal.client?.name,
+      proposal.Client?.Name,
       "Client"
     ),
 
+    expertName: getValue(proposal.expertName, proposal.ExpertName, "Expert"),
+
     coverLetter: getValue(
-      item.coverLetter,
-      item.CoverLetter,
-      item.proposalText,
-      item.ProposalText,
-      item.message,
-      item.Message,
-      item.description,
-      item.Description,
+      proposal.coverLetter,
+      proposal.CoverLetter,
+      proposal.proposalText,
+      proposal.ProposalText,
+      proposal.message,
+      proposal.Message,
       ""
     ),
 
-    proposalText: getValue(
-      item.proposalText,
-      item.ProposalText,
-      item.coverLetter,
-      item.CoverLetter,
-      item.message,
-      item.Message,
+    proposedPrice: Number(
+      getValue(
+        proposal.proposedPrice,
+        proposal.ProposedPrice,
+        proposal.proposedBudget,
+        proposal.ProposedBudget,
+        0
+      )
+    ),
+
+    proposedTimelineDays: Number(
+      getValue(
+        proposal.proposedTimelineDays,
+        proposal.ProposedTimelineDays,
+        proposal.estimatedDurationDays,
+        proposal.EstimatedDurationDays,
+        0
+      )
+    ),
+
+    expectedOutputs: getValue(
+      proposal.expectedOutputs,
+      proposal.ExpectedOutputs,
       ""
     ),
 
-    proposedBudget: Number.isNaN(proposedBudget) ? 0 : proposedBudget,
-    budget: Number.isNaN(proposedBudget) ? 0 : proposedBudget,
+    workingApproach: getValue(
+      proposal.workingApproach,
+      proposal.WorkingApproach,
+      proposal.workPlan,
+      proposal.WorkPlan,
+      ""
+    ),
 
-    estimatedDurationDays: Number.isNaN(estimatedDurationDays)
-      ? 0
-      : estimatedDurationDays,
-    durationDays: Number.isNaN(estimatedDurationDays)
-      ? 0
-      : estimatedDurationDays,
+    preliminaryMilestonePlan: getValue(
+      proposal.preliminaryMilestonePlan,
+      proposal.PreliminaryMilestonePlan,
+      ""
+    ),
 
-    status: normalizeStatus(getValue(item.status, item.Status)),
+    milestones,
 
-    version: Number(getValue(item.version, item.Version, 1)),
+    resubmitNote: getValue(
+      proposal.resubmitNote,
+      proposal.ResubmitNote,
+      proposal.changeNote,
+      proposal.ChangeNote,
+      ""
+    ),
 
-    createdAt: getValue(item.createdAt, item.CreatedAt, ""),
-    updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
-    submittedAt: getValue(item.submittedAt, item.SubmittedAt, item.createdAt, ""),
+    counterPrice: getValue(proposal.counterPrice, proposal.CounterPrice, null),
 
-    raw: item,
+    counterTimelineDays: getValue(
+      proposal.counterTimelineDays,
+      proposal.CounterTimelineDays,
+      null
+    ),
+
+    counterMessage: getValue(
+      proposal.counterMessage,
+      proposal.CounterMessage,
+      proposal.clientMessage,
+      proposal.ClientMessage,
+      proposal.revisionReason,
+      proposal.RevisionReason,
+      ""
+    ),
+
+    status,
+
+    contractId: getValue(proposal.contractId, proposal.ContractId, null),
+
+    submittedAt: getValue(proposal.submittedAt, proposal.SubmittedAt, ""),
+    createdAt: getValue(proposal.createdAt, proposal.CreatedAt, ""),
+    updatedAt: getValue(proposal.updatedAt, proposal.UpdatedAt, ""),
+
+    raw: proposal,
   };
 };
 
-const normalizeProposalVersion = (item) => {
-  if (!item) return null;
+export const normalizeProposalVersion = (version) => {
+  if (!version) return null;
 
-  const normalized = normalizeProposal(item);
+  const milestones = normalizeMilestones(
+    getValue(
+      version.milestones,
+      version.Milestones,
+      version.proposalMilestones,
+      version.ProposalMilestones,
+      []
+    )
+  );
 
   return {
-    ...normalized,
-
     proposalVersionId: getValue(
-      item.proposalVersionId,
-      item.ProposalVersionId,
-      item.versionId,
-      item.VersionId,
-      item.id,
-      item.Id
+      version.proposalVersionId,
+      version.ProposalVersionId,
+      version.versionId,
+      version.VersionId,
+      version.id,
+      version.Id
     ),
 
-    version: Number(getValue(item.version, item.Version, 1)),
+    proposalId: getValue(version.proposalId, version.ProposalId),
 
-    changeNote: getValue(
-      item.changeNote,
-      item.ChangeNote,
-      item.note,
-      item.Note,
-      item.resubmitReason,
-      item.ResubmitReason,
+    version: getValue(version.version, version.Version, null),
+
+    coverLetter: getValue(
+      version.coverLetter,
+      version.CoverLetter,
+      version.proposalText,
+      version.ProposalText,
       ""
     ),
+
+    proposedPrice: Number(
+      getValue(version.proposedPrice, version.ProposedPrice, 0)
+    ),
+
+    proposedTimelineDays: Number(
+      getValue(version.proposedTimelineDays, version.ProposedTimelineDays, 0)
+    ),
+
+    expectedOutputs: getValue(
+      version.expectedOutputs,
+      version.ExpectedOutputs,
+      ""
+    ),
+
+    workingApproach: getValue(
+      version.workingApproach,
+      version.WorkingApproach,
+      ""
+    ),
+
+    preliminaryMilestonePlan: getValue(
+      version.preliminaryMilestonePlan,
+      version.PreliminaryMilestonePlan,
+      ""
+    ),
+
+    milestones,
+
+    changeNote: getValue(
+      version.changeNote,
+      version.ChangeNote,
+      version.resubmitNote,
+      version.ResubmitNote,
+      ""
+    ),
+
+    createdAt: getValue(version.createdAt, version.CreatedAt, ""),
+    updatedAt: getValue(version.updatedAt, version.UpdatedAt, ""),
+
+    raw: version,
   };
 };
 
-const buildSubmitProposalPayload = (firstArg, secondArg) => {
-  const payload = secondArg
-    ? {
-        ...secondArg,
-        jobId: firstArg,
-        jobPostingId: firstArg,
-      }
-    : {
-        ...firstArg,
-      };
+const buildSubmitPayload = (jobId, formData) => ({
+  jobId: Number(jobId),
+  coverLetter: trim(formData.coverLetter),
+  proposedPrice: toNumber(formData.proposedPrice),
+  proposedTimelineDays: toNumber(formData.proposedTimelineDays),
+  expectedOutputs: trim(formData.expectedOutputs),
+  workingApproach: trim(formData.workingApproach),
+  preliminaryMilestonePlan: trim(formData.preliminaryMilestonePlan),
+  milestones: buildMilestonesPayload(formData.milestones),
+});
 
-  const jobId = getValue(payload.jobId, payload.jobPostingId);
-
-  return cleanPayload({
-    ...payload,
-
-    jobId,
-    jobPostingId: jobId,
-
-    coverLetter: trim(
-      getValue(payload.coverLetter, payload.proposalText, payload.message, "")
-    ),
-
-    proposalText: trim(
-      getValue(payload.proposalText, payload.coverLetter, payload.message, "")
-    ),
-
-    proposedBudget: Number(
-      getValue(payload.proposedBudget, payload.budget, payload.price, 0)
-    ),
-
-    estimatedDurationDays: Number(
-      getValue(
-        payload.estimatedDurationDays,
-        payload.durationDays,
-        payload.timelineDays,
-        0
-      )
-    ),
-  });
-};
-
-const buildResubmitProposalPayload = (payload = {}) => {
-  return cleanPayload({
-    ...payload,
-
-    coverLetter: trim(
-      getValue(payload.coverLetter, payload.proposalText, payload.message, "")
-    ),
-
-    proposalText: trim(
-      getValue(payload.proposalText, payload.coverLetter, payload.message, "")
-    ),
-
-    proposedBudget: Number(
-      getValue(payload.proposedBudget, payload.budget, payload.price, 0)
-    ),
-
-    estimatedDurationDays: Number(
-      getValue(
-        payload.estimatedDurationDays,
-        payload.durationDays,
-        payload.timelineDays,
-        0
-      )
-    ),
-
-    resubmitReason: trim(
-      getValue(payload.resubmitReason, payload.reason, payload.changeNote, "")
-    ),
-  });
-};
-
-const buildDecisionPayload = (payload = {}) => {
-  const decision = String(
-    getValue(payload.decision, payload.status, payload.action, "")
-  )
-    .trim()
-    .toUpperCase();
-
-  return cleanPayload({
-    ...payload,
-    decision,
-    reason: trim(getValue(payload.reason, payload.note, payload.message, "")),
-  });
-};
+const buildResubmitPayload = (formData) => ({
+  coverLetter: trim(formData.coverLetter),
+  proposedPrice: toNumber(
+    getValue(formData.proposedPrice, formData.proposedBudget)
+  ),
+  proposedTimelineDays: toNumber(
+    getValue(formData.proposedTimelineDays, formData.estimatedDurationDays)
+  ),
+  expectedOutputs: trim(formData.expectedOutputs),
+  workingApproach: trim(formData.workingApproach),
+  preliminaryMilestonePlan: trim(formData.preliminaryMilestonePlan),
+  milestones: buildMilestonesPayload(formData.milestones),
+  resubmitNote: trim(getValue(formData.resubmitNote, formData.resubmitReason)),
+});
 
 const proposalService = {
-  async submitProposal(firstArg, secondArg) {
-    const payload = buildSubmitProposalPayload(firstArg, secondArg);
+  async submitProposal(jobId, formData) {
+    const payload = buildSubmitPayload(jobId, formData);
+
+    console.log("SUBMIT PROPOSAL PAYLOAD:", payload);
+
     const response = await proposalApi.submitProposal(payload);
-
     return normalizeProposal(unwrapData(response));
   },
 
-  async getMyProposals(params = {}) {
-    const response = await proposalApi.getMyProposals(params);
+  async getMyProposals() {
+    const response = await proposalApi.getMyProposals();
+
+    console.log("GET MY PROPOSALS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeProposal).filter(Boolean);
   },
 
-  async getJobProposals(jobId, params = {}) {
-    if (!jobId) {
-      throw new Error("jobId is required.");
-    }
+  async getJobProposals(jobId) {
+    const response = await proposalApi.getJobProposals(jobId);
 
-    const response = await proposalApi.getJobProposals(jobId, params);
+    console.log("GET JOB PROPOSALS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeProposal).filter(Boolean);
-  },
-
-  async getProposalsByJob(jobId, params = {}) {
-    return this.getJobProposals(jobId, params);
-  },
-
-  async getProposal(proposalId) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
-    }
-
-    const response = await proposalApi.getProposal(proposalId);
-
-    return normalizeProposal(unwrapData(response));
   },
 
   async getProposalById(proposalId) {
-    return this.getProposal(proposalId);
-  },
+    if (!proposalId || proposalId === "undefined" || proposalId === "null") {
+      throw new Error("Invalid proposal id.");
+    }
 
-  async getProposalDetail(proposalId) {
-    return this.getProposal(proposalId);
+    const response = await proposalApi.getProposalById(proposalId);
+
+    console.log("GET PROPOSAL DETAIL RESPONSE:", response?.data);
+
+    return normalizeProposal(unwrapData(response));
   },
 
   async getProposalVersions(proposalId) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
+    if (!proposalId || proposalId === "undefined" || proposalId === "null") {
+      throw new Error("Invalid proposal id.");
     }
 
     const response = await proposalApi.getProposalVersions(proposalId);
+
+    console.log("GET PROPOSAL VERSIONS RESPONSE:", response?.data);
 
     return unwrapListData(response)
       .map(normalizeProposalVersion)
       .filter(Boolean);
   },
 
-  async resubmitProposal(proposalId, payload) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
+  async resubmitProposal(proposalId, formData) {
+    if (!proposalId || proposalId === "undefined" || proposalId === "null") {
+      throw new Error("Invalid proposal id.");
     }
 
-    const request = buildResubmitProposalPayload(payload);
-    const response = await proposalApi.resubmitProposal(proposalId, request);
+    const payload = buildResubmitPayload(formData);
 
+    console.log("RESUBMIT PROPOSAL PAYLOAD:", payload);
+
+    const response = await proposalApi.resubmitProposal(proposalId, payload);
     return normalizeProposal(unwrapData(response));
-  },
-
-  async decideProposal(proposalId, payload) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
-    }
-
-    const request = buildDecisionPayload(payload);
-    const response = await proposalApi.decideProposal(proposalId, request);
-
-    return normalizeProposal(unwrapData(response));
-  },
-
-  async submitDecision(proposalId, payload) {
-    return this.decideProposal(proposalId, payload);
   },
 
   async withdrawProposal(proposalId) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
+    if (!proposalId || proposalId === "undefined" || proposalId === "null") {
+      throw new Error("Invalid proposal id.");
     }
 
     const response = await proposalApi.withdrawProposal(proposalId);
 
+    console.log("WITHDRAW PROPOSAL RESPONSE:", response?.data);
+
     return normalizeProposal(unwrapData(response));
   },
-
-  async cancelProposal(proposalId) {
-    return this.withdrawProposal(proposalId);
-  },
-
-  /*
-    Backend mới không còn /counter.
-    Giữ alias này để page cũ không vỡ, nhưng sẽ chạy qua /resubmit.
-    Sau bước này mình sẽ sửa ProposalDetailPage để bỏ hẳn chữ Counter.
-  */
-  async counterProposal(proposalId, payload) {
-    return this.resubmitProposal(proposalId, payload);
-  },
-
-  normalizeProposal,
-  normalizeProposalVersion,
 };
 
 export default proposalService;

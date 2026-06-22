@@ -66,6 +66,9 @@ import ExpertNotificationsPage from "../../modules/expert/pages/ExpertNotificati
 import ExpertReviewsPage from "../../modules/expert/pages/ExpertReviewsPage";
 import ExpertSkillsPage from "../../modules/expert/pages/ExpertSkillsPage";
 import ExpertProfileLockedPage from "../../modules/expert/pages/ExpertProfileLockedPage";
+import CreateContractFromProposalPage from "../../modules/expert/pages/CreateContractFromProposalPage";
+import ProposalVersionsPage from "../../modules/expert/pages/ProposalVersionsPage";
+import ResubmitProposalPage from "../../modules/expert/pages/ResubmitProposalPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -152,7 +155,11 @@ export default function AppRouter() {
   <Route path="/expert/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalDetailPage /></ProtectedRoute>} />
   <Route path="/expert/proposals/:proposalId/contract" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
   <Route path="/expert/contracts/:contractId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
+  <Route path="/expert/proposals/:proposalId/create-contract" element={<ProtectedRoute allowedRoles={["EXPERT"]}><CreateContractFromProposalPage /></ProtectedRoute>} />   
+  <Route path="/expert/proposals/:proposalId/versions" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalVersionsPage /></ProtectedRoute>} />
+  <Route path="/expert/proposals/:proposalId/resubmit" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ResubmitProposalPage /></ProtectedRoute>} />   
 
+    
   {/* Expert projects */}
   <Route path="/expert/projects" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProjectsPage /></ProtectedRoute>} />
   <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
