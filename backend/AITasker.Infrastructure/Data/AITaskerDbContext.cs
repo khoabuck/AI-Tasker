@@ -14,6 +14,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<AdminAuditLog> AdminAuditLogs => Set<AdminAuditLog>();
 
+    public DbSet<PlatformFeePolicy> PlatformFeePolicies => Set<PlatformFeePolicy>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -114,6 +116,8 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.UpdatedAt);
         });
 
+
+
         // =========================
         // AdminAuditLogs
         // =========================
@@ -157,6 +161,42 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.EntityId);
 
             entity.HasIndex(x => x.CreatedAt);
+        });
+
+        // =========================
+        // PlatformFeePolicies
+        // =========================
+        modelBuilder.Entity<PlatformFeePolicy>(entity =>
+        {
+            entity.ToTable("PlatformFeePolicies");
+
+            entity.HasKey(x => x.PlatformFeePolicyId);
+
+            entity.Property(x => x.IndividualClientFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.BusinessClientFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
         });
 
         // =========================
