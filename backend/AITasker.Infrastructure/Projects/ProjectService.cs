@@ -9,6 +9,8 @@ namespace AITasker.Infrastructure.Projects
 {
     public class ProjectService : IProjectService
     {
+        private const string JobStatusCompleted = "COMPLETED";
+
         private const string ContractStatusConfirmed = "CONFIRMED";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
@@ -440,6 +442,10 @@ namespace AITasker.Infrastructure.Projects
                 project.Status = ProjectStatusCompleted;
                 project.EndDate = DateTime.UtcNow;
 
+                await UpdateJobStatusByProjectAsync(
+                    project,
+                    JobStatusCompleted);
+
                 await _context.SaveChangesAsync();
 
                 await _notificationService.CreateNotificationAsync(
@@ -806,6 +812,40 @@ namespace AITasker.Infrastructure.Projects
                 Status = milestone.Status,
                 CreatedAt = milestone.CreatedAt
             };
+        }
+
+        private async Task UpdateJobStatusByProjectAsync(
+            Project project,
+            string jobStatus)
+        {
+            var contract = await _context.ProjectContracts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ContractId == project.ContractId);
+
+            if (contract == null)
+            {
+                return;
+            }
+
+            var proposal = await _context.Proposals
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalId == contract.ProposalId);
+
+            if (proposal == null)
+            {
+                return;
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
+
+            if (job == null)
+            {
+                return;
+            }
+
+            job.Status = jobStatus;
+            job.UpdatedAt = DateTime.UtcNow;
         }
     }
 }

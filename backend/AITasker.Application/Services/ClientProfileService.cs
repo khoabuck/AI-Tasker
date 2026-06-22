@@ -13,7 +13,7 @@ public class ClientProfileService : IClientProfileService
 
     private const int MaxBusinessVerificationSubmissions = 5;
     private static readonly TimeSpan BusinessVerificationLockDuration =
-        TimeSpan.FromSeconds(15); 
+        TimeSpan.FromHours(24);
 
     private const string PendingCompanyName = "Pending VietQR verification";
     private const string PendingCompanyAddress = "Pending VietQR verification";

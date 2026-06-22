@@ -33,15 +33,15 @@ public class ExpertProfile
 
     public string? GitHubUrl { get; set; }
 
-    public string ExpertCategory { get; set; } = string.Empty;
+    public string ExpertCategory { get; set; } = "OTHER";
 
     public decimal ProfileScore { get; set; }
 
     // FRESHER / JUNIOR / MID_LEVEL / SENIOR / LEAD
-    public string Level { get; set; } = string.Empty;
+    public string Level { get; set; } = "FRESHER";
 
     // APPROVED / NEEDS_CORRECTION / LOCKED
-    public string ProfileReviewStatus { get; set; } = string.Empty;
+    public string ProfileReviewStatus { get; set; } = "NEEDS_CORRECTION";
 
     public string? ProfileReviewNote { get; set; }
 

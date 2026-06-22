@@ -99,9 +99,10 @@ namespace AITasker.Infrastructure.Dashboards
                 TotalJobs = jobs.Count,
                 OpenJobs = jobs.Count(j => IsStatus(j.Status, "OPEN")),
                 DraftJobs = jobs.Count(j => IsStatus(j.Status, "DRAFT")),
-                ClosedJobs = jobs.Count(j =>
-                    IsStatus(j.Status, "CLOSED") ||
-                    IsStatus(j.Status, "COMPLETED")),
+                ActiveJobs = jobs.Count(j => IsStatus(j.Status, "ACTIVE")),
+                CompletedJobs = jobs.Count(j => IsStatus(j.Status, "COMPLETED")),
+                DisputedJobs = jobs.Count(j => IsStatus(j.Status, "DISPUTED")),
+                CancelledJobs = jobs.Count(j => IsStatus(j.Status, "CANCELLED")),
 
                 TotalProposals = proposals.Count,
                 SubmittedProposals = proposals.Count(p => IsStatus(p.Status, "SUBMITTED")),
@@ -233,8 +234,7 @@ namespace AITasker.Infrastructure.Dashboards
                     transactions,
                     "REFUND",
                     "ESCROW_REFUNDED",
-                    "DISPUTE_REFUND",
-                    "PARTIAL_REFUND"),
+                    "DISPUTE_REFUND"),
 
                 PendingWithdrawalAmount = withdrawalRequests
                     .Where(w => IsStatus(w.Status, "PENDING"))

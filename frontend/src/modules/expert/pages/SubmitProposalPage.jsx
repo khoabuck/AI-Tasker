@@ -44,8 +44,8 @@ export default function SubmitProposalPage() {
       const data = await jobService.getJobById(jobId);
       setJob(data);
     } catch (err) {
-      console.error(err);
-      setError("Unable to load job information. Please try again.");
+      console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load job detail."));
       setJob(null);
     } finally {
       setLoading(false);
@@ -84,7 +84,7 @@ export default function SubmitProposalPage() {
     const errors = validateProposalForm(formData);
 
     if (Object.keys(errors).length > 0) {
-      setError("Please complete all required fields correctly before submitting.");
+      setError("Please check the highlighted fields before submitting.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -94,16 +94,14 @@ export default function SubmitProposalPage() {
 
       await proposalService.submitProposal(jobId, formData);
 
-      setMessage(
-        "Your proposal has been sent successfully. We will notify you when there is an update."
-      );
+      setMessage("Proposal submitted successfully.");
 
       setTimeout(() => {
         navigate("/expert/proposals", { replace: true });
       }, 900);
     } catch (err) {
-      console.error(err);
-      setError("We couldn't submit your proposal. Please try again later.");
+      console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot submit proposal."));
     } finally {
       setSubmitting(false);
     }
@@ -115,7 +113,7 @@ export default function SubmitProposalPage() {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job details...
+          Loading job information...
         </div>
       </ExpertLayout>
     );
@@ -146,12 +144,13 @@ export default function SubmitProposalPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in price, timeline, outputs, and working approach.
+              Fill in price, timeline, outputs, and working approach based on
+              the backend proposal API.
             </p>
           </div>
 
           {error && (
-            <Alert type="danger" title="Notice" message={error} />
+            <Alert type="danger" title="Proposal error" message={error} />
           )}
 
           {message && (
@@ -160,9 +159,7 @@ export default function SubmitProposalPage() {
 
           {!job && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
-              <p className="text-gray-400">
-                This job is no longer available.
-              </p>
+              <p className="text-gray-400">Job not found.</p>
 
               <button
                 type="button"
@@ -180,8 +177,8 @@ export default function SubmitProposalPage() {
                 {!isJobOpen && (
                   <Alert
                     type="warning"
-                    title="Notice"
-                    message="This job is currently not open for new proposals."
+                    title="Job is not open"
+                    message="This job is not OPEN, so backend may reject proposal submission."
                   />
                 )}
 
@@ -193,7 +190,7 @@ export default function SubmitProposalPage() {
                     onChange={(value) => updateField("coverLetter", value)}
                     onBlur={() => markTouched("coverLetter")}
                     error={getFieldError("coverLetter")}
-                    placeholder="Introduce yourself..."
+                    placeholder="Introduce yourself and explain why you are suitable for this job..."
                     rows={6}
                   />
                 </Card>
@@ -207,10 +204,11 @@ export default function SubmitProposalPage() {
                       onChange={(value) => updateField("proposedPrice", value)}
                       onBlur={() => markTouched("proposedPrice")}
                       error={getFieldError("proposedPrice")}
+                      placeholder="500"
                     />
 
                     <NumberInput
-                      label="Timeline (days)"
+                      label="Proposed Timeline Days"
                       required
                       value={formData.proposedTimelineDays}
                       onChange={(value) =>
@@ -218,6 +216,7 @@ export default function SubmitProposalPage() {
                       }
                       onBlur={() => markTouched("proposedTimelineDays")}
                       error={getFieldError("proposedTimelineDays")}
+                      placeholder="14"
                     />
                   </div>
                 </Card>
@@ -233,6 +232,7 @@ export default function SubmitProposalPage() {
                       }
                       onBlur={() => markTouched("expectedOutputs")}
                       error={getFieldError("expectedOutputs")}
+                      placeholder="List the final outputs you will deliver to the client..."
                       rows={5}
                     />
 
@@ -245,15 +245,17 @@ export default function SubmitProposalPage() {
                       }
                       onBlur={() => markTouched("workingApproach")}
                       error={getFieldError("workingApproach")}
+                      placeholder="Explain your working method, communication plan, and implementation steps..."
                       rows={5}
                     />
 
                     <TextArea
-                      label="Milestone Plan (optional)"
+                      label="Preliminary Milestone Plan"
                       value={formData.preliminaryMilestonePlan}
                       onChange={(value) =>
                         updateField("preliminaryMilestonePlan", value)
                       }
+                      placeholder="Optional. Example: Milestone 1: UI, Milestone 2: API integration..."
                       rows={4}
                     />
                   </div>
@@ -289,23 +291,36 @@ export default function SubmitProposalPage() {
                   </h2>
 
                   <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {job.description || "No description available."}
+                    {job.description || "No description."}
                   </p>
 
                   <div className="mt-5 space-y-3">
                     <Info label="Client" value={job.clientName || "Client"} />
+
                     <Info
                       label="Budget"
                       value={formatBudget(job.budgetMin, job.budgetMax)}
                     />
+
                     <Info
                       label="Duration"
                       value={
                         job.durationDays ? `${job.durationDays} days` : "N/A"
                       }
                     />
+
                     <Info label="Status" value={job.status || "OPEN"} />
                   </div>
+                </section>
+
+                <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
+                  <p className="font-bold">Backend rule</p>
+
+                  <p className="mt-2 text-sm leading-6">
+                    Expert profile must be approved and available for work.
+                    Also, one expert can submit only one active proposal per
+                    job.
+                  </p>
                 </section>
               </aside>
             </div>
@@ -316,65 +331,96 @@ export default function SubmitProposalPage() {
   );
 }
 
-/* KEEP UI COMPONENTS UNCHANGED */
 function Card({ title, icon, children }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8">
       <div className="mb-6 flex items-center gap-3">
-        <span className="material-symbols-outlined text-[#00F0FF]">
-          {icon}
-        </span>
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+          <span className="material-symbols-outlined text-xl text-[#00F0FF]">
+            {icon}
+          </span>
+        </div>
+
         <h2 className="text-lg font-bold text-white">{title}</h2>
       </div>
+
       {children}
     </section>
   );
 }
 
-function TextArea(props) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+  rows = 4,
+}) {
   return (
     <div>
-      <label className="mb-2 block text-xs text-gray-400">
-        {props.label} {props.required && "*"}
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
       </label>
 
       <textarea
-        {...props}
-        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-white"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
       />
 
-      {props.error && (
-        <p className="mt-1 text-xs text-red-300">{props.error}</p>
-      )}
+      <FieldError message={error} />
     </div>
   );
 }
 
-function NumberInput(props) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
   return (
     <div>
-      <label className="mb-2 block text-xs text-gray-400">
-        {props.label} {props.required && "*"}
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
       </label>
 
       <input
         type="number"
-        {...props}
-        className="w-full rounded-xl border border-white/10 bg-white/5 p-3 text-white"
+        min="1"
+        step="1"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
       />
 
-      {props.error && (
-        <p className="mt-1 text-xs text-red-300">{props.error}</p>
-      )}
+      <FieldError message={error} />
     </div>
   );
 }
 
+function FieldError({ message }) {
+  if (!message) return null;
+
+  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
+}
+
 function Info({ label, value }) {
   return (
-    <div className="flex justify-between text-sm text-gray-400">
-      <span>{label}</span>
-      <span className="text-white">{value}</span>
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 font-bold text-white">{value}</p>
     </div>
   );
 }
@@ -388,7 +434,7 @@ function Alert({ type, title, message }) {
       : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
-    <div className={`mb-5 rounded-xl border p-4 text-sm ${style}`}>
+    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
       <p className="font-bold">{title}</p>
       <p className="mt-1">{message}</p>
     </div>
@@ -396,8 +442,21 @@ function Alert({ type, title, message }) {
 }
 
 function formatBudget(min, max) {
-  if (min && max) return `$${min} - $${max}`;
-  if (min) return `From $${min}`;
-  if (max) return `Up to $${max}`;
-  return "Not set";
+  const minValue = Number(min || 0);
+  const maxValue = Number(max || 0);
+
+  if (minValue && maxValue) return `$${minValue} - $${maxValue}`;
+  if (minValue) return `From $${minValue}`;
+  if (maxValue) return `Up to $${maxValue}`;
+
+  return "Budget not set";
+}
+
+function getFriendlyError(err, fallback) {
+  return (
+    err?.response?.data?.message ||
+    err?.response?.data?.title ||
+    err?.message ||
+    fallback
+  );
 }

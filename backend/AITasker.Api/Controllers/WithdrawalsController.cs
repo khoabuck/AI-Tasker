@@ -12,10 +12,28 @@ namespace AITasker.Api.Controllers
     public class WithdrawalsController : ControllerBase
     {
         private readonly IWithdrawalService _withdrawalService;
+        private readonly IBankAccountVerificationService _bankAccountVerificationService;
 
-        public WithdrawalsController(IWithdrawalService withdrawalService)
+        public WithdrawalsController(
+            IWithdrawalService withdrawalService,
+            IBankAccountVerificationService bankAccountVerificationService)
         {
             _withdrawalService = withdrawalService;
+            _bankAccountVerificationService = bankAccountVerificationService;
+        }
+
+        [HttpPost("bank-account/verify")]
+        public async Task<IActionResult> VerifyBankAccount(
+            [FromBody] BankAccountVerificationRequest request)
+        {
+            var result = await _bankAccountVerificationService.VerifyAsync(request);
+
+            return Ok(new
+            {
+                success = result.IsValid,
+                message = result.Message,
+                data = result
+            });
         }
 
         [HttpPost]
@@ -26,11 +44,14 @@ namespace AITasker.Api.Controllers
                 var userId = GetCurrentUserId();
 
                 var result = await _withdrawalService.CreateWithdrawalRequestAsync(userId, request);
+                var success = !string.Equals(result.Status, "FAILED", StringComparison.OrdinalIgnoreCase);
 
                 return Ok(new
                 {
-                    success = true,
-                    message = "Withdrawal request submitted successfully.",
+                    success,
+                    message = success
+                        ? "Withdrawal processed in simulated mode."
+                        : result.BankVerificationMessage ?? "Withdrawal failed.",
                     data = result
                 });
             }

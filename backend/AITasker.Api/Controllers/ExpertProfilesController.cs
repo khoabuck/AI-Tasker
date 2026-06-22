@@ -219,13 +219,13 @@ public class ExpertProfilesController : ControllerBase
     }
 
     private static string GetSubmitMessage(string? profileReviewStatus)
+{
+    return profileReviewStatus?.Trim().ToUpperInvariant() switch
     {
-        return profileReviewStatus?.Trim().ToUpperInvariant() switch
-        {
-            "APPROVED" => "Expert profile approved successfully.",
-            "LOCKED" => "Expert profile review is locked.",
-            "NEEDS_CORRECTION" => "Expert profile submitted but needs correction.",
-            _ => "Expert profile submitted but needs correction."
-        };
-    }
+        "APPROVED" => "Expert profile approved successfully.",
+        "NEEDS_CORRECTION" => "Expert profile submitted but needs correction.",
+        "LOCKED" => "Expert profile is locked due to too many failed verification attempts.",
+        _ => "Expert profile submitted but needs correction."
+    };
+}
 }

@@ -22,6 +22,8 @@ namespace AITasker.Domain.Entities
 
         public DateTime Deadline { get; set; }
 
+        public DateTime? SubmissionOverdueNotifiedAt { get; set; }
+
         public int RevisionLimit { get; set; }
 
         public int RevisionUsed { get; set; }

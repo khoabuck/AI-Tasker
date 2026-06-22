@@ -8,6 +8,7 @@ namespace AITasker.Application.Services;
 public class ExpertProfileService : IExpertProfileService
 {
     private const int MaxExpertProfileReviewSubmissions = 5;
+    private const decimal ExpertProfilePassThreshold = 70m;
 
     private static readonly TimeSpan ExpertProfileReviewLockDuration =
         TimeSpan.FromHours(24);
@@ -79,7 +80,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var now = DateTime.UtcNow;
 
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(request, user.FullName);
 
         var expertProfile = new ExpertProfile
         {
@@ -216,7 +217,7 @@ public class ExpertProfileService : IExpertProfileService
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
 
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(request, user.FullName);
 
         expertProfile.ProfessionalTitle = request.ProfessionalTitle.Trim();
         expertProfile.Bio = request.Bio.Trim();
@@ -348,7 +349,7 @@ public class ExpertProfileService : IExpertProfileService
 
         ValidateCreateOrResubmitRequest(reviewRequest);
 
-        var reviewSnapshot = await ReviewFullProfileAsync(reviewRequest);
+        var reviewSnapshot = await ReviewFullProfileAsync(reviewRequest, user.FullName);
 
         var proposedCertificates = BuildProposedCertificateResponses(
             reviewRequest,
@@ -464,10 +465,14 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<ReviewSnapshot> ReviewFullProfileAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName
     )
     {
-        var certificateVerificationResults = await VerifyCertificatesAsync(request);
+        var certificateVerificationResults = await VerifyCertificatesAsync(
+            request,
+            expertFullName
+        );
 
         var experienceVerification = BuildExperienceVerification(
             request,
@@ -476,11 +481,27 @@ public class ExpertProfileService : IExpertProfileService
 
         var reviewResult = await ReviewByAiAsync(request);
 
-        var finalReviewStatus = ResolveFinalReviewStatus(
-            reviewResult.Status,
-            request.YearsOfExperience,
-            experienceVerification
+        var finalProfileScore = NormalizeProfileScore(reviewResult.ProfileScore);
+
+        var hasSubmittedCertificates = request.Certificates.Count > 0;
+
+        var hasUnverifiedCertificate = certificateVerificationResults.Any(x =>
+            !string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            )
         );
+
+        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalProfileScore = Math.Min(
+                finalProfileScore,
+                ExpertProfilePassThreshold - 1
+            );
+        }
+
+        var finalReviewStatus = ResolveFinalReviewStatus(finalProfileScore);
 
         var finalLevel = ResolveFinalLevel(
             reviewResult.Level,
@@ -492,15 +513,28 @@ public class ExpertProfileService : IExpertProfileService
             reviewResult.ReviewNote,
             experienceVerification.ExperienceVerificationNote,
             reviewResult.Status,
-            finalReviewStatus
+            finalReviewStatus,
+            finalProfileScore
         );
+
+        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} Certificate evidence is not fully verified. At least one submitted certificate requires stronger evidence, so the profile cannot be approved yet.";
+        }
+
+        var finalMissingInformation = finalReviewStatus == "APPROVED"
+            ? null
+            : hasSubmittedCertificates && hasUnverifiedCertificate
+                ? "At least one submitted certificate requires stronger evidence. Please provide a certificate page that clearly shows certificate name, holder name, issuer, and issued date."
+                : NormalizeMissingInformation(reviewResult.MissingInformation);
 
         return new ReviewSnapshot
         {
             ProfileReviewStatus = finalReviewStatus,
             ProfileReviewNote = finalReviewNote,
-            MissingInformation = reviewResult.MissingInformation,
-            ProfileScore = reviewResult.ProfileScore,
+            MissingInformation = finalMissingInformation,
+            ProfileScore = finalProfileScore,
             Level = finalLevel,
             ExpertCategory = reviewResult.ExpertCategory,
 
@@ -518,7 +552,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<List<CertificateVerificationResult>> VerifyCertificatesAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName
     )
     {
         if (request.Certificates.Count == 0)
@@ -533,6 +568,7 @@ public class ExpertProfileService : IExpertProfileService
                 CertificateIssuer = x.CertificateIssuer.Trim(),
                 CertificateUrl = x.CertificateUrl.Trim(),
                 IssuedAt = x.IssuedAt,
+                ExpertFullName = expertFullName.Trim(),
                 ExpertBio = request.Bio.Trim(),
                 ExpertSkillsText = request.Skills.Trim()
             })
@@ -592,8 +628,8 @@ public class ExpertProfileService : IExpertProfileService
         );
 
         var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
+            x.VerificationStatus == "NEEDS_EVIDENCE"
+        );
 
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
             x.VerificationStatus is "SUSPICIOUS" or "INVALID"
@@ -710,75 +746,11 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-    private static string ResolveFinalReviewStatus(
-        string aiReviewStatus,
-        int claimedYearsOfExperience,
-        ExperienceVerificationSnapshot experienceVerification
-    )
+    private static string ResolveFinalReviewStatus(decimal profileScore)
     {
-        var normalizedAiStatus = NormalizeReviewStatus(aiReviewStatus);
-        var claimedYears = Math.Clamp(claimedYearsOfExperience, 0, 50);
-        var verifiedYears = Math.Clamp(
-            experienceVerification.VerifiedYearsOfExperience,
-            0,
-            50
-        );
-
-        var gap = claimedYears - verifiedYears;
-        var confidence = experienceVerification.ExperienceConfidenceScore;
-        var experienceStatus =
-            experienceVerification.ExperienceVerificationStatus;
-
-        if (string.Equals(
-                experienceStatus,
-                "SUSPICIOUS",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (gap >= 3)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (claimedYears >= 7 && confidence < 70m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (claimedYears >= 5 && confidence < 60m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (normalizedAiStatus == "NEEDS_CORRECTION"
-            && claimedYears <= 2
-            && verifiedYears >= claimedYears
-            && confidence >= 85m
-            && string.Equals(
-                experienceStatus,
-                "VERIFIED",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            return "APPROVED";
-        }
-
-        if (normalizedAiStatus == "APPROVED"
-            && claimedYears >= 3
-            && string.Equals(
-                experienceStatus,
-                "NEEDS_EVIDENCE",
-                StringComparison.OrdinalIgnoreCase
-            )
-            && confidence < 45m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        return normalizedAiStatus;
+        return profileScore >= ExpertProfilePassThreshold
+            ? "APPROVED"
+            : "NEEDS_CORRECTION";
     }
 
     private static string ResolveFinalLevel(
@@ -883,8 +855,8 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-   private static string NormalizeReviewStatus(string? status)
-{
+    private static string NormalizeReviewStatus(string? status)
+    {
     if (string.IsNullOrWhiteSpace(status))
     {
         return "NEEDS_CORRECTION";
@@ -901,13 +873,14 @@ public class ExpertProfileService : IExpertProfileService
         "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
         _ => "NEEDS_CORRECTION"
     };
-}
+    }
 
     private static string BuildFinalProfileReviewNote(
         string? aiReviewNote,
         string? experienceNote,
         string aiReviewStatus,
-        string finalReviewStatus
+        string finalReviewStatus,
+        decimal finalProfileScore
     )
     {
         var notes = new List<string>();
@@ -922,6 +895,10 @@ public class ExpertProfileService : IExpertProfileService
             notes.Add(experienceNote.Trim());
         }
 
+        notes.Add(
+            $"Final profile score: {finalProfileScore:0.##}/100. Pass threshold: {ExpertProfilePassThreshold:0.##}. Final review status: {finalReviewStatus}."
+        );
+
         if (!string.Equals(
                 NormalizeReviewStatus(aiReviewStatus),
                 finalReviewStatus,
@@ -929,11 +906,23 @@ public class ExpertProfileService : IExpertProfileService
             ))
         {
             notes.Add(
-                $"Backend verification changed profile review status from {aiReviewStatus} to {finalReviewStatus} because backend evidence verification result is stronger than the AI review result."
+                $"Backend verification changed profile review status from {aiReviewStatus} to {finalReviewStatus} because final status is determined by ProfileScore threshold."
             );
         }
 
         return string.Join(" ", notes);
+    }
+
+    private static decimal NormalizeProfileScore(decimal profileScore)
+    {
+        return Math.Clamp(profileScore, 0m, 100m);
+    }
+
+    private static string NormalizeMissingInformation(string? missingInformation)
+    {
+        return string.IsNullOrWhiteSpace(missingInformation)
+            ? "ProfileScore is below 70. Please improve profile completeness, AI skill relevance, experience evidence, portfolio/GitHub/LinkedIn proof, certificate evidence, or trust/risk issues."
+            : missingInformation.Trim();
     }
 
     private static string BuildExperienceVerificationNote(
@@ -967,8 +956,8 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             var needsEvidenceCount = certificateVerificationResults.Count(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
+                x.VerificationStatus == "NEEDS_EVIDENCE"
+            );
 
             var suspiciousCount = certificateVerificationResults.Count(x =>
                 x.VerificationStatus == "SUSPICIOUS"
@@ -1150,7 +1139,8 @@ public class ExpertProfileService : IExpertProfileService
         user.Status = reviewStatus switch
         {
             "LOCKED" => "EXPERT_PROFILE_LOCKED",
-            "NEEDS_CORRECTION" => "PENDING_PROFILE",            _ => "PENDING_PROFILE"
+            "NEEDS_CORRECTION" => "PENDING_PROFILE",
+            _ => "PENDING_PROFILE"
         };
 
         user.UpdatedAt = now;

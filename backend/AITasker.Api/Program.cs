@@ -12,6 +12,8 @@ using AITasker.Infrastructure.Reviews;
 using AITasker.Infrastructure.Banking;
 using AITasker.Infrastructure.Dashboards;
 using AITasker.Infrastructure.Conversations;
+using AITasker.Api.BackgroundServices;
+using AITasker.Infrastructure.Notifications;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -246,6 +248,7 @@ builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>(
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
+builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================
@@ -259,16 +262,17 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
 // =========================
-// BE3 - Wallet / Escrow / VNPay / Withdrawal
+// BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
-builder.Services.AddScoped<AITasker.Infrastructure.Banking.VNPayService>();
+builder.Services.AddHttpClient<IBankAccountVerificationService, VietQrBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
 // =========================
 // BE3 - Deliverables / Disputes
 // =========================
 builder.Services.AddScoped<IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
+builder.Services.AddHostedService<AITasker.Infrastructure.Deliverables.DeliverableReviewDeadlineHostedService>();
 builder.Services.AddScoped<IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
 
 // =========================
@@ -276,6 +280,9 @@ builder.Services.AddScoped<IDisputeService, AITasker.Infrastructure.Disputes.Dis
 // =========================
 builder.Services.AddScoped<INotificationService, AITasker.Infrastructure.Notifications.NotificationService>();
 builder.Services.AddScoped<INotificationRealtimeService, AITasker.Api.Realtime.NotificationRealtimeService>();
+
+builder.Services.AddScoped<IJobDigestNotificationService, JobDigestNotificationService>();
+builder.Services.AddHostedService<JobDigestNotificationHostedService>();
 
 // =========================
 // HttpClient
@@ -348,7 +355,6 @@ app.MapControllers();
 // =======================================================
 // MAP SIGNALR REALTIME HUBS ENDPOINTS
 // =======================================================
-app.MapHub<AITasker.Api.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
 app.MapHub<ConversationHub>("/hubs/conversations");
 

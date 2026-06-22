@@ -8,11 +8,23 @@ namespace AITasker.Domain.Entities
 
         public decimal Amount { get; set; }
 
+        public decimal FeeAmount { get; set; }
+
+        public decimal NetAmount { get; set; }
+
+        public string BankCode { get; set; } = string.Empty;
+
         public string BankName { get; set; } = string.Empty;
 
         public string BankAccountNumber { get; set; } = string.Empty;
 
         public string BankAccountHolder { get; set; } = string.Empty;
+
+        public string BankVerificationStatus { get; set; } = "NOT_VERIFIED";
+
+        public string? BankVerificationMessage { get; set; }
+
+        public string? PayoutReferenceCode { get; set; }
 
         public string Status { get; set; } = "PENDING";
 
