@@ -71,6 +71,26 @@ const buildPayload = (form) => ({
     .filter((id) => Number.isInteger(id) && id > 0),
 });
 
+  const validateJobForm = (form) => {
+  const budgetMin = Number(form.budgetMin);
+  const budgetMax = Number(form.budgetMax);
+
+  if (!form.title.trim()) return "Job title is required.";
+  if (form.budgetMin === "") return "Budget min is required.";
+  if (form.budgetMax === "") return "Budget max is required.";
+  if (Number.isNaN(budgetMin) || Number.isNaN(budgetMax)) return "Budget must be valid numbers.";
+  if (budgetMin < 0 || budgetMax < 0) return "Budget cannot be negative.";
+  if (budgetMin >= budgetMax) return "Budget min must be less than budget max.";
+  if (!form.projectType.trim()) return "Project type is required.";
+  if (!form.complexity.trim()) return "Complexity is required.";
+  if (!form.deadline) return "Deadline is required.";
+  if (!form.description.trim()) return "Description is required.";
+  if (!form.expectedDeliverables.trim()) return "Expected deliverables is required.";
+  if (!Array.isArray(form.skills) || form.skills.length === 0) return "Please select at least one skill.";
+
+  return "";
+};
+
 export default function PostJobPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -123,10 +143,16 @@ export default function PostJobPage() {
 }, [editId]);
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError("");
-    setDraftSaved(false);
-  };
+  const { name, value } = e.target;
+
+  if ((name === "budgetMin" || name === "budgetMax") && Number(value) < 0) {
+    return;
+  }
+
+  setForm((prev) => ({ ...prev, [name]: value }));
+  setError("");
+  setDraftSaved(false);
+};
 
   const toggleSkill = (skill) => {
     const exists = form.skills.find((s) => s.id === skill.id);
@@ -140,7 +166,6 @@ export default function PostJobPage() {
 
   const switchMode = (newMode) => {
     setMode(newMode);
-    setForm(DEFAULT_FORM);
     setError("");
     setDraftSaved(false);
   };
@@ -186,13 +211,15 @@ export default function PostJobPage() {
 
   // POST /api/jobs/draft
   const handleSaveDraft = async () => {
-  if (!form.title.trim()) {
-    setError("Please enter a job title before saving draft.");
-    return;
-  }
+  const validationMessage = validateJobForm(form);
 
-  setSavingDraft(true);
-  setError("");
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
+    }
+
+    setSavingDraft(true);
+    setError("");
 
   try {
     if (isEditMode) {
@@ -208,6 +235,7 @@ export default function PostJobPage() {
     }
 
     setDraftSaved(true);
+    navigate("/client/jobs?status=DRAFT");
   } catch (err) {
     setError(
       err?.response?.data?.message ||
@@ -221,8 +249,16 @@ export default function PostJobPage() {
   // POST /api/jobs/submit
   const handleSubmit = async (e) => {
   e.preventDefault();
-  setSubmitting(true);
+
   setError("");
+
+  const validationMessage = validateJobForm(form);
+  if (validationMessage) {
+    setError(validationMessage);
+    return;
+  }
+
+  setSubmitting(true);
 
   try {
     if (isEditMode) {
@@ -238,7 +274,7 @@ export default function PostJobPage() {
     }
 
     setForm(DEFAULT_FORM);
-    navigate("/client/projects");
+    navigate("/client/jobs?status=OPEN");
   } catch (err) {
     setError(
       err?.response?.data?.message ||
@@ -322,7 +358,7 @@ export default function PostJobPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
                           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMin" value={form.budgetMin} onChange={handleChange} required
+                          <input type="number" min="0" name="budgetMin" value={form.budgetMin} onChange={handleChange} required
                             placeholder="Min" style={{ ...inputStyle, paddingLeft: 28 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
@@ -330,7 +366,7 @@ export default function PostJobPage() {
                         <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>—</span>
                         <div style={{ position: "relative" }}>
                           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMax" value={form.budgetMax} onChange={handleChange} required
+                          <input type="number" min="0" name="budgetMax" value={form.budgetMax} onChange={handleChange} required
                             placeholder="Max" style={{ ...inputStyle, paddingLeft: 28 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />

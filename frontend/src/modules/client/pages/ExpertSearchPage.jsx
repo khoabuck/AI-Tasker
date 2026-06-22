@@ -3,7 +3,13 @@ import { useState, useEffect } from "react";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const SENIORITY_OPTIONS = ["Fresher", "Junior", "Mid-level", "Senior", "Lead"];
+const SENIORITY_OPTIONS = [
+  { label: "Fresher", value: "fresher" },
+  { label: "Junior", value: "junior" },
+  { label: "Mid", value: "mid" },
+  { label: "Senior", value: "senior" },
+  { label: "Lead", value: "lead" },
+];
 
 function StarRating({ rating }) {
   return (
@@ -103,18 +109,26 @@ export default function ExpertSearchPage() {
       const res = await axiosInstance.get("/experts", {
         params: {
           keyword: query.trim() || undefined,
-          level: seniority || undefined,
           availableOnly: true,
           page: 1,
-          pageSize: 20,
+          pageSize: 100,
         },
       });
+
       const data = res.data;
       const items = Array.isArray(data) ? data : (data?.items || data?.data || []);
-      setExperts(items);
-      setHasSearched(true);
-    } catch (err) {
-      setExperts([]);
+
+      const filteredItems = seniority
+        ? items.filter((expert) => {
+            const level = String(expert.level || "").toLowerCase();
+            return level === seniority.toLowerCase();
+          })
+        : items;
+
+      setExperts(filteredItems);
+            setHasSearched(true);
+          } catch (err) {
+            setExperts([]);
       setHasSearched(true);
     } finally {
       setSearching(false);
@@ -180,11 +194,20 @@ export default function ExpertSearchPage() {
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.15em", color: "#8c90a0", marginBottom: 12 }}>Seniority</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                   {SENIORITY_OPTIONS.map((s) => {
-                    const isSelected = seniority === s;
+                    const isSelected = seniority === s.value;
+
                     return (
-                      <button key={s} type="button" onClick={() => toggleSeniority(s)}
-                        className={`rounded-md px-2 py-2 text-xs transition-all ${isSelected ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]" : "border border-white/10 bg-[#272a30] text-[#c2c6d6] hover:border-cyan-400/50 hover:text-cyan-400"}`}>
-                        {s}
+                      <button
+                        key={s.value}
+                        type="button"
+                        onClick={() => toggleSeniority(s.value)}
+                        className={`rounded-md px-2 py-2 text-xs transition-all ${
+                          isSelected
+                            ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"
+                            : "border border-white/10 bg-[#272a30] text-[#c2c6d6] hover:border-cyan-400/50 hover:text-cyan-400"
+                        }`}
+                      >
+                        {s.label}
                       </button>
                     );
                   })}

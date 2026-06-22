@@ -17,6 +17,11 @@ import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
 // Guest pages
 import LandingPage from "../../modules/guest/pages/LandingPage";
 
+//Legal
+import PrivacyPolicyPage from "../../modules/legal/pages/PrivacyPolicyPage";
+import TermsOfServicePage from "../../modules/legal/pages/TermsOfServicePage";
+import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
+
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
@@ -76,6 +81,8 @@ import ManageWithdrawalsPage from "../../modules/admin/pages/ManageWithdrawalsPa
 import ManageSkillsPage from "../../modules/admin/pages/ManageSkillsPage";
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
 
+
+
 const RequireAuth = ({ children }) => {
   if (!authService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
@@ -103,6 +110,11 @@ export default function AppRouter() {
   <Route path="/select-role" element={<RequireAuth><SelectRolePage /></RequireAuth>} />
   <Route path="/setup-profile" element={<RequireAuth><SetupProfilePage /></RequireAuth>} />
 
+  {/* Legal */}
+  <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+  <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+  <Route path="/dispute-policy" element={<DisputePolicyPage />} />
+
   {/* Client */}
   <Route path="/client/dashboard" element={<RequireAuth><ClientDashboard /></RequireAuth>} />
   <Route path="/client/post-job" element={<RequireAuth><PostJobPage /></RequireAuth>} />
@@ -129,6 +141,7 @@ export default function AppRouter() {
   {/* Client proposals + notifications */}
   <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />
   <Route path="/client/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+
 
   {/* Expert */}
   <Route path="/expert" element={<ProtectedRoute allowedRoles={["EXPERT"]}><Navigate to="/expert/dashboard" replace /></ProtectedRoute>} />

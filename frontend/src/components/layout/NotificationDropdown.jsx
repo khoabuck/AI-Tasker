@@ -122,7 +122,20 @@ export default function NotificationDropdown() {
           </div>
 
           {/* List */}
-          <div style={{ maxHeight: 420, overflowY: "auto" }}>
+          <div  className="
+                        max-h-[220px]
+                        overflow-y-auto
+                        pr-1
+
+                        [&::-webkit-scrollbar]:w-1
+                        [&::-webkit-scrollbar-track]:bg-transparent
+                        [&::-webkit-scrollbar-thumb]:rounded-full
+                        [&::-webkit-scrollbar-thumb]:bg-white/10
+                        hover:[&::-webkit-scrollbar-thumb]:bg-cyan-400/50
+
+                        [scrollbar-width:thin]
+                        [scrollbar-color:rgba(255,255,255,0.12)_transparent]
+                      ">
             {loading && (
               <div style={{ textAlign: "center", padding: "40px 0", color: "#8c90a0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 32, display: "block", marginBottom: 8, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>

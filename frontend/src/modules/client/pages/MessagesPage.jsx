@@ -175,6 +175,7 @@ export default function MessagesPage() {
   const [error, setError] = useState("");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [contractModal, setContractModal] = useState(null); // { loading, error, data }
+  const [walletBalance, setWalletBalance] = useState(null);
   const [proposalModal, setProposalModal] = useState(null); // { loading, error, data, accepting, requestingRevision }
   const [openConversationMenu, setOpenConversationMenu] = useState(null);
 
@@ -207,7 +208,7 @@ export default function MessagesPage() {
         .map((c) => ({
           id: c.conversationId,
           name: c.expertFullName || c.otherPartyName || c.expertName || "Expert",
-          avatar: c.expertAvatarUrl || c.otherPartyAvatarUrl || `https://i.pravatar.cc/100?u=${c.conversationId}`,
+          avatar: c.expertAvatarUrl || c.otherPartyAvatarUrl || `https://i.pravatar.cc/100?u=${c.expertUserId ?? c.expertProfileId ?? c.conversationId}`,
           online: c.isOtherPartyOnline ?? false,
           lastMessage: c.lastMessage?.content || c.lastMessageContent || "Bắt đầu cuộc trò chuyện",
           time: timeAgo(c.lastMessage?.createdAt || c.updatedAt || c.createdAt),
@@ -408,6 +409,19 @@ export default function MessagesPage() {
   };
 
   // Client Accept proposal → mới thực sự tạo contract
+  // Lấy số dư ví — response thật: { success, balance } (không có wrapper "data").
+  const fetchWalletBalance = async () => {
+    try {
+      const res = await axiosInstance.get("/wallets/balance");
+      const bal = res.data?.balance ?? res.data?.data?.balance ?? null;
+      setWalletBalance(bal);
+      return bal;
+    } catch {
+      setWalletBalance(null);
+      return null;
+    }
+  };
+
   const handleAcceptAndCreateContract = async () => {
     if (!proposalModal?.data?.proposalId) return;
     setProposalModal((prev) => ({ ...prev, accepting: true, error: "" }));
@@ -427,7 +441,8 @@ export default function MessagesPage() {
 
       setProposalModal(null);
       setActiveChat((prev) => prev ? { ...prev, relatedContractId: contractData?.contractId } : prev);
-      setContractModal({ loading: false, error: "", data: contractData });
+      setContractModal({ loading: false, error: "", data: contractData, proposal: proposalModal.data });
+      fetchWalletBalance();
     } catch (err) {
       setProposalModal((prev) => ({ ...prev, accepting: false, error: err?.response?.data?.message || "Accept proposal thất bại." }));
     }
@@ -470,41 +485,27 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
     if (!activeChat?.relatedContractId) return;
 
     setContractModal({ loading: true, error: "", data: null });
-
     try {
       const res = await axiosInstance.get(`/contracts/${activeChat.relatedContractId}`);
-      const contractData = res.data?.data ?? res.data;
+      const data = res.data?.data ?? res.data;
 
       let proposalData = null;
-
-      const proposalId =
-        contractData?.relatedProposalId ||
-        contractData?.proposalId ||
-        activeChat?.relatedProposalId;
-
+      const proposalId = data?.relatedProposalId || data?.proposalId || activeChat?.relatedProposalId;
       if (proposalId) {
-        const propRes = await axiosInstance.get(`/proposals/${proposalId}`);
-        let rawProposal = propRes.data?.data ?? propRes.data;
-
-        if (Array.isArray(rawProposal)) {
-          rawProposal = rawProposal[0] ?? null;
+        try {
+          const propRes = await axiosInstance.get(`/proposals/${proposalId}`);
+          let rawProposal = propRes.data?.data ?? propRes.data;
+          if (Array.isArray(rawProposal)) rawProposal = rawProposal[0] ?? null;
+          proposalData = rawProposal;
+        } catch {
+          // Không chặn việc hiện contract nếu lookup proposal lỗi
         }
-
-        proposalData = rawProposal;
       }
 
-      setContractModal({
-        loading: false,
-        error: "",
-        data: contractData,
-        proposal: proposalData,
-      });
+      setContractModal({ loading: false, error: "", data, proposal: proposalData });
+      fetchWalletBalance();
     } catch (err) {
-      setContractModal({
-        loading: false,
-        error: err?.response?.data?.message || "Không thể tải hợp đồng.",
-        data: null,
-      });
+      setContractModal({ loading: false, error: err?.response?.data?.message || "Không thể tải hợp đồng.", data: null });
     }
   };
 
@@ -900,65 +901,14 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
 
                 {/* Thông tin chính */}
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                  {contractModal.proposal && (
-                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                      <p className="mb-3 text-sm font-bold text-slate-100">
-                        Proposal đã ký
-                      </p>
-
-                      <div className="mb-4 flex flex-wrap gap-6">
-                        <div>
-                          <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                            Proposed Price
-                          </p>
-                          <p className="font-mono text-lg font-bold text-cyan-300">
-                            ${contractModal.proposal.proposedPrice?.toLocaleString() ?? "—"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-slate-400">
-                            Timeline
-                          </p>
-                          <p className="font-mono text-lg font-bold text-slate-100">
-                            {contractModal.proposal.proposedTimelineDays ?? "—"} days
-                          </p>
-                        </div>
-                      </div>
-
-                      {contractModal.proposal.coverLetter && (
-                        <div className="mt-4">
-                          <p className="mb-1 text-xs font-bold text-slate-100">
-                            Cover Letter
-                          </p>
-                          <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-                            {contractModal.proposal.coverLetter}
-                          </p>
-                        </div>
-                      )}
-
-                      {contractModal.proposal.expectedOutputs && (
-                        <div className="mt-4">
-                          <p className="mb-1 text-xs font-bold text-slate-100">
-                            Expected Outputs
-                          </p>
-                          <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-                            {contractModal.proposal.expectedOutputs}
-                          </p>
-                        </div>
-                      )}
-
-                      {contractModal.proposal.workingApproach && (
-                        <div className="mt-4">
-                          <p className="mb-1 text-xs font-bold text-slate-100">
-                            Working Approach
-                          </p>
-                          <p className="whitespace-pre-line text-sm leading-7 text-slate-300">
-                            {contractModal.proposal.workingApproach}
-                          </p>
-                        </div>
-                      )}
-                    </div>
+                  {contractModal.data.title && (
+                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Tiêu đề: </span><span style={{ fontSize: 13, color: "#e1e2eb" }}>{contractModal.data.title}</span></div>
+                  )}
+                  {(contractModal.data.totalAmount ?? contractModal.data.amount) != null && (
+                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Tổng giá trị: </span><span style={{ fontSize: 14, color: "#00F0FF", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>${(contractModal.data.totalAmount ?? contractModal.data.amount)?.toLocaleString()}</span></div>
+                  )}
+                  {contractModal.data.deadline && (
+                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Hạn hoàn thành: </span><span style={{ fontSize: 13, color: "#c2c6d6" }}>{new Date(contractModal.data.deadline).toLocaleDateString("vi-VN")}</span></div>
                   )}
                 </div>
 
@@ -1012,35 +962,60 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
 
                 {/* Actions */}
                 <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                  <button onClick={() => setContractModal(null)} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-                    Close
+                  <button onClick={() => setContractModal(null)}
+                    style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
+                    Đóng
                   </button>
-
                   {contractModal.projectCreated ? (
-                    <button onClick={() => { setContractModal(null); navigate(`/client/projects/${contractModal.projectCreated.projectId}`); }} style={{ flex: 2, padding: "12px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                    <button onClick={() => { setContractModal(null); navigate(`/client/projects/${contractModal.projectCreated.projectId}`); }}
+                      style={{ flex: 2, padding: "12px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
-                      View Project
+                      Xem Project
                     </button>
-                  ) : !(
-                      contractModal.data.clientConfirmedAt ||
-                      contractModal.data.clientSignedAt ||
-                      contractModal.data.clientConfirmed ||
-                      contractModal.data.isClientConfirmed ||
-                      contractModal.data.status === "CLIENT_CONFIRMED" ||
-                      contractModal.data.status === "CONFIRMED"
-                    ) ? (
-                    <button onClick={handleConfirmContract} disabled={contractModal.confirming} style={{ flex: 2, padding: "12px", background: contractModal.confirming ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: contractModal.confirming ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                      {contractModal.confirming
-                        ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Signing...</>
-                        : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>draw</span>Sign Contract</>}
-                    </button>
-                  ) : (
-                    <div style={{ flex: 2, padding: "12px", borderRadius: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", color: "#22c55e", fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>
-                      Contract Signed
-                    </div>
-                  )}
+                  ) : contractModal.data.status !== "CONFIRMED" && !contractModal.data.clientConfirmedAt ? (
+                    (() => {
+                      // Client chỉ ký được khi ví đủ tiền — so với giá đã chốt trong proposal.
+                      // Nếu chưa load được balance (null) thì coi như chưa xác định, không
+                      // chặn cứng nhưng cũng không cho ký nhầm — hiện nút nạp tiền để an toàn.
+                      const requiredAmount = contractModal.proposal?.proposedPrice ?? null;
+                      const hasEnoughFunds = requiredAmount != null && walletBalance != null && walletBalance >= requiredAmount;
+
+                      if (requiredAmount != null && !hasEnoughFunds) {
+                        return (
+                          <button onClick={() => { setContractModal(null); navigate("/client/wallet"); }}
+                            style={{ flex: 2, padding: "12px", background: "rgba(250,204,21,0.1)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>account_balance_wallet</span>
+                            Nạp thêm tiền vào ví
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button onClick={handleConfirmContract} disabled={contractModal.confirming}
+                          style={{ flex: 2, padding: "12px", background: contractModal.confirming ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: contractModal.confirming ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                          {contractModal.confirming
+                            ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang ký...</>
+                            : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>draw</span>Ký hợp đồng</>}
+                        </button>
+                      );
+                    })()
+                  ) : null}
                 </div>
+
+                {/* Cảnh báo thiếu tiền — hiện ngay trên nút để rõ lý do bị ẩn nút Ký */}
+                {!contractModal.projectCreated
+                  && contractModal.data.status !== "CONFIRMED"
+                  && !contractModal.data.clientConfirmedAt
+                  && contractModal.proposal?.proposedPrice != null
+                  && walletBalance != null
+                  && walletBalance < contractModal.proposal.proposedPrice && (
+                  <div style={{ display: "flex", gap: 10, padding: "10px 14px", background: "rgba(250,204,21,0.06)", border: "1px solid rgba(250,204,21,0.2)", borderRadius: 8, fontSize: 12.5, color: "#facc15" }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: 16, flexShrink: 0 }}>info</span>
+                    <span>
+                      Số dư ví hiện tại: <strong>{walletBalance.toLocaleString()}đ</strong> — cần ít nhất <strong>{contractModal.proposal.proposedPrice.toLocaleString()}đ</strong> để ký hợp đồng này.
+                    </span>
+                  </div>
+                )}
               </div>
             ) : null}
           </div>
