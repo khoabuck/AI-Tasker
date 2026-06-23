@@ -72,12 +72,15 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Expert profile already exists.");
         }
 
+        var now = DateTime.UtcNow;
+
+        user.FullName = ResolveExpertSubmissionFullName(request, user);
+        user.UpdatedAt = now;
+
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
         {
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
-
-        var now = DateTime.UtcNow;
 
         var reviewSnapshot = await ReviewFullProfileAsync(
             request,
@@ -216,6 +219,9 @@ public class ExpertProfileService : IExpertProfileService
                 "Expert profile cannot be resubmitted in the current status."
             );
         }
+
+        user.FullName = ResolveExpertSubmissionFullName(request, user);
+        user.UpdatedAt = now;
 
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
         {
@@ -1466,6 +1472,30 @@ public class ExpertProfileService : IExpertProfileService
                 );
             }
         }
+    }
+
+    private static string ResolveExpertSubmissionFullName(
+        CreateExpertProfileRequest request,
+        User user
+    )
+    {
+        var fullName = !string.IsNullOrWhiteSpace(request.FullName)
+            ? request.FullName.Trim()
+            : user.FullName.Trim();
+
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            throw new InvalidOperationException("Full name is required.");
+        }
+
+        if (fullName.Length < 2 || fullName.Length > 255)
+        {
+            throw new InvalidOperationException(
+                "Full name must be between 2 and 255 characters."
+            );
+        }
+
+        return fullName;
     }
 
     private static void ValidateCreateOrResubmitRequest(
