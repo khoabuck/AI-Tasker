@@ -74,8 +74,11 @@ import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
 import ManageDisputesPage from "../../modules/admin/pages/ManageDisputesPage";
 import ManageJobsPage from "../../modules/admin/pages/ManageJobsPage";
 import ManageUsersPage from "../../modules/admin/pages/ManageUsersPage";
+import AdminUserDetailPage from "../../modules/admin/pages/AdminUserDetailPage";
 import ManageWithdrawalsPage from "../../modules/admin/pages/ManageWithdrawalsPage";
 import ManageSkillsPage from "../../modules/admin/pages/ManageSkillsPage";
+import AdminAuditLogsPage from "../../modules/admin/pages/AdminAuditLogsPage";
+import AdminAuditLogDetailPage from "../../modules/admin/pages/AdminAuditLogDetailPage";
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -191,7 +194,11 @@ export default function AppRouter() {
       <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/withdrawals" replace /></ProtectedRoute>} />
       <Route path="/admin/withdrawals" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageWithdrawalsPage /></ProtectedRoute>} />
       <Route path="/admin/skills" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageSkillsPage /></ProtectedRoute>} />
-
+      <Route path="/admin/users/:userId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminUserDetailPage /></ProtectedRoute>} />
+      <Route path="/admin/audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogsPage /></ProtectedRoute>} />
+      <Route path="/admin/audit-logs/:auditLogId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogDetailPage /></ProtectedRoute>} />
+           
+      
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
