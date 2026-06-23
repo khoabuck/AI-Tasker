@@ -8,9 +8,6 @@ namespace AITasker.Application.Services;
 
 public class ClientProfileService : IClientProfileService
 {
-    private const decimal IndividualClientPlatformFeeRate = 5.00m;
-    private const decimal BusinessClientPlatformFeeRate = 10.00m;
-
     private const int MaxBusinessVerificationSubmissions = 5;
     private static readonly TimeSpan BusinessVerificationLockDuration =
         TimeSpan.FromHours(24);
@@ -21,15 +18,18 @@ public class ClientProfileService : IClientProfileService
     private readonly IUserRepository _userRepository;
     private readonly IClientProfileRepository _clientProfileRepository;
     private readonly IBusinessVerificationProvider _businessVerificationProvider;
+    private readonly IPlatformFeePolicyService _platformFeePolicyService;
 
     public ClientProfileService(
         IUserRepository userRepository,
         IClientProfileRepository clientProfileRepository,
-        IBusinessVerificationProvider businessVerificationProvider)
+        IBusinessVerificationProvider businessVerificationProvider,
+        IPlatformFeePolicyService platformFeePolicyService)
     {
         _userRepository = userRepository;
         _clientProfileRepository = clientProfileRepository;
         _businessVerificationProvider = businessVerificationProvider;
+        _platformFeePolicyService = platformFeePolicyService;
     }
 
     public async Task<ClientProfileResponse> CreateIndividualAsync(
@@ -54,7 +54,7 @@ public class ClientProfileService : IClientProfileService
             ClientType = "INDIVIDUAL",
             PhoneNumber = phoneNumber,
             Address = address,
-            PlatformFeeRate = IndividualClientPlatformFeeRate,
+            PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL"),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -166,7 +166,7 @@ public class ClientProfileService : IClientProfileService
             ClientType = "BUSINESS",
             PhoneNumber = phoneNumber,
             Address = representativeAddress,
-            PlatformFeeRate = BusinessClientPlatformFeeRate,
+            PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS"),
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
         };
@@ -330,7 +330,7 @@ public class ClientProfileService : IClientProfileService
         clientProfile.ClientType = "BUSINESS";
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = representativeAddress;
-        clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS");
         clientProfile.UpdatedAt = now;
 
         var officialCompanyName = businessVerificationStatus == "VERIFIED"
@@ -432,7 +432,7 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = address;
-        clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL");
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -507,7 +507,7 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS");
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
         clientProfile.BusinessProfile.BusinessEmail =
