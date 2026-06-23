@@ -7,9 +7,7 @@ export default function AdminLayout({ children }) {
         <AdminNavbar />
 
         <div className="flex min-h-screen flex-1 flex-col">
-          <main className="flex-1 px-6 py-6 md:px-8">
-            {children}
-          </main>
+          <main className="flex-1 px-6 py-6 md:px-8">{children}</main>
 
           <footer className="border-t border-white/10 bg-[#0b0f16] px-6 py-6 md:px-8">
             <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">

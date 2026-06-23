@@ -79,6 +79,9 @@ import ManageWithdrawalsPage from "../../modules/admin/pages/ManageWithdrawalsPa
 import ManageSkillsPage from "../../modules/admin/pages/ManageSkillsPage";
 import AdminAuditLogsPage from "../../modules/admin/pages/AdminAuditLogsPage";
 import AdminAuditLogDetailPage from "../../modules/admin/pages/AdminAuditLogDetailPage";
+import AdminExpertScoringPolicyPage from "../../modules/admin/pages/AdminExpertScoringPolicyPage";
+import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformFeePolicyPage";
+
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -197,7 +200,10 @@ export default function AppRouter() {
       <Route path="/admin/users/:userId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminUserDetailPage /></ProtectedRoute>} />
       <Route path="/admin/audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogsPage /></ProtectedRoute>} />
       <Route path="/admin/audit-logs/:auditLogId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogDetailPage /></ProtectedRoute>} />
-           
+      <Route path="/admin/expert-profile-scoring-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminExpertScoringPolicyPage /></ProtectedRoute>} />
+      <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />  
+
+
       
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
