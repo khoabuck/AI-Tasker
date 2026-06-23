@@ -281,7 +281,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
-builder.Services.AddHttpClient<IBankAccountVerificationService, VietQrBankAccountVerificationService>();
+builder.Services.AddHttpClient<IBankAccountVerificationService, MockBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 
 // =========================

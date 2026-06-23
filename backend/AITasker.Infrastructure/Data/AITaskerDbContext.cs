@@ -919,10 +919,6 @@ public class AITaskerDbContext : DbContext
                 table.HasCheckConstraint(
                     "CK_ProposalMilestoneDrafts_DeadlineOffsetDays",
                     "[DeadlineOffsetDays] > 0");
-
-                table.HasCheckConstraint(
-                    "CK_ProposalMilestoneDrafts_RevisionLimit",
-                    "[RevisionLimit] >= 0");
             });
 
             entity.HasKey(e => e.ProposalMilestoneDraftId);
@@ -948,9 +944,6 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(e => e.DeadlineOffsetDays)
-                .IsRequired();
-
-            entity.Property(e => e.RevisionLimit)
                 .IsRequired();
 
             entity.Property(e => e.CreatedAt)
@@ -1220,7 +1213,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_ProjectContracts_Amounts",
-                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0 AND [RevisionLimit] >= 0");
+                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0");
             });
 
             entity.HasKey(e => e.ContractId);
@@ -1317,10 +1310,6 @@ public class AITaskerDbContext : DbContext
                 table.HasCheckConstraint(
                     "CK_ContractMilestoneDrafts_DeadlineOffsetDays",
                     "[DeadlineOffsetDays] > 0");
-
-                table.HasCheckConstraint(
-                    "CK_ContractMilestoneDrafts_RevisionLimit",
-                    "[RevisionLimit] >= 0");
             });
 
             entity.HasKey(e => e.ContractMilestoneDraftId);
@@ -1346,9 +1335,6 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(e => e.DeadlineOffsetDays)
-                .IsRequired();
-
-            entity.Property(e => e.RevisionLimit)
                 .IsRequired();
 
             entity.Property(e => e.CreatedAt)
@@ -1437,7 +1423,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Milestones_Revision",
-                "[RevisionLimit] >= 0 AND [RevisionUsed] >= 0 AND [RevisionUsed] <= [RevisionLimit]");
+                "[RevisionUsed] >= 0");
 
                 t.HasCheckConstraint(
                 "CK_Milestones_Status",

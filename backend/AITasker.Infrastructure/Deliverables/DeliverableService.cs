@@ -288,11 +288,6 @@ namespace AITasker.Infrastructure.Deliverables
                     throw new InvalidOperationException("Revision can only be requested when project is ACTIVE.");
                 }
 
-                if (milestone.RevisionUsed >= milestone.RevisionLimit)
-                {
-                    throw new InvalidOperationException("Revision limit has been reached. Client must approve deliverable or open dispute.");
-                }
-
                 deliverable.Status = DeliverableStatusRevisionRequested;
                 deliverable.ClientFeedback = request.Feedback.Trim();
                 deliverable.ReviewedAt = DateTime.UtcNow;
@@ -582,7 +577,6 @@ namespace AITasker.Infrastructure.Deliverables
 
                 MilestoneStatus = milestone.Status,
                 MilestonePaymentStatus = milestone.PaymentStatus,
-                RevisionLimit = milestone.RevisionLimit,
                 RevisionUsed = milestone.RevisionUsed,
 
                 SubmittedAt = deliverable.SubmittedAt,

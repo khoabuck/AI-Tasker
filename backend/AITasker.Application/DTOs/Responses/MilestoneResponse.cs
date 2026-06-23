@@ -22,8 +22,6 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime Deadline { get; set; }
 
-        public int RevisionLimit { get; set; }
-
         public int RevisionUsed { get; set; }
 
         public string PaymentStatus { get; set; } = string.Empty;
