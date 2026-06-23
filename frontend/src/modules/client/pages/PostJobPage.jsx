@@ -187,6 +187,12 @@ export default function PostJobPage() {
         projectTypeHint: form.projectType || "",
       });
       const data = res.data;
+      const defaultDeadline = new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000
+      )
+        .toISOString()
+        .split("T")[0];
+
       setForm((prev) => ({
         ...prev,
         title: data.suggestedTitle || prev.title,
@@ -195,12 +201,18 @@ export default function PostJobPage() {
         projectType: data.suggestedProjectType || prev.projectType,
         complexity: data.suggestedComplexity || "",
         expectedDeliverables: data.expectedDeliverables || "",
+
+        deadline:
+          data.suggestedDeadline?.split?.("T")[0] ||
+          prev.deadline ||
+          defaultDeadline,
+
         skills: (data.suggestedSkills || [])
-        .map((s) => ({
-          id: Number(s.skillId ?? s.SkillId ?? s.id),
-          name: s.skillName ?? s.SkillName ?? s.name,
-        }))
-        .filter((s) => Number.isInteger(s.id) && s.id > 0),
+          .map((s) => ({
+            id: Number(s.skillId ?? s.SkillId ?? s.id),
+            name: s.skillName ?? s.SkillName ?? s.name,
+          }))
+          .filter((s) => Number.isInteger(s.id) && s.id > 0),
       }));
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to generate. Please try again.");
@@ -627,6 +639,28 @@ export default function PostJobPage() {
                             <option value="COMPLEX">Complex</option>
                           </select>
                         </div>
+                      </div>
+
+                      <div>
+                        <label style={labelStyle}>
+                          Deadline <span style={{ color: "#f87171" }}>*</span>
+                        </label>
+
+                        <input
+                          type="date"
+                          name="deadline"
+                          value={form.deadline}
+                          onChange={handleChange}
+                          min={new Date().toISOString().split("T")[0]}
+                          style={{
+                            ...inputStyle,
+                            colorScheme: "dark",
+                          }}
+                          onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
+                          onBlur={(e) =>
+                            (e.target.style.borderColor = "rgba(255,255,255,0.12)")
+                          }
+                        />
                       </div>
 
                       {/* Expected Deliverables */}

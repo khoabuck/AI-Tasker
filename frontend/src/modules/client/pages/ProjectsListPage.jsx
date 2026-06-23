@@ -7,20 +7,20 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
 const STATUS_TABS = [
-  { key: "IN_PROGRESS", label: "In Progress", icon: "pending_actions", color: "#facc15" },
+  { key: "ACTIVE", label: "Active", icon: "pending_actions", color: "#facc15" },
   { key: "COMPLETED",   label: "Completed",   icon: "verified",        color: "#22c55e" },
   { key: "DISPUTED",    label: "Disputed",     icon: "gavel",           color: "#f97316" },
 ];
 
 const STATUS_CONFIG = {
-  IN_PROGRESS: { label: "In Progress", color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
+  ACTIVE: { label: "Active", color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
   COMPLETED:   { label: "Completed",   color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
   DISPUTED:    { label: "Disputed",    color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
 };
 
 function ProjectCard({ project }) {
   const navigate = useNavigate();
-  const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.IN_PROGRESS;
+  const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
 
   return (
@@ -90,7 +90,7 @@ function ProjectCard({ project }) {
 export default function ProjectsListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const activeStatus = searchParams.get("status") || "IN_PROGRESS";
+  const activeStatus = searchParams.get("status") || "ACTIVE";
 
   const [allProjects, setAllProjects] = useState([]);
   const [loading, setLoading] = useState(true);

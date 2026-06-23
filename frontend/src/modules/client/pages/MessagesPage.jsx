@@ -200,28 +200,37 @@ export default function MessagesPage() {
   const fetchConversations = useCallback(async () => {
     try {
       const res = await axiosInstance.get("/conversations/me");
+      console.log("CURRENT USER", currentUser);
+      console.log("CONVERSATIONS RESPONSE", res.data);
       const raw = res.data?.data ?? res.data;
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
       // Chuẩn hoá field về shape UI đang dùng (id, name, avatar, online, lastMessage, time, unread)
       const normalized = list
-        .map((c) => ({
-          id: c.conversationId,
-          name: c.expertFullName || c.otherPartyName || c.expertName || "Expert",
-          avatar: c.expertAvatarUrl || c.otherPartyAvatarUrl || `https://i.pravatar.cc/100?u=${c.expertUserId ?? c.expertProfileId ?? c.conversationId}`,
-          online: c.isOtherPartyOnline ?? false,
-          lastMessage: c.lastMessage?.content || c.lastMessageContent || "Bắt đầu cuộc trò chuyện",
-          time: timeAgo(c.lastMessage?.createdAt || c.updatedAt || c.createdAt),
-          unread: c.unreadCount || 0,
-          relatedProposalId: c.relatedProposalId,
-          relatedContractId: c.relatedContractId,
-          relatedJobId: c.relatedJobId,
-          relatedJobTitle: c.relatedJobTitle,
-          pinned: pinnedIds.includes(c.conversationId),
-          raw: c,
-        }))
-        // Ẩn conversation đã "xóa" cục bộ (chưa có API delete thật từ BE)
-        .filter((c) => !deletedIds.includes(c.id))
+        .map((c) => {
+          const convId = c.conversationId ?? c.id ?? c.conversationID;
+
+          return {
+            id: convId,
+            name: c.expertName || c.otherPartyName || c.clientName || "Expert",
+            avatar:
+              c.expertAvatarUrl ||
+              c.otherPartyAvatarUrl ||
+              `https://i.pravatar.cc/100?u=${c.expertUserId ?? c.expertProfileId ?? convId}`,
+            online: c.isOtherPartyOnline ?? false,
+            lastMessage: c.lastMessage?.content || c.lastMessageContent || "Bắt đầu cuộc trò chuyện",
+            time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
+            unread: c.unreadCount || 0,
+            relatedProposalId: c.relatedProposalId,
+            relatedContractId: c.relatedContractId,
+            relatedJobId: c.relatedJobId,
+            relatedJobTitle: c.relatedJobTitle,
+            pinned: pinnedIds.includes(convId),
+            raw: c,
+          };
+        })
+        .filter((c) => c.id != null)
+        //.filter((c) => !deletedIds.includes(c.id))
         // Pin gần nhất lên đầu tiên (pinnedIds[0] mới nhất → vị trí 1, pinnedIds[1] → vị trí 2...),
         // các conversation chưa pin giữ nguyên thứ tự BE trả về.
         .sort((a, b) => {
@@ -234,11 +243,14 @@ export default function MessagesPage() {
       setConversations(normalized);
 
       if (normalized.length > 0) {
-        const target = initialConvId
-          ? normalized.find((c) => c.id === Number(initialConvId))
-          : normalized[0];
-        setActiveChat(target || normalized[0]);
-      }
+      const target = initialConvId
+        ? normalized.find((c) => String(c.id) === String(initialConvId))
+        : normalized[0];
+
+      setActiveChat(target ?? normalized[0]);
+    } else {
+      setActiveChat(null);
+    }
     } catch (err) {
       setError(err?.response?.data?.message || "Không thể tải danh sách trò chuyện.");
     } finally {

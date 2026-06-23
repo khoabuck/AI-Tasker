@@ -83,7 +83,7 @@ function MessageModal({ proposal, onClose, navigate }) {
           initialMessage: message,
         });
         const conv = res.data?.data ?? res.data;
-        conversationId = conv?.conversationId;
+        conversationId = conv?.conversationId ?? conv?.id ?? conv?.conversationID;
       }
 
       setSent(true);
@@ -163,6 +163,10 @@ export default function ClientProposalDetailPage() {
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(null); // "accept" | "decline"
   const [showMessage, setShowMessage] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [contractCreated, setContractCreated] = useState(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
 
   const fetchProposal = useCallback(async (signal) => {
     setLoading(true);
@@ -202,19 +206,123 @@ export default function ClientProposalDetailPage() {
     return () => controller.abort();
   }, [fetchProposal]);
 
+  useEffect(() => {
+    const fetchWalletBalance = async () => {
+      setWalletLoading(true);
+
+      try {
+        const res = await axiosInstance.get("/wallets/balance");
+
+        const balance =
+          res.data?.balance ??
+          res.data?.data?.balance ??
+          0;
+
+        setWalletBalance(Number(balance));
+      } catch {
+        setWalletBalance(0);
+      } finally {
+        setWalletLoading(false);
+      }
+    };
+
+    fetchWalletBalance();
+  }, []);
+
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
-    if (!confirm("Chấp nhận proposal này?")) return;
-    setActionLoading("accept");
-    try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
-      setProposal((prev) => ({ ...prev, status: "ACCEPTED" }));
-    } catch (err) {
-      alert(err?.response?.data?.message || "Accept thất bại.");
-    } finally {
-      setActionLoading(null);
+  setShowAcceptModal(false);
+
+  setActionLoading("accept");
+
+  try {
+    await axiosInstance.post(
+      `/proposals/${proposalId}/decision?decision=ACCEPT`
+    );
+
+    const contractRes = await axiosInstance.post(
+      `/contracts/from-proposal/${proposalId}`
+    );
+
+    const contract = contractRes.data?.data ?? contractRes.data;
+
+    setProposal((prev) => ({
+      ...prev,
+      status: "ACCEPTED",
+    }));
+
+    setContractCreated(contract);
+
+  } catch (err) {
+    alert(
+      err?.response?.data?.message ||
+      err?.message ||
+      "Accept proposal failed."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
+  const handleSignContract = async () => {
+  const contractId =
+    contractCreated?.contractId ??
+    contractCreated?.id ??
+    contractCreated?.projectContractId;
+
+  if (!contractId) {
+    alert("Contract not found.");
+    return;
+  }
+
+  if (!hasEnoughWallet) {
+    navigate("/client/wallet");
+    return;
+  }
+
+  setActionLoading("sign");
+
+  try {
+    const confirmRes = await axiosInstance.post(
+      `/contracts/${contractId}/confirm`
+    );
+
+    const confirmedContract = confirmRes.data?.data ?? confirmRes.data;
+    setContractCreated(confirmedContract);
+
+    const clientSigned =
+      confirmedContract?.clientConfirmedAt ||
+      confirmedContract?.clientSignedAt;
+
+    const expertSigned =
+      confirmedContract?.expertConfirmedAt ||
+      confirmedContract?.expertSignedAt;
+
+    if (clientSigned && expertSigned) {
+      const projectRes = await axiosInstance.post(
+        `/projects/from-contract/${contractId}`
+      );
+
+      const project = projectRes.data?.data ?? projectRes.data;
+
+      alert("Both parties signed. Project is now in progress.");
+      navigate(`/client/projects/${project.projectId ?? project.id}`);
+      return;
     }
-  };
+
+    alert("Client signed. Waiting for AI Expert signature.");
+  } catch (err) {
+    alert(
+      err?.response?.data?.message ||
+      err?.message ||
+      "Sign contract failed."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
+
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
@@ -261,8 +369,12 @@ export default function ClientProposalDetailPage() {
   const isPending = proposal.status === "SUBMITTED" || proposal.status === "PENDING";
   const isAccepting = actionLoading === "accept";
   const isDeclining = actionLoading === "decline";
+  const isSigning = actionLoading === "sign";
   const isProcessing = isAccepting || isDeclining;
   const expertName = proposal.expertName || proposal.fullName || "Expert";
+  const proposedPrice = Number(proposal.proposedPrice || proposal.bidAmount || 0);
+  const requiredDeposit = proposedPrice * 1.05;
+  const hasEnoughWallet = walletBalance !== null && walletBalance >= requiredDeposit;
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -319,6 +431,16 @@ export default function ClientProposalDetailPage() {
               </div>
             </div>
 
+            <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 12,
+                  color: hasEnoughWallet ? "#22c55e" : "#facc15",
+                }}
+              >
+                Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()} — Required deposit: ${requiredDeposit.toFixed(2)} (5% of proposal price)
+              </div>
+
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
               {/* Message */}
@@ -340,13 +462,31 @@ export default function ClientProposalDetailPage() {
                     {isDeclining ? "Declining..." : "Decline"}
                   </button>
 
-                  <button onClick={handleAccept} disabled={isProcessing}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", background: isProcessing ? "rgba(34,197,94,0.08)" : "#22c55e", color: isProcessing ? "#22c55e" : "#002022", border: "1px solid rgba(34,197,94,0.5)", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: isProcessing ? "not-allowed" : "pointer", opacity: isProcessing ? 0.6 : 1, boxShadow: isProcessing ? "none" : "0 0 16px rgba(34,197,94,0.3)", transition: "all 0.2s" }}
-                    onMouseEnter={(e) => { if (!isProcessing) e.currentTarget.style.boxShadow = "0 0 24px rgba(34,197,94,0.5)"; }}
-                    onMouseLeave={(e) => { if (!isProcessing) e.currentTarget.style.boxShadow = "0 0 16px rgba(34,197,94,0.3)"; }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{isAccepting ? "hourglass_empty" : "check_circle"}</span>
-                    {isAccepting ? "Accepting..." : "Accept Proposal"}
-                  </button>
+                  <button
+                    onClick={() => setShowAcceptModal(true)}
+                    disabled={isProcessing}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "10px 20px",
+                      background: isProcessing ? "rgba(34,197,94,0.08)" : "#22c55e",
+                      color: isProcessing ? "#22c55e" : "#002022",
+                      border: "1px solid rgba(34,197,94,0.5)",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: isProcessing ? "not-allowed" : "pointer",
+                      opacity: isProcessing ? 0.6 : 1,
+                      boxShadow: isProcessing ? "none" : "0 0 16px rgba(34,197,94,0.3)",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                  {isAccepting ? "hourglass_empty" : "check_circle"}
+                </span>
+                {isAccepting ? "Accepting..." : "Accept Proposal"}
+              </button>
                 </>
               )}
 
@@ -361,6 +501,94 @@ export default function ClientProposalDetailPage() {
           </div>
         </div>
 
+        {contractCreated && (
+  <div style={{ ...cardStyle, marginBottom: 24, border: "1px solid rgba(0,240,255,0.25)" }}>
+    <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#00F0FF", marginBottom: 16 }}>
+      Contract Preview
+    </h3>
+
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Expert:</strong> {expertName}
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Proposal Price:</strong> ${proposedPrice.toLocaleString()}
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Timeline:</strong> {proposal.proposedTimelineDays || proposal.estimatedDays} days
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Status:</strong> {contractCreated.status || "DRAFT"}
+      </p>
+    </div>
+
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: hasEnoughWallet ? "rgba(34,197,94,0.08)" : "rgba(250,204,21,0.08)",
+        border: `1px solid ${hasEnoughWallet ? "rgba(34,197,94,0.25)" : "rgba(250,204,21,0.25)"}`,
+        color: hasEnoughWallet ? "#22c55e" : "#facc15",
+        fontSize: 13,
+      }}
+    >
+      Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()} — Required: ${requiredDeposit.toFixed(2)} (5% of proposal price)
+    </div>
+
+    {hasEnoughWallet ? (
+      <button
+        type="button"
+        onClick={handleSignContract}
+        disabled={isSigning}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "11px 20px",
+          background: isSigning ? "rgba(0,240,255,0.08)" : "#00F0FF",
+          color: isSigning ? "#00F0FF" : "#002022",
+          border: "1px solid rgba(0,240,255,0.5)",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: isSigning ? "not-allowed" : "pointer",
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+          {isSigning ? "hourglass_empty" : "draw"}
+        </span>
+        {isSigning ? "Signing..." : "Sign Contract"}
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => navigate("/client/wallet")}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "11px 20px",
+          background: "rgba(250,204,21,0.12)",
+          color: "#facc15",
+          border: "1px solid rgba(250,204,21,0.35)",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+          account_balance_wallet
+        </span>
+        Deposit Wallet
+      </button>
+    )}
+  </div>
+)}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
           {/* Cover Letter */}
@@ -451,10 +679,92 @@ export default function ClientProposalDetailPage() {
       </div>
 
       {showMessage && (
-        <MessageModal proposal={proposal} onClose={() => setShowMessage(false)} navigate={navigate} />
-      )}
+          <MessageModal
+            proposal={proposal}
+            onClose={() => setShowMessage(false)}
+            navigate={navigate}
+          />
+        )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        {showAcceptModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-[520px] rounded-2xl border border-cyan-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
+              <h2 className="mb-3 text-2xl font-bold text-cyan-400">
+                Create Contract
+              </h2>
+
+              <p className="mb-5 leading-relaxed text-slate-300">
+                Do you want to accept this proposal and create a contract with{" "}
+                <span className="font-bold text-white">{expertName}</span>?
+              </p>
+
+              <div className="mb-5 rounded-xl bg-white/5 p-4">
+                <div className="mb-2 text-white">
+                  Price: ${proposedPrice.toLocaleString()}
+                </div>
+
+                <div className="mb-3 text-white">
+                  Timeline: {proposal.proposedTimelineDays || proposal.estimatedDays} days
+                </div>
+
+                <div
+                  className={`font-semibold ${
+                    hasEnoughWallet ? "text-green-400" : "text-yellow-400"
+                  }`}
+                >
+                  Wallet Balance: ${Number(walletBalance ?? 0).toLocaleString()}
+                </div>
+
+                <div
+                  className={`font-semibold ${
+                    hasEnoughWallet ? "text-green-400" : "text-yellow-400"
+                  }`}
+                >
+                  Required Deposit: ${requiredDeposit.toFixed(2)}
+                </div>
+              </div>
+
+              {!hasEnoughWallet && (
+                <div className="mb-5 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+                  Your wallet balance is insufficient. Please deposit funds before signing the contract.
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAcceptModal(false)}
+                  className="rounded-lg border border-white/15 px-5 py-2.5 text-slate-300 transition hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+
+                {hasEnoughWallet ? (
+                  <button
+                    onClick={handleAccept}
+                    disabled={isAccepting}
+                    className="rounded-lg bg-green-500 px-5 py-2.5 font-bold text-white transition hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isAccepting ? "Creating..." : "Create Contract"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate("/client/wallet")}
+                    className="rounded-lg bg-yellow-400 px-5 py-2.5 font-bold text-[#1d1500] transition hover:bg-yellow-300"
+                  >
+                    Deposit Wallet
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        `}</style>
     </ClientLayout>
   );
 }

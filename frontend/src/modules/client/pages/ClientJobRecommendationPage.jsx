@@ -27,31 +27,52 @@ function MatchScoreBar({ score }) {
 }
 
 // ── Message Modal ─────────────────────────────────────────────────────
-function MessageModal({ expert, onClose }) {
+function MessageModal({ expert, jobId, navigate, onClose }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [sendError, setSendError] = useState("");
 
   const handleSend = async () => {
-    if (!message.trim()) return;
-    setSending(true);
-    setSendError("");
-    try {
-      await axiosInstance.post("/messages", {
-        recipientId: expert.expertProfileId,
-        content: message,
-      });
-      setSent(true);
-      setTimeout(() => { setSent(false); setMessage(""); onClose(); }, 1500);
-    } catch (err) {
-      setSendError(
-        err?.response?.data?.message || "Gửi tin nhắn thất bại. Vui lòng thử lại."
-      );
-    } finally {
-      setSending(false);
-    }
-  };
+  if (!message.trim()) return;
+
+  setSending(true);
+  setSendError("");
+
+  try {
+    const res = await axiosInstance.post("/conversations", {
+      conversationType: "JOB_INQUIRY",
+      expertProfileId: expert.expertProfileId,
+      relatedJobId: Number(jobId),
+      initialMessage: message,
+    });
+
+    const conversation = res.data?.data ?? res.data;
+    const conversationId =
+      conversation?.conversationId ?? conversation?.id;
+
+    setSent(true);
+
+    setTimeout(() => {
+      setSent(false);
+      setMessage("");
+      onClose();
+
+      if (conversationId) {
+        navigate(`/client/messages?conversationId=${conversationId}`);
+      } else {
+        navigate("/client/messages");
+      }
+    }, 800);
+  } catch (err) {
+    setSendError(
+      err?.response?.data?.message ||
+      "Gửi tin nhắn thất bại. Vui lòng thử lại."
+    );
+  } finally {
+    setSending(false);
+  }
+};
 
   return (
     <div
@@ -344,7 +365,7 @@ export default function ClientJobRecommendationPage() {
                         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                           {/* View Profile — cyan */}
                           <button
-                            onClick={() => navigate(`/expert/${expert.expertProfileId}`)}
+                            onClick={() => navigate(`/client/experts/${expert.expertProfileId}`)}
                             style={{ flex: 1, padding: "9px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(0,240,255,0.2)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}
@@ -386,7 +407,12 @@ export default function ClientJobRecommendationPage() {
 
       {/* Message Modal */}
       {messagingExpert && (
-        <MessageModal expert={messagingExpert} onClose={() => setMessagingExpert(null)} />
+        <MessageModal
+          expert={messagingExpert}
+          jobId={id}
+          navigate={navigate}
+          onClose={() => setMessagingExpert(null)}
+        />
       )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -396,9 +422,14 @@ export default function ClientJobRecommendationPage() {
   // ── Invite handler ─────────────────────────────────────────────────
   async function handleInvite(expertProfileId) {
     try {
-      await axiosInstance.post(`/jobs/${id}/invite`, { expertProfileId });
-      alert("Đã gửi lời mời thành công!");
-      // TODO: thay alert bằng toast notification nếu có
+      await axiosInstance.post("/conversations", {
+        conversationType: "JOB_INQUIRY",
+        expertProfileId: expertProfileId,
+        relatedJobId: Number(id),
+        initialMessage: "You have been invited to apply for this job.",
+      });
+
+      alert("Invitation sent to AI Expert!");
     } catch (err) {
       alert(err?.response?.data?.message || "Gửi lời mời thất bại.");
     }
