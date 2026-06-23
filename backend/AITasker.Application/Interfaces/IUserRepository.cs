@@ -15,4 +15,10 @@ public interface IUserRepository
     Task AddAsync(User user);
 
     Task SaveChangesAsync();
+
+    Task<List<User>> GetAdminUsersAsync(
+        string? search,
+        string? role,
+        string? status
+    );
 }
