@@ -24,8 +24,6 @@ namespace AITasker.Domain.Entities
 
         public DateTime? SubmissionOverdueNotifiedAt { get; set; }
 
-        public int RevisionLimit { get; set; }
-
         public int RevisionUsed { get; set; }
 
         public string PaymentStatus { get; set; } = "PENDING";

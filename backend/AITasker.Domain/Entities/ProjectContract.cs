@@ -31,8 +31,6 @@ namespace AITasker.Domain.Entities
 
         public string AcceptanceCriteria { get; set; } = string.Empty;
 
-        public int RevisionLimit { get; set; }
-
         public string PaymentTerms { get; set; } = string.Empty;
 
         public string ContractSource { get; set; } = "PROPOSAL";

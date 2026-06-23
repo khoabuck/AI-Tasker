@@ -20,7 +20,7 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("from-proposal/{proposalId:int}")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
+        [Authorize(Roles = "CLIENT")]
         public async Task<IActionResult> CreateFromProposal(int proposalId)
         {
             try
@@ -35,83 +35,6 @@ namespace AITasker.Api.Controllers
                 {
                     success = true,
                     message = "Contract draft created successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPost("draft")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> CreateDraft([FromBody] CreateContractRequest request)
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _contractService.CreateDraftContractAsync(
-                    userId,
-                    request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Contract draft created successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPut("{contractId:int}/draft")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> UpdateDraft(
-            int contractId,
-            [FromBody] UpdateContractDraftRequest request)
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _contractService.UpdateContractDraftAsync(
-                    userId,
-                    contractId,
-                    request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Contract draft updated successfully.",
                     data = result
                 });
             }
@@ -148,46 +71,6 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPut("{contractId:int}/milestone-drafts")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> ReplaceMilestoneDrafts(
-            int contractId,
-            [FromBody] ReplaceContractMilestoneDraftsRequest request)
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _contractService.ReplaceContractMilestoneDraftsAsync(
-                    userId,
-                    contractId,
-                    request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Contract milestone drafts updated successfully.",
                     data = result
                 });
             }

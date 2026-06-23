@@ -243,70 +243,24 @@ namespace AITasker.Infrastructure.Proposals
             var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
 
             proposal.Status = StatusAccepted;
-
             job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
 
-            var contractExists = await _context.ProjectContracts
-                .AnyAsync(x => x.ProposalId == proposalId);
-
-            if (!contractExists)
-            {
-                var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
-
-                var finalPrice = proposal.ProposedPrice;
-                var finalTimelineDays = proposal.ProposedTimelineDays;
-
-                var platformFeeRate = ResolvePlatformFeeRate(clientProfile);
-                var platformFeeAmount = finalPrice * platformFeeRate / 100m;
-                var totalClientPayment = finalPrice + platformFeeAmount;
-
-                var contract = new ProjectContract
-                {
-                    ProposalId = proposal.ProposalId,
-
-                    SourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId),
-
-                    ClientId = job.ClientProfileId,
-                    ExpertId = proposal.ExpertId,
-
-                    ProjectScope = proposal.WorkingApproach,
-                    FinalPrice = finalPrice,
-                    PlatformFeeRate = platformFeeRate,
-                    PlatformFeeAmount = platformFeeAmount,
-                    TotalClientPayment = totalClientPayment,
-                    FinalTimelineDays = finalTimelineDays,
-
-                    Deliverables = proposal.ExpectedOutputs,
-                    AcceptanceCriteria = "To be defined before contract confirmation.",
-                    RevisionLimit = 2,
-                    PaymentTerms = "Milestone based escrow simulation",
-
-                    ContractSource = ContractSourceProposal,
-                    ChatSummary = null,
-                    ClientConfirmed = false,
-                    ExpertConfirmed = false,
-                    Status = ContractStatusDraft,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.ProjectContracts.Add(contract);
-
-                await _context.SaveChangesAsync();
-
-                await CopyLatestProposalMilestonesToContractDraftAsync(
-                    proposal.ProposalId,
-                    contract.ContractId);
-            }
-
             await _context.SaveChangesAsync();
 
+            var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
             var expert = await GetExpertProfileByIdAsync(proposal.ExpertId);
+
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "Proposal accepted",
+                $"You accepted proposal version {sourceProposalVersionNumber} for job '{job.Title}'. You can now create the contract draft from this accepted proposal.",
+                "PROPOSAL_ACCEPTED");
 
             await _notificationService.CreateNotificationAsync(
                 expert.UserId,
                 "Proposal accepted",
-                $"Your latest proposal version {sourceProposalVersionNumber} for job '{job.Title}' was accepted. A contract draft is ready for confirmation.",
+                $"Your latest proposal version {sourceProposalVersionNumber} for job '{job.Title}' was accepted. Please wait for the client to create the contract draft.",
                 "PROPOSAL_ACCEPTED");
 
             return await MapToProposalResponseAsync(proposal);
@@ -650,9 +604,7 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = proposal.ExpectedOutputs,
                 WorkingApproach = proposal.WorkingApproach,
                 PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
-                Milestones = milestoneDrafts
-                    .Select(MapProposalMilestoneDraftResponse)
-                    .ToList(),
+                Milestones = MapProposalMilestoneDraftResponses(milestoneDrafts),
 
                 Status = proposal.Status,
                 ContractId = contractId,
@@ -1044,27 +996,6 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("A proposal cannot have more than 10 milestones.");
             }
 
-            var orderIndexes = milestones
-                .Select(x => x.OrderIndex)
-                .ToList();
-
-            if (orderIndexes.Any(x => x <= 0))
-            {
-                throw new InvalidOperationException("Milestone order index must be greater than 0.");
-            }
-
-            if (orderIndexes.Distinct().Count() != orderIndexes.Count)
-            {
-                throw new InvalidOperationException("Milestone order indexes must be unique.");
-            }
-
-            var expectedOrderIndexes = Enumerable.Range(1, milestones.Count).ToList();
-
-            if (!orderIndexes.OrderBy(x => x).SequenceEqual(expectedOrderIndexes))
-            {
-                throw new InvalidOperationException("Milestone order indexes must be sequential starting from 1.");
-            }
-
             foreach (var milestone in milestones)
             {
                 if (string.IsNullOrWhiteSpace(milestone.Title))
@@ -1072,39 +1003,14 @@ namespace AITasker.Infrastructure.Proposals
                     throw new InvalidOperationException("Milestone title is required.");
                 }
 
-                if (string.IsNullOrWhiteSpace(milestone.Description))
-                {
-                    throw new InvalidOperationException("Milestone description is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.ExpectedDeliverable))
-                {
-                    throw new InvalidOperationException("Milestone expected deliverable is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria))
-                {
-                    throw new InvalidOperationException("Milestone acceptance criteria is required.");
-                }
-
                 if (milestone.Amount <= 0)
                 {
                     throw new InvalidOperationException("Milestone amount must be greater than 0.");
                 }
 
-                if (milestone.DeadlineOffsetDays <= 0)
+                if (milestone.DurationDays <= 0)
                 {
-                    throw new InvalidOperationException("Milestone deadline offset days must be greater than 0.");
-                }
-
-                if (milestone.DeadlineOffsetDays > proposedTimelineDays)
-                {
-                    throw new InvalidOperationException("Milestone deadline cannot exceed proposal timeline days.");
-                }
-
-                if (milestone.RevisionLimit < 0)
-                {
-                    throw new InvalidOperationException("Milestone revision limit cannot be negative.");
+                    throw new InvalidOperationException("Milestone duration days must be greater than 0.");
                 }
             }
 
@@ -1114,66 +1020,94 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Total milestone amount must equal proposed price.");
             }
+
+            var totalDurationDays = milestones.Sum(x => x.DurationDays);
+
+            if (totalDurationDays > proposedTimelineDays)
+            {
+                throw new InvalidOperationException("Total milestone duration days cannot exceed proposed timeline days.");
+            }
         }
 
         private static List<ProposalMilestoneDraft> BuildProposalMilestoneDrafts(
             Proposal proposal,
             List<ProposalMilestoneDraftItemRequest> milestones)
         {
-            return milestones
-                .OrderBy(x => x.OrderIndex)
-                .Select(x => new ProposalMilestoneDraft
+            var result = new List<ProposalMilestoneDraft>();
+            var deadlineOffsetDays = 0;
+            var orderIndex = 1;
+
+            foreach (var milestone in milestones)
+            {
+                deadlineOffsetDays += milestone.DurationDays;
+
+                result.Add(new ProposalMilestoneDraft
                 {
                     Proposal = proposal,
-                    Title = x.Title.Trim(),
-                    Description = x.Description.Trim(),
-                    ExpectedDeliverable = x.ExpectedDeliverable.Trim(),
-                    AcceptanceCriteria = x.AcceptanceCriteria.Trim(),
-                    Amount = x.Amount,
-                    OrderIndex = x.OrderIndex,
-                    DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    RevisionLimit = x.RevisionLimit,
+                    Title = milestone.Title.Trim(),
+                    Description = milestone.Title.Trim(),
+                    ExpectedDeliverable = proposal.ExpectedOutputs,
+                    AcceptanceCriteria = "Client confirms this milestone is completed according to the accepted proposal and contract deliverables.",
+                    Amount = milestone.Amount,
+                    OrderIndex = orderIndex,
+                    DeadlineOffsetDays = deadlineOffsetDays,
                     CreatedAt = DateTime.UtcNow
-                })
-                .ToList();
+                });
+
+                orderIndex++;
+            }
+
+            return result;
         }
 
-        private static ProposalMilestoneDraftResponse MapProposalMilestoneDraftResponse(
-            ProposalMilestoneDraft draft)
+        private static List<ProposalMilestoneDraftResponse> MapProposalMilestoneDraftResponses(
+            List<ProposalMilestoneDraft> drafts)
         {
-            return new ProposalMilestoneDraftResponse
+            var result = new List<ProposalMilestoneDraftResponse>();
+            var previousDeadlineOffsetDays = 0;
+
+            foreach (var draft in drafts.OrderBy(x => x.OrderIndex))
             {
-                ProposalMilestoneDraftId = draft.ProposalMilestoneDraftId,
-                ProposalId = draft.ProposalId,
-                Title = draft.Title,
-                Description = draft.Description,
-                ExpectedDeliverable = draft.ExpectedDeliverable,
-                AcceptanceCriteria = draft.AcceptanceCriteria,
-                Amount = draft.Amount,
-                OrderIndex = draft.OrderIndex,
-                DeadlineOffsetDays = draft.DeadlineOffsetDays,
-                RevisionLimit = draft.RevisionLimit,
-                CreatedAt = draft.CreatedAt
-            };
+                var durationDays = draft.DeadlineOffsetDays - previousDeadlineOffsetDays;
+
+                result.Add(new ProposalMilestoneDraftResponse
+                {
+                    ProposalMilestoneDraftId = draft.ProposalMilestoneDraftId,
+                    ProposalId = draft.ProposalId,
+                    Title = draft.Title,
+                    Amount = draft.Amount,
+                    DurationDays = durationDays <= 0 ? draft.DeadlineOffsetDays : durationDays,
+                    CreatedAt = draft.CreatedAt
+                });
+
+                previousDeadlineOffsetDays = draft.DeadlineOffsetDays;
+            }
+
+            return result;
         }
 
         private static string SerializeProposalMilestoneDraftRequests(
             List<ProposalMilestoneDraftItemRequest> milestones)
         {
-            var normalizedMilestones = milestones
-                .OrderBy(x => x.OrderIndex)
-                .Select(x => new
+            var deadlineOffsetDays = 0;
+            var orderIndex = 1;
+            var normalizedMilestones = new List<object>();
+
+            foreach (var milestone in milestones)
+            {
+                deadlineOffsetDays += milestone.DurationDays;
+
+                normalizedMilestones.Add(new
                 {
-                    title = x.Title.Trim(),
-                    description = x.Description.Trim(),
-                    expectedDeliverable = x.ExpectedDeliverable.Trim(),
-                    acceptanceCriteria = x.AcceptanceCriteria.Trim(),
-                    amount = x.Amount,
-                    orderIndex = x.OrderIndex,
-                    deadlineOffsetDays = x.DeadlineOffsetDays,
-                    revisionLimit = x.RevisionLimit
-                })
-                .ToList();
+                    title = milestone.Title.Trim(),
+                    amount = milestone.Amount,
+                    durationDays = milestone.DurationDays,
+                    orderIndex,
+                    deadlineOffsetDays
+                });
+
+                orderIndex++;
+            }
 
             return JsonSerializer.Serialize(normalizedMilestones);
         }
@@ -1191,8 +1125,7 @@ namespace AITasker.Infrastructure.Proposals
                     acceptanceCriteria = x.AcceptanceCriteria,
                     amount = x.Amount,
                     orderIndex = x.OrderIndex,
-                    deadlineOffsetDays = x.DeadlineOffsetDays,
-                    revisionLimit = x.RevisionLimit
+                    deadlineOffsetDays = x.DeadlineOffsetDays
                 })
                 .ToList();
 
@@ -1234,7 +1167,6 @@ namespace AITasker.Infrastructure.Proposals
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    RevisionLimit = x.RevisionLimit,
                     CreatedAt = DateTime.UtcNow
                 })
                 .ToList();

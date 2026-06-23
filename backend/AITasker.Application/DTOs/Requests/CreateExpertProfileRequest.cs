@@ -2,6 +2,8 @@ namespace AITasker.Application.DTOs.Requests;
 
 public class CreateExpertProfileRequest
 {
+    public string FullName { get; set; } = string.Empty;
+
     // Avatar nằm ở bảng Users, nhưng gửi chung trong form hoàn thiện profile
     public string? AvatarUrl { get; set; }
 

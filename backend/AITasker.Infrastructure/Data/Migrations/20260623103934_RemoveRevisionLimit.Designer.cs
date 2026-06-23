@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623103934_RemoveRevisionLimit")]
+    partial class RemoveRevisionLimit
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,60 +24,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
-
-            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
-                {
-                    b.Property<int>("AdminAuditLogId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AdminAuditLogId"));
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int?>("AdminId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("EntityId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("EntityName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("NewValue")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("OldValue")
-                        .HasMaxLength(4000)
-                        .HasColumnType("nvarchar(4000)");
-
-                    b.Property<string>("Reason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.HasKey("AdminAuditLogId");
-
-                    b.HasIndex("Action");
-
-                    b.HasIndex("AdminId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("EntityId");
-
-                    b.HasIndex("EntityName");
-
-                    b.ToTable("AdminAuditLogs", (string)null);
-                });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
@@ -937,82 +886,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("ExpertProfiles", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfileScoringPolicy", b =>
-                {
-                    b.Property<int>("ExpertProfileScoringPolicyId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertProfileScoringPolicyId"));
-
-                    b.Property<decimal>("AiSkillMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<int>("BioMinimumLength")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("CertificateMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal>("CertificateUnverifiedMaxProfileScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("ExperienceMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal>("GitHubMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<decimal>("LinkedInMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<int>("MaxCertificates")
-                        .HasColumnType("int");
-
-                    b.Property<int>("MaxReviewSubmissions")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("PassThreshold")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal>("PortfolioMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<decimal>("ProfileCompletenessMaxScore")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<int>("ReviewLockDurationHours")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("RiskMaxPenalty")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<int>("SkillsMinimumLength")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.HasKey("ExpertProfileScoringPolicyId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UpdatedByAdminId");
-
-                    b.ToTable("ExpertProfileScoringPolicies", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
                 {
                     b.Property<int>("ExpertSkillId")
@@ -1699,43 +1572,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.PlatformFeePolicy", b =>
-                {
-                    b.Property<int>("PlatformFeePolicyId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PlatformFeePolicyId"));
-
-                    b.Property<decimal>("BusinessClientFeeRate")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("IndividualClientFeeRate")
-                        .HasColumnType("decimal(5,2)");
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.HasKey("PlatformFeePolicyId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UpdatedByAdminId");
-
-                    b.ToTable("PlatformFeePolicies", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Skill", b =>
                 {
                     b.Property<int>("SkillId")
@@ -1853,13 +1689,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("BanReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("BannedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1877,21 +1706,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<DateTime?>("LastLockedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("LockReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("LockoutCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.Property<DateTime?>("LockoutEnd")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -1902,10 +1716,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("StatusBeforeSuspension")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
@@ -1920,12 +1730,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("GoogleId")
                         .IsUnique()
                         .HasFilter("[GoogleId] IS NOT NULL");
-
-                    b.HasIndex("LockoutEnd");
-
-                    b.HasIndex("Role");
-
-                    b.HasIndex("Status");
 
                     b.ToTable("Users", (string)null);
                 });
@@ -2058,16 +1862,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("WithdrawalRequests", (string)null);
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "Admin")
-                        .WithMany()
-                        .HasForeignKey("AdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("Admin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
@@ -2329,16 +2123,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfileScoringPolicy", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("UpdatedByAdmin");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
@@ -2588,16 +2372,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("ProcessedByAdmin");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.PlatformFeePolicy", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("UpdatedByAdmin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.ClientProfile", b =>
