@@ -22,8 +22,6 @@ namespace AITasker.Domain.Entities
 
         public int DeadlineOffsetDays { get; set; }
 
-        public int RevisionLimit { get; set; }
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public Proposal? Proposal { get; set; }

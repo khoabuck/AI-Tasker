@@ -47,7 +47,10 @@ namespace AITasker.Infrastructure.Contracts
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
             var expertProfile = await GetExpertProfileByIdAsync(proposal.ExpertId);
 
-            EnsureUserBelongsToProposal(userId, clientProfile, expertProfile);
+            if (clientProfile.UserId != userId)
+            {
+                throw new UnauthorizedAccessException("Only the Client who owns the job can create a contract from an accepted proposal.");
+            }
 
             if (!string.Equals(proposal.Status, ProposalStatusAccepted, StringComparison.OrdinalIgnoreCase))
             {
@@ -77,7 +80,6 @@ namespace AITasker.Infrastructure.Contracts
                 finalTimelineDays,
                 proposal.ExpectedOutputs,
                 "Acceptance criteria must be confirmed by Client and Expert before project starts.",
-                2,
                 "Milestone based escrow simulation.",
                 ContractSourceProposal,
                 null);
@@ -105,64 +107,10 @@ namespace AITasker.Infrastructure.Contracts
             int userId,
             CreateContractRequest request)
         {
-            ValidateCreateRequest(request);
+            await Task.CompletedTask;
 
-            var proposal = await GetProposalByIdAsync(request.ProposalId);
-            var job = await GetJobByIdAsync(proposal.JobId);
-            var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
-            var expertProfile = await GetExpertProfileByIdAsync(proposal.ExpertId);
-
-            EnsureUserBelongsToProposal(userId, clientProfile, expertProfile);
-
-            if (!string.Equals(proposal.Status, ProposalStatusAccepted, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only ACCEPTED proposals can create contract draft.");
-            }
-
-            var existingContract = await _context.ProjectContracts
-                .FirstOrDefaultAsync(x => x.ProposalId == request.ProposalId);
-
-            if (existingContract != null)
-            {
-                throw new InvalidOperationException("Contract already exists for this proposal.");
-            }
-
-            await EnsureProposalBaseVersionExistsAsync(proposal);
-            var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
-
-            var contract = BuildContract(
-                proposal,
-                job,
-                clientProfile,
-                request.ProjectScope.Trim(),
-                request.FinalPrice,
-                request.FinalTimelineDays,
-                request.Deliverables.Trim(),
-                request.AcceptanceCriteria.Trim(),
-                request.RevisionLimit,
-                request.PaymentTerms.Trim(),
-                ContractSourceProposal,
-                string.IsNullOrWhiteSpace(request.PaymentTerms)
-                    ? null
-                    : "Contract draft created from accepted proposal and editable contract template.");
-
-            contract.SourceProposalVersionNumber = sourceProposalVersionNumber;
-
-            _context.ProjectContracts.Add(contract);
-            await _context.SaveChangesAsync();
-
-            await CopyLatestProposalMilestonesToContractDraftAsync(
-                proposal.ProposalId,
-                contract.ContractId);
-
-            await NotifyContractDraftCreatedAsync(
-                userId,
-                contract,
-                job,
-                clientProfile,
-                expertProfile);
-
-            return await MapToContractResponseAsync(contract);
+            throw new InvalidOperationException(
+                "Manual contract creation is disabled. A contract can only be generated from an accepted proposal.");
         }
 
         public async Task<ProjectContractResponse> UpdateContractDraftAsync(
@@ -170,87 +118,10 @@ namespace AITasker.Infrastructure.Contracts
             int contractId,
             UpdateContractDraftRequest request)
         {
-            ValidateUpdateDraftRequest(request);
+            await Task.CompletedTask;
 
-            var contract = await GetContractByIdInternalAsync(contractId);
-
-            if (!string.Equals(contract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only DRAFT contracts can be updated.");
-            }
-
-            if (contract.ClientConfirmed)
-            {
-                throw new InvalidOperationException("Cannot update contract after Client has signed it.");
-            }
-
-            if (contract.ExpertConfirmed)
-            {
-                throw new InvalidOperationException("Cannot update contract after Expert has signed it.");
-            }
-            var proposal = await GetProposalByIdAsync(contract.ProposalId);
-            var job = await GetJobByIdAsync(proposal.JobId);
-            var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
-            var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
-
-            if (userId != expertProfile.UserId)
-            {
-                throw new UnauthorizedAccessException("Only Expert can update the contract draft. Client can only request revision or sign/reject the contract.");
-            }
-
-            var oldProjectScope = contract.ProjectScope;
-            var oldFinalPrice = contract.FinalPrice;
-            var oldFinalTimelineDays = contract.FinalTimelineDays;
-            var oldDeliverables = contract.Deliverables;
-            var oldAcceptanceCriteria = contract.AcceptanceCriteria;
-            var oldRevisionLimit = contract.RevisionLimit;
-            var oldPaymentTerms = contract.PaymentTerms;
-            var oldChatSummary = contract.ChatSummary;
-
-            var platformFeeRate = ResolvePlatformFeeRate(clientProfile);
-            var platformFeeAmount = request.FinalPrice * platformFeeRate / 100m;
-            var totalClientPayment = request.FinalPrice + platformFeeAmount;
-
-            contract.ProjectScope = request.ProjectScope.Trim();
-            contract.FinalPrice = request.FinalPrice;
-            contract.PlatformFeeRate = platformFeeRate;
-            contract.PlatformFeeAmount = platformFeeAmount;
-            contract.TotalClientPayment = totalClientPayment;
-            contract.FinalTimelineDays = request.FinalTimelineDays;
-            contract.Deliverables = request.Deliverables.Trim();
-            contract.AcceptanceCriteria = request.AcceptanceCriteria.Trim();
-            contract.RevisionLimit = request.RevisionLimit;
-            contract.PaymentTerms = request.PaymentTerms.Trim();
-            contract.ChatSummary = string.IsNullOrWhiteSpace(request.ChatSummary)
-                ? null
-                : request.ChatSummary.Trim();
-
-            var changed =
-                oldProjectScope != contract.ProjectScope ||
-                oldFinalPrice != contract.FinalPrice ||
-                oldFinalTimelineDays != contract.FinalTimelineDays ||
-                oldDeliverables != contract.Deliverables ||
-                oldAcceptanceCriteria != contract.AcceptanceCriteria ||
-                oldRevisionLimit != contract.RevisionLimit ||
-                oldPaymentTerms != contract.PaymentTerms ||
-                oldChatSummary != contract.ChatSummary;
-
-            if (changed)
-            {
-                contract.ClientConfirmed = false;
-                contract.ExpertConfirmed = false;
-                contract.ConfirmedAt = null;
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Contract draft updated",
-                    $"The expert updated the contract draft for job: {job.Title}. Please review and sign if everything is correct.",
-                    "CONTRACT_DRAFT_UPDATED");
-            }
-
-            await _context.SaveChangesAsync();
-
-            return await MapToContractResponseAsync(contract);
+            throw new InvalidOperationException(
+                "Contract editing is disabled. The generated contract can only be signed or cancelled.");
         }
 
         public async Task<ProjectContractResponse> GetContractByIdAsync(
@@ -505,7 +376,6 @@ namespace AITasker.Infrastructure.Contracts
             int finalTimelineDays,
             string deliverables,
             string acceptanceCriteria,
-            int revisionLimit,
             string paymentTerms,
             string contractSource,
             string? chatSummary)
@@ -539,7 +409,6 @@ namespace AITasker.Infrastructure.Contracts
 
                 Deliverables = deliverables,
                 AcceptanceCriteria = acceptanceCriteria,
-                RevisionLimit = revisionLimit,
                 PaymentTerms = paymentTerms,
 
                 ContractSource = contractSource,
@@ -612,11 +481,6 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Acceptance criteria are required.");
             }
 
-            if (request.RevisionLimit < 0)
-            {
-                throw new InvalidOperationException("Revision limit cannot be negative.");
-            }
-
             if (string.IsNullOrWhiteSpace(request.PaymentTerms))
             {
                 throw new InvalidOperationException("Payment terms are required.");
@@ -664,11 +528,6 @@ namespace AITasker.Infrastructure.Contracts
             if (string.IsNullOrWhiteSpace(request.AcceptanceCriteria))
             {
                 throw new InvalidOperationException("Acceptance criteria are required.");
-            }
-
-            if (request.RevisionLimit < 0)
-            {
-                throw new InvalidOperationException("Revision limit cannot be negative.");
             }
 
             if (string.IsNullOrWhiteSpace(request.PaymentTerms))
@@ -915,7 +774,6 @@ namespace AITasker.Infrastructure.Contracts
                 FinalTimelineDays = contract.FinalTimelineDays,
                 Deliverables = contract.Deliverables,
                 AcceptanceCriteria = contract.AcceptanceCriteria,
-                RevisionLimit = contract.RevisionLimit,
                 PaymentTerms = contract.PaymentTerms,
 
                 ContractSource = contract.ContractSource,
@@ -951,9 +809,7 @@ namespace AITasker.Infrastructure.Contracts
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            return drafts
-                .Select(MapContractMilestoneDraftResponse)
-                .ToList();
+            return MapContractMilestoneDraftResponses(drafts);
         }
 
         public async Task<IReadOnlyList<ContractMilestoneDraftResponse>> ReplaceContractMilestoneDraftsAsync(
@@ -961,76 +817,10 @@ namespace AITasker.Infrastructure.Contracts
             int contractId,
             ReplaceContractMilestoneDraftsRequest request)
         {
-            var contract = await GetContractByIdInternalAsync(contractId);
-            
-            if (!string.Equals(contract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Only DRAFT contracts can update milestone drafts.");
-            }
+            await Task.CompletedTask;
 
-            if (contract.ClientConfirmed)
-            {
-                throw new InvalidOperationException("Cannot update milestone drafts after Client has signed the contract.");
-            }
-
-            if (contract.ExpertConfirmed)
-            {
-                throw new InvalidOperationException("Cannot update milestone drafts after Expert has signed the contract.");
-            }
-
-            var proposal = await GetProposalByIdAsync(contract.ProposalId);
-            var job = await GetJobByIdAsync(proposal.JobId);
-            var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
-            var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
-
-            if (userId != expertProfile.UserId)
-            {
-                throw new UnauthorizedAccessException("Only Expert can update contract milestone drafts. Client can only review, request revision, sign, or reject the contract.");
-            }
-
-            ValidateReplaceMilestoneDraftsRequest(request, contract.FinalPrice, contract.FinalTimelineDays);
-
-            var oldDrafts = await _context.ContractMilestoneDrafts
-                .Where(x => x.ContractId == contractId)
-                .ToListAsync();
-
-            _context.ContractMilestoneDrafts.RemoveRange(oldDrafts);
-
-            var newDrafts = request.Milestones
-                .OrderBy(x => x.OrderIndex)
-                .Select(x => new ContractMilestoneDraft
-                {
-                    ContractId = contractId,
-                    Title = x.Title.Trim(),
-                    Description = x.Description.Trim(),
-                    ExpectedDeliverable = x.ExpectedDeliverable.Trim(),
-                    AcceptanceCriteria = x.AcceptanceCriteria.Trim(),
-                    Amount = x.Amount,
-                    OrderIndex = x.OrderIndex,
-                    DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    RevisionLimit = x.RevisionLimit,
-                    CreatedAt = DateTime.UtcNow
-                })
-                .ToList();
-
-            _context.ContractMilestoneDrafts.AddRange(newDrafts);
-
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
-
-            await _notificationService.CreateNotificationAsync(
-                clientProfile.UserId,
-                "Contract milestone draft updated",
-                $"The expert updated milestone drafts for job: {job.Title}. Please review and sign if everything is correct.",
-                "CONTRACT_MILESTONE_DRAFT_UPDATED");
-
-            await _context.SaveChangesAsync();
-
-            return newDrafts
-                .OrderBy(x => x.OrderIndex)
-                .Select(MapContractMilestoneDraftResponse)
-                .ToList();
+            throw new InvalidOperationException(
+                "Contract milestone editing is disabled. Milestones are generated from the accepted proposal.");
         }
 
         private static void ValidateReplaceMilestoneDraftsRequest(
@@ -1110,11 +900,6 @@ namespace AITasker.Infrastructure.Contracts
                 {
                     throw new InvalidOperationException("Milestone deadline cannot exceed contract final timeline days.");
                 }
-
-                if (milestone.RevisionLimit < 0)
-                {
-                    throw new InvalidOperationException("Milestone revision limit cannot be negative.");
-                }
             }
 
             var totalMilestoneAmount = request.Milestones.Sum(x => x.Amount);
@@ -1125,23 +910,30 @@ namespace AITasker.Infrastructure.Contracts
             }
         }
 
-        private static ContractMilestoneDraftResponse MapContractMilestoneDraftResponse(
-            ContractMilestoneDraft draft)
+        private static List<ContractMilestoneDraftResponse> MapContractMilestoneDraftResponses(
+            List<ContractMilestoneDraft> drafts)
         {
-            return new ContractMilestoneDraftResponse
+            var result = new List<ContractMilestoneDraftResponse>();
+            var previousDeadlineOffsetDays = 0;
+
+            foreach (var draft in drafts.OrderBy(x => x.OrderIndex))
             {
-                ContractMilestoneDraftId = draft.ContractMilestoneDraftId,
-                ContractId = draft.ContractId,
-                Title = draft.Title,
-                Description = draft.Description,
-                ExpectedDeliverable = draft.ExpectedDeliverable,
-                AcceptanceCriteria = draft.AcceptanceCriteria,
-                Amount = draft.Amount,
-                OrderIndex = draft.OrderIndex,
-                DeadlineOffsetDays = draft.DeadlineOffsetDays,
-                RevisionLimit = draft.RevisionLimit,
-                CreatedAt = draft.CreatedAt
-            };
+                var durationDays = draft.DeadlineOffsetDays - previousDeadlineOffsetDays;
+
+                result.Add(new ContractMilestoneDraftResponse
+                {
+                    ContractMilestoneDraftId = draft.ContractMilestoneDraftId,
+                    ContractId = draft.ContractId,
+                    Title = draft.Title,
+                    Amount = draft.Amount,
+                    DurationDays = durationDays <= 0 ? draft.DeadlineOffsetDays : durationDays,
+                    CreatedAt = draft.CreatedAt
+                });
+
+                previousDeadlineOffsetDays = draft.DeadlineOffsetDays;
+            }
+
+            return result;
         }
 
         private async Task EnsureContractMilestoneDraftsReadyAsync(ProjectContract contract)
@@ -1213,7 +1005,6 @@ namespace AITasker.Infrastructure.Contracts
                 Amount = draft.Amount,
                 OrderIndex = draft.OrderIndex,
                 Deadline = baseDate.AddDays(draft.DeadlineOffsetDays),
-                RevisionLimit = draft.RevisionLimit,
                 RevisionUsed = 0,
                 PaymentStatus = "PENDING",
                 Status = "PENDING",
@@ -1309,7 +1100,6 @@ namespace AITasker.Infrastructure.Contracts
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    RevisionLimit = x.RevisionLimit,
                     CreatedAt = DateTime.UtcNow
                 })
                 .ToList();

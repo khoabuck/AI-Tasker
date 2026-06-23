@@ -21,6 +21,5 @@ namespace AITasker.Application.DTOs.Requests
 
         public int DeadlineOffsetDays { get; set; }
 
-        public int RevisionLimit { get; set; }
     }
 }

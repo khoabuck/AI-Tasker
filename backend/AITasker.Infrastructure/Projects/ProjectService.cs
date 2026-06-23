@@ -391,7 +391,6 @@ namespace AITasker.Infrastructure.Projects
             milestone.Amount = request.Amount;
             milestone.OrderIndex = request.OrderIndex;
             milestone.Deadline = request.Deadline;
-            milestone.RevisionLimit = request.RevisionLimit;
 
             await _context.SaveChangesAsync();
 
@@ -478,8 +477,6 @@ namespace AITasker.Infrastructure.Projects
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
                 Deadline = request.Deadline,
-                RevisionLimit = request.RevisionLimit,
-                RevisionUsed = 0,
                 PaymentStatus = PaymentStatusPending,
                 Status = MilestoneStatusPending,
                 CreatedAt = DateTime.UtcNow
@@ -547,11 +544,6 @@ namespace AITasker.Infrastructure.Projects
             {
                 throw new InvalidOperationException("Milestone deadline must be in the future.");
             }
-
-            if (request.RevisionLimit < 0)
-            {
-                throw new InvalidOperationException("Revision limit cannot be negative.");
-            }
         }
 
         private static void ValidateUpdateMilestoneRequest(UpdateMilestoneRequest request)
@@ -569,8 +561,7 @@ namespace AITasker.Infrastructure.Projects
                 AcceptanceCriteria = request.AcceptanceCriteria,
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
-                Deadline = request.Deadline,
-                RevisionLimit = request.RevisionLimit
+                Deadline = request.Deadline
             });
         }
 
@@ -806,7 +797,6 @@ namespace AITasker.Infrastructure.Projects
                 Amount = milestone.Amount,
                 OrderIndex = milestone.OrderIndex,
                 Deadline = milestone.Deadline,
-                RevisionLimit = milestone.RevisionLimit,
                 RevisionUsed = milestone.RevisionUsed,
                 PaymentStatus = milestone.PaymentStatus,
                 Status = milestone.Status,

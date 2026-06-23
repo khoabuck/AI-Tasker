@@ -44,8 +44,6 @@ namespace AITasker.Application.DTOs.Responses
 
         public string MilestonePaymentStatus { get; set; } = string.Empty;
 
-        public int RevisionLimit { get; set; }
-
         public int RevisionUsed { get; set; }
 
         public DateTime SubmittedAt { get; set; }
