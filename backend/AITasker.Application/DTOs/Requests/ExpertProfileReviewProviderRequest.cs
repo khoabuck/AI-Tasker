@@ -20,6 +20,26 @@ public class ExpertProfileReviewProviderRequest
 
     public string? GitHubUrl { get; set; }
 
+    public decimal PassThreshold { get; set; } = 70m;
+
+    public decimal ProfileCompletenessMaxScore { get; set; } = 15m;
+
+    public decimal AiSkillMaxScore { get; set; } = 15m;
+
+    public decimal ExperienceMaxScore { get; set; } = 20m;
+
+    public decimal PortfolioMaxScore { get; set; } = 10m;
+
+    public decimal GitHubMaxScore { get; set; } = 10m;
+
+    public decimal LinkedInMaxScore { get; set; } = 5m;
+
+    public decimal CertificateMaxScore { get; set; } = 15m;
+
+    public decimal RiskMaxPenalty { get; set; } = 10m;
+
+    public decimal CertificateUnverifiedMaxProfileScore { get; set; } = 69m;
+
     public List<ExpertProfileReviewCertificateItem> Certificates { get; set; } = new();
 
     public List<UrlInspectionResult> UrlInspectionResults { get; set; } = new();
