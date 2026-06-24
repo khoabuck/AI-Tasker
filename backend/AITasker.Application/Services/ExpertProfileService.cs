@@ -1758,6 +1758,450 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
+    private static ExpertProfileScoreBreakdownResponse BuildScoreBreakdown(
+        ExpertProfile expertProfile
+    )
+    {
+        const decimal profileCompletenessMaxScore = 15m;
+        const decimal aiSkillRelevanceMaxScore = 15m;
+        const decimal experienceCredibilityMaxScore = 20m;
+        const decimal proofEvidenceMaxScore = 25m;
+        const decimal certificateEvidenceMaxScore = 15m;
+        const decimal trustRiskMaxScore = 10m;
+
+        var profileCompletenessScore = CalculateProfileCompletenessScore(
+            expertProfile,
+            profileCompletenessMaxScore
+        );
+        var aiSkillRelevanceScore = CalculateAiSkillRelevanceScore(
+            expertProfile,
+            aiSkillRelevanceMaxScore
+        );
+        var experienceCredibilityScore = CalculateExperienceCredibilityScore(
+            expertProfile,
+            experienceCredibilityMaxScore
+        );
+        var proofEvidenceScore = CalculateProofEvidenceScore(
+            expertProfile,
+            proofEvidenceMaxScore
+        );
+        var certificateEvidenceScore = CalculateCertificateEvidenceScore(
+            expertProfile,
+            certificateEvidenceMaxScore
+        );
+        var trustRiskScore = CalculateTrustRiskScore(
+            expertProfile,
+            trustRiskMaxScore
+        );
+
+        var scores = new[]
+        {
+            profileCompletenessScore,
+            aiSkillRelevanceScore,
+            experienceCredibilityScore,
+            proofEvidenceScore,
+            certificateEvidenceScore,
+            trustRiskScore
+        };
+
+        var maxScores = new[]
+        {
+            profileCompletenessMaxScore,
+            aiSkillRelevanceMaxScore,
+            experienceCredibilityMaxScore,
+            proofEvidenceMaxScore,
+            certificateEvidenceMaxScore,
+            trustRiskMaxScore
+        };
+
+        var canReceiveAdditionalScore = new[]
+        {
+            true,
+            true,
+            true,
+            true,
+            expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "VERIFIED",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ),
+            !HasNameMismatchCertificate(expertProfile)
+        };
+
+        NormalizeBreakdownTotal(
+            scores,
+            maxScores,
+            canReceiveAdditionalScore,
+            NormalizeProfileScore(expertProfile.ProfileScore)
+        );
+
+        return new ExpertProfileScoreBreakdownResponse
+        {
+            ProfileCompleteness = BuildScoreItem(
+                scores[0],
+                profileCompletenessMaxScore
+            ),
+            AiSkillRelevance = BuildScoreItem(
+                scores[1],
+                aiSkillRelevanceMaxScore
+            ),
+            ExperienceCredibility = BuildScoreItem(
+                scores[2],
+                experienceCredibilityMaxScore
+            ),
+            ProofEvidence = BuildScoreItem(
+                scores[3],
+                proofEvidenceMaxScore
+            ),
+            CertificateEvidence = BuildScoreItem(
+                scores[4],
+                certificateEvidenceMaxScore
+            ),
+            TrustRisk = BuildScoreItem(
+                scores[5],
+                trustRiskMaxScore
+            )
+        };
+    }
+
+    private static ExpertProfileScoreItemResponse BuildScoreItem(
+        decimal score,
+        decimal maxScore
+    )
+    {
+        return new ExpertProfileScoreItemResponse
+        {
+            Score = RoundScore(ClampScore(score, 0m, maxScore)),
+            MaxScore = maxScore
+        };
+    }
+
+    private static decimal CalculateProfileCompletenessScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var score = 0m;
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.User?.FullName))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.ProfessionalTitle))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.Bio))
+        {
+            score += expertProfile.Bio.Trim().Length >= 80 ? 4m : 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.Skills))
+        {
+            score += SplitSkills(expertProfile.Skills).Count >= 3 ? 3m : 1.5m;
+        }
+
+        if (expertProfile.YearsOfExperience >= 0)
+        {
+            score += 1m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.PortfolioUrl))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.GitHubUrl))
+        {
+            score += 1m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateAiSkillRelevanceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var text = $"{expertProfile.ProfessionalTitle} {expertProfile.Bio} {expertProfile.Skills}"
+            .ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0m;
+        }
+
+        var keywords = new[]
+        {
+            "ai",
+            "automation",
+            "rag",
+            "chatbot",
+            "llm",
+            "machine learning",
+            "ml",
+            "nlp",
+            "openai",
+            "gemini",
+            "deepseek",
+            "python",
+            "prompt",
+            "computer vision",
+            "ocr",
+            "data"
+        };
+
+        var matchedKeywordCount = keywords.Count(keyword => text.Contains(keyword));
+        var skillCount = SplitSkills(expertProfile.Skills).Count;
+
+        var score = Math.Min(matchedKeywordCount * 2m, 12m);
+
+        if (skillCount >= 3)
+        {
+            score += 3m;
+        }
+        else if (skillCount > 0)
+        {
+            score += 1.5m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateExperienceCredibilityScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        if (expertProfile.ExperienceConfidenceScore > 0)
+        {
+            return ClampScore(
+                expertProfile.ExperienceConfidenceScore / 100m * maxScore,
+                0m,
+                maxScore
+            );
+        }
+
+        var years = Math.Max(
+            expertProfile.VerifiedYearsOfExperience,
+            expertProfile.YearsOfExperience
+        );
+
+        var score = years switch
+        {
+            >= 8 => 20m,
+            >= 5 => 18m,
+            >= 3 => 15m,
+            >= 1 => 10m,
+            _ => 5m
+        };
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateProofEvidenceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var score = 0m;
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.PortfolioUrl))
+        {
+            score += 12.5m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.GitHubUrl))
+        {
+            score += 12.5m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateCertificateEvidenceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var verifiedCertificateScores = expertProfile.Certificates
+            .Where(x => string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            ))
+            .Select(x => ClampScore(x.VerificationScore, 0m, 100m))
+            .ToList();
+
+        if (verifiedCertificateScores.Count == 0)
+        {
+            return 0m;
+        }
+
+        return ClampScore(
+            verifiedCertificateScores.Max() / 100m * maxScore,
+            0m,
+            maxScore
+        );
+    }
+
+    private static decimal CalculateTrustRiskScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        if (HasNameMismatchCertificate(expertProfile))
+        {
+            return 0m;
+        }
+
+        var score = maxScore;
+
+        if (expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "INVALID",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 5m;
+        }
+
+        if (expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "NEEDS_REVIEW",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 2m;
+        }
+
+        if (string.Equals(
+                expertProfile.ProfileReviewStatus,
+                "NEEDS_CORRECTION",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            score -= 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.MissingInformation))
+        {
+            score -= 1m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static void NormalizeBreakdownTotal(
+        decimal[] scores,
+        decimal[] maxScores,
+        bool[] canReceiveAdditionalScore,
+        decimal targetTotal
+    )
+    {
+        targetTotal = ClampScore(targetTotal, 0m, maxScores.Sum());
+
+        var currentTotal = scores.Sum();
+
+        if (currentTotal > targetTotal && currentTotal > 0m)
+        {
+            var factor = targetTotal / currentTotal;
+
+            for (var i = 0; i < scores.Length; i++)
+            {
+                scores[i] = ClampScore(scores[i] * factor, 0m, maxScores[i]);
+            }
+        }
+        else if (currentTotal < targetTotal)
+        {
+            var remaining = targetTotal - currentTotal;
+
+            while (remaining > 0.01m)
+            {
+                var changed = false;
+
+                for (var i = 0; i < scores.Length && remaining > 0.01m; i++)
+                {
+                    if (!canReceiveAdditionalScore[i])
+                    {
+                        continue;
+                    }
+
+                    var capacity = maxScores[i] - scores[i];
+
+                    if (capacity <= 0m)
+                    {
+                        continue;
+                    }
+
+                    var increment = Math.Min(capacity, remaining);
+                    scores[i] += increment;
+                    remaining -= increment;
+                    changed = true;
+                }
+
+                if (!changed)
+                {
+                    break;
+                }
+            }
+        }
+
+        for (var i = 0; i < scores.Length; i++)
+        {
+            scores[i] = RoundScore(ClampScore(scores[i], 0m, maxScores[i]));
+        }
+    }
+
+    private static bool HasNameMismatchCertificate(ExpertProfile expertProfile)
+    {
+        return expertProfile.Certificates.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private static List<string> SplitSkills(string? skills)
+    {
+        if (string.IsNullOrWhiteSpace(skills))
+        {
+            return new List<string>();
+        }
+
+        return skills
+            .Split(new[] { ',', ';', '|', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static decimal ClampScore(
+        decimal score,
+        decimal minScore,
+        decimal maxScore
+    )
+    {
+        return Math.Min(Math.Max(score, minScore), maxScore);
+    }
+
+    private static decimal RoundScore(decimal score)
+    {
+        return Math.Round(score, 2, MidpointRounding.AwayFromZero);
+    }
+
     private static ExpertProfileResponse ToResponse(ExpertProfile expertProfile)
     {
         return new ExpertProfileResponse
@@ -1785,6 +2229,10 @@ public class ExpertProfileService : IExpertProfileService
             GitHubUrl = expertProfile.GitHubUrl,
             ExpertCategory = expertProfile.ExpertCategory,
             ProfileScore = expertProfile.ProfileScore,
+            ProfileScoreMax = 100m,
+            ProfilePassScore = 70m,
+            ProfileScoreText = $"{expertProfile.ProfileScore:0.##}/100",
+            ScoreBreakdown = BuildScoreBreakdown(expertProfile),
             Level = expertProfile.Level,
             ProfileReviewStatus = expertProfile.ProfileReviewStatus,
             ProfileReviewNote = expertProfile.ProfileReviewNote,
