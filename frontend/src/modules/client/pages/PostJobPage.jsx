@@ -105,6 +105,9 @@ export default function PostJobPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
+  const [customSkill, setCustomSkill] = useState("");
+  const [aiSuggestedSkills, setAiSuggestedSkills] = useState([]);
+  const [irrelevantSkills, setIrrelevantSkills] = useState([]);
 
   useEffect(() => {
   if (!editId) return;
@@ -156,6 +159,21 @@ export default function PostJobPage() {
 
   const toggleSkill = (skill) => {
     const exists = form.skills.find((s) => s.id === skill.id);
+
+    const isAiSuggested = aiSuggestedSkills.some(
+      (s) => Number(s.id) === Number(skill.id)
+    );
+
+    if (exists) {
+      setIrrelevantSkills((prev) =>
+        prev.filter((name) => name.toLowerCase() !== skill.name.toLowerCase())
+      );
+    } else if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
+      setIrrelevantSkills((prev) =>
+        prev.includes(skill.name) ? prev : [...prev, skill.name]
+      );
+    }
+
     setForm((prev) => ({
       ...prev,
       skills: exists
@@ -187,6 +205,15 @@ export default function PostJobPage() {
         projectTypeHint: form.projectType || "",
       });
       const data = res.data;
+      const suggestedSkills = (data.suggestedSkills || [])
+      .map((s) => ({
+        id: Number(s.skillId ?? s.SkillId ?? s.id),
+        name: s.skillName ?? s.SkillName ?? s.name,
+      }))
+      .filter((s) => Number.isInteger(s.id) && s.id > 0);
+
+    setAiSuggestedSkills(suggestedSkills);
+    setIrrelevantSkills([]);
       const defaultDeadline = new Date(
         Date.now() + 30 * 24 * 60 * 60 * 1000
       )
@@ -207,12 +234,7 @@ export default function PostJobPage() {
           prev.deadline ||
           defaultDeadline,
 
-        skills: (data.suggestedSkills || [])
-          .map((s) => ({
-            id: Number(s.skillId ?? s.SkillId ?? s.id),
-            name: s.skillName ?? s.SkillName ?? s.name,
-          }))
-          .filter((s) => Number.isInteger(s.id) && s.id > 0),
+        skills: suggestedSkills,
       }));
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to generate. Please try again.");
@@ -297,17 +319,34 @@ export default function PostJobPage() {
   }
 };
 
-  const [customSkill, setCustomSkill] = useState("");
 
   const addCustomSkill = () => {
-  const s = customSkill.trim();
-  if (!s) return;
-  const exists = form.skills.find((sk) => sk.name.toLowerCase() === s.toLowerCase());
-  if (!exists) {
-    setForm((prev) => ({ ...prev, skills: [...prev.skills, { id: -(Date.now()), name: s }] }));
-  }
-  setCustomSkill("");
-};
+    const s = customSkill.trim();
+    if (!s) return;
+
+    const exists = form.skills.find(
+      (sk) => sk.name.toLowerCase() === s.toLowerCase()
+    );
+
+    if (!exists) {
+      setForm((prev) => ({
+        ...prev,
+        skills: [...prev.skills, { id: -Date.now(), name: s }],
+      }));
+
+      const isAiSuggested = aiSuggestedSkills.some(
+        (skill) => skill.name.toLowerCase() === s.toLowerCase()
+      );
+
+      if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
+        setIrrelevantSkills((prev) =>
+          prev.includes(s) ? prev : [...prev, s]
+        );
+      }
+    }
+
+    setCustomSkill("");
+  };
 
   return (
     <ClientLayout>
@@ -489,6 +528,27 @@ export default function PostJobPage() {
                       {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
                     </p>
                   )}
+
+                  {mode === "ai" && irrelevantSkills.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: "#fbbf24",
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                          warning
+                        </span>
+                        These skills were added outside AI suggestion: {irrelevantSkills.join(", ")}
+                      </div>
+                    )}
+
+                  
                 </div>
               </>
             )}
@@ -679,10 +739,47 @@ export default function PostJobPage() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                         {SKILL_OPTIONS.map((skill) => {
                           const selected = !!form.skills.find((s) => s.id === skill.id);
+
+                          const isIrrelevant = irrelevantSkills.some(
+                            (name) => name.toLowerCase() === skill.name.toLowerCase()
+                          );
+
                           return (
-                            <button key={skill.id} type="button" onClick={() => toggleSkill(skill)}
-                              style={{ padding: "7px 16px", borderRadius: 999, fontSize: 12, fontFamily: "JetBrains Mono, monospace", cursor: "pointer", transition: "all 0.15s", background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", color: selected ? "#00F0FF" : "#8c90a0", border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)", fontWeight: selected ? 700 : 400 }}>
-                              {selected ? "✓ " : ""}{skill.name}
+                            <button
+                              key={skill.id}
+                              type="button"
+                              onClick={() => toggleSkill(skill)}
+                              style={{
+                                padding: "7px 16px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontFamily: "JetBrains Mono, monospace",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+
+                                background: isIrrelevant
+                                  ? "rgba(245,158,11,0.12)"
+                                  : selected
+                                  ? "rgba(0,240,255,0.12)"
+                                  : "rgba(255,255,255,0.04)",
+
+                                color: isIrrelevant
+                                  ? "#fbbf24"
+                                  : selected
+                                  ? "#00F0FF"
+                                  : "#8c90a0",
+
+                                border: isIrrelevant
+                                  ? "1px solid rgba(245,158,11,0.45)"
+                                  : selected
+                                  ? "1px solid rgba(0,240,255,0.4)"
+                                  : "1px solid rgba(255,255,255,0.1)",
+
+                                fontWeight: selected ? 700 : 400,
+                              }}
+                            >
+                              {selected ? "✓ " : ""}
+                              {skill.name}
                             </button>
                           );
                         })}
@@ -710,6 +807,36 @@ export default function PostJobPage() {
                         <p style={{ fontSize: 12, color: "#00F0FF", marginTop: 10 }}>
                           {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
                         </p>
+                      )}
+
+                      {irrelevantSkills.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            background: "rgba(245,158,11,0.08)",
+                            border: "1px solid rgba(245,158,11,0.25)",
+                            color: "#fbbf24",
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: 16 }}
+                          >
+                            warning
+                          </span>
+
+                          <span>
+                            Warning: These skills were not suggested by AI:
+                            {" "}
+                            <strong>{irrelevantSkills.join(", ")}</strong>
+                          </span>
+                        </div>
                       )}
                     </div>
                     </div>
