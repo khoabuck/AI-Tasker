@@ -20,6 +20,12 @@ public class JobService : IJobService
     private const string ClientTypeBusiness = "BUSINESS";
     private const string BusinessVerificationVerified = "VERIFIED";
 
+    private const string ChargeNone = "NONE";
+    private const string ChargeFree = "FREE";
+    private const string ChargePaid = "PAID";
+
+    private const int MaxDraftJobsPerClient = 10;
+
     private readonly AITaskerDbContext _context;
 
     public JobService(AITaskerDbContext context)
@@ -33,7 +39,11 @@ public class JobService : IJobService
 
         ValidateJobRequest(request, requireSkill: false);
 
+        await EnsureClientCanCreateDraftAsync(clientProfile.ClientProfileId);
+
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var now = DateTime.UtcNow;
 
         var job = new JobPosting
         {
@@ -51,7 +61,8 @@ public class JobService : IJobService
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
             Status = StatusDraft,
             IsAiAssisted = request.IsAiAssisted,
-            CreatedAt = DateTime.UtcNow
+            PostingChargeType = ChargeNone,
+            CreatedAt = now
         };
 
         _context.JobPostings.Add(job);
@@ -73,6 +84,9 @@ public class JobService : IJobService
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
+        var postingChargeType = ApplyJobPostingCredit(clientProfile);
+        var now = DateTime.UtcNow;
+
         var job = new JobPosting
         {
             ClientProfileId = clientProfile.ClientProfileId,
@@ -89,7 +103,9 @@ public class JobService : IJobService
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
             Status = StatusOpen,
             IsAiAssisted = request.IsAiAssisted,
-            CreatedAt = DateTime.UtcNow
+            PostingChargeType = postingChargeType,
+            PublishedAt = now,
+            CreatedAt = now
         };
 
         _context.JobPostings.Add(job);
@@ -128,10 +144,18 @@ public class JobService : IJobService
 
         await EnsureJobSkillsAreStillActiveAsync(job.JobPostingId);
 
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var postingChargeType = ApplyJobPostingCredit(clientProfile);
+        var now = DateTime.UtcNow;
+
         job.Status = StatusOpen;
-        job.UpdatedAt = DateTime.UtcNow;
+        job.PostingChargeType = postingChargeType;
+        job.PublishedAt = now;
+        job.UpdatedAt = now;
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return await GetJobResponseByIdAsync(job.JobPostingId);
     }
@@ -368,6 +392,43 @@ public class JobService : IJobService
                clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
     }
 
+    private async Task EnsureClientCanCreateDraftAsync(int clientProfileId)
+    {
+        var currentDraftCount = await _context.JobPostings
+            .CountAsync(x =>
+                x.ClientProfileId == clientProfileId &&
+                x.Status == StatusDraft
+            );
+
+        if (currentDraftCount >= MaxDraftJobsPerClient)
+        {
+            throw new InvalidOperationException(
+                $"You can keep up to {MaxDraftJobsPerClient} draft jobs at the same time. Please submit, update, or cancel an existing draft before creating a new one."
+            );
+        }
+    }
+
+    private static string ApplyJobPostingCredit(ClientProfile clientProfile)
+    {
+        if (clientProfile.FreeJobPostCredits > 0)
+        {
+            clientProfile.FreeJobPostCredits -= 1;
+            clientProfile.UpdatedAt = DateTime.UtcNow;
+            return ChargeFree;
+        }
+
+        if (clientProfile.PaidJobPostCredits > 0)
+        {
+            clientProfile.PaidJobPostCredits -= 1;
+            clientProfile.UpdatedAt = DateTime.UtcNow;
+            return ChargePaid;
+        }
+
+        throw new InvalidOperationException(
+            "You have no job posting credits left. Please buy a job posting package to publish more jobs."
+        );
+    }
+
     private async Task EnsureJobSkillsAreStillActiveAsync(int jobPostingId)
     {
         var hasInactiveSkill = await _context.JobSkills
@@ -452,6 +513,8 @@ public class JobService : IJobService
             ExpectedDeliverables = job.ExpectedDeliverables,
             Status = job.Status,
             IsAiAssisted = job.IsAiAssisted,
+            PostingChargeType = job.PostingChargeType,
+            PublishedAt = job.PublishedAt,
             CreatedAt = job.CreatedAt,
             UpdatedAt = job.UpdatedAt,
             Skills = job.JobSkills.Select(js => new JobSkillResponse

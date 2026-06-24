@@ -375,6 +375,22 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
 
+            entity.Property(x => x.FreeJobPostCredits)
+                .HasDefaultValue(1)
+                .IsRequired();
+
+            entity.Property(x => x.PaidJobPostCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.FreeAiGenerationCredits)
+                .HasDefaultValue(3)
+                .IsRequired();
+
+            entity.Property(x => x.PaidAiGenerationCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -755,6 +771,13 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.IsAiAssisted)
                 .HasDefaultValue(false)
                 .IsRequired();
+
+            entity.Property(x => x.PostingChargeType)
+                .HasMaxLength(20)
+                .HasDefaultValue("NONE")
+                .IsRequired();
+
+            entity.Property(x => x.PublishedAt);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();

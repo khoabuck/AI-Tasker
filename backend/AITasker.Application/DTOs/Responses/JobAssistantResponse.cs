@@ -19,6 +19,10 @@ public class JobAssistantResponse
     public List<JobAssistantSkillResponse> SuggestedSkills { get; set; } = new();
 
     public List<string> Warnings { get; set; } = new();
+
+    public int RemainingFreeAiGenerationCredits { get; set; }
+
+    public int RemainingPaidAiGenerationCredits { get; set; }
 }
 
 public class JobAssistantSkillResponse
