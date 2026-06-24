@@ -40,6 +40,12 @@ public class ClientProfileService : IClientProfileService
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsAsync(phoneNumber))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var address = request.Address?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(address))
@@ -77,6 +83,11 @@ public class ClientProfileService : IClientProfileService
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsAsync(phoneNumber))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
 
         var representativeAddress = request.Address?.Trim() ?? string.Empty;
 
@@ -277,6 +288,13 @@ public class ClientProfileService : IClientProfileService
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var representativeAddress = request.Address?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(representativeAddress))
@@ -429,6 +447,14 @@ public class ClientProfileService : IClientProfileService
         ValidateIndividualProfileUpdateRequest(request);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var address = request.Address!.Trim();
 
         clientProfile.PhoneNumber = phoneNumber;
@@ -492,6 +518,14 @@ public class ClientProfileService : IClientProfileService
         ValidateBusinessProfileUpdateRequest(request);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
             "Business phone"

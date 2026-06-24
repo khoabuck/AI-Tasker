@@ -357,6 +357,9 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.UserId)
                 .IsUnique();
 
+            entity.HasIndex(x => x.PhoneNumber)
+                .IsUnique();
+
             entity.Property(x => x.ClientType)
                 .HasMaxLength(20)
                 .IsRequired();

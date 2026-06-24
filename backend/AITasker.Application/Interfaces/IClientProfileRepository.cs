@@ -6,6 +6,13 @@ public interface IClientProfileRepository
 {
     Task<ClientProfile?> GetByUserIdAsync(int userId);
 
+    Task<bool> PhoneNumberExistsAsync(string phoneNumber);
+
+    Task<bool> PhoneNumberExistsExceptClientProfileAsync(
+        string phoneNumber,
+        int clientProfileId
+    );
+
     Task<bool> TaxCodeExistsAsync(string taxCode);
 
     Task<bool> TaxCodeExistsExceptBusinessProfileAsync(
