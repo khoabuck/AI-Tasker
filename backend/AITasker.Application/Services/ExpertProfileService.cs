@@ -153,7 +153,7 @@ public class ExpertProfileService : IExpertProfileService
 
         expertProfile.User = user;
 
-        return ToResponse(expertProfile);
+        return ToResponse(expertProfile, scoringPolicy);
     }
 
     public async Task<ExpertProfileResponse> ResubmitAsync(
@@ -299,7 +299,7 @@ public class ExpertProfileService : IExpertProfileService
                 : expertProfile.YearsOfExperience
         );
 
-        return ToResponse(expertProfile);
+        return ToResponse(expertProfile, scoringPolicy);
     }
 
     public async Task<ExpertProfileResponse> UpdateBasicAsync(
@@ -344,7 +344,7 @@ public class ExpertProfileService : IExpertProfileService
 
         await _expertProfileRepository.SaveChangesAsync();
 
-        return ToResponse(expertProfile);
+        return ToResponse(expertProfile, scoringPolicy);
     }
 
     public async Task<ExpertVerificationUpdateResponse> UpdateVerificationAsync(
@@ -422,7 +422,7 @@ public class ExpertProfileService : IExpertProfileService
                 ExperienceVerificationNote =
                     reviewSnapshot.ExperienceVerificationNote,
                 ProposedCertificates = proposedCertificates,
-                CurrentProfile = ToResponse(expertProfile)
+                CurrentProfile = ToResponse(expertProfile, scoringPolicy)
             };
         }
 
@@ -487,7 +487,7 @@ public class ExpertProfileService : IExpertProfileService
             ExperienceVerificationNote =
                 reviewSnapshot.ExperienceVerificationNote,
             ProposedCertificates = proposedCertificates,
-            CurrentProfile = ToResponse(expertProfile)
+            CurrentProfile = ToResponse(expertProfile, scoringPolicy)
         };
     }
 
@@ -500,7 +500,9 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Expert profile not found.");
         }
 
-        return ToResponse(expertProfile);
+        var scoringPolicy = await _scoringPolicyService.GetOrCreateActivePolicyEntityAsync();
+
+        return ToResponse(expertProfile, scoringPolicy);
     }
 
     private async Task<ReviewSnapshot> ReviewFullProfileAsync(
@@ -1759,15 +1761,19 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private static ExpertProfileScoreBreakdownResponse BuildScoreBreakdown(
-        ExpertProfile expertProfile
+        ExpertProfile expertProfile,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        const decimal profileCompletenessMaxScore = 15m;
-        const decimal aiSkillRelevanceMaxScore = 15m;
-        const decimal experienceCredibilityMaxScore = 20m;
-        const decimal proofEvidenceMaxScore = 25m;
-        const decimal certificateEvidenceMaxScore = 15m;
-        const decimal trustRiskMaxScore = 10m;
+        var profileCompletenessMaxScore = scoringPolicy.ProfileCompletenessMaxScore;
+        var aiSkillRelevanceMaxScore = scoringPolicy.AiSkillMaxScore;
+        var experienceCredibilityMaxScore = scoringPolicy.ExperienceMaxScore;
+        var proofEvidenceMaxScore =
+            scoringPolicy.PortfolioMaxScore
+            + scoringPolicy.GitHubMaxScore
+            + scoringPolicy.LinkedInMaxScore;
+        var certificateEvidenceMaxScore = scoringPolicy.CertificateMaxScore;
+        var trustRiskMaxScore = scoringPolicy.RiskMaxPenalty;
 
         var profileCompletenessScore = CalculateProfileCompletenessScore(
             expertProfile,
@@ -1783,6 +1789,7 @@ public class ExpertProfileService : IExpertProfileService
         );
         var proofEvidenceScore = CalculateProofEvidenceScore(
             expertProfile,
+            scoringPolicy,
             proofEvidenceMaxScore
         );
         var certificateEvidenceScore = CalculateCertificateEvidenceScore(
@@ -1920,7 +1927,7 @@ public class ExpertProfileService : IExpertProfileService
             score += 1m;
         }
 
-        return ClampScore(score, 0m, maxScore);
+        return ClampScore(score / 15m * maxScore, 0m, maxScore);
     }
 
     private static decimal CalculateAiSkillRelevanceScore(
@@ -1959,16 +1966,18 @@ public class ExpertProfileService : IExpertProfileService
         var matchedKeywordCount = keywords.Count(keyword => text.Contains(keyword));
         var skillCount = SplitSkills(expertProfile.Skills).Count;
 
-        var score = Math.Min(matchedKeywordCount * 2m, 12m);
+        var baseScore = Math.Min(matchedKeywordCount * 2m, 12m);
 
         if (skillCount >= 3)
         {
-            score += 3m;
+            baseScore += 3m;
         }
         else if (skillCount > 0)
         {
-            score += 1.5m;
+            baseScore += 1.5m;
         }
+
+        var score = baseScore / 15m * maxScore;
 
         return ClampScore(score, 0m, maxScore);
     }
@@ -1994,11 +2003,11 @@ public class ExpertProfileService : IExpertProfileService
 
         var score = years switch
         {
-            >= 8 => 20m,
-            >= 5 => 18m,
-            >= 3 => 15m,
-            >= 1 => 10m,
-            _ => 5m
+            >= 8 => maxScore,
+            >= 5 => maxScore * 0.9m,
+            >= 3 => maxScore * 0.75m,
+            >= 1 => maxScore * 0.5m,
+            _ => maxScore * 0.25m
         };
 
         return ClampScore(score, 0m, maxScore);
@@ -2006,6 +2015,7 @@ public class ExpertProfileService : IExpertProfileService
 
     private static decimal CalculateProofEvidenceScore(
         ExpertProfile expertProfile,
+        ExpertProfileScoringPolicy scoringPolicy,
         decimal maxScore
     )
     {
@@ -2013,12 +2023,17 @@ public class ExpertProfileService : IExpertProfileService
 
         if (!string.IsNullOrWhiteSpace(expertProfile.PortfolioUrl))
         {
-            score += 12.5m;
+            score += scoringPolicy.PortfolioMaxScore;
         }
 
         if (!string.IsNullOrWhiteSpace(expertProfile.GitHubUrl))
         {
-            score += 12.5m;
+            score += scoringPolicy.GitHubMaxScore;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.LinkedInUrl))
+        {
+            score += scoringPolicy.LinkedInMaxScore;
         }
 
         return ClampScore(score, 0m, maxScore);
@@ -2202,8 +2217,28 @@ public class ExpertProfileService : IExpertProfileService
         return Math.Round(score, 2, MidpointRounding.AwayFromZero);
     }
 
-    private static ExpertProfileResponse ToResponse(ExpertProfile expertProfile)
+    private static decimal CalculateProfileScoreMax(
+        ExpertProfileScoringPolicy scoringPolicy
+    )
     {
+        return
+            scoringPolicy.ProfileCompletenessMaxScore
+            + scoringPolicy.AiSkillMaxScore
+            + scoringPolicy.ExperienceMaxScore
+            + scoringPolicy.PortfolioMaxScore
+            + scoringPolicy.GitHubMaxScore
+            + scoringPolicy.LinkedInMaxScore
+            + scoringPolicy.CertificateMaxScore
+            + scoringPolicy.RiskMaxPenalty;
+    }
+
+    private static ExpertProfileResponse ToResponse(
+        ExpertProfile expertProfile,
+        ExpertProfileScoringPolicy scoringPolicy
+    )
+    {
+        var profileScoreMax = CalculateProfileScoreMax(scoringPolicy);
+
         return new ExpertProfileResponse
         {
             ExpertProfileId = expertProfile.ExpertProfileId,
@@ -2229,10 +2264,10 @@ public class ExpertProfileService : IExpertProfileService
             GitHubUrl = expertProfile.GitHubUrl,
             ExpertCategory = expertProfile.ExpertCategory,
             ProfileScore = expertProfile.ProfileScore,
-            ProfileScoreMax = 100m,
-            ProfilePassScore = 70m,
-            ProfileScoreText = $"{expertProfile.ProfileScore:0.##}/100",
-            ScoreBreakdown = BuildScoreBreakdown(expertProfile),
+            ProfileScoreMax = profileScoreMax,
+            ProfilePassScore = scoringPolicy.PassThreshold,
+            ProfileScoreText = $"{expertProfile.ProfileScore:0.##}/{profileScoreMax:0.##}",
+            ScoreBreakdown = BuildScoreBreakdown(expertProfile, scoringPolicy),
             Level = expertProfile.Level,
             ProfileReviewStatus = expertProfile.ProfileReviewStatus,
             ProfileReviewNote = expertProfile.ProfileReviewNote,
