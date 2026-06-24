@@ -169,6 +169,11 @@ export default function ClientJobRecommendationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [messagingExpert, setMessagingExpert] = useState(null);
+  const [invitePopup, setInvitePopup] = useState({
+    open: false,
+    type: "success",
+    message: "",
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -414,7 +419,49 @@ export default function ClientJobRecommendationPage() {
           onClose={() => setMessagingExpert(null)}
         />
       )}
+      {invitePopup.open && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 p-6 backdrop-blur-sm"
+          onClick={() => setInvitePopup((prev) => ({ ...prev, open: false }))}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-[420px] rounded-2xl border bg-[#101319] p-7 text-center shadow-2xl ${
+              invitePopup.type === "success"
+                ? "border-emerald-400/40"
+                : "border-red-400/40"
+            }`}
+          >
+            <div
+              className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border ${
+                invitePopup.type === "success"
+                  ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
+                  : "border-red-400/40 bg-red-400/10 text-red-400"
+              }`}
+            >
+              <span className="material-symbols-outlined text-3xl">
+                {invitePopup.type === "success" ? "check_circle" : "error"}
+              </span>
+            </div>
 
+            <h3 className="mb-2 text-xl font-extrabold text-[#e1e2eb]">
+              {invitePopup.type === "success" ? "Invite Sent" : "Invite Failed"}
+            </h3>
+
+            <p className="mb-6 text-sm leading-6 text-[#c2c6d6]">
+              {invitePopup.message}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setInvitePopup((prev) => ({ ...prev, open: false }))}
+              className="w-full rounded-xl border border-[#c0c1ff]/30 bg-[#c0c1ff]/10 px-4 py-3 text-sm font-bold text-[#c0c1ff] transition hover:bg-[#c0c1ff]/20"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
   );
@@ -422,16 +469,43 @@ export default function ClientJobRecommendationPage() {
   // ── Invite handler ─────────────────────────────────────────────────
   async function handleInvite(expertProfileId) {
     try {
-      await axiosInstance.post("/conversations", {
+      const jobName = jobTitle || "Job opportunity";
+
+      const res = await axiosInstance.post("/conversations", {
         conversationType: "JOB_INQUIRY",
-        expertProfileId: expertProfileId,
+        expertProfileId,
         relatedJobId: Number(id),
-        initialMessage: "You have been invited to apply for this job.",
+        initialMessage: `Invitation to Apply
+
+  Job: ${jobName}
+
+  You have been invited because your profile matches this job.
+
+  Please review the job details and submit a proposal if you are interested.`,
       });
 
-      alert("Invitation sent to AI Expert!");
+      const conversation = res.data?.data ?? res.data;
+      const conversationId = conversation?.conversationId ?? conversation?.id;
+
+      setInvitePopup({
+        open: true,
+        type: "success",
+        message: "Invitation sent successfully!",
+      });
+
+      if (conversationId) {
+        setTimeout(() => {
+          navigate(`/client/messages?conversationId=${conversationId}`);
+        }, 1000);
+      }
     } catch (err) {
-      alert(err?.response?.data?.message || "Gửi lời mời thất bại.");
+      setInvitePopup({
+        open: true,
+        type: "error",
+        message:
+          err?.response?.data?.message ||
+          "Failed to send invitation.",
+      });
     }
   }
 }

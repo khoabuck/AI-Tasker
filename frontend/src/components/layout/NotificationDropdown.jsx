@@ -8,7 +8,8 @@ const TYPE_CONFIG = {
   PROPOSAL_SUBMITTED: { icon: "description",        color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
   PROPOSAL_ACCEPTED:  { icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
   PROPOSAL_REJECTED:  { icon: "cancel",              color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
-  MESSAGE_RECEIVED:   { icon: "chat",                color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  MESSAGE_RECEIVED:      { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  CHAT_MESSAGE_RECEIVED: { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
   DEPOSIT:            { icon: "add_card",            color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
   WITHDRAWAL:         { icon: "outbox",              color: "#facc15", bg: "rgba(250,204,21,0.1)"  },
   WITHDRAWAL_APPROVED:{ icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"  },
@@ -21,17 +22,18 @@ function getTypeConfig(type) {
   return TYPE_CONFIG[type] || TYPE_CONFIG.SYSTEM;
 }
 
-function timeAgo(dateStr) {
+function formatNotificationTime(dateStr) {
   if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const date = new Date(dateStr);
+
+  return date.toLocaleString("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function NotificationDropdown() {
@@ -64,14 +66,52 @@ export default function NotificationDropdown() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const getNotificationTargetUrl = (notification) => {
+  const type = notification.type;
+
+  // Ưu tiên link từ backend nếu có
+  if (notification.actionUrl || notification.link) {
+    return notification.actionUrl || notification.link;
+  }
+
+  switch (type) {
+    case "CHAT_MESSAGE_RECEIVED":
+    case "MESSAGE_RECEIVED":
+      return "/client/messages";
+
+    case "PROPOSAL_SUBMITTED":
+      return "/client/projects";
+
+    case "PROPOSAL_ACCEPTED":
+    case "PROPOSAL_REJECTED":
+      return "/client/projects";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
+
+    case "DEPOSIT":
+    case "WITHDRAWAL":
+    case "WITHDRAWAL_APPROVED":
+    case "WITHDRAWAL_REJECTED":
+      return "/client/wallet";
+
+    case "SYSTEM":
+      return "/client/notifications";
+
+    default:
+      return "/client/notifications";
+  }
+};
+
   const handleNotificationClick = (notification) => {
-    // Mark read
+    console.log(notification);
     if (!notification.isRead) {
       markRead(notification.notificationId);
     }
-    // Navigate theo type
-    const link = notification.actionUrl || notification.link;
-    if (link) navigate(link);
+
+    const targetUrl = getNotificationTargetUrl(notification);
+    navigate(targetUrl);
+
     setOpen(false);
   };
 
@@ -211,7 +251,7 @@ export default function NotificationDropdown() {
                       </p>
                     )}
                     <span style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                      {timeAgo(n.createdAt)}
+                      {formatNotificationTime(n.createdAt)}
                     </span>
                   </div>
                 </div>
