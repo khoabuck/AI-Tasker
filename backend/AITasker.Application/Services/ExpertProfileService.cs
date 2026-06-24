@@ -73,6 +73,11 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Expert profile already exists.");
         }
 
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            request.Certificates,
+            null
+        );
+
         var now = DateTime.UtcNow;
 
         user.FullName = ResolveExpertSubmissionFullName(request, user);
@@ -220,6 +225,11 @@ public class ExpertProfileService : IExpertProfileService
                 "Expert profile cannot be resubmitted in the current status."
             );
         }
+
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            request.Certificates,
+            expertProfile.ExpertProfileId
+        );
 
         user.FullName = ResolveExpertSubmissionFullName(request, user);
         user.UpdatedAt = now;
@@ -369,6 +379,11 @@ public class ExpertProfileService : IExpertProfileService
 
         ValidateCreateOrResubmitRequest(reviewRequest, scoringPolicy);
 
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            reviewRequest.Certificates,
+            expertProfile.ExpertProfileId
+        );
+
         var reviewSnapshot = await ReviewFullProfileAsync(
             reviewRequest,
             user.FullName,
@@ -510,6 +525,14 @@ public class ExpertProfileService : IExpertProfileService
 
         var hasSubmittedCertificates = request.Certificates.Count > 0;
 
+        var hasNameMismatchCertificate = certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
         var hasUnverifiedCertificate = certificateVerificationResults.Any(x =>
             !string.Equals(
                 x.VerificationStatus,
@@ -518,18 +541,17 @@ public class ExpertProfileService : IExpertProfileService
             )
         );
 
-        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        if (hasNameMismatchCertificate)
         {
-            finalProfileScore = Math.Min(
-                finalProfileScore,
-                scoringPolicy.CertificateUnverifiedMaxProfileScore
-            );
+            finalProfileScore = Math.Min(finalProfileScore, 60m);
         }
 
-        var finalReviewStatus = ResolveFinalReviewStatus(
-            finalProfileScore,
-            scoringPolicy
-        );
+        var finalReviewStatus = hasNameMismatchCertificate
+            ? "NEEDS_CORRECTION"
+            : ResolveFinalReviewStatus(
+                finalProfileScore,
+                scoringPolicy
+            );
 
         var finalLevel = ResolveFinalLevel(
             reviewResult.Level,
@@ -546,16 +568,21 @@ public class ExpertProfileService : IExpertProfileService
             scoringPolicy
         );
 
-        if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        if (hasNameMismatchCertificate)
         {
             finalReviewNote =
-                $"{finalReviewNote} Certificate evidence is not fully verified. At least one submitted certificate requires stronger evidence, so the profile cannot be approved yet.";
+                $"{finalReviewNote} Certificate holder name mismatch detected. At least one submitted certificate appears to belong to another person, so the profile needs correction.";
+        }
+        else if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} Optional certificate evidence is not fully verified. This certificate evidence is not counted, but certificates are not a hard pass/fail requirement.";
         }
 
         var finalMissingInformation = finalReviewStatus == "APPROVED"
             ? null
-            : hasSubmittedCertificates && hasUnverifiedCertificate
-                ? "At least one submitted certificate requires stronger evidence. Please provide a certificate page that clearly shows certificate name, holder name, issuer, and issued date."
+            : hasNameMismatchCertificate
+                ? "Remove or replace certificates whose detected holder name does not match the expert full name."
                 : NormalizeMissingInformation(
                     reviewResult.MissingInformation,
                     scoringPolicy
@@ -596,10 +623,11 @@ public class ExpertProfileService : IExpertProfileService
         var verificationRequests = request.Certificates
             .Select(x => new CertificateVerificationRequest
             {
-                CertificateName = x.CertificateName.Trim(),
-                CertificateIssuer = x.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(x.CertificateType),
+                CertificateName = string.Empty,
+                CertificateIssuer = string.Empty,
                 CertificateUrl = x.CertificateUrl.Trim(),
-                IssuedAt = x.IssuedAt,
+                IssuedAt = null,
                 ExpertFullName = NameNormalizer.NormalizeFullName(expertFullName),
                 ExpertBio = request.Bio.Trim(),
                 ExpertSkillsText = request.Skills.Trim()
@@ -645,10 +673,11 @@ public class ExpertProfileService : IExpertProfileService
             Certificates = request.Certificates.Select(x =>
                 new ExpertProfileReviewCertificateItem
                 {
-                    CertificateName = x.CertificateName.Trim(),
-                    CertificateIssuer = x.CertificateIssuer.Trim(),
+                    CertificateType = NormalizeCertificateType(x.CertificateType),
+                    CertificateName = string.Empty,
+                    CertificateIssuer = string.Empty,
                     CertificateUrl = x.CertificateUrl.Trim(),
-                    IssuedAt = x.IssuedAt
+                    IssuedAt = null
                 }).ToList(),
             UrlInspectionResults = urlInspectionResults
         };
@@ -670,15 +699,9 @@ public class ExpertProfileService : IExpertProfileService
             x.VerificationStatus == "VERIFIED"
         );
 
-        var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus == "NEEDS_EVIDENCE"
-        );
-
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus is "SUSPICIOUS" or "INVALID"
+            x.VerificationStatus is "NAME_MISMATCH" or "INVALID"
         );
-
-        var hasAnyCertificate = certificateVerificationResults.Count > 0;
 
         var maxCertificateScore = certificateVerificationResults.Count == 0
             ? 0m
@@ -698,14 +721,6 @@ public class ExpertProfileService : IExpertProfileService
         if (hasVerifiedCertificate)
         {
             confidence += 35m;
-        }
-        else if (hasNeedsEvidenceCertificate)
-        {
-            confidence += 20m;
-        }
-        else if (hasAnyCertificate)
-        {
-            confidence += 5m;
         }
 
         if (!string.IsNullOrWhiteSpace(request.Bio)
@@ -747,7 +762,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var gap = claimedYears - verifiedYears;
 
-        var status = "NEEDS_EVIDENCE";
+        var status = "NEEDS_REVIEW";
 
         if (confidence >= 75m && gap <= 1)
         {
@@ -755,15 +770,15 @@ public class ExpertProfileService : IExpertProfileService
         }
         else if (gap >= 3 || (claimedYears >= 5 && confidence < 60m))
         {
-            status = "NEEDS_EVIDENCE";
+            status = "NEEDS_REVIEW";
         }
         else if (hasSuspiciousOrInvalidCertificate && claimedYears >= 3)
         {
-            status = "SUSPICIOUS";
+            status = "NEEDS_REVIEW";
         }
         else if (confidence >= 45m)
         {
-            status = "NEEDS_EVIDENCE";
+            status = "NEEDS_REVIEW";
         }
 
         var note = BuildExperienceVerificationNote(
@@ -993,7 +1008,7 @@ public class ExpertProfileService : IExpertProfileService
 
         if (certificateVerificationResults.Count == 0)
         {
-            notes.Add("No certificates were provided.");
+            notes.Add("No optional certificates were provided.");
         }
         else
         {
@@ -1001,12 +1016,12 @@ public class ExpertProfileService : IExpertProfileService
                 x.VerificationStatus == "VERIFIED"
             );
 
-            var needsEvidenceCount = certificateVerificationResults.Count(x =>
-                x.VerificationStatus == "NEEDS_EVIDENCE"
+            var needsReviewCount = certificateVerificationResults.Count(x =>
+                x.VerificationStatus == "NEEDS_REVIEW"
             );
 
-            var suspiciousCount = certificateVerificationResults.Count(x =>
-                x.VerificationStatus == "SUSPICIOUS"
+            var nameMismatchCount = certificateVerificationResults.Count(x =>
+                x.VerificationStatus == "NAME_MISMATCH"
             );
 
             var invalidCount = certificateVerificationResults.Count(x =>
@@ -1014,7 +1029,7 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             notes.Add(
-              $"Certificate verification summary: {verifiedCount} verified, {needsEvidenceCount} needs evidence, {suspiciousCount} suspicious, {invalidCount} invalid."
+              $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {nameMismatchCount} name mismatch, {invalidCount} invalid."
             );
         }
 
@@ -1042,18 +1057,22 @@ public class ExpertProfileService : IExpertProfileService
 
             return new ExpertCertificate
             {
-                CertificateName = certificate.CertificateName.Trim(),
-                CertificateIssuer = certificate.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(certificate.CertificateType),
+                CertificateName = ResolveCertificateName(certificate, verificationResult),
+                CertificateIssuer = ResolveCertificateIssuer(certificate, verificationResult),
                 CertificateUrl = certificate.CertificateUrl.Trim(),
-                IssuedAt = certificate.IssuedAt,
+                IssuedAt = verificationResult?.DetectedIssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
+                    verificationResult?.VerificationStatus ?? "NEEDS_REVIEW",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
                 DetectedCertificateName =
                     verificationResult?.DetectedCertificateName,
+                DetectedHolderName = verificationResult?.DetectedHolderName,
+                DetectedIssuedDateText = verificationResult?.DetectedIssuedDateText,
+                DetectedIssuedAt = verificationResult?.DetectedIssuedAt,
                 CheckedAt = verificationResult?.CheckedAt
             };
         }).ToList();
@@ -1074,18 +1093,22 @@ public class ExpertProfileService : IExpertProfileService
             return new ExpertCertificateResponse
             {
                 ExpertCertificateId = 0,
-                CertificateName = certificate.CertificateName.Trim(),
-                CertificateIssuer = certificate.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(certificate.CertificateType),
+                CertificateName = ResolveCertificateName(certificate, verificationResult),
+                CertificateIssuer = ResolveCertificateIssuer(certificate, verificationResult),
                 CertificateUrl = certificate.CertificateUrl.Trim(),
-                IssuedAt = certificate.IssuedAt,
+                IssuedAt = verificationResult?.DetectedIssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
+                    verificationResult?.VerificationStatus ?? "NEEDS_REVIEW",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
                 DetectedCertificateName =
                     verificationResult?.DetectedCertificateName,
+                DetectedHolderName = verificationResult?.DetectedHolderName,
+                DetectedIssuedDateText = verificationResult?.DetectedIssuedDateText,
+                DetectedIssuedAt = verificationResult?.DetectedIssuedAt,
                 CheckedAt = verificationResult?.CheckedAt
             };
         }).ToList();
@@ -1151,9 +1174,9 @@ public class ExpertProfileService : IExpertProfileService
         {
             targets.Add(new UrlInspectionTarget
             {
-                Label = $"Certificate URL - {certificate.CertificateName}",
+                Label = $"Certificate URL - {NormalizeCertificateType(certificate.CertificateType)}",
                 Url = certificate.CertificateUrl.Trim(),
-                IsRequiredProof = true
+                IsRequiredProof = false
             });
         }
 
@@ -1417,12 +1440,6 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("GitHub URL is invalid.");
         }
 
-        if (request.Certificates.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "At least one certificate is required."
-            );
-        }
 
         if (request.Certificates.Count > scoringPolicy.MaxCertificates)
         {
@@ -1443,22 +1460,40 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        foreach (var certificate in request.Certificates)
+        ValidateCertificateInputs(request.Certificates);
+    }
+
+    private async Task EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+        List<CreateExpertCertificateRequest> certificates,
+        int? currentExpertProfileId
+    )
+    {
+        foreach (var certificateUrl in certificates
+            .Select(x => x.CertificateUrl?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(certificate.CertificateName))
+            var exists = await _expertProfileRepository
+                .CertificateUrlExistsForAnotherExpertAsync(
+                    certificateUrl!,
+                    currentExpertProfileId
+                );
+
+            if (exists)
             {
                 throw new InvalidOperationException(
-                    "Certificate name is required."
+                    "This certificate URL is already used by another expert."
                 );
             }
+        }
+    }
 
-            if (string.IsNullOrWhiteSpace(certificate.CertificateIssuer))
-            {
-                throw new InvalidOperationException(
-                    "Certificate issuer is required."
-                );
-            }
-
+    private static void ValidateCertificateInputs(
+        List<CreateExpertCertificateRequest> certificates
+    )
+    {
+        foreach (var certificate in certificates)
+        {
             if (string.IsNullOrWhiteSpace(certificate.CertificateUrl))
             {
                 throw new InvalidOperationException(
@@ -1472,7 +1507,76 @@ public class ExpertProfileService : IExpertProfileService
                     "Certificate URL is invalid."
                 );
             }
+
+            if (string.IsNullOrWhiteSpace(certificate.CertificateType))
+            {
+                throw new InvalidOperationException(
+                    "Certificate type is required."
+                );
+            }
+
+            _ = NormalizeCertificateType(certificate.CertificateType);
         }
+    }
+
+    private static string NormalizeCertificateType(string? certificateType)
+    {
+        var normalized = certificateType?.Trim()
+            .ToUpperInvariant()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized switch
+        {
+            "COURSE_CERTIFICATE" => "COURSE_CERTIFICATE",
+            "PROFESSIONAL_CERTIFICATE" => "PROFESSIONAL_CERTIFICATE",
+            "BOOTCAMP_CERTIFICATE" => "BOOTCAMP_CERTIFICATE",
+            "DEGREE_CERTIFICATE" => "DEGREE_CERTIFICATE",
+            "AWARD_CERTIFICATE" => "AWARD_CERTIFICATE",
+            "OTHER" => "OTHER",
+            _ => throw new InvalidOperationException(
+                "Certificate type is invalid. Allowed values: COURSE_CERTIFICATE, PROFESSIONAL_CERTIFICATE, BOOTCAMP_CERTIFICATE, DEGREE_CERTIFICATE, AWARD_CERTIFICATE, OTHER."
+            )
+        };
+    }
+
+    private static string ResolveCertificateName(
+        CreateExpertCertificateRequest certificate,
+        CertificateVerificationResult? verificationResult
+    )
+    {
+        if (!string.IsNullOrWhiteSpace(verificationResult?.DetectedCertificateName))
+        {
+            return verificationResult.DetectedCertificateName.Trim();
+        }
+
+        return NormalizeCertificateType(certificate.CertificateType) switch
+        {
+            "COURSE_CERTIFICATE" => "Course Certificate",
+            "PROFESSIONAL_CERTIFICATE" => "Professional Certificate",
+            "BOOTCAMP_CERTIFICATE" => "Bootcamp Certificate",
+            "DEGREE_CERTIFICATE" => "Degree Certificate",
+            "AWARD_CERTIFICATE" => "Award Certificate",
+            _ => "Certificate"
+        };
+    }
+
+    private static string ResolveCertificateIssuer(
+        CreateExpertCertificateRequest certificate,
+        CertificateVerificationResult? verificationResult
+    )
+    {
+        if (!string.IsNullOrWhiteSpace(verificationResult?.DetectedIssuer))
+        {
+            return verificationResult.DetectedIssuer.Trim();
+        }
+
+        if (Uri.TryCreate(certificate.CertificateUrl, UriKind.Absolute, out var uri))
+        {
+            return uri.Host.Trim().ToLowerInvariant();
+        }
+
+        return "Unknown Issuer";
     }
 
     private static string ResolveExpertSubmissionFullName(
@@ -1550,12 +1654,6 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("GitHub URL is required.");
         }
 
-        if (request.Certificates.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "At least one certificate is required."
-            );
-        }
 
         if (request.Certificates.Count > scoringPolicy.MaxCertificates)
         {
@@ -1576,36 +1674,7 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        foreach (var certificate in request.Certificates)
-        {
-            if (string.IsNullOrWhiteSpace(certificate.CertificateName))
-            {
-                throw new InvalidOperationException(
-                    "Certificate name is required."
-                );
-            }
-
-            if (string.IsNullOrWhiteSpace(certificate.CertificateIssuer))
-            {
-                throw new InvalidOperationException(
-                    "Certificate issuer is required."
-                );
-            }
-
-            if (string.IsNullOrWhiteSpace(certificate.CertificateUrl))
-            {
-                throw new InvalidOperationException(
-                    "Certificate URL is required."
-                );
-            }
-
-            if (!IsValidUrl(certificate.CertificateUrl))
-            {
-                throw new InvalidOperationException(
-                    "Certificate URL is invalid."
-                );
-            }
-        }
+        ValidateCertificateInputs(request.Certificates);
 
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl)
             && !IsValidUrl(request.AvatarUrl))
@@ -1731,6 +1800,7 @@ public class ExpertProfileService : IExpertProfileService
                 .Select(x => new ExpertCertificateResponse
                 {
                     ExpertCertificateId = x.ExpertCertificateId,
+                    CertificateType = x.CertificateType,
                     CertificateName = x.CertificateName,
                     CertificateIssuer = x.CertificateIssuer,
                     CertificateUrl = x.CertificateUrl,
@@ -1741,6 +1811,9 @@ public class ExpertProfileService : IExpertProfileService
                     VerificationNote = x.VerificationNote,
                     DetectedIssuer = x.DetectedIssuer,
                     DetectedCertificateName = x.DetectedCertificateName,
+                    DetectedHolderName = x.DetectedHolderName,
+                    DetectedIssuedDateText = x.DetectedIssuedDateText,
+                    DetectedIssuedAt = x.DetectedIssuedAt,
                     CheckedAt = x.CheckedAt
                 })
                 .ToList()
@@ -1753,7 +1826,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_REVIEW";
 
         public string? ExperienceVerificationNote { get; set; }
     }
@@ -1776,7 +1849,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_REVIEW";
 
         public string? ExperienceVerificationNote { get; set; }
 

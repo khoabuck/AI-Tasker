@@ -10,6 +10,11 @@ public interface IExpertProfileRepository
 
     Task<bool> ExistsByUserIdAsync(int userId);
 
+    Task<bool> CertificateUrlExistsForAnotherExpertAsync(
+        string certificateUrl,
+        int? currentExpertProfileId
+    );
+
     Task AddAsync(ExpertProfile expertProfile);
 
     void RemoveCertificates(IEnumerable<ExpertCertificate> certificates);

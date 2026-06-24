@@ -67,10 +67,11 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         var result = new CertificateVerificationResult
         {
+            CertificateType = NormalizeText(request.CertificateType),
             CertificateName = NormalizeText(request.CertificateName),
             CertificateIssuer = NormalizeText(request.CertificateIssuer),
             CertificateUrl = NormalizeText(request.CertificateUrl),
-            VerificationStatus = "NEEDS_EVIDENCE",
+            VerificationStatus = "NEEDS_REVIEW",
             CheckedAt = checkedAt
         };
 
@@ -105,8 +106,8 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (!string.IsNullOrWhiteSpace(nonCertificateEvidenceReason))
         {
-            result.VerificationStatus = "NEEDS_EVIDENCE";
-            result.VerificationScore = 40;
+            result.VerificationStatus = "NEEDS_REVIEW";
+            result.VerificationScore = 0;
             result.VerificationNote = nonCertificateEvidenceReason;
             result.IsReachable = false;
             result.DetectedIssuer = DetectIssuer(string.Empty, request.CertificateIssuer, uri.Host);
@@ -133,14 +134,11 @@ public class CertificateVerificationService : ICertificateVerificationService
 
             if (!response.IsSuccessStatusCode)
             {
-                result.VerificationStatus = IsClearlyInvalidHttpStatus(response.StatusCode)
-                    ? "INVALID"
-                    : "NEEDS_EVIDENCE";
-
-                result.VerificationScore = CalculateScore(result, request);
+                result.VerificationStatus = "NEEDS_REVIEW";
+                result.VerificationScore = 0;
                 result.VerificationNote = response.StatusCode == HttpStatusCode.Forbidden
-                    ? "Certificate URL is protected or blocks automated verification. More evidence is required."
-                    : $"Certificate URL returned HTTP {(int)response.StatusCode}. More evidence is required.";
+                    ? "Certificate URL is protected or blocks automated verification. Holder name could not be verified."
+                    : $"Certificate URL returned HTTP {(int)response.StatusCode}. Holder name could not be verified.";
 
                 return result;
             }
@@ -157,26 +155,26 @@ public class CertificateVerificationService : ICertificateVerificationService
         }
         catch (TaskCanceledException)
         {
-            result.VerificationStatus = "NEEDS_EVIDENCE";
-            result.VerificationScore = CalculateScore(result, request);
+            result.VerificationStatus = "NEEDS_REVIEW";
+            result.VerificationScore = 0;
             result.VerificationNote =
-                "Certificate URL request timed out. More evidence is required.";
+                "Certificate URL request timed out. Holder name could not be verified.";
             return result;
         }
         catch (HttpRequestException ex)
         {
-            result.VerificationStatus = "INVALID";
-            result.VerificationScore = CalculateScore(result, request);
+            result.VerificationStatus = "NEEDS_REVIEW";
+            result.VerificationScore = 0;
             result.VerificationNote =
-                $"Certificate URL could not be checked: {ex.Message}";
+                $"Certificate URL could not be checked: {ex.Message}. Holder name could not be verified.";
             return result;
         }
         catch (Exception ex)
         {
-            result.VerificationStatus = "NEEDS_EVIDENCE";
-            result.VerificationScore = CalculateScore(result, request);
+            result.VerificationStatus = "NEEDS_REVIEW";
+            result.VerificationScore = 0;
             result.VerificationNote =
-                $"Certificate URL could not be fully verified: {ex.Message}. More evidence is required.";
+                $"Certificate URL could not be fully verified: {ex.Message}. Holder name could not be verified.";
             return result;
         }
 
@@ -194,25 +192,52 @@ public class CertificateVerificationService : ICertificateVerificationService
             }
         }
 
-        result.ContainsCertificateName = ContainsMeaningfulText(
-            searchableText,
-            request.CertificateName
-        );
+        var detectedIssuedAt = request.IssuedAt
+            ?? courseraData?.IssuedAt
+            ?? DetectIssuedDate(searchableText);
 
-        result.ContainsIssuer = ContainsMeaningfulText(
-            searchableText,
-            request.CertificateIssuer
-        );
+        var detectedIssuer = courseraData is not null
+            ? "Coursera"
+            : DetectIssuer(searchableText, request.CertificateIssuer, uri.Host);
 
-        result.ContainsHolderName = ContainsPersonName(
-            searchableText,
-            request.ExpertFullName
-        );
+        var detectedCertificateName = !string.IsNullOrWhiteSpace(courseraData?.CertificateName)
+            ? courseraData.CertificateName
+            : !string.IsNullOrWhiteSpace(request.CertificateName)
+                ? request.CertificateName.Trim()
+                : result.PageTitle;
 
-        result.ContainsIssuedDate = ContainsIssuedDate(
-            searchableText,
-            request.IssuedAt
-        );
+        result.DetectedIssuer = detectedIssuer;
+        result.DetectedCertificateName = detectedCertificateName;
+
+        result.ContainsCertificateName = !string.IsNullOrWhiteSpace(detectedCertificateName)
+            && ContainsMeaningfulText(searchableText, detectedCertificateName);
+
+        result.ContainsIssuer = !string.IsNullOrWhiteSpace(detectedIssuer)
+            && (result.IsTrustedDomain || ContainsMeaningfulText(searchableText, detectedIssuer));
+
+        var detectedHolderName = !string.IsNullOrWhiteSpace(courseraData?.HolderName)
+            ? courseraData.HolderName!.Trim()
+            : ContainsPersonName(searchableText, request.ExpertFullName)
+                ? request.ExpertFullName.Trim()
+                : null;
+
+        result.DetectedHolderName = detectedHolderName;
+
+        if (!string.IsNullOrWhiteSpace(detectedHolderName))
+        {
+            result.ContainsHolderName = IsHolderNameMatched(
+                request.ExpertFullName,
+                detectedHolderName
+            );
+            result.IsHolderNameMismatch = !result.ContainsHolderName;
+        }
+
+        result.DetectedIssuedAt = detectedIssuedAt;
+        result.DetectedIssuedDateText = detectedIssuedAt.HasValue
+            ? BuildDetectedIssuedDateText(detectedIssuedAt.Value)
+            : null;
+
+        result.ContainsIssuedDate = detectedIssuedAt.HasValue;
 
         result.IsRelatedToExpertSkills = IsRelatedToSkills(
             searchableText,
@@ -220,33 +245,16 @@ public class CertificateVerificationService : ICertificateVerificationService
             request.ExpertBio
         );
 
-        result.IsIssuedAtReasonable = IsIssuedAtReasonable(request.IssuedAt);
-
-        result.DetectedIssuer = courseraData is not null
-            ? "Coursera"
-            : DetectIssuer(searchableText, request.CertificateIssuer, uri.Host);
-
-        result.DetectedCertificateName = !string.IsNullOrWhiteSpace(courseraData?.CertificateName)
-            ? courseraData.CertificateName
-            : result.ContainsCertificateName
-                ? request.CertificateName.Trim()
-                : result.PageTitle;
-
-        result.DetectedHolderName = !string.IsNullOrWhiteSpace(courseraData?.HolderName)
-            ? courseraData.HolderName
-            : result.ContainsHolderName
-                ? request.ExpertFullName.Trim()
-                : null;
-
-        result.DetectedIssuedDateText = courseraData?.IssuedAt is not null
-            ? BuildDetectedIssuedDateText(courseraData.IssuedAt.Value)
-            : result.ContainsIssuedDate && request.IssuedAt.HasValue
-                ? BuildDetectedIssuedDateText(request.IssuedAt.Value)
-                : null;
+        result.IsIssuedAtReasonable = IsIssuedAtReasonable(detectedIssuedAt);
 
         result.VerificationScore = CalculateScore(result, request);
 
         result.VerificationStatus = DetermineStatus(result);
+
+        if (result.VerificationStatus is "NAME_MISMATCH" or "NEEDS_REVIEW")
+        {
+            result.VerificationScore = 0;
+        }
 
         result.VerificationNote = BuildVerificationNote(result, request);
 
@@ -258,11 +266,16 @@ public class CertificateVerificationService : ICertificateVerificationService
         CertificateVerificationRequest request
     )
     {
+        if (result.IsHolderNameMismatch || !result.ContainsHolderName)
+        {
+            return 0m;
+        }
+
         var score = 0m;
 
         if (result.IsReachable)
         {
-            score += 10m;
+            score += 15m;
         }
 
         if (result.IsHttps)
@@ -272,30 +285,25 @@ public class CertificateVerificationService : ICertificateVerificationService
 
         if (result.IsTrustedDomain)
         {
-            score += 10m;
+            score += 15m;
         }
 
         if (result.ContainsCertificateName)
         {
-            score += 20m;
+            score += 15m;
         }
 
         if (result.ContainsIssuer)
         {
-            score += 15m;
+            score += 10m;
         }
 
         if (result.ContainsHolderName)
         {
-            score += 20m;
+            score += 35m;
         }
 
         if (result.ContainsIssuedDate)
-        {
-            score += 15m;
-        }
-
-        if (result.IsRelatedToExpertSkills)
         {
             score += 5m;
         }
@@ -305,46 +313,32 @@ public class CertificateVerificationService : ICertificateVerificationService
 
     private static string DetermineStatus(CertificateVerificationResult result)
     {
+        if (result.IsHolderNameMismatch)
+        {
+            return "NAME_MISMATCH";
+        }
+
         if (!result.IsReachable)
         {
-            return "INVALID";
+            return "NEEDS_REVIEW";
         }
 
-        if (!result.IsTrustedDomain)
+        if (string.IsNullOrWhiteSpace(result.DetectedHolderName))
         {
-            return result.VerificationScore >= 50m
-                ? "NEEDS_EVIDENCE"
-                : "SUSPICIOUS";
+            return "NEEDS_REVIEW";
         }
 
-        var hasRequiredIdentityEvidence =
-            result.ContainsCertificateName &&
-            result.ContainsIssuer &&
-            result.ContainsHolderName &&
-            result.ContainsIssuedDate;
-
-        if (hasRequiredIdentityEvidence && result.VerificationScore >= 80m)
+        if (!result.ContainsHolderName)
         {
-            return "VERIFIED";
-        }
-
-        if (!result.ContainsCertificateName ||
-            !result.ContainsHolderName)
-        {
-            return "NEEDS_EVIDENCE";
+            return "NAME_MISMATCH";
         }
 
         if (result.VerificationScore >= 50m)
         {
-            return "NEEDS_EVIDENCE";
+            return "VERIFIED";
         }
 
-        if (result.VerificationScore >= 20m)
-        {
-            return "SUSPICIOUS";
-        }
-
-        return "INVALID";
+        return "NEEDS_REVIEW";
     }
 
     private static bool IsClearlyInvalidHttpStatus(HttpStatusCode statusCode)
@@ -361,9 +355,18 @@ public class CertificateVerificationService : ICertificateVerificationService
     {
         var notes = new List<string>();
 
+        if (result.VerificationStatus == "NAME_MISMATCH")
+        {
+            notes.Add(
+                $"Certificate holder name '{NormalizeText(result.DetectedHolderName ?? string.Empty)}' does not match expert full name '{NormalizeText(request.ExpertFullName)}'. Please submit a certificate that belongs to you or remove this certificate."
+            );
+
+            return string.Join(" ", notes);
+        }
+
         if (!result.IsReachable)
         {
-            notes.Add("Certificate URL is not reachable.");
+            notes.Add("Certificate URL is not reachable or could not be checked automatically.");
         }
 
         if (!result.IsHttps)
@@ -376,17 +379,28 @@ public class CertificateVerificationService : ICertificateVerificationService
             notes.Add("Certificate domain is not in the trusted issuer list.");
         }
 
+        if (string.IsNullOrWhiteSpace(result.DetectedHolderName))
+        {
+            notes.Add("Certificate holder name could not be detected from the provided URL, so this certificate is not counted as verified evidence.");
+        }
+        else if (!result.ContainsHolderName)
+        {
+            notes.Add(
+                $"Detected certificate holder '{NormalizeText(result.DetectedHolderName)}' does not match expert full name '{NormalizeText(request.ExpertFullName)}'."
+            );
+        }
+
         if (!result.ContainsCertificateName)
         {
             if (HasUsefulDetectedValue(result.DetectedCertificateName, result.PageTitle))
             {
                 notes.Add(
-                    $"Claimed certificate name does not match detected certificate name. Claimed: '{NormalizeText(request.CertificateName)}'. Detected: '{NormalizeText(result.DetectedCertificateName!)}'."
+                    $"Detected certificate name: '{NormalizeText(result.DetectedCertificateName!)}', but page content is not strong enough for full verification."
                 );
             }
             else
             {
-                notes.Add("Page content does not clearly contain the claimed certificate name.");
+                notes.Add("Page content does not clearly expose the certificate name.");
             }
         }
 
@@ -395,45 +409,18 @@ public class CertificateVerificationService : ICertificateVerificationService
             if (HasUsefulDetectedValue(result.DetectedIssuer, null))
             {
                 notes.Add(
-                    $"Claimed certificate issuer does not match detected issuer. Claimed: '{NormalizeText(request.CertificateIssuer)}'. Detected: '{NormalizeText(result.DetectedIssuer!)}'."
+                    $"Detected certificate issuer/domain: '{NormalizeText(result.DetectedIssuer!)}', but issuer evidence is not strong enough for full verification."
                 );
             }
             else
             {
-                notes.Add("Page content does not clearly contain the claimed issuer.");
-            }
-        }
-
-        if (!result.ContainsHolderName)
-        {
-            if (HasUsefulDetectedValue(result.DetectedHolderName, null))
-            {
-                notes.Add(
-                    $"Expert full name does not match detected certificate holder. Profile name: '{NormalizeText(request.ExpertFullName)}'. Detected holder: '{NormalizeText(result.DetectedHolderName!)}'."
-                );
-            }
-            else
-            {
-                notes.Add("Page content does not clearly contain the expert full name shown on the user profile.");
+                notes.Add("Page content does not clearly expose the certificate issuer.");
             }
         }
 
         if (!result.ContainsIssuedDate)
         {
-            if (HasUsefulDetectedValue(result.DetectedIssuedDateText, null))
-            {
-                var claimedDate = request.IssuedAt.HasValue
-                    ? BuildDetectedIssuedDateText(request.IssuedAt.Value)
-                    : "missing";
-
-                notes.Add(
-                    $"Claimed issued date does not match detected issued date. Claimed: '{claimedDate}'. Detected: '{NormalizeText(result.DetectedIssuedDateText!)}'."
-                );
-            }
-            else
-            {
-                notes.Add("Page content does not clearly contain the claimed certificate issued date.");
-            }
+            notes.Add("Page content does not clearly expose the certificate issued date.");
         }
 
         if (!result.IsRelatedToExpertSkills)
@@ -441,19 +428,14 @@ public class CertificateVerificationService : ICertificateVerificationService
             notes.Add("Certificate content does not clearly relate to the expert's skills.");
         }
 
-        if (!result.IsIssuedAtReasonable)
+        if (result.VerificationStatus == "NEEDS_REVIEW")
         {
-            notes.Add("Issued date is missing or unreasonable.");
-        }
-
-        if (result.VerificationStatus == "NEEDS_EVIDENCE")
-        {
-            notes.Add("More evidence is required to verify this certificate confidently.");
+            notes.Add("This optional certificate needs review and is not counted toward certificate evidence score.");
         }
 
         if (notes.Count == 0)
         {
-            notes.Add("Certificate URL is reachable and evidence matches certificate name, issuer, holder name, issued date, and expert skills.");
+            notes.Add("Certificate URL is reachable and the detected holder name matches the expert full name.");
         }
 
         return string.Join(" ", notes);
@@ -547,6 +529,43 @@ public class CertificateVerificationService : ICertificateVerificationService
         return matchedTokens >= Math.Ceiling(expectedTokens.Count * 0.7);
     }
 
+    private static bool IsHolderNameMatched(string expertFullName, string detectedHolderName)
+    {
+        var normalizedExpertName = NormalizeForCompare(expertFullName);
+        var normalizedHolderName = NormalizeForCompare(detectedHolderName);
+
+        if (string.IsNullOrWhiteSpace(normalizedExpertName) ||
+            string.IsNullOrWhiteSpace(normalizedHolderName))
+        {
+            return false;
+        }
+
+        if (normalizedExpertName == normalizedHolderName)
+        {
+            return true;
+        }
+
+        var expertTokens = normalizedExpertName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => x.Length >= 2)
+            .ToList();
+
+        var holderTokens = normalizedHolderName
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => x.Length >= 2)
+            .ToList();
+
+        if (expertTokens.Count < 2 || holderTokens.Count < 2)
+        {
+            return false;
+        }
+
+        var matchedTokens = holderTokens.Count(token => expertTokens.Contains(token));
+
+        return matchedTokens == holderTokens.Count &&
+               holderTokens.Count >= Math.Ceiling(expertTokens.Count * 0.7);
+    }
+
     private static bool ContainsPersonName(string source, string fullName)
     {
         if (string.IsNullOrWhiteSpace(source) || string.IsNullOrWhiteSpace(fullName))
@@ -588,6 +607,73 @@ public class CertificateVerificationService : ICertificateVerificationService
         // Require at least two name parts and at least 70% token match.
         return matchedTokens >= 2 &&
                matchedTokens >= Math.Ceiling(nameTokens.Count * 0.7);
+    }
+
+    private static DateTime? DetectIssuedDate(string source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return null;
+        }
+
+        var normalized = source.Trim();
+
+        var patterns = new[]
+        {
+            @"\b(?<year>20\d{2}|19\d{2})[-/](?<month>0?[1-9]|1[0-2])[-/](?<day>0?[1-9]|[12]\d|3[01])\b",
+            @"\b(?<day>0?[1-9]|[12]\d|3[01])[-/](?<month>0?[1-9]|1[0-2])[-/](?<year>20\d{2}|19\d{2})\b"
+        };
+
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(normalized, pattern);
+
+            if (!match.Success)
+            {
+                continue;
+            }
+
+            if (int.TryParse(match.Groups["year"].Value, out var year)
+                && int.TryParse(match.Groups["month"].Value, out var month)
+                && int.TryParse(match.Groups["day"].Value, out var day)
+                && DateTime.TryParse(
+                    $"{year:D4}-{month:D2}-{day:D2}",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal,
+                    out var parsedDate
+                ))
+            {
+                var date = parsedDate.Date;
+
+                if (IsIssuedAtReasonable(date))
+                {
+                    return date;
+                }
+            }
+        }
+
+        var monthPattern =
+            @"\b(?<month>January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\s+(?<day>0?[1-9]|[12]\d|3[01]),?\s+(?<year>20\d{2}|19\d{2})\b";
+
+        var monthMatch = Regex.Match(
+            normalized,
+            monthPattern,
+            RegexOptions.IgnoreCase
+        );
+
+        if (monthMatch.Success
+            && DateTime.TryParse(
+                monthMatch.Value,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var monthDate
+            )
+            && IsIssuedAtReasonable(monthDate.Date))
+        {
+            return monthDate.Date;
+        }
+
+        return null;
     }
 
     private static bool ContainsIssuedDate(string source, DateTime? issuedAt)
