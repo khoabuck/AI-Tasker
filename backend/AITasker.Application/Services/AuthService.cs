@@ -5,6 +5,7 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Application.Common;
 
 namespace AITasker.Application.Services;
 
@@ -37,7 +38,7 @@ public class AuthService : IAuthService
     {
         var email = NormalizeEmail(request.Email);
         var password = request.Password?.Trim() ?? string.Empty;
-        var fullName = request.FullName?.Trim() ?? string.Empty;
+        var fullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         ValidateRegister(email, password, fullName);
 
@@ -128,7 +129,7 @@ public class AuthService : IAuthService
         string? avatarUrl)
     {
         email = NormalizeEmail(email);
-        fullName = fullName.Trim();
+        fullName = NameNormalizer.NormalizeFullName(fullName);
         googleId = googleId.Trim();
 
         if (string.IsNullOrWhiteSpace(googleId))

@@ -14,6 +14,8 @@ namespace AITasker.Application.DTOs.Requests
 
         public string? PreliminaryMilestonePlan { get; set; }
 
+        public List<ProposalMilestoneDraftItemRequest> Milestones { get; set; } = new();
+
         public string? ResubmitNote { get; set; }
     }
 }

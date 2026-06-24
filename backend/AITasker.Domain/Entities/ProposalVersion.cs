@@ -22,6 +22,8 @@ namespace AITasker.Domain.Entities
 
         public string? PreliminaryMilestonePlan { get; set; }
 
+        public string? MilestonePlanJson { get; set; }
+
         public string? ResubmitNote { get; set; }
 
         public int CreatedByUserId { get; set; }

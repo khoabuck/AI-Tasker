@@ -14,8 +14,6 @@ namespace AITasker.Application.DTOs.Requests
 
         public string AcceptanceCriteria { get; set; } = string.Empty;
 
-        public int RevisionLimit { get; set; }
-
         public string PaymentTerms { get; set; } = string.Empty;
     }
 }

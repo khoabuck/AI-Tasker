@@ -9,6 +9,8 @@ namespace AITasker.Domain.Entities
 
         public int ProposalId { get; set; }
 
+        public int SourceProposalVersionNumber { get; set; } = 1;
+
         public int ClientId { get; set; }
 
         public int ExpertId { get; set; }
@@ -28,8 +30,6 @@ namespace AITasker.Domain.Entities
         public string Deliverables { get; set; } = string.Empty;
 
         public string AcceptanceCriteria { get; set; } = string.Empty;
-
-        public int RevisionLimit { get; set; }
 
         public string PaymentTerms { get; set; } = string.Empty;
 

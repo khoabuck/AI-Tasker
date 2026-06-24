@@ -2,6 +2,7 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,6 +13,10 @@ namespace AITasker.Infrastructure.Disputes
         private const string ProjectStatusActive = "ACTIVE";
         private const string ProjectStatusDisputed = "DISPUTED";
         private const string ProjectStatusCompleted = "COMPLETED";
+
+        private const string JobStatusActive = "ACTIVE";
+        private const string JobStatusDisputed = "DISPUTED";
+        private const string JobStatusCompleted = "COMPLETED";
 
         private const string MilestoneStatusApproved = "APPROVED";
         private const string MilestoneStatusResolved = "RESOLVED";
@@ -24,26 +29,28 @@ namespace AITasker.Infrastructure.Disputes
         private const string PaymentStatusFrozen = "FROZEN";
         private const string PaymentStatusReleased = "RELEASED";
         private const string PaymentStatusRefunded = "REFUNDED";
-        private const string PaymentStatusPartialRefund = "PARTIAL_REFUND";
 
         private const string EscrowStatusLocked = "LOCKED";
         private const string EscrowStatusFrozen = "FROZEN";
         private const string EscrowStatusReleased = "RELEASED";
         private const string EscrowStatusRefunded = "REFUNDED";
-        private const string EscrowStatusResolved = "RESOLVED";
 
         private const string DisputeStatusOpen = "OPEN";
         private const string DisputeStatusResolved = "RESOLVED";
 
+        private const string DeliverableStatusSubmitted = "SUBMITTED";
+        private const string DeliverableStatusApproved = "APPROVED";
+
         private const string ResolutionReleaseToExpert = "RELEASE_TO_EXPERT";
         private const string ResolutionRefundToClient = "REFUND_TO_CLIENT";
-        private const string ResolutionPartialSplit = "PARTIAL_SPLIT";
+
+        private const string UserStatusSuspended = "SUSPENDED";
+        private const string UserStatusBanned = "BANNED";
 
         private const string TransactionStatusSuccess = "SUCCESS";
         private const string TxEscrowFreeze = "ESCROW_FREEZE";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxRefund = "REFUND";
-        private const string TxPartialRefund = "PARTIAL_REFUND";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -225,6 +232,10 @@ namespace AITasker.Infrastructure.Disputes
                 }
 
                 project.Status = ProjectStatusDisputed;
+
+                await UpdateJobStatusByProjectAsync(
+                    project,
+                    JobStatusDisputed);
 
                 var dispute = new Dispute
                 {
@@ -415,42 +426,27 @@ namespace AITasker.Infrastructure.Disputes
                 var clientProfile = await GetClientProfileAsync(contract.ClientId);
                 var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
 
-                var clientUser = await GetUserAsync(clientProfile.UserId);
-                var expertUser = await GetUserAsync(expertProfile.UserId);
-
                 var normalizedResolutionType = request.ResolutionType.Trim().ToUpperInvariant();
 
                 decimal expertAmount;
                 decimal clientAmount;
+                int loserUserId;
 
                 if (normalizedResolutionType == ResolutionReleaseToExpert)
                 {
                     expertAmount = dispute.DisputedAmount;
                     clientAmount = 0;
+                    loserUserId = clientProfile.UserId;
                 }
                 else if (normalizedResolutionType == ResolutionRefundToClient)
                 {
                     expertAmount = 0;
                     clientAmount = dispute.DisputedAmount;
-                }
-                else if (normalizedResolutionType == ResolutionPartialSplit)
-                {
-                    expertAmount = request.ExpertAmount;
-                    clientAmount = request.ClientAmount;
+                    loserUserId = expertProfile.UserId;
                 }
                 else
                 {
-                    throw new InvalidOperationException("ResolutionType must be RELEASE_TO_EXPERT, REFUND_TO_CLIENT, or PARTIAL_SPLIT.");
-                }
-
-                if (expertAmount < 0 || clientAmount < 0)
-                {
-                    throw new InvalidOperationException("Resolution amounts cannot be negative.");
-                }
-
-                if (expertAmount + clientAmount != dispute.DisputedAmount)
-                {
-                    throw new InvalidOperationException("ExpertAmount plus ClientAmount must equal DisputedAmount.");
+                    throw new InvalidOperationException("ResolutionType must be RELEASE_TO_EXPERT or REFUND_TO_CLIENT.");
                 }
 
                 Milestone? milestone = null;
@@ -465,7 +461,7 @@ namespace AITasker.Infrastructure.Disputes
                         .FirstOrDefaultAsync(e =>
                             e.MilestoneId == milestone.MilestoneId &&
                             (e.Status == EscrowStatusFrozen ||
-                             e.Status == EscrowStatusLocked));
+                            e.Status == EscrowStatusLocked));
 
                     if (escrow == null)
                     {
@@ -483,7 +479,7 @@ namespace AITasker.Infrastructure.Disputes
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
                             (e.Status == EscrowStatusFrozen ||
-                             e.Status == EscrowStatusLocked))
+                            e.Status == EscrowStatusLocked))
                         .ToListAsync();
 
                     if (!projectEscrows.Any())
@@ -526,9 +522,7 @@ namespace AITasker.Infrastructure.Disputes
                         MilestoneId = dispute.MilestoneId,
                         EscrowId = escrow?.EscrowId,
                         Amount = clientAmount,
-                        Type = normalizedResolutionType == ResolutionPartialSplit
-                            ? TxPartialRefund
-                            : TxRefund,
+                        Type = TxRefund,
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Resolution] Client refund from Dispute ID {dispute.DisputeId}",
                         ReferenceId = referenceId,
@@ -549,9 +543,7 @@ namespace AITasker.Infrastructure.Disputes
                         MilestoneId = dispute.MilestoneId,
                         EscrowId = escrow?.EscrowId,
                         Amount = expertAmount,
-                        Type = normalizedResolutionType == ResolutionPartialSplit
-                            ? TxPartialRefund
-                            : TxEscrowRelease,
+                        Type = TxEscrowRelease,
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Resolution] Expert release from Dispute ID {dispute.DisputeId}",
                         ReferenceId = referenceId,
@@ -561,75 +553,46 @@ namespace AITasker.Infrastructure.Disputes
 
                 if (escrow != null)
                 {
-                    if (normalizedResolutionType == ResolutionReleaseToExpert)
-                    {
-                        escrow.Status = EscrowStatusReleased;
-                    }
-                    else if (normalizedResolutionType == ResolutionRefundToClient)
-                    {
-                        escrow.Status = EscrowStatusRefunded;
-                    }
-                    else
-                    {
-                        escrow.Status = EscrowStatusResolved;
-                    }
+                    escrow.Status = normalizedResolutionType == ResolutionReleaseToExpert
+                        ? EscrowStatusReleased
+                        : EscrowStatusRefunded;
 
                     escrow.UpdatedAt = DateTime.UtcNow;
                 }
 
                 foreach (var projectEscrow in projectEscrows)
                 {
-                    if (normalizedResolutionType == ResolutionReleaseToExpert)
-                    {
-                        projectEscrow.Status = EscrowStatusReleased;
-                    }
-                    else if (normalizedResolutionType == ResolutionRefundToClient)
-                    {
-                        projectEscrow.Status = EscrowStatusRefunded;
-                    }
-                    else
-                    {
-                        projectEscrow.Status = EscrowStatusResolved;
-                    }
+                    projectEscrow.Status = normalizedResolutionType == ResolutionReleaseToExpert
+                        ? EscrowStatusReleased
+                        : EscrowStatusRefunded;
 
                     projectEscrow.UpdatedAt = DateTime.UtcNow;
 
                     if (projectEscrow.MilestoneId.HasValue)
                     {
                         var projectMilestone = await GetMilestoneAsync(projectEscrow.MilestoneId.Value);
-                        projectMilestone.Status = MilestoneStatusResolved;
 
-                        if (normalizedResolutionType == ResolutionReleaseToExpert)
-                        {
-                            projectMilestone.PaymentStatus = PaymentStatusReleased;
-                        }
-                        else if (normalizedResolutionType == ResolutionRefundToClient)
-                        {
-                            projectMilestone.PaymentStatus = PaymentStatusRefunded;
-                        }
-                        else
-                        {
-                            projectMilestone.PaymentStatus = PaymentStatusPartialRefund;
-                        }
+                        projectMilestone.Status = MilestoneStatusResolved;
+                        projectMilestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
+                            ? PaymentStatusReleased
+                            : PaymentStatusRefunded;
+
+                        await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                            projectMilestone.MilestoneId,
+                            normalizedResolutionType);
                     }
                 }
 
                 if (milestone != null)
                 {
                     milestone.Status = MilestoneStatusResolved;
+                    milestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
+                        ? PaymentStatusReleased
+                        : PaymentStatusRefunded;
 
-                    if (normalizedResolutionType == ResolutionReleaseToExpert)
-                    {
-                        milestone.PaymentStatus = PaymentStatusReleased;
-                    }
-                    else if (normalizedResolutionType == ResolutionRefundToClient)
-                    {
-                        milestone.PaymentStatus = PaymentStatusRefunded;
-                    }
-                    else
-                    {
-                        milestone.PaymentStatus = PaymentStatusPartialRefund;
-                    }
+                    await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                        milestone.MilestoneId,
+                        normalizedResolutionType);
                 }
 
                 dispute.Status = DisputeStatusResolved;
@@ -639,7 +602,13 @@ namespace AITasker.Infrastructure.Disputes
                     : request.AdminDecision.Trim();
                 dispute.ResolvedAt = DateTime.UtcNow;
 
-                await UpdateProjectStatusAfterResolutionAsync(project, dispute.DisputeId);
+                await ApplyLostDisputePolicyAsync(
+                    loserUserId,
+                    dispute.DisputeId);
+
+                await UpdateProjectStatusAfterResolutionAsync(
+                    project,
+                    dispute.DisputeId);
 
                 await _context.SaveChangesAsync();
 
@@ -663,6 +632,35 @@ namespace AITasker.Infrastructure.Disputes
             {
                 await dbTransaction.RollbackAsync();
                 throw;
+            }
+        }
+
+        private async Task MarkLatestDeliverableAfterDisputeResolutionAsync(
+            int milestoneId,
+            string normalizedResolutionType)
+        {
+            var latestDeliverable = await _context.Deliverables
+                .Where(d =>
+                    d.MilestoneId == milestoneId &&
+                    d.Status == DeliverableStatusSubmitted)
+                .OrderByDescending(d => d.VersionNumber)
+                .FirstOrDefaultAsync();
+
+            if (latestDeliverable == null)
+            {
+                return;
+            }
+
+            latestDeliverable.ReviewedAt ??= DateTime.UtcNow;
+
+            if (normalizedResolutionType == ResolutionReleaseToExpert)
+            {
+                latestDeliverable.Status = DeliverableStatusApproved;
+                latestDeliverable.ClientFeedback = null;
+            }
+            else if (normalizedResolutionType == ResolutionRefundToClient)
+            {
+                latestDeliverable.ClientFeedback = "Dispute resolved with refund to Client.";
             }
         }
 
@@ -714,6 +712,14 @@ namespace AITasker.Infrastructure.Disputes
             {
                 throw new InvalidOperationException("ResolutionType is required.");
             }
+
+            var normalizedResolutionType = request.ResolutionType.Trim().ToUpperInvariant();
+
+            if (normalizedResolutionType != ResolutionReleaseToExpert &&
+                normalizedResolutionType != ResolutionRefundToClient)
+            {
+                throw new InvalidOperationException("ResolutionType must be RELEASE_TO_EXPERT or REFUND_TO_CLIENT.");
+            }
         }
 
         private static bool IsMilestoneFinal(Milestone milestone)
@@ -738,11 +744,12 @@ namespace AITasker.Infrastructure.Disputes
                 status == MilestoneStatusReleased ||
                 status == MilestoneStatusRefunded ||
                 paymentStatus == PaymentStatusReleased ||
-                paymentStatus == PaymentStatusRefunded ||
-                paymentStatus == PaymentStatusPartialRefund;
+                paymentStatus == PaymentStatusRefunded;
         }
 
-        private async Task UpdateProjectStatusAfterResolutionAsync(Project project, int resolvedDisputeId)
+        private async Task UpdateProjectStatusAfterResolutionAsync(
+            Project project,
+            int resolvedDisputeId)
         {
             var hasOpenDispute = await _context.Disputes.AnyAsync(d =>
                 d.ProjectId == project.ProjectId &&
@@ -752,6 +759,11 @@ namespace AITasker.Infrastructure.Disputes
             if (hasOpenDispute)
             {
                 project.Status = ProjectStatusDisputed;
+
+                await UpdateJobStatusByProjectAsync(
+                    project,
+                    JobStatusCompleted);
+
                 return;
             }
 
@@ -763,11 +775,20 @@ namespace AITasker.Infrastructure.Disputes
             {
                 project.Status = ProjectStatusCompleted;
                 project.EndDate ??= DateTime.UtcNow;
+
+                await UpdateJobStatusByProjectAsync(
+                    project,
+                    JobStatusCompleted);
+
                 return;
             }
 
             project.Status = ProjectStatusActive;
             project.EndDate = null;
+
+            await UpdateJobStatusByProjectAsync(
+                project,
+                JobStatusActive);
         }
 
         private async Task NotifyAdminsAsync(
@@ -1047,6 +1068,168 @@ namespace AITasker.Infrastructure.Disputes
                 ResolvedAt = dispute.ResolvedAt,
                 Evidences = evidenceResponses
             };
+        }
+
+        private async Task UpdateJobStatusByProjectAsync(
+            Project project,
+            string jobStatus)
+        {
+            var contract = await _context.ProjectContracts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ContractId == project.ContractId);
+
+            if (contract == null)
+            {
+                return;
+            }
+
+            var proposal = await _context.Proposals
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalId == contract.ProposalId);
+
+            if (proposal == null)
+            {
+                return;
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
+
+            if (job == null)
+            {
+                return;
+            }
+
+            job.Status = jobStatus;
+            job.UpdatedAt = DateTime.UtcNow;
+        }
+
+        private async Task ApplyLostDisputePolicyAsync(
+            int loserUserId,
+            int currentDisputeId)
+        {
+            var loser = await GetUserAsync(loserUserId);
+
+            var lostCountBeforeCurrent = await CountResolvedLostDisputesAsync(
+                loserUserId,
+                currentDisputeId);
+
+            var lostCountAfterCurrent = lostCountBeforeCurrent + 1;
+
+            if (lostCountAfterCurrent < 3)
+            {
+                return;
+            }
+
+            if (lostCountAfterCurrent == 3)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    loser.UserId,
+                    "Dispute warning",
+                    "You have lost 3 disputes. Please review your work quality, communication and contract compliance to avoid account restrictions.",
+                    NotificationTypes.DisputeWarning);
+
+                await NotifyAdminsUserDisputeRiskAsync(
+                    loser,
+                    lostCountAfterCurrent,
+                    "User has lost 3 disputes and should be reviewed by Admin.");
+
+                return;
+            }
+
+            if (lostCountAfterCurrent == 4)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    loser.UserId,
+                    "Serious dispute warning",
+                    "You have lost 4 disputes. Your account is at high risk of suspension if another dispute is lost.",
+                    NotificationTypes.DisputeSeriousWarning);
+
+                await NotifyAdminsUserDisputeRiskAsync(
+                    loser,
+                    lostCountAfterCurrent,
+                    "User has lost 4 disputes. Admin should consider suspension or manual review.");
+
+                return;
+            }
+
+            if (lostCountAfterCurrent >= 5)
+            {
+                if (!string.Equals(loser.Status, UserStatusBanned, StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))
+                {
+                    loser.Status = UserStatusSuspended;
+                    loser.UpdatedAt = DateTime.UtcNow;
+                }
+
+                await _notificationService.CreateNotificationAsync(
+                    loser.UserId,
+                    "Account suspended",
+                    "Your account has been automatically suspended because you lost 5 disputes. Please contact support or wait for Admin review.",
+                    NotificationTypes.AccountAutoSuspended);
+
+                await NotifyAdminsUserDisputeRiskAsync(
+                    loser,
+                    lostCountAfterCurrent,
+                    "User has lost 5 disputes and was automatically suspended by the system.");
+            }
+        }
+
+        private async Task<int> CountResolvedLostDisputesAsync(
+            int userId,
+            int excludeDisputeId)
+        {
+            var lostCount = await
+            (
+                from dispute in _context.Disputes.AsNoTracking()
+                join project in _context.Projects.AsNoTracking()
+                    on dispute.ProjectId equals project.ProjectId
+                join contract in _context.ProjectContracts.AsNoTracking()
+                    on project.ContractId equals contract.ContractId
+                join clientProfile in _context.ClientProfiles.AsNoTracking()
+                    on contract.ClientId equals clientProfile.ClientProfileId
+                join expertProfile in _context.ExpertProfiles.AsNoTracking()
+                    on contract.ExpertId equals expertProfile.ExpertProfileId
+                where dispute.DisputeId != excludeDisputeId
+                    && dispute.Status == DisputeStatusResolved
+                    && (
+                            (
+                                dispute.ResolutionType == ResolutionReleaseToExpert &&
+                                clientProfile.UserId == userId
+                            )
+                            ||
+                            (
+                                dispute.ResolutionType == ResolutionRefundToClient &&
+                                expertProfile.UserId == userId
+                            )
+                        )
+                select dispute.DisputeId
+            ).CountAsync();
+
+            return lostCount;
+        }
+
+        private async Task NotifyAdminsUserDisputeRiskAsync(
+            User loser,
+            int lostCount,
+            string adminMessage)
+        {
+            var adminUserIds = await _context.Users
+                .AsNoTracking()
+                .Where(x =>
+                    x.Role == "ADMIN" &&
+                    x.Status != UserStatusBanned)
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            foreach (var adminUserId in adminUserIds)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    adminUserId,
+                    "User dispute risk alert",
+                    $"{adminMessage} UserId={loser.UserId}, Email={loser.Email}, LostDisputeCount={lostCount}.",
+                    NotificationTypes.UserDisputeRisk);
+            }
         }
     }
 }

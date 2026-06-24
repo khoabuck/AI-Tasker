@@ -4,6 +4,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace AITasker.Infrastructure.Proposals
 {
@@ -15,8 +16,9 @@ namespace AITasker.Infrastructure.Proposals
         private const string StatusWithdrawn = "WITHDRAWN";
         private const string StatusNotSelected = "NOT_SELECTED";
 
+        private const string JobStatusActive = "ACTIVE";
+
         private const string ContractStatusDraft = "DRAFT";
-        private const string JobStatusContracting = "CONTRACTING";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private readonly AITaskerDbContext _context;
@@ -35,6 +37,11 @@ namespace AITasker.Infrastructure.Proposals
             SubmitProposalRequest request)
         {
             ValidateSubmitProposalRequest(request);
+
+            ValidateProposalMilestonesRequest(
+                request.Milestones,
+                request.ProposedPrice,
+                request.ProposedTimelineDays);
 
             var expert = await _context.ExpertProfiles
                 .FirstOrDefaultAsync(x => x.UserId == userId);
@@ -94,6 +101,13 @@ namespace AITasker.Infrastructure.Proposals
             };
 
             _context.Proposals.Add(proposal);
+
+            var milestoneDrafts = BuildProposalMilestoneDrafts(
+                proposal,
+                request.Milestones);
+
+            _context.ProposalMilestoneDrafts.AddRange(milestoneDrafts);
+
             await _context.SaveChangesAsync();
 
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
@@ -225,62 +239,28 @@ namespace AITasker.Infrastructure.Proposals
                 return await MapToProposalResponseAsync(proposal);
             }
 
+            await EnsureProposalBaseVersionExistsAsync(proposal);
+            var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
+
             proposal.Status = StatusAccepted;
-
-            job.Status = JobStatusContracting;
+            job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
-
-            var contractExists = await _context.ProjectContracts
-                .AnyAsync(x => x.ProposalId == proposalId);
-
-            if (!contractExists)
-            {
-                var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
-
-                var finalPrice = proposal.ProposedPrice;
-                var finalTimelineDays = proposal.ProposedTimelineDays;
-
-                var platformFeeRate = ResolvePlatformFeeRate(clientProfile);
-                var platformFeeAmount = finalPrice * platformFeeRate / 100m;
-                var totalClientPayment = finalPrice + platformFeeAmount;
-
-                var contract = new ProjectContract
-                {
-                    ProposalId = proposal.ProposalId,
-                    ClientId = job.ClientProfileId,
-                    ExpertId = proposal.ExpertId,
-
-                    ProjectScope = proposal.WorkingApproach,
-                    FinalPrice = finalPrice,
-                    PlatformFeeRate = platformFeeRate,
-                    PlatformFeeAmount = platformFeeAmount,
-                    TotalClientPayment = totalClientPayment,
-                    FinalTimelineDays = finalTimelineDays,
-
-                    Deliverables = proposal.ExpectedOutputs,
-                    AcceptanceCriteria = "To be defined before contract confirmation.",
-                    RevisionLimit = 2,
-                    PaymentTerms = "Milestone based escrow simulation",
-
-                    ContractSource = ContractSourceProposal,
-                    ChatSummary = null,
-                    ClientConfirmed = false,
-                    ExpertConfirmed = false,
-                    Status = ContractStatusDraft,
-                    CreatedAt = DateTime.UtcNow
-                };
-
-                _context.ProjectContracts.Add(contract);
-            }
 
             await _context.SaveChangesAsync();
 
+            var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
             var expert = await GetExpertProfileByIdAsync(proposal.ExpertId);
+
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "Proposal accepted",
+                $"You accepted proposal version {sourceProposalVersionNumber} for job '{job.Title}'. You can now create the contract draft from this accepted proposal.",
+                "PROPOSAL_ACCEPTED");
 
             await _notificationService.CreateNotificationAsync(
                 expert.UserId,
                 "Proposal accepted",
-                $"Your proposal for job '{job.Title}' was accepted. A contract draft is ready for confirmation.",
+                $"Your latest proposal version {sourceProposalVersionNumber} for job '{job.Title}' was accepted. Please wait for the client to create the contract draft.",
                 "PROPOSAL_ACCEPTED");
 
             return await MapToProposalResponseAsync(proposal);
@@ -558,6 +538,52 @@ namespace AITasker.Infrastructure.Proposals
                 .Select(x => (int?)x.ContractId)
                 .FirstOrDefaultAsync();
 
+            const int resubmitLimit = 3;
+            const int resubmitWindowHours = 8;
+
+            var windowStart = DateTime.UtcNow.AddHours(-resubmitWindowHours);
+
+            var versions = await _context.ProposalVersions
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .OrderByDescending(x => x.VersionNumber)
+                .ToListAsync();
+
+            var totalVersions = versions.Count == 0
+                ? 1
+                : versions.Count;
+
+            var latestVersionNumber = versions.Count == 0
+                ? 1
+                : versions[0].VersionNumber;
+
+            var latestVersion = versions.Count == 0
+                ? null
+                : await MapProposalVersionResponseAsync(versions[0]);
+
+            var lastResubmittedAt = versions
+                .Where(x => x.VersionNumber > 1)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (DateTime?)x.CreatedAt)
+                .FirstOrDefault();
+
+            var resubmitCountInWindow = await _context.ProposalVersions
+                .AsNoTracking()
+                .CountAsync(x =>
+                    x.ProposalId == proposal.ProposalId &&
+                    x.VersionNumber > 1 &&
+                    x.CreatedAt >= windowStart);
+
+            var remainingResubmitsInWindow = Math.Max(
+                0,
+                resubmitLimit - resubmitCountInWindow);
+
+            var milestoneDrafts = await _context.ProposalMilestoneDrafts
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .OrderBy(x => x.OrderIndex)
+                .ToListAsync();
+
             return new ProposalResponse
             {
                 ProposalId = proposal.ProposalId,
@@ -578,9 +604,19 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = proposal.ExpectedOutputs,
                 WorkingApproach = proposal.WorkingApproach,
                 PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                Milestones = MapProposalMilestoneDraftResponses(milestoneDrafts),
 
                 Status = proposal.Status,
                 ContractId = contractId,
+
+                LatestVersionNumber = latestVersionNumber,
+                TotalVersions = totalVersions,
+                LastResubmittedAt = lastResubmittedAt,
+                ResubmitLimit = resubmitLimit,
+                ResubmitWindowHours = resubmitWindowHours,
+                RemainingResubmitsInWindow = remainingResubmitsInWindow,
+                LatestVersion = latestVersion,
+
                 CreatedAt = proposal.CreatedAt
             };
         }
@@ -622,6 +658,11 @@ namespace AITasker.Infrastructure.Proposals
             ResubmitProposalRequest request)
         {
             ValidateResubmitProposalRequestLocal(request);
+
+            ValidateProposalMilestonesRequest(
+                request.Milestones,
+                request.ProposedPrice,
+                request.ProposedTimelineDays);
 
             var proposal = await LoadProposalForVersionAsync(proposalId);
 
@@ -703,6 +744,7 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = proposal.ExpectedOutputs,
                 WorkingApproach = proposal.WorkingApproach,
                 PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                MilestonePlanJson = SerializeProposalMilestoneDraftRequests(request.Milestones),
                 ResubmitNote = string.IsNullOrWhiteSpace(request.ResubmitNote)
                     ? "Proposal resubmitted after negotiation."
                     : request.ResubmitNote.Trim(),
@@ -711,6 +753,18 @@ namespace AITasker.Infrastructure.Proposals
             };
 
             _context.ProposalVersions.Add(newVersion);
+
+            var oldMilestoneDrafts = await _context.ProposalMilestoneDrafts
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .ToListAsync();
+
+            _context.ProposalMilestoneDrafts.RemoveRange(oldMilestoneDrafts);
+
+            var newMilestoneDrafts = BuildProposalMilestoneDrafts(
+                proposal,
+                request.Milestones);
+
+            _context.ProposalMilestoneDrafts.AddRange(newMilestoneDrafts);
 
             await _context.SaveChangesAsync();
 
@@ -823,6 +877,12 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Expert profile not found.");
             }
 
+            var currentMilestoneDrafts = await _context.ProposalMilestoneDrafts
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .OrderBy(x => x.OrderIndex)
+                .ToListAsync();
+
             var baseVersion = new ProposalVersion
             {
                 ProposalId = proposal.ProposalId,
@@ -833,6 +893,7 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = proposal.ExpectedOutputs,
                 WorkingApproach = proposal.WorkingApproach,
                 PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                MilestonePlanJson = SerializeProposalMilestoneDraftEntities(currentMilestoneDrafts),
                 ResubmitNote = "Initial proposal version generated from existing proposal.",
                 CreatedByUserId = expertProfile.UserId,
                 CreatedAt = proposal.CreatedAt == default
@@ -902,11 +963,217 @@ namespace AITasker.Infrastructure.Proposals
                 ExpectedOutputs = version.ExpectedOutputs,
                 WorkingApproach = version.WorkingApproach,
                 PreliminaryMilestonePlan = version.PreliminaryMilestonePlan,
+                MilestonePlanJson = version.MilestonePlanJson,
                 ResubmitNote = version.ResubmitNote,
                 CreatedByUserId = version.CreatedByUserId,
                 CreatedByName = createdBy?.FullName ?? string.Empty,
                 CreatedAt = version.CreatedAt
             };
+        }
+
+        private async Task<int> GetLatestProposalVersionNumberAsync(int proposalId)
+        {
+            var latestVersionNumber = await _context.ProposalVersions
+                .Where(x => x.ProposalId == proposalId)
+                .Select(x => (int?)x.VersionNumber)
+                .MaxAsync();
+
+            return latestVersionNumber ?? 1;
+        }
+
+        private static void ValidateProposalMilestonesRequest(
+            List<ProposalMilestoneDraftItemRequest> milestones,
+            decimal proposedPrice,
+            int proposedTimelineDays)
+        {
+            if (milestones == null || milestones.Count == 0)
+            {
+                throw new InvalidOperationException("At least one proposal milestone is required.");
+            }
+
+            if (milestones.Count > 10)
+            {
+                throw new InvalidOperationException("A proposal cannot have more than 10 milestones.");
+            }
+
+            foreach (var milestone in milestones)
+            {
+                if (string.IsNullOrWhiteSpace(milestone.Title))
+                {
+                    throw new InvalidOperationException("Milestone title is required.");
+                }
+
+                if (milestone.Amount <= 0)
+                {
+                    throw new InvalidOperationException("Milestone amount must be greater than 0.");
+                }
+
+                if (milestone.DurationDays <= 0)
+                {
+                    throw new InvalidOperationException("Milestone duration days must be greater than 0.");
+                }
+            }
+
+            var totalMilestoneAmount = milestones.Sum(x => x.Amount);
+
+            if (totalMilestoneAmount != proposedPrice)
+            {
+                throw new InvalidOperationException("Total milestone amount must equal proposed price.");
+            }
+
+            var totalDurationDays = milestones.Sum(x => x.DurationDays);
+
+            if (totalDurationDays > proposedTimelineDays)
+            {
+                throw new InvalidOperationException("Total milestone duration days cannot exceed proposed timeline days.");
+            }
+        }
+
+        private static List<ProposalMilestoneDraft> BuildProposalMilestoneDrafts(
+            Proposal proposal,
+            List<ProposalMilestoneDraftItemRequest> milestones)
+        {
+            var result = new List<ProposalMilestoneDraft>();
+            var deadlineOffsetDays = 0;
+            var orderIndex = 1;
+
+            foreach (var milestone in milestones)
+            {
+                deadlineOffsetDays += milestone.DurationDays;
+
+                result.Add(new ProposalMilestoneDraft
+                {
+                    Proposal = proposal,
+                    Title = milestone.Title.Trim(),
+                    Description = milestone.Title.Trim(),
+                    ExpectedDeliverable = proposal.ExpectedOutputs,
+                    AcceptanceCriteria = "Client confirms this milestone is completed according to the accepted proposal and contract deliverables.",
+                    Amount = milestone.Amount,
+                    OrderIndex = orderIndex,
+                    DeadlineOffsetDays = deadlineOffsetDays,
+                    CreatedAt = DateTime.UtcNow
+                });
+
+                orderIndex++;
+            }
+
+            return result;
+        }
+
+        private static List<ProposalMilestoneDraftResponse> MapProposalMilestoneDraftResponses(
+            List<ProposalMilestoneDraft> drafts)
+        {
+            var result = new List<ProposalMilestoneDraftResponse>();
+            var previousDeadlineOffsetDays = 0;
+
+            foreach (var draft in drafts.OrderBy(x => x.OrderIndex))
+            {
+                var durationDays = draft.DeadlineOffsetDays - previousDeadlineOffsetDays;
+
+                result.Add(new ProposalMilestoneDraftResponse
+                {
+                    ProposalMilestoneDraftId = draft.ProposalMilestoneDraftId,
+                    ProposalId = draft.ProposalId,
+                    Title = draft.Title,
+                    Amount = draft.Amount,
+                    DurationDays = durationDays <= 0 ? draft.DeadlineOffsetDays : durationDays,
+                    CreatedAt = draft.CreatedAt
+                });
+
+                previousDeadlineOffsetDays = draft.DeadlineOffsetDays;
+            }
+
+            return result;
+        }
+
+        private static string SerializeProposalMilestoneDraftRequests(
+            List<ProposalMilestoneDraftItemRequest> milestones)
+        {
+            var deadlineOffsetDays = 0;
+            var orderIndex = 1;
+            var normalizedMilestones = new List<object>();
+
+            foreach (var milestone in milestones)
+            {
+                deadlineOffsetDays += milestone.DurationDays;
+
+                normalizedMilestones.Add(new
+                {
+                    title = milestone.Title.Trim(),
+                    amount = milestone.Amount,
+                    durationDays = milestone.DurationDays,
+                    orderIndex,
+                    deadlineOffsetDays
+                });
+
+                orderIndex++;
+            }
+
+            return JsonSerializer.Serialize(normalizedMilestones);
+        }
+
+        private static string SerializeProposalMilestoneDraftEntities(
+            List<ProposalMilestoneDraft> milestones)
+        {
+            var normalizedMilestones = milestones
+                .OrderBy(x => x.OrderIndex)
+                .Select(x => new
+                {
+                    title = x.Title,
+                    description = x.Description,
+                    expectedDeliverable = x.ExpectedDeliverable,
+                    acceptanceCriteria = x.AcceptanceCriteria,
+                    amount = x.Amount,
+                    orderIndex = x.OrderIndex,
+                    deadlineOffsetDays = x.DeadlineOffsetDays
+                })
+                .ToList();
+
+            return JsonSerializer.Serialize(normalizedMilestones);
+        }
+
+        private async Task CopyLatestProposalMilestonesToContractDraftAsync(
+            int proposalId,
+            int contractId)
+        {
+            var proposalMilestones = await _context.ProposalMilestoneDrafts
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposalId)
+                .OrderBy(x => x.OrderIndex)
+                .ToListAsync();
+
+            if (proposalMilestones.Count == 0)
+            {
+                throw new InvalidOperationException("Proposal must have milestone drafts before creating contract.");
+            }
+
+            var existingContractMilestones = await _context.ContractMilestoneDrafts
+                .Where(x => x.ContractId == contractId)
+                .ToListAsync();
+
+            if (existingContractMilestones.Count > 0)
+            {
+                _context.ContractMilestoneDrafts.RemoveRange(existingContractMilestones);
+            }
+
+            var contractMilestones = proposalMilestones
+                .Select(x => new ContractMilestoneDraft
+                {
+                    ContractId = contractId,
+                    Title = x.Title,
+                    Description = x.Description,
+                    ExpectedDeliverable = x.ExpectedDeliverable,
+                    AcceptanceCriteria = x.AcceptanceCriteria,
+                    Amount = x.Amount,
+                    OrderIndex = x.OrderIndex,
+                    DeadlineOffsetDays = x.DeadlineOffsetDays,
+                    CreatedAt = DateTime.UtcNow
+                })
+                .ToList();
+
+            _context.ContractMilestoneDrafts.AddRange(contractMilestones);
+
+            await _context.SaveChangesAsync();
         }
     }
 }

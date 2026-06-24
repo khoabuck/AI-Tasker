@@ -34,5 +34,7 @@ namespace AITasker.Domain.Entities
         public ExpertProfile? ExpertProfile { get; set; }
 
         public ICollection<ProposalVersion> ProposalVersions { get; set; } = new List<ProposalVersion>();
+
+        public ICollection<ProposalMilestoneDraft> MilestoneDrafts { get; set; } = new List<ProposalMilestoneDraft>();
     }
 }

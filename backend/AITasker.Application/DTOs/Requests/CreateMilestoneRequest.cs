@@ -17,7 +17,5 @@ namespace AITasker.Application.DTOs.Requests
         public int OrderIndex { get; set; }
 
         public DateTime Deadline { get; set; }
-
-        public int RevisionLimit { get; set; }
     }
 }

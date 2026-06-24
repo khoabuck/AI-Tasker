@@ -1,6 +1,7 @@
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -159,6 +160,41 @@ namespace AITasker.Infrastructure.Notifications
             return unreadNotifications.Count;
         }
 
+        public async Task<NotificationDetailResponse> GetNotificationDetailAsync(
+            int notificationId,
+            int userId)
+        {
+            await EnsureUserExistsAsync(userId);
+
+            var notification = await _context.Notifications
+                .FirstOrDefaultAsync(n =>
+                    n.NotificationId == notificationId &&
+                    n.UserId == userId);
+
+            if (notification == null)
+            {
+                throw new InvalidOperationException("Notification not found or access denied.");
+            }
+
+            if (!notification.IsRead)
+            {
+                notification.IsRead = true;
+                await _context.SaveChangesAsync();
+            }
+
+            var response = new NotificationDetailResponse
+            {
+                Notification = MapToResponse(notification)
+            };
+
+            if (notification.Type == NotificationTypes.JobDailyDigest)
+            {
+                response.JobDigest = await BuildJobDigestPayloadAsync(notification);
+            }
+
+            return response;
+        }
+
         private static void ValidateCreateNotificationInput(
             int userId,
             string title,
@@ -252,6 +288,59 @@ namespace AITasker.Infrastructure.Notifications
             {
                 return utcDateTime.AddHours(7);
             }
+        }
+
+        private async Task<JobDigestNotificationPayload> BuildJobDigestPayloadAsync(
+            Notification notification)
+        {
+            var windowEndUtc = SpecifyUtc(notification.CreatedAt);
+            var windowStartUtc = windowEndUtc.AddHours(-24);
+
+            var jobsQuery = _context.JobPostings
+                .AsNoTracking()
+                .Include(j => j.JobSkills)
+                    .ThenInclude(js => js.Skill)
+                .Where(j =>
+                    j.CreatedAt >= windowStartUtc &&
+                    j.CreatedAt < windowEndUtc &&
+                    j.Status == "OPEN");
+
+            var totalJobs = await jobsQuery.CountAsync();
+
+            var jobs = await jobsQuery
+                .OrderByDescending(j => j.CreatedAt)
+                .Take(10)
+                .ToListAsync();
+
+            return new JobDigestNotificationPayload
+            {
+                WindowStartUtc = windowStartUtc,
+                WindowEndUtc = windowEndUtc,
+                WindowStart = ConvertUtcToVietnamTime(windowStartUtc),
+                WindowEnd = ConvertUtcToVietnamTime(windowEndUtc),
+                TimeZone = VietnamTimeZoneName,
+                TotalJobs = totalJobs,
+                DisplayedJobs = jobs.Count,
+                Jobs = jobs.Select(j => new JobDigestJobItemResponse
+                {
+                    JobPostingId = j.JobPostingId,
+                    Title = j.Title,
+                    BudgetMin = j.BudgetMin,
+                    BudgetMax = j.BudgetMax,
+                    ProjectType = j.ProjectType,
+                    Complexity = j.Complexity,
+                    Status = j.Status,
+                    Deadline = j.Deadline,
+                    CreatedAtUtc = SpecifyUtc(j.CreatedAt),
+                    CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(j.CreatedAt)),
+                    Skills = j.JobSkills.Select(js => new JobSkillResponse
+                    {
+                        SkillId = js.SkillId,
+                        SkillName = js.Skill != null ? js.Skill.SkillName : string.Empty,
+                        Category = js.Skill?.Category
+                    }).ToList()
+                }).ToList()
+            };
         }
     }
 }

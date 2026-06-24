@@ -90,43 +90,6 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("milestones/{milestoneId:int}/lock")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> LockMilestoneEscrow(int milestoneId)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _walletService.HoldEscrowAsync(
-                    currentUserId,
-                    milestoneId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
         [HttpPost("milestones/{milestoneId:int}/release")]
         [Authorize(Roles = "CLIENT,ADMIN")]
         public IActionResult ReleaseFunds(int milestoneId)

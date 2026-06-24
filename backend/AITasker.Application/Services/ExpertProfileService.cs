@@ -2,28 +2,26 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Application.Common;
 
 namespace AITasker.Application.Services;
 
 public class ExpertProfileService : IExpertProfileService
 {
-    private const int MaxExpertProfileReviewSubmissions = 5;
-
-    private static readonly TimeSpan ExpertProfileReviewLockDuration =
-        TimeSpan.FromHours(24);
-
     private readonly IExpertProfileRepository _expertProfileRepository;
     private readonly IExpertProfileReviewProvider _expertProfileReviewProvider;
     private readonly IUrlInspectionService _urlInspectionService;
     private readonly IExpertSkillService _expertSkillService;
     private readonly ICertificateVerificationService _certificateVerificationService;
+    private readonly IExpertProfileScoringPolicyService _scoringPolicyService;
 
     public ExpertProfileService(
         IExpertProfileRepository expertProfileRepository,
         IExpertProfileReviewProvider expertProfileReviewProvider,
         IUrlInspectionService urlInspectionService,
         IExpertSkillService expertSkillService,
-        ICertificateVerificationService certificateVerificationService
+        ICertificateVerificationService certificateVerificationService,
+        IExpertProfileScoringPolicyService scoringPolicyService
     )
     {
         _expertProfileRepository = expertProfileRepository;
@@ -31,6 +29,7 @@ public class ExpertProfileService : IExpertProfileService
         _urlInspectionService = urlInspectionService;
         _expertSkillService = expertSkillService;
         _certificateVerificationService = certificateVerificationService;
+        _scoringPolicyService = scoringPolicyService;
     }
 
     public async Task<ExpertProfileResponse> CreateAsync(
@@ -38,7 +37,9 @@ public class ExpertProfileService : IExpertProfileService
         CreateExpertProfileRequest request
     )
     {
-        ValidateCreateOrResubmitRequest(request);
+        var scoringPolicy = await _scoringPolicyService.GetOrCreateActivePolicyEntityAsync();
+
+        ValidateCreateOrResubmitRequest(request, scoringPolicy);
 
         var user = await _expertProfileRepository.GetUserByIdAsync(userId);
 
@@ -72,14 +73,26 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Expert profile already exists.");
         }
 
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            request.Certificates,
+            null
+        );
+
+        var now = DateTime.UtcNow;
+
+        user.FullName = ResolveExpertSubmissionFullName(request, user);
+        user.UpdatedAt = now;
+
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
         {
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
 
-        var now = DateTime.UtcNow;
-
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(
+            request,
+            user.FullName,
+            scoringPolicy
+        );
 
         var expertProfile = new ExpertProfile
         {
@@ -148,7 +161,9 @@ public class ExpertProfileService : IExpertProfileService
         CreateExpertProfileRequest request
     )
     {
-        ValidateCreateOrResubmitRequest(request);
+        var scoringPolicy = await _scoringPolicyService.GetOrCreateActivePolicyEntityAsync();
+
+        ValidateCreateOrResubmitRequest(request, scoringPolicy);
 
         var expertProfile = await _expertProfileRepository.GetByUserIdAsync(userId);
 
@@ -193,9 +208,9 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        if (ShouldLockBeforeNextExpertReviewAttempt(expertProfile))
+        if (ShouldLockBeforeNextExpertReviewAttempt(expertProfile, scoringPolicy))
         {
-            LockExpertProfileReview(expertProfile, user, now);
+            LockExpertProfileReview(expertProfile, user, now, scoringPolicy);
 
             await _expertProfileRepository.SaveChangesAsync();
 
@@ -211,12 +226,24 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            request.Certificates,
+            expertProfile.ExpertProfileId
+        );
+
+        user.FullName = ResolveExpertSubmissionFullName(request, user);
+        user.UpdatedAt = now;
+
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
         {
             user.AvatarUrl = request.AvatarUrl.Trim();
         }
 
-        var reviewSnapshot = await ReviewFullProfileAsync(request);
+        var reviewSnapshot = await ReviewFullProfileAsync(
+            request,
+            user.FullName,
+            scoringPolicy
+        );
 
         expertProfile.ProfessionalTitle = request.ProfessionalTitle.Trim();
         expertProfile.Bio = request.Bio.Trim();
@@ -280,7 +307,9 @@ public class ExpertProfileService : IExpertProfileService
         UpdateExpertBasicProfileRequest request
     )
     {
-        ValidateBasicUpdateRequest(request);
+        var scoringPolicy = await _scoringPolicyService.GetOrCreateActivePolicyEntityAsync();
+
+        ValidateBasicUpdateRequest(request, scoringPolicy);
 
         var expertProfile = await _expertProfileRepository.GetByUserIdAsync(userId);
 
@@ -298,7 +327,7 @@ public class ExpertProfileService : IExpertProfileService
 
         EnsureActiveExpertCanUpdate(user);
 
-        user.FullName = request.FullName.Trim();
+        user.FullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (request.AvatarUrl != null)
         {
@@ -323,7 +352,9 @@ public class ExpertProfileService : IExpertProfileService
         UpdateExpertVerificationProfileRequest request
     )
     {
-        ValidateVerificationUpdateRequest(request);
+        var scoringPolicy = await _scoringPolicyService.GetOrCreateActivePolicyEntityAsync();
+
+        ValidateVerificationUpdateRequest(request, scoringPolicy);
 
         var expertProfile = await _expertProfileRepository.GetByUserIdAsync(userId);
 
@@ -346,9 +377,18 @@ public class ExpertProfileService : IExpertProfileService
             request
         );
 
-        ValidateCreateOrResubmitRequest(reviewRequest);
+        ValidateCreateOrResubmitRequest(reviewRequest, scoringPolicy);
 
-        var reviewSnapshot = await ReviewFullProfileAsync(reviewRequest);
+        await EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+            reviewRequest.Certificates,
+            expertProfile.ExpertProfileId
+        );
+
+        var reviewSnapshot = await ReviewFullProfileAsync(
+            reviewRequest,
+            user.FullName,
+            scoringPolicy
+        );
 
         var proposedCertificates = BuildProposedCertificateResponses(
             reviewRequest,
@@ -464,23 +504,54 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<ReviewSnapshot> ReviewFullProfileAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        var certificateVerificationResults = await VerifyCertificatesAsync(request);
+        var certificateVerificationResults = await VerifyCertificatesAsync(
+            request,
+            expertFullName
+        );
 
         var experienceVerification = BuildExperienceVerification(
             request,
             certificateVerificationResults
         );
 
-        var reviewResult = await ReviewByAiAsync(request);
+        var reviewResult = await ReviewByAiAsync(request, scoringPolicy);
 
-        var finalReviewStatus = ResolveFinalReviewStatus(
-            reviewResult.Status,
-            request.YearsOfExperience,
-            experienceVerification
+        var finalProfileScore = NormalizeProfileScore(reviewResult.ProfileScore);
+
+        var hasSubmittedCertificates = request.Certificates.Count > 0;
+
+        var hasNameMismatchCertificate = certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
         );
+
+        var hasUnverifiedCertificate = certificateVerificationResults.Any(x =>
+            !string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (hasNameMismatchCertificate)
+        {
+            finalProfileScore = Math.Min(finalProfileScore, 60m);
+        }
+
+        var finalReviewStatus = hasNameMismatchCertificate
+            ? "NEEDS_CORRECTION"
+            : ResolveFinalReviewStatus(
+                finalProfileScore,
+                scoringPolicy
+            );
 
         var finalLevel = ResolveFinalLevel(
             reviewResult.Level,
@@ -492,15 +563,37 @@ public class ExpertProfileService : IExpertProfileService
             reviewResult.ReviewNote,
             experienceVerification.ExperienceVerificationNote,
             reviewResult.Status,
-            finalReviewStatus
+            finalReviewStatus,
+            finalProfileScore,
+            scoringPolicy
         );
+
+        if (hasNameMismatchCertificate)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} Certificate holder name mismatch detected. At least one submitted certificate appears to belong to another person, so the profile needs correction.";
+        }
+        else if (hasSubmittedCertificates && hasUnverifiedCertificate)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} Optional certificate evidence is not fully verified. This certificate evidence is not counted, but certificates are not a hard pass/fail requirement.";
+        }
+
+        var finalMissingInformation = finalReviewStatus == "APPROVED"
+            ? null
+            : hasNameMismatchCertificate
+                ? "Remove or replace certificates whose detected holder name does not match the expert full name."
+                : NormalizeMissingInformation(
+                    reviewResult.MissingInformation,
+                    scoringPolicy
+                );
 
         return new ReviewSnapshot
         {
             ProfileReviewStatus = finalReviewStatus,
             ProfileReviewNote = finalReviewNote,
-            MissingInformation = reviewResult.MissingInformation,
-            ProfileScore = reviewResult.ProfileScore,
+            MissingInformation = finalMissingInformation,
+            ProfileScore = finalProfileScore,
             Level = finalLevel,
             ExpertCategory = reviewResult.ExpertCategory,
 
@@ -518,7 +611,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<List<CertificateVerificationResult>> VerifyCertificatesAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        string expertFullName
     )
     {
         if (request.Certificates.Count == 0)
@@ -529,10 +623,12 @@ public class ExpertProfileService : IExpertProfileService
         var verificationRequests = request.Certificates
             .Select(x => new CertificateVerificationRequest
             {
-                CertificateName = x.CertificateName.Trim(),
-                CertificateIssuer = x.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(x.CertificateType),
+                CertificateName = string.Empty,
+                CertificateIssuer = string.Empty,
                 CertificateUrl = x.CertificateUrl.Trim(),
-                IssuedAt = x.IssuedAt,
+                IssuedAt = null,
+                ExpertFullName = NameNormalizer.NormalizeFullName(expertFullName),
                 ExpertBio = request.Bio.Trim(),
                 ExpertSkillsText = request.Skills.Trim()
             })
@@ -544,7 +640,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private async Task<ExpertProfileReviewProviderResult> ReviewByAiAsync(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         var urlTargets = BuildUrlInspectionTargets(request);
@@ -563,13 +660,24 @@ public class ExpertProfileService : IExpertProfileService
             PortfolioUrl = NormalizeNullable(request.PortfolioUrl),
             LinkedInUrl = NormalizeNullable(request.LinkedInUrl),
             GitHubUrl = NormalizeNullable(request.GitHubUrl),
+            PassThreshold = scoringPolicy.PassThreshold,
+            ProfileCompletenessMaxScore = scoringPolicy.ProfileCompletenessMaxScore,
+            AiSkillMaxScore = scoringPolicy.AiSkillMaxScore,
+            ExperienceMaxScore = scoringPolicy.ExperienceMaxScore,
+            PortfolioMaxScore = scoringPolicy.PortfolioMaxScore,
+            GitHubMaxScore = scoringPolicy.GitHubMaxScore,
+            LinkedInMaxScore = scoringPolicy.LinkedInMaxScore,
+            CertificateMaxScore = scoringPolicy.CertificateMaxScore,
+            RiskMaxPenalty = scoringPolicy.RiskMaxPenalty,
+            CertificateUnverifiedMaxProfileScore = scoringPolicy.CertificateUnverifiedMaxProfileScore,
             Certificates = request.Certificates.Select(x =>
                 new ExpertProfileReviewCertificateItem
                 {
-                    CertificateName = x.CertificateName.Trim(),
-                    CertificateIssuer = x.CertificateIssuer.Trim(),
+                    CertificateType = NormalizeCertificateType(x.CertificateType),
+                    CertificateName = string.Empty,
+                    CertificateIssuer = string.Empty,
                     CertificateUrl = x.CertificateUrl.Trim(),
-                    IssuedAt = x.IssuedAt
+                    IssuedAt = null
                 }).ToList(),
             UrlInspectionResults = urlInspectionResults
         };
@@ -591,15 +699,9 @@ public class ExpertProfileService : IExpertProfileService
             x.VerificationStatus == "VERIFIED"
         );
 
-        var hasNeedsEvidenceCertificate = certificateVerificationResults.Any(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
-
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus is "SUSPICIOUS" or "INVALID"
+            x.VerificationStatus is "NAME_MISMATCH" or "INVALID"
         );
-
-        var hasAnyCertificate = certificateVerificationResults.Count > 0;
 
         var maxCertificateScore = certificateVerificationResults.Count == 0
             ? 0m
@@ -611,26 +713,14 @@ public class ExpertProfileService : IExpertProfileService
 
         var confidence = 20m;
 
-        if (proofUrlCount >= 3)
+        if (hasEvidenceUrl)
         {
             confidence += 30m;
-        }
-        else if (proofUrlCount >= 2)
-        {
-            confidence += 20m;
         }
 
         if (hasVerifiedCertificate)
         {
             confidence += 35m;
-        }
-        else if (hasNeedsEvidenceCertificate)
-        {
-            confidence += 20m;
-        }
-        else if (hasAnyCertificate)
-        {
-            confidence += 5m;
         }
 
         if (!string.IsNullOrWhiteSpace(request.Bio)
@@ -672,7 +762,7 @@ public class ExpertProfileService : IExpertProfileService
 
         var gap = claimedYears - verifiedYears;
 
-        var status = "NEEDS_EVIDENCE";
+        var status = "NEEDS_REVIEW";
 
         if (confidence >= 75m && gap <= 1)
         {
@@ -680,15 +770,15 @@ public class ExpertProfileService : IExpertProfileService
         }
         else if (gap >= 3 || (claimedYears >= 5 && confidence < 60m))
         {
-            status = "NEEDS_EVIDENCE";
+            status = "NEEDS_REVIEW";
         }
         else if (hasSuspiciousOrInvalidCertificate && claimedYears >= 3)
         {
-            status = "SUSPICIOUS";
+            status = "NEEDS_REVIEW";
         }
         else if (confidence >= 45m)
         {
-            status = "NEEDS_EVIDENCE";
+            status = "NEEDS_REVIEW";
         }
 
         var note = BuildExperienceVerificationNote(
@@ -711,74 +801,13 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private static string ResolveFinalReviewStatus(
-        string aiReviewStatus,
-        int claimedYearsOfExperience,
-        ExperienceVerificationSnapshot experienceVerification
+        decimal profileScore,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        var normalizedAiStatus = NormalizeReviewStatus(aiReviewStatus);
-        var claimedYears = Math.Clamp(claimedYearsOfExperience, 0, 50);
-        var verifiedYears = Math.Clamp(
-            experienceVerification.VerifiedYearsOfExperience,
-            0,
-            50
-        );
-
-        var gap = claimedYears - verifiedYears;
-        var confidence = experienceVerification.ExperienceConfidenceScore;
-        var experienceStatus =
-            experienceVerification.ExperienceVerificationStatus;
-
-        if (string.Equals(
-                experienceStatus,
-                "SUSPICIOUS",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (gap >= 3)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (claimedYears >= 7 && confidence < 70m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (claimedYears >= 5 && confidence < 60m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        if (normalizedAiStatus == "NEEDS_CORRECTION"
-            && claimedYears <= 2
-            && verifiedYears >= claimedYears
-            && confidence >= 85m
-            && string.Equals(
-                experienceStatus,
-                "VERIFIED",
-                StringComparison.OrdinalIgnoreCase
-            ))
-        {
-            return "APPROVED";
-        }
-
-        if (normalizedAiStatus == "APPROVED"
-            && claimedYears >= 3
-            && string.Equals(
-                experienceStatus,
-                "NEEDS_EVIDENCE",
-                StringComparison.OrdinalIgnoreCase
-            )
-            && confidence < 45m)
-        {
-            return "NEEDS_CORRECTION";
-        }
-
-        return normalizedAiStatus;
+        return profileScore >= scoringPolicy.PassThreshold
+            ? "APPROVED"
+            : "NEEDS_CORRECTION";
     }
 
     private static string ResolveFinalLevel(
@@ -883,8 +912,8 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
-   private static string NormalizeReviewStatus(string? status)
-{
+    private static string NormalizeReviewStatus(string? status)
+    {
     if (string.IsNullOrWhiteSpace(status))
     {
         return "NEEDS_CORRECTION";
@@ -901,13 +930,15 @@ public class ExpertProfileService : IExpertProfileService
         "NEEDS_CORRECTION" => "NEEDS_CORRECTION",
         _ => "NEEDS_CORRECTION"
     };
-}
+    }
 
     private static string BuildFinalProfileReviewNote(
         string? aiReviewNote,
         string? experienceNote,
         string aiReviewStatus,
-        string finalReviewStatus
+        string finalReviewStatus,
+        decimal finalProfileScore,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         var notes = new List<string>();
@@ -922,6 +953,10 @@ public class ExpertProfileService : IExpertProfileService
             notes.Add(experienceNote.Trim());
         }
 
+        notes.Add(
+            $"Final profile score: {finalProfileScore:0.##}/100. Pass threshold: {scoringPolicy.PassThreshold:0.##}. Final review status: {finalReviewStatus}."
+        );
+
         if (!string.Equals(
                 NormalizeReviewStatus(aiReviewStatus),
                 finalReviewStatus,
@@ -929,11 +964,26 @@ public class ExpertProfileService : IExpertProfileService
             ))
         {
             notes.Add(
-                $"Backend verification changed profile review status from {aiReviewStatus} to {finalReviewStatus} because backend evidence verification result is stronger than the AI review result."
+                $"Backend verification changed profile review status from {aiReviewStatus} to {finalReviewStatus} because final status is determined by ProfileScore threshold."
             );
         }
 
         return string.Join(" ", notes);
+    }
+
+    private static decimal NormalizeProfileScore(decimal profileScore)
+    {
+        return Math.Clamp(profileScore, 0m, 100m);
+    }
+
+    private static string NormalizeMissingInformation(
+        string? missingInformation,
+        ExpertProfileScoringPolicy scoringPolicy
+    )
+    {
+        return string.IsNullOrWhiteSpace(missingInformation)
+            ? $"ProfileScore is below {scoringPolicy.PassThreshold:0.##}. Please improve profile completeness, AI skill relevance, experience evidence, Portfolio/GitHub proof, optional LinkedIn score, certificate evidence, or trust/risk issues."
+            : missingInformation.Trim();
     }
 
     private static string BuildExperienceVerificationNote(
@@ -948,17 +998,17 @@ public class ExpertProfileService : IExpertProfileService
     {
         var notes = new List<string>
         {
-            $"Claimed years: {claimedYears}. Initial verified years: {verifiedYears}. Confidence score: {confidence:0.##}. Status: {status}. Proof URL count: {proofUrlCount}/3."
+            $"Claimed years: {claimedYears}. Initial verified years: {verifiedYears}. Confidence score: {confidence:0.##}. Status: {status}. Required proof URL count: {proofUrlCount}/2."
         };
 
         if (!hasEvidenceUrl)
         {
-            notes.Add("Less than two proof URLs were provided.");
+            notes.Add("Portfolio URL and GitHub URL are required proof links; LinkedIn URL is optional and does not count as required proof.");
         }
 
         if (certificateVerificationResults.Count == 0)
         {
-            notes.Add("No certificates were provided.");
+            notes.Add("No optional certificates were provided.");
         }
         else
         {
@@ -966,12 +1016,12 @@ public class ExpertProfileService : IExpertProfileService
                 x.VerificationStatus == "VERIFIED"
             );
 
-            var needsEvidenceCount = certificateVerificationResults.Count(x =>
-    x.VerificationStatus == "NEEDS_EVIDENCE"
-);
+            var needsReviewCount = certificateVerificationResults.Count(x =>
+                x.VerificationStatus == "NEEDS_REVIEW"
+            );
 
-            var suspiciousCount = certificateVerificationResults.Count(x =>
-                x.VerificationStatus == "SUSPICIOUS"
+            var nameMismatchCount = certificateVerificationResults.Count(x =>
+                x.VerificationStatus == "NAME_MISMATCH"
             );
 
             var invalidCount = certificateVerificationResults.Count(x =>
@@ -979,7 +1029,7 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             notes.Add(
-              $"Certificate verification summary: {verifiedCount} verified, {needsEvidenceCount} needs evidence, {suspiciousCount} suspicious, {invalidCount} invalid."
+              $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {nameMismatchCount} name mismatch, {invalidCount} invalid."
             );
         }
 
@@ -1007,18 +1057,22 @@ public class ExpertProfileService : IExpertProfileService
 
             return new ExpertCertificate
             {
-                CertificateName = certificate.CertificateName.Trim(),
-                CertificateIssuer = certificate.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(certificate.CertificateType),
+                CertificateName = ResolveCertificateName(certificate, verificationResult),
+                CertificateIssuer = ResolveCertificateIssuer(certificate, verificationResult),
                 CertificateUrl = certificate.CertificateUrl.Trim(),
-                IssuedAt = certificate.IssuedAt,
+                IssuedAt = verificationResult?.DetectedIssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
+                    verificationResult?.VerificationStatus ?? "NEEDS_REVIEW",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
                 DetectedCertificateName =
                     verificationResult?.DetectedCertificateName,
+                DetectedHolderName = verificationResult?.DetectedHolderName,
+                DetectedIssuedDateText = verificationResult?.DetectedIssuedDateText,
+                DetectedIssuedAt = verificationResult?.DetectedIssuedAt,
                 CheckedAt = verificationResult?.CheckedAt
             };
         }).ToList();
@@ -1039,18 +1093,22 @@ public class ExpertProfileService : IExpertProfileService
             return new ExpertCertificateResponse
             {
                 ExpertCertificateId = 0,
-                CertificateName = certificate.CertificateName.Trim(),
-                CertificateIssuer = certificate.CertificateIssuer.Trim(),
+                CertificateType = NormalizeCertificateType(certificate.CertificateType),
+                CertificateName = ResolveCertificateName(certificate, verificationResult),
+                CertificateIssuer = ResolveCertificateIssuer(certificate, verificationResult),
                 CertificateUrl = certificate.CertificateUrl.Trim(),
-                IssuedAt = certificate.IssuedAt,
+                IssuedAt = verificationResult?.DetectedIssuedAt,
                 CreatedAt = DateTime.UtcNow,
                 VerificationStatus =
-                    verificationResult?.VerificationStatus ?? "NEEDS_EVIDENCE",
+                    verificationResult?.VerificationStatus ?? "NEEDS_REVIEW",
                 VerificationScore = verificationResult?.VerificationScore ?? 0,
                 VerificationNote = verificationResult?.VerificationNote,
                 DetectedIssuer = verificationResult?.DetectedIssuer,
                 DetectedCertificateName =
                     verificationResult?.DetectedCertificateName,
+                DetectedHolderName = verificationResult?.DetectedHolderName,
+                DetectedIssuedDateText = verificationResult?.DetectedIssuedDateText,
+                DetectedIssuedAt = verificationResult?.DetectedIssuedAt,
                 CheckedAt = verificationResult?.CheckedAt
             };
         }).ToList();
@@ -1106,9 +1164,9 @@ public class ExpertProfileService : IExpertProfileService
         {
             targets.Add(new UrlInspectionTarget
             {
-                Label = "LinkedIn URL",
+                Label = "LinkedIn URL (optional display/scoring)",
                 Url = request.LinkedInUrl.Trim(),
-                IsRequiredProof = true
+                IsRequiredProof = false
             });
         }
 
@@ -1116,9 +1174,9 @@ public class ExpertProfileService : IExpertProfileService
         {
             targets.Add(new UrlInspectionTarget
             {
-                Label = $"Certificate URL - {certificate.CertificateName}",
+                Label = $"Certificate URL - {NormalizeCertificateType(certificate.CertificateType)}",
                 Url = certificate.CertificateUrl.Trim(),
-                IsRequiredProof = true
+                IsRequiredProof = false
             });
         }
 
@@ -1150,7 +1208,8 @@ public class ExpertProfileService : IExpertProfileService
         user.Status = reviewStatus switch
         {
             "LOCKED" => "EXPERT_PROFILE_LOCKED",
-            "NEEDS_CORRECTION" => "PENDING_PROFILE",            _ => "PENDING_PROFILE"
+            "NEEDS_CORRECTION" => "PENDING_PROFILE",
+            _ => "PENDING_PROFILE"
         };
 
         user.UpdatedAt = now;
@@ -1169,12 +1228,13 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private static bool ShouldLockBeforeNextExpertReviewAttempt(
-        ExpertProfile expertProfile
+        ExpertProfile expertProfile,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         return IsFailedReviewStatus(expertProfile.ProfileReviewStatus)
             && expertProfile.ProfileReviewSubmissionCount >=
-                MaxExpertProfileReviewSubmissions;
+                scoringPolicy.MaxReviewSubmissions;
     }
 
     private static bool IsProfileReviewLocked(
@@ -1228,10 +1288,11 @@ public class ExpertProfileService : IExpertProfileService
     private static void LockExpertProfileReview(
         ExpertProfile expertProfile,
         User user,
-        DateTime now
+        DateTime now,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        var lockedUntil = now.Add(ExpertProfileReviewLockDuration);
+        var lockedUntil = now.AddHours(scoringPolicy.ReviewLockDurationHours);
 
         expertProfile.ProfileReviewStatus = "LOCKED";
         expertProfile.ProfileReviewNote =
@@ -1288,7 +1349,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private static void ValidateBasicUpdateRequest(
-        UpdateExpertBasicProfileRequest request
+        UpdateExpertBasicProfileRequest request,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         if (string.IsNullOrWhiteSpace(request.FullName))
@@ -1296,7 +1358,7 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Full name is required.");
         }
 
-        var fullName = request.FullName.Trim();
+        var fullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (fullName.Length < 2 || fullName.Length > 255)
         {
@@ -1320,10 +1382,10 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Bio is required.");
         }
 
-        if (request.Bio.Trim().Length < 50)
+        if (request.Bio.Trim().Length < scoringPolicy.BioMinimumLength)
         {
             throw new InvalidOperationException(
-                "Bio must be at least 50 characters."
+                $"Bio must be at least {scoringPolicy.BioMinimumLength} characters."
             );
         }
 
@@ -1335,7 +1397,8 @@ public class ExpertProfileService : IExpertProfileService
     }
 
     private static void ValidateVerificationUpdateRequest(
-        UpdateExpertVerificationProfileRequest request
+        UpdateExpertVerificationProfileRequest request,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         if (string.IsNullOrWhiteSpace(request.Skills))
@@ -1343,9 +1406,11 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Skills are required.");
         }
 
-        if (request.Skills.Trim().Length < 10)
+        if (request.Skills.Trim().Length < scoringPolicy.SkillsMinimumLength)
         {
-            throw new InvalidOperationException("Skills must be more specific.");
+            throw new InvalidOperationException(
+                $"Skills must be at least {scoringPolicy.SkillsMinimumLength} characters."
+            );
         }
 
         if (request.YearsOfExperience < 0)
@@ -1355,59 +1420,31 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        var proofUrlCount = 0;
-
-        if (!string.IsNullOrWhiteSpace(request.PortfolioUrl))
+        if (string.IsNullOrWhiteSpace(request.PortfolioUrl))
         {
-            proofUrlCount++;
+            throw new InvalidOperationException("Portfolio URL is required.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.LinkedInUrl))
-        {
-            proofUrlCount++;
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.GitHubUrl))
-        {
-            proofUrlCount++;
-        }
-
-        if (proofUrlCount < 2)
-        {
-            throw new InvalidOperationException(
-                "At least 2 of Portfolio URL, LinkedIn URL, and GitHub URL are required."
-            );
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.PortfolioUrl)
-            && !IsValidUrl(request.PortfolioUrl))
+        if (!IsValidUrl(request.PortfolioUrl))
         {
             throw new InvalidOperationException("Portfolio URL is invalid.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.LinkedInUrl)
-            && !IsValidUrl(request.LinkedInUrl))
+        if (string.IsNullOrWhiteSpace(request.GitHubUrl))
         {
-            throw new InvalidOperationException("LinkedIn URL is invalid.");
+            throw new InvalidOperationException("GitHub URL is required.");
         }
 
-        if (!string.IsNullOrWhiteSpace(request.GitHubUrl)
-            && !IsValidUrl(request.GitHubUrl))
+        if (!IsValidUrl(request.GitHubUrl))
         {
             throw new InvalidOperationException("GitHub URL is invalid.");
         }
 
-        if (request.Certificates.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "At least one certificate is required."
-            );
-        }
 
-        if (request.Certificates.Count > 10)
+        if (request.Certificates.Count > scoringPolicy.MaxCertificates)
         {
             throw new InvalidOperationException(
-                "Maximum 10 certificates are allowed."
+                $"Maximum {scoringPolicy.MaxCertificates} certificates are allowed."
             );
         }
 
@@ -1423,22 +1460,40 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        foreach (var certificate in request.Certificates)
+        ValidateCertificateInputs(request.Certificates);
+    }
+
+    private async Task EnsureCertificateUrlsAreNotUsedByOtherExpertsAsync(
+        List<CreateExpertCertificateRequest> certificates,
+        int? currentExpertProfileId
+    )
+    {
+        foreach (var certificateUrl in certificates
+            .Select(x => x.CertificateUrl?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(certificate.CertificateName))
+            var exists = await _expertProfileRepository
+                .CertificateUrlExistsForAnotherExpertAsync(
+                    certificateUrl!,
+                    currentExpertProfileId
+                );
+
+            if (exists)
             {
                 throw new InvalidOperationException(
-                    "Certificate name is required."
+                    "This certificate URL is already used by another expert."
                 );
             }
+        }
+    }
 
-            if (string.IsNullOrWhiteSpace(certificate.CertificateIssuer))
-            {
-                throw new InvalidOperationException(
-                    "Certificate issuer is required."
-                );
-            }
-
+    private static void ValidateCertificateInputs(
+        List<CreateExpertCertificateRequest> certificates
+    )
+    {
+        foreach (var certificate in certificates)
+        {
             if (string.IsNullOrWhiteSpace(certificate.CertificateUrl))
             {
                 throw new InvalidOperationException(
@@ -1452,11 +1507,105 @@ public class ExpertProfileService : IExpertProfileService
                     "Certificate URL is invalid."
                 );
             }
+
+            if (string.IsNullOrWhiteSpace(certificate.CertificateType))
+            {
+                throw new InvalidOperationException(
+                    "Certificate type is required."
+                );
+            }
+
+            _ = NormalizeCertificateType(certificate.CertificateType);
         }
     }
 
+    private static string NormalizeCertificateType(string? certificateType)
+    {
+        var normalized = certificateType?.Trim()
+            .ToUpperInvariant()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized switch
+        {
+            "COURSE_CERTIFICATE" => "COURSE_CERTIFICATE",
+            "PROFESSIONAL_CERTIFICATE" => "PROFESSIONAL_CERTIFICATE",
+            "BOOTCAMP_CERTIFICATE" => "BOOTCAMP_CERTIFICATE",
+            "DEGREE_CERTIFICATE" => "DEGREE_CERTIFICATE",
+            "AWARD_CERTIFICATE" => "AWARD_CERTIFICATE",
+            "OTHER" => "OTHER",
+            _ => throw new InvalidOperationException(
+                "Certificate type is invalid. Allowed values: COURSE_CERTIFICATE, PROFESSIONAL_CERTIFICATE, BOOTCAMP_CERTIFICATE, DEGREE_CERTIFICATE, AWARD_CERTIFICATE, OTHER."
+            )
+        };
+    }
+
+    private static string ResolveCertificateName(
+        CreateExpertCertificateRequest certificate,
+        CertificateVerificationResult? verificationResult
+    )
+    {
+        if (!string.IsNullOrWhiteSpace(verificationResult?.DetectedCertificateName))
+        {
+            return verificationResult.DetectedCertificateName.Trim();
+        }
+
+        return NormalizeCertificateType(certificate.CertificateType) switch
+        {
+            "COURSE_CERTIFICATE" => "Course Certificate",
+            "PROFESSIONAL_CERTIFICATE" => "Professional Certificate",
+            "BOOTCAMP_CERTIFICATE" => "Bootcamp Certificate",
+            "DEGREE_CERTIFICATE" => "Degree Certificate",
+            "AWARD_CERTIFICATE" => "Award Certificate",
+            _ => "Certificate"
+        };
+    }
+
+    private static string ResolveCertificateIssuer(
+        CreateExpertCertificateRequest certificate,
+        CertificateVerificationResult? verificationResult
+    )
+    {
+        if (!string.IsNullOrWhiteSpace(verificationResult?.DetectedIssuer))
+        {
+            return verificationResult.DetectedIssuer.Trim();
+        }
+
+        if (Uri.TryCreate(certificate.CertificateUrl, UriKind.Absolute, out var uri))
+        {
+            return uri.Host.Trim().ToLowerInvariant();
+        }
+
+        return "Unknown Issuer";
+    }
+
+    private static string ResolveExpertSubmissionFullName(
+        CreateExpertProfileRequest request,
+        User user
+    )
+    {
+        var fullName = !string.IsNullOrWhiteSpace(request.FullName)
+            ? NameNormalizer.NormalizeFullName(request.FullName)
+            : NameNormalizer.NormalizeFullName(user.FullName);
+
+        if (string.IsNullOrWhiteSpace(fullName))
+        {
+            throw new InvalidOperationException("Full name is required.");
+        }
+
+        if (fullName.Length < 2 || fullName.Length > 255)
+        {
+            throw new InvalidOperationException(
+                "Full name must be between 2 and 255 characters."
+            );
+        }
+
+        return fullName;
+    }
+
     private static void ValidateCreateOrResubmitRequest(
-        CreateExpertProfileRequest request
+        CreateExpertProfileRequest request,
+        ExpertProfileScoringPolicy scoringPolicy
     )
     {
         if (string.IsNullOrWhiteSpace(request.ProfessionalTitle))
@@ -1469,10 +1618,10 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Bio is required.");
         }
 
-        if (request.Bio.Trim().Length < 50)
+        if (request.Bio.Trim().Length < scoringPolicy.BioMinimumLength)
         {
             throw new InvalidOperationException(
-                "Bio must be at least 50 characters."
+                $"Bio must be at least {scoringPolicy.BioMinimumLength} characters."
             );
         }
 
@@ -1481,9 +1630,11 @@ public class ExpertProfileService : IExpertProfileService
             throw new InvalidOperationException("Skills are required.");
         }
 
-        if (request.Skills.Trim().Length < 10)
+        if (request.Skills.Trim().Length < scoringPolicy.SkillsMinimumLength)
         {
-            throw new InvalidOperationException("Skills must be more specific.");
+            throw new InvalidOperationException(
+                $"Skills must be at least {scoringPolicy.SkillsMinimumLength} characters."
+            );
         }
 
         if (request.YearsOfExperience < 0)
@@ -1493,24 +1644,21 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        if (CountProvidedProofUrls(request) < 2)
+        if (string.IsNullOrWhiteSpace(request.PortfolioUrl))
         {
-            throw new InvalidOperationException(
-                "At least 2 of Portfolio URL, LinkedIn URL, and GitHub URL are required."
-            );
+            throw new InvalidOperationException("Portfolio URL is required.");
         }
 
-        if (request.Certificates.Count == 0)
+        if (string.IsNullOrWhiteSpace(request.GitHubUrl))
         {
-            throw new InvalidOperationException(
-                "At least one certificate is required."
-            );
+            throw new InvalidOperationException("GitHub URL is required.");
         }
 
-        if (request.Certificates.Count > 10)
+
+        if (request.Certificates.Count > scoringPolicy.MaxCertificates)
         {
             throw new InvalidOperationException(
-                "Maximum 10 certificates are allowed."
+                $"Maximum {scoringPolicy.MaxCertificates} certificates are allowed."
             );
         }
 
@@ -1526,36 +1674,7 @@ public class ExpertProfileService : IExpertProfileService
             );
         }
 
-        foreach (var certificate in request.Certificates)
-        {
-            if (string.IsNullOrWhiteSpace(certificate.CertificateName))
-            {
-                throw new InvalidOperationException(
-                    "Certificate name is required."
-                );
-            }
-
-            if (string.IsNullOrWhiteSpace(certificate.CertificateIssuer))
-            {
-                throw new InvalidOperationException(
-                    "Certificate issuer is required."
-                );
-            }
-
-            if (string.IsNullOrWhiteSpace(certificate.CertificateUrl))
-            {
-                throw new InvalidOperationException(
-                    "Certificate URL is required."
-                );
-            }
-
-            if (!IsValidUrl(certificate.CertificateUrl))
-            {
-                throw new InvalidOperationException(
-                    "Certificate URL is invalid."
-                );
-            }
-        }
+        ValidateCertificateInputs(request.Certificates);
 
         if (!string.IsNullOrWhiteSpace(request.AvatarUrl)
             && !IsValidUrl(request.AvatarUrl))
@@ -1567,12 +1686,6 @@ public class ExpertProfileService : IExpertProfileService
             && !IsValidUrl(request.PortfolioUrl))
         {
             throw new InvalidOperationException("Portfolio URL is invalid.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.LinkedInUrl)
-            && !IsValidUrl(request.LinkedInUrl))
-        {
-            throw new InvalidOperationException("LinkedIn URL is invalid.");
         }
 
         if (!string.IsNullOrWhiteSpace(request.GitHubUrl)
@@ -1587,11 +1700,6 @@ public class ExpertProfileService : IExpertProfileService
         var count = 0;
 
         if (!string.IsNullOrWhiteSpace(request.PortfolioUrl))
-        {
-            count++;
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.LinkedInUrl))
         {
             count++;
         }
@@ -1650,6 +1758,450 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
+    private static ExpertProfileScoreBreakdownResponse BuildScoreBreakdown(
+        ExpertProfile expertProfile
+    )
+    {
+        const decimal profileCompletenessMaxScore = 15m;
+        const decimal aiSkillRelevanceMaxScore = 15m;
+        const decimal experienceCredibilityMaxScore = 20m;
+        const decimal proofEvidenceMaxScore = 25m;
+        const decimal certificateEvidenceMaxScore = 15m;
+        const decimal trustRiskMaxScore = 10m;
+
+        var profileCompletenessScore = CalculateProfileCompletenessScore(
+            expertProfile,
+            profileCompletenessMaxScore
+        );
+        var aiSkillRelevanceScore = CalculateAiSkillRelevanceScore(
+            expertProfile,
+            aiSkillRelevanceMaxScore
+        );
+        var experienceCredibilityScore = CalculateExperienceCredibilityScore(
+            expertProfile,
+            experienceCredibilityMaxScore
+        );
+        var proofEvidenceScore = CalculateProofEvidenceScore(
+            expertProfile,
+            proofEvidenceMaxScore
+        );
+        var certificateEvidenceScore = CalculateCertificateEvidenceScore(
+            expertProfile,
+            certificateEvidenceMaxScore
+        );
+        var trustRiskScore = CalculateTrustRiskScore(
+            expertProfile,
+            trustRiskMaxScore
+        );
+
+        var scores = new[]
+        {
+            profileCompletenessScore,
+            aiSkillRelevanceScore,
+            experienceCredibilityScore,
+            proofEvidenceScore,
+            certificateEvidenceScore,
+            trustRiskScore
+        };
+
+        var maxScores = new[]
+        {
+            profileCompletenessMaxScore,
+            aiSkillRelevanceMaxScore,
+            experienceCredibilityMaxScore,
+            proofEvidenceMaxScore,
+            certificateEvidenceMaxScore,
+            trustRiskMaxScore
+        };
+
+        var canReceiveAdditionalScore = new[]
+        {
+            true,
+            true,
+            true,
+            true,
+            expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "VERIFIED",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ),
+            !HasNameMismatchCertificate(expertProfile)
+        };
+
+        NormalizeBreakdownTotal(
+            scores,
+            maxScores,
+            canReceiveAdditionalScore,
+            NormalizeProfileScore(expertProfile.ProfileScore)
+        );
+
+        return new ExpertProfileScoreBreakdownResponse
+        {
+            ProfileCompleteness = BuildScoreItem(
+                scores[0],
+                profileCompletenessMaxScore
+            ),
+            AiSkillRelevance = BuildScoreItem(
+                scores[1],
+                aiSkillRelevanceMaxScore
+            ),
+            ExperienceCredibility = BuildScoreItem(
+                scores[2],
+                experienceCredibilityMaxScore
+            ),
+            ProofEvidence = BuildScoreItem(
+                scores[3],
+                proofEvidenceMaxScore
+            ),
+            CertificateEvidence = BuildScoreItem(
+                scores[4],
+                certificateEvidenceMaxScore
+            ),
+            TrustRisk = BuildScoreItem(
+                scores[5],
+                trustRiskMaxScore
+            )
+        };
+    }
+
+    private static ExpertProfileScoreItemResponse BuildScoreItem(
+        decimal score,
+        decimal maxScore
+    )
+    {
+        return new ExpertProfileScoreItemResponse
+        {
+            Score = RoundScore(ClampScore(score, 0m, maxScore)),
+            MaxScore = maxScore
+        };
+    }
+
+    private static decimal CalculateProfileCompletenessScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var score = 0m;
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.User?.FullName))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.ProfessionalTitle))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.Bio))
+        {
+            score += expertProfile.Bio.Trim().Length >= 80 ? 4m : 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.Skills))
+        {
+            score += SplitSkills(expertProfile.Skills).Count >= 3 ? 3m : 1.5m;
+        }
+
+        if (expertProfile.YearsOfExperience >= 0)
+        {
+            score += 1m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.PortfolioUrl))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.GitHubUrl))
+        {
+            score += 1m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateAiSkillRelevanceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var text = $"{expertProfile.ProfessionalTitle} {expertProfile.Bio} {expertProfile.Skills}"
+            .ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0m;
+        }
+
+        var keywords = new[]
+        {
+            "ai",
+            "automation",
+            "rag",
+            "chatbot",
+            "llm",
+            "machine learning",
+            "ml",
+            "nlp",
+            "openai",
+            "gemini",
+            "deepseek",
+            "python",
+            "prompt",
+            "computer vision",
+            "ocr",
+            "data"
+        };
+
+        var matchedKeywordCount = keywords.Count(keyword => text.Contains(keyword));
+        var skillCount = SplitSkills(expertProfile.Skills).Count;
+
+        var score = Math.Min(matchedKeywordCount * 2m, 12m);
+
+        if (skillCount >= 3)
+        {
+            score += 3m;
+        }
+        else if (skillCount > 0)
+        {
+            score += 1.5m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateExperienceCredibilityScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        if (expertProfile.ExperienceConfidenceScore > 0)
+        {
+            return ClampScore(
+                expertProfile.ExperienceConfidenceScore / 100m * maxScore,
+                0m,
+                maxScore
+            );
+        }
+
+        var years = Math.Max(
+            expertProfile.VerifiedYearsOfExperience,
+            expertProfile.YearsOfExperience
+        );
+
+        var score = years switch
+        {
+            >= 8 => 20m,
+            >= 5 => 18m,
+            >= 3 => 15m,
+            >= 1 => 10m,
+            _ => 5m
+        };
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateProofEvidenceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var score = 0m;
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.PortfolioUrl))
+        {
+            score += 12.5m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.GitHubUrl))
+        {
+            score += 12.5m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal CalculateCertificateEvidenceScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        var verifiedCertificateScores = expertProfile.Certificates
+            .Where(x => string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            ))
+            .Select(x => ClampScore(x.VerificationScore, 0m, 100m))
+            .ToList();
+
+        if (verifiedCertificateScores.Count == 0)
+        {
+            return 0m;
+        }
+
+        return ClampScore(
+            verifiedCertificateScores.Max() / 100m * maxScore,
+            0m,
+            maxScore
+        );
+    }
+
+    private static decimal CalculateTrustRiskScore(
+        ExpertProfile expertProfile,
+        decimal maxScore
+    )
+    {
+        if (HasNameMismatchCertificate(expertProfile))
+        {
+            return 0m;
+        }
+
+        var score = maxScore;
+
+        if (expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "INVALID",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 5m;
+        }
+
+        if (expertProfile.Certificates.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "NEEDS_REVIEW",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 2m;
+        }
+
+        if (string.Equals(
+                expertProfile.ProfileReviewStatus,
+                "NEEDS_CORRECTION",
+                StringComparison.OrdinalIgnoreCase
+            ))
+        {
+            score -= 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(expertProfile.MissingInformation))
+        {
+            score -= 1m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static void NormalizeBreakdownTotal(
+        decimal[] scores,
+        decimal[] maxScores,
+        bool[] canReceiveAdditionalScore,
+        decimal targetTotal
+    )
+    {
+        targetTotal = ClampScore(targetTotal, 0m, maxScores.Sum());
+
+        var currentTotal = scores.Sum();
+
+        if (currentTotal > targetTotal && currentTotal > 0m)
+        {
+            var factor = targetTotal / currentTotal;
+
+            for (var i = 0; i < scores.Length; i++)
+            {
+                scores[i] = ClampScore(scores[i] * factor, 0m, maxScores[i]);
+            }
+        }
+        else if (currentTotal < targetTotal)
+        {
+            var remaining = targetTotal - currentTotal;
+
+            while (remaining > 0.01m)
+            {
+                var changed = false;
+
+                for (var i = 0; i < scores.Length && remaining > 0.01m; i++)
+                {
+                    if (!canReceiveAdditionalScore[i])
+                    {
+                        continue;
+                    }
+
+                    var capacity = maxScores[i] - scores[i];
+
+                    if (capacity <= 0m)
+                    {
+                        continue;
+                    }
+
+                    var increment = Math.Min(capacity, remaining);
+                    scores[i] += increment;
+                    remaining -= increment;
+                    changed = true;
+                }
+
+                if (!changed)
+                {
+                    break;
+                }
+            }
+        }
+
+        for (var i = 0; i < scores.Length; i++)
+        {
+            scores[i] = RoundScore(ClampScore(scores[i], 0m, maxScores[i]));
+        }
+    }
+
+    private static bool HasNameMismatchCertificate(ExpertProfile expertProfile)
+    {
+        return expertProfile.Certificates.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private static List<string> SplitSkills(string? skills)
+    {
+        if (string.IsNullOrWhiteSpace(skills))
+        {
+            return new List<string>();
+        }
+
+        return skills
+            .Split(new[] { ',', ';', '|', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
+            .Select(x => x.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static decimal ClampScore(
+        decimal score,
+        decimal minScore,
+        decimal maxScore
+    )
+    {
+        return Math.Min(Math.Max(score, minScore), maxScore);
+    }
+
+    private static decimal RoundScore(decimal score)
+    {
+        return Math.Round(score, 2, MidpointRounding.AwayFromZero);
+    }
+
     private static ExpertProfileResponse ToResponse(ExpertProfile expertProfile)
     {
         return new ExpertProfileResponse
@@ -1677,6 +2229,10 @@ public class ExpertProfileService : IExpertProfileService
             GitHubUrl = expertProfile.GitHubUrl,
             ExpertCategory = expertProfile.ExpertCategory,
             ProfileScore = expertProfile.ProfileScore,
+            ProfileScoreMax = 100m,
+            ProfilePassScore = 70m,
+            ProfileScoreText = $"{expertProfile.ProfileScore:0.##}/100",
+            ScoreBreakdown = BuildScoreBreakdown(expertProfile),
             Level = expertProfile.Level,
             ProfileReviewStatus = expertProfile.ProfileReviewStatus,
             ProfileReviewNote = expertProfile.ProfileReviewNote,
@@ -1692,6 +2248,7 @@ public class ExpertProfileService : IExpertProfileService
                 .Select(x => new ExpertCertificateResponse
                 {
                     ExpertCertificateId = x.ExpertCertificateId,
+                    CertificateType = x.CertificateType,
                     CertificateName = x.CertificateName,
                     CertificateIssuer = x.CertificateIssuer,
                     CertificateUrl = x.CertificateUrl,
@@ -1702,6 +2259,9 @@ public class ExpertProfileService : IExpertProfileService
                     VerificationNote = x.VerificationNote,
                     DetectedIssuer = x.DetectedIssuer,
                     DetectedCertificateName = x.DetectedCertificateName,
+                    DetectedHolderName = x.DetectedHolderName,
+                    DetectedIssuedDateText = x.DetectedIssuedDateText,
+                    DetectedIssuedAt = x.DetectedIssuedAt,
                     CheckedAt = x.CheckedAt
                 })
                 .ToList()
@@ -1714,7 +2274,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_REVIEW";
 
         public string? ExperienceVerificationNote { get; set; }
     }
@@ -1737,7 +2297,7 @@ public class ExpertProfileService : IExpertProfileService
 
         public decimal ExperienceConfidenceScore { get; set; }
 
-        public string ExperienceVerificationStatus { get; set; } = "NEEDS_EVIDENCE";
+        public string ExperienceVerificationStatus { get; set; } = "NEEDS_REVIEW";
 
         public string? ExperienceVerificationNote { get; set; }
 

@@ -6,6 +6,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public int ProposalId { get; set; }
 
+        public int SourceProposalVersionNumber { get; set; }
+
         public int JobId { get; set; }
 
         public string JobTitle { get; set; } = string.Empty;
@@ -39,8 +41,6 @@ namespace AITasker.Application.DTOs.Responses
         public string Deliverables { get; set; } = string.Empty;
 
         public string AcceptanceCriteria { get; set; } = string.Empty;
-
-        public int RevisionLimit { get; set; }
 
         public string PaymentTerms { get; set; } = string.Empty;
 

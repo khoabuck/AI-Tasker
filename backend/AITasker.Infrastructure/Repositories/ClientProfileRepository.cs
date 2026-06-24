@@ -22,6 +22,41 @@ public class ClientProfileRepository : IClientProfileRepository
             .FirstOrDefaultAsync(x => x.UserId == userId);
     }
 
+    public async Task<bool> PhoneNumberExistsAsync(string phoneNumber)
+    {
+        return await _dbContext.ClientProfiles
+            .AnyAsync(x => x.PhoneNumber == phoneNumber);
+    }
+
+    public async Task<bool> PhoneNumberExistsExceptClientProfileAsync(
+        string phoneNumber,
+        int clientProfileId)
+    {
+        return await _dbContext.ClientProfiles
+            .AnyAsync(x =>
+                x.PhoneNumber == phoneNumber
+                && x.ClientProfileId != clientProfileId
+            );
+    }
+
+
+    public async Task<bool> BusinessEmailExistsAsync(string businessEmail)
+    {
+        return await _dbContext.BusinessProfiles
+            .AnyAsync(x => x.BusinessEmail == businessEmail);
+    }
+
+    public async Task<bool> BusinessEmailExistsExceptBusinessProfileAsync(
+        string businessEmail,
+        int businessProfileId)
+    {
+        return await _dbContext.BusinessProfiles
+            .AnyAsync(x =>
+                x.BusinessEmail == businessEmail
+                && x.BusinessProfileId != businessProfileId
+            );
+    }
+
     public async Task<bool> TaxCodeExistsAsync(string taxCode)
     {
         return await _dbContext.BusinessProfiles

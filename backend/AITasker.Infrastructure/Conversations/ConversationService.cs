@@ -33,7 +33,7 @@ namespace AITasker.Infrastructure.Conversations
         private const string MessageTypeMilestoneDraft = "MILESTONE_DRAFT";
         private const string MessageTypeDeliverable = "DELIVERABLE";
         private const string MessageTypeDisputeEvidence = "DISPUTE_EVIDENCE";
-
+        
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
 
@@ -825,9 +825,11 @@ namespace AITasker.Infrastructure.Conversations
 
                 ClientUserId = conversation.ClientUserId,
                 ClientName = clientUser?.FullName,
+                ClientAvatarUrl = clientUser?.AvatarUrl,
 
                 ExpertUserId = conversation.ExpertUserId,
                 ExpertName = expertUser?.FullName,
+                ExpertAvatarUrl = expertUser?.AvatarUrl,
 
                 RelatedJobId = conversation.RelatedJobId,
                 RelatedJobTitle = job?.Title,
@@ -863,6 +865,7 @@ namespace AITasker.Infrastructure.Conversations
                 SenderUserId = message.SenderUserId,
                 SenderName = sender?.FullName ?? string.Empty,
                 SenderRole = sender?.Role ?? string.Empty,
+                SenderAvatarUrl = sender?.AvatarUrl,
                 Content = message.Content,
                 MessageType = message.MessageType,
                 AttachmentUrl = message.AttachmentUrl,

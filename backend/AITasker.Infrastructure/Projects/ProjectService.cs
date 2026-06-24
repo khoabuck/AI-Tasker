@@ -9,6 +9,8 @@ namespace AITasker.Infrastructure.Projects
 {
     public class ProjectService : IProjectService
     {
+        private const string JobStatusCompleted = "COMPLETED";
+
         private const string ContractStatusConfirmed = "CONFIRMED";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
@@ -389,7 +391,6 @@ namespace AITasker.Infrastructure.Projects
             milestone.Amount = request.Amount;
             milestone.OrderIndex = request.OrderIndex;
             milestone.Deadline = request.Deadline;
-            milestone.RevisionLimit = request.RevisionLimit;
 
             await _context.SaveChangesAsync();
 
@@ -440,6 +441,10 @@ namespace AITasker.Infrastructure.Projects
                 project.Status = ProjectStatusCompleted;
                 project.EndDate = DateTime.UtcNow;
 
+                await UpdateJobStatusByProjectAsync(
+                    project,
+                    JobStatusCompleted);
+
                 await _context.SaveChangesAsync();
 
                 await _notificationService.CreateNotificationAsync(
@@ -472,8 +477,6 @@ namespace AITasker.Infrastructure.Projects
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
                 Deadline = request.Deadline,
-                RevisionLimit = request.RevisionLimit,
-                RevisionUsed = 0,
                 PaymentStatus = PaymentStatusPending,
                 Status = MilestoneStatusPending,
                 CreatedAt = DateTime.UtcNow
@@ -541,11 +544,6 @@ namespace AITasker.Infrastructure.Projects
             {
                 throw new InvalidOperationException("Milestone deadline must be in the future.");
             }
-
-            if (request.RevisionLimit < 0)
-            {
-                throw new InvalidOperationException("Revision limit cannot be negative.");
-            }
         }
 
         private static void ValidateUpdateMilestoneRequest(UpdateMilestoneRequest request)
@@ -563,8 +561,7 @@ namespace AITasker.Infrastructure.Projects
                 AcceptanceCriteria = request.AcceptanceCriteria,
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
-                Deadline = request.Deadline,
-                RevisionLimit = request.RevisionLimit
+                Deadline = request.Deadline
             });
         }
 
@@ -800,12 +797,45 @@ namespace AITasker.Infrastructure.Projects
                 Amount = milestone.Amount,
                 OrderIndex = milestone.OrderIndex,
                 Deadline = milestone.Deadline,
-                RevisionLimit = milestone.RevisionLimit,
                 RevisionUsed = milestone.RevisionUsed,
                 PaymentStatus = milestone.PaymentStatus,
                 Status = milestone.Status,
                 CreatedAt = milestone.CreatedAt
             };
+        }
+
+        private async Task UpdateJobStatusByProjectAsync(
+            Project project,
+            string jobStatus)
+        {
+            var contract = await _context.ProjectContracts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ContractId == project.ContractId);
+
+            if (contract == null)
+            {
+                return;
+            }
+
+            var proposal = await _context.Proposals
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalId == contract.ProposalId);
+
+            if (proposal == null)
+            {
+                return;
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
+
+            if (job == null)
+            {
+                return;
+            }
+
+            job.Status = jobStatus;
+            job.UpdatedAt = DateTime.UtcNow;
         }
     }
 }

@@ -3,17 +3,15 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Application.Common;
 
 namespace AITasker.Application.Services;
 
 public class ClientProfileService : IClientProfileService
 {
-    private const decimal IndividualClientPlatformFeeRate = 5.00m;
-    private const decimal BusinessClientPlatformFeeRate = 10.00m;
-
     private const int MaxBusinessVerificationSubmissions = 5;
     private static readonly TimeSpan BusinessVerificationLockDuration =
-        TimeSpan.FromSeconds(15); 
+        TimeSpan.FromHours(24);
 
     private const string PendingCompanyName = "Pending VietQR verification";
     private const string PendingCompanyAddress = "Pending VietQR verification";
@@ -21,15 +19,18 @@ public class ClientProfileService : IClientProfileService
     private readonly IUserRepository _userRepository;
     private readonly IClientProfileRepository _clientProfileRepository;
     private readonly IBusinessVerificationProvider _businessVerificationProvider;
+    private readonly IPlatformFeePolicyService _platformFeePolicyService;
 
     public ClientProfileService(
         IUserRepository userRepository,
         IClientProfileRepository clientProfileRepository,
-        IBusinessVerificationProvider businessVerificationProvider)
+        IBusinessVerificationProvider businessVerificationProvider,
+        IPlatformFeePolicyService platformFeePolicyService)
     {
         _userRepository = userRepository;
         _clientProfileRepository = clientProfileRepository;
         _businessVerificationProvider = businessVerificationProvider;
+        _platformFeePolicyService = platformFeePolicyService;
     }
 
     public async Task<ClientProfileResponse> CreateIndividualAsync(
@@ -39,6 +40,12 @@ public class ClientProfileService : IClientProfileService
         var user = await ValidateClientCanCreateProfileAsync(userId);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsAsync(phoneNumber))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var address = request.Address?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(address))
@@ -54,7 +61,7 @@ public class ClientProfileService : IClientProfileService
             ClientType = "INDIVIDUAL",
             PhoneNumber = phoneNumber,
             Address = address,
-            PlatformFeeRate = IndividualClientPlatformFeeRate,
+            PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL"),
             CreatedAt = DateTime.UtcNow
         };
 
@@ -77,6 +84,11 @@ public class ClientProfileService : IClientProfileService
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
+        if (await _clientProfileRepository.PhoneNumberExistsAsync(phoneNumber))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var representativeAddress = request.Address?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(representativeAddress))
@@ -94,7 +106,7 @@ public class ClientProfileService : IClientProfileService
 
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
-        var businessEmail = NormalizeNullableText(request.BusinessEmail);
+        var businessEmail = NormalizeOptionalEmail(request.BusinessEmail);
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
             "Business phone"
@@ -105,6 +117,12 @@ public class ClientProfileService : IClientProfileService
             industry,
             businessEmail
         );
+
+        if (businessEmail != null
+            && await _clientProfileRepository.BusinessEmailExistsAsync(businessEmail))
+        {
+            throw new InvalidOperationException("Business email already exists.");
+        }
 
         var taxCodeExists = await _clientProfileRepository.TaxCodeExistsAsync(
             taxCode
@@ -166,7 +184,7 @@ public class ClientProfileService : IClientProfileService
             ClientType = "BUSINESS",
             PhoneNumber = phoneNumber,
             Address = representativeAddress,
-            PlatformFeeRate = BusinessClientPlatformFeeRate,
+            PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS"),
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
         };
@@ -276,6 +294,13 @@ public class ClientProfileService : IClientProfileService
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var representativeAddress = request.Address?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(representativeAddress))
@@ -293,7 +318,7 @@ public class ClientProfileService : IClientProfileService
 
         var taxCode = request.TaxCode?.Trim() ?? string.Empty;
         var industry = request.Industry?.Trim() ?? string.Empty;
-        var businessEmail = NormalizeNullableText(request.BusinessEmail);
+        var businessEmail = NormalizeOptionalEmail(request.BusinessEmail);
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
             "Business phone"
@@ -304,6 +329,14 @@ public class ClientProfileService : IClientProfileService
             industry,
             businessEmail
         );
+
+        if (businessEmail != null
+            && await _clientProfileRepository.BusinessEmailExistsExceptBusinessProfileAsync(
+                businessEmail,
+                businessProfile.BusinessProfileId))
+        {
+            throw new InvalidOperationException("Business email already exists.");
+        }
 
         var taxCodeExists = await _clientProfileRepository
             .TaxCodeExistsExceptBusinessProfileAsync(
@@ -330,7 +363,7 @@ public class ClientProfileService : IClientProfileService
         clientProfile.ClientType = "BUSINESS";
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = representativeAddress;
-        clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS");
         clientProfile.UpdatedAt = now;
 
         var officialCompanyName = businessVerificationStatus == "VERIFIED"
@@ -428,11 +461,19 @@ public class ClientProfileService : IClientProfileService
         ValidateIndividualProfileUpdateRequest(request);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var address = request.Address!.Trim();
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = address;
-        clientProfile.PlatformFeeRate = IndividualClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL");
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
         user.UpdatedAt = DateTime.UtcNow;
@@ -491,12 +532,30 @@ public class ClientProfileService : IClientProfileService
         ValidateBusinessProfileUpdateRequest(request);
 
         var phoneNumber = ValidateAndNormalizePhoneNumber(request.PhoneNumber);
+
+        if (await _clientProfileRepository.PhoneNumberExistsExceptClientProfileAsync(
+                phoneNumber,
+                clientProfile.ClientProfileId))
+        {
+            throw new InvalidOperationException("Phone number already exists.");
+        }
+
         var businessPhone = ValidateAndNormalizeOptionalPhoneNumber(
             request.BusinessPhone,
             "Business phone"
         );
 
-        user.FullName = request.FullName!.Trim();
+        var businessEmail = NormalizeOptionalEmail(request.BusinessEmail);
+
+        if (businessEmail != null
+            && await _clientProfileRepository.BusinessEmailExistsExceptBusinessProfileAsync(
+                businessEmail,
+                clientProfile.BusinessProfile.BusinessProfileId))
+        {
+            throw new InvalidOperationException("Business email already exists.");
+        }
+
+        user.FullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (request.AvatarUrl != null)
         {
@@ -507,11 +566,10 @@ public class ClientProfileService : IClientProfileService
 
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = NormalizeNullableText(request.Address);
-        clientProfile.PlatformFeeRate = BusinessClientPlatformFeeRate;
+        clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS");
         clientProfile.UpdatedAt = DateTime.UtcNow;
 
-        clientProfile.BusinessProfile.BusinessEmail =
-            NormalizeNullableText(request.BusinessEmail);
+        clientProfile.BusinessProfile.BusinessEmail = businessEmail;
 
         clientProfile.BusinessProfile.BusinessPhone = businessPhone;
 
@@ -615,7 +673,7 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Full name is required.");
         }
 
-        var fullName = request.FullName.Trim();
+        var fullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (fullName.Length < 2 || fullName.Length > 255)
         {
@@ -624,8 +682,9 @@ public class ClientProfileService : IClientProfileService
 
         ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
-        if (!string.IsNullOrWhiteSpace(request.BusinessEmail)
-            && !IsValidEmail(request.BusinessEmail.Trim()))
+        var businessEmail = NormalizeOptionalEmail(request.BusinessEmail);
+
+        if (businessEmail != null && !IsValidEmail(businessEmail))
         {
             throw new InvalidOperationException(
                 "Business email format is invalid."
@@ -773,6 +832,15 @@ public class ClientProfileService : IClientProfileService
         return string.IsNullOrWhiteSpace(text)
             ? null
             : text;
+    }
+
+    private static string? NormalizeOptionalEmail(string? value)
+    {
+        var email = value?.Trim().ToLowerInvariant();
+
+        return string.IsNullOrWhiteSpace(email)
+            ? null
+            : email;
     }
 
     private static string? TruncateNote(string? note)
