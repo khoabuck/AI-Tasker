@@ -28,6 +28,10 @@ public class JobPosting
 
     public bool IsAiAssisted { get; set; } = false;
 
+    public string PostingChargeType { get; set; } = "NONE";
+
+    public DateTime? PublishedAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

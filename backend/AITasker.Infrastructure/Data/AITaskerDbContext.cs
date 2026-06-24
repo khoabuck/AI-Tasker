@@ -76,6 +76,10 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<Notification> Notifications { get; set; }
 
+    public DbSet<JobCreditPackage> JobCreditPackages => Set<JobCreditPackage>();
+
+    public DbSet<JobCreditPackagePurchase> JobCreditPackagePurchases => Set<JobCreditPackagePurchase>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
@@ -413,6 +417,22 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
 
+            entity.Property(x => x.FreeJobPostCredits)
+                .HasDefaultValue(1)
+                .IsRequired();
+
+            entity.Property(x => x.PaidJobPostCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.FreeAiGenerationCredits)
+                .HasDefaultValue(3)
+                .IsRequired();
+
+            entity.Property(x => x.PaidAiGenerationCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -422,6 +442,185 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // =========================
+        // JobCreditPackages
+        // =========================
+        modelBuilder.Entity<JobCreditPackage>(entity =>
+        {
+            entity.ToTable("JobCreditPackages", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_JobCreditPackages_CreditsAndPrice",
+                    "[JobPostCredits] > 0 AND [AiGenerationCredits] >= 0 AND [Price] >= 0"
+                );
+            });
+
+            entity.HasKey(x => x.JobCreditPackageId);
+
+            entity.Property(x => x.PackageName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(x => x.PackageName)
+                .IsUnique();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.JobPostCredits)
+                .IsRequired();
+
+            entity.Property(x => x.AiGenerationCredits)
+                .IsRequired();
+
+            entity.Property(x => x.Price)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Currency)
+                .HasMaxLength(10)
+                .HasDefaultValue("VND")
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.DisplayOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasIndex(x => x.DisplayOrder);
+
+            entity.HasData(
+                new JobCreditPackage
+                {
+                    JobCreditPackageId = 1,
+                    PackageName = "Basic",
+                    Description = "3 job posting credits and 10 AI generation credits.",
+                    JobPostCredits = 3,
+                    AiGenerationCredits = 10,
+                    Price = 49000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 1,
+                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new JobCreditPackage
+                {
+                    JobCreditPackageId = 2,
+                    PackageName = "Pro",
+                    Description = "10 job posting credits and 35 AI generation credits.",
+                    JobPostCredits = 10,
+                    AiGenerationCredits = 35,
+                    Price = 149000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 2,
+                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new JobCreditPackage
+                {
+                    JobCreditPackageId = 3,
+                    PackageName = "Business",
+                    Description = "30 job posting credits and 120 AI generation credits.",
+                    JobPostCredits = 30,
+                    AiGenerationCredits = 120,
+                    Price = 399000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 3,
+                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
+                }
+            );
+        });
+
+        // =========================
+        // JobCreditPackagePurchases
+        // =========================
+        modelBuilder.Entity<JobCreditPackagePurchase>(entity =>
+        {
+            entity.ToTable("JobCreditPackagePurchases", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_JobCreditPackagePurchases_CreditsAndPrice",
+                    "[JobPostCreditsAdded] > 0 AND [AiGenerationCreditsAdded] >= 0 AND [PricePaid] >= 0"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_JobCreditPackagePurchases_Status",
+                    "[Status] IN ('SUCCESS','FAILED','CANCELLED')"
+                );
+            });
+
+            entity.HasKey(x => x.JobCreditPackagePurchaseId);
+
+            entity.Property(x => x.PackageNameSnapshot)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.DescriptionSnapshot)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.JobPostCreditsAdded)
+                .IsRequired();
+
+            entity.Property(x => x.AiGenerationCreditsAdded)
+                .IsRequired();
+
+            entity.Property(x => x.PricePaid)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Currency)
+                .HasMaxLength(10)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.TransactionReferenceId)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(x => x.TransactionReferenceId)
+                .IsUnique();
+
+            entity.Property(x => x.PurchasedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.ClientProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ClientProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.JobCreditPackage)
+                .WithMany(x => x.Purchases)
+                .HasForeignKey(x => x.JobCreditPackageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.ClientProfileId);
+
+            entity.HasIndex(x => x.JobCreditPackageId);
+
+            entity.HasIndex(x => x.PurchasedAt);
         });
 
         // =========================
@@ -793,6 +992,13 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.IsAiAssisted)
                 .HasDefaultValue(false)
                 .IsRequired();
+
+            entity.Property(x => x.PostingChargeType)
+                .HasMaxLength(20)
+                .HasDefaultValue("NONE")
+                .IsRequired();
+
+            entity.Property(x => x.PublishedAt);
 
             entity.Property(x => x.CreatedAt)
                 .IsRequired();

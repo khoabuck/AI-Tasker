@@ -62,6 +62,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = phoneNumber,
             Address = address,
             PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL"),
+            FreeJobPostCredits = 1,
+            PaidJobPostCredits = 0,
+            FreeAiGenerationCredits = 3,
+            PaidAiGenerationCredits = 0,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -185,6 +189,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = phoneNumber,
             Address = representativeAddress,
             PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS"),
+            FreeJobPostCredits = 1,
+            PaidJobPostCredits = 0,
+            FreeAiGenerationCredits = 3,
+            PaidAiGenerationCredits = 0,
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
         };
@@ -886,6 +894,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,
             PlatformFeeRate = clientProfile.PlatformFeeRate,
+            FreeJobPostCredits = clientProfile.FreeJobPostCredits,
+            PaidJobPostCredits = clientProfile.PaidJobPostCredits,
+            FreeAiGenerationCredits = clientProfile.FreeAiGenerationCredits,
+            PaidAiGenerationCredits = clientProfile.PaidAiGenerationCredits,
             UserStatus = clientProfile.User.Status,
             BusinessProfile = clientProfile.BusinessProfile == null
                 ? null
