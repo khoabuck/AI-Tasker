@@ -8,12 +8,8 @@ const toNumber = (value) => {
 const hasAnyMilestoneValue = (milestone) => {
   return (
     !isEmpty(milestone.title) ||
-    !isEmpty(milestone.description) ||
-    !isEmpty(milestone.expectedDeliverable) ||
-    !isEmpty(milestone.acceptanceCriteria) ||
     !isEmpty(milestone.amount) ||
-    !isEmpty(milestone.deadlineOffsetDays) ||
-    !isEmpty(milestone.revisionLimit)
+    !isEmpty(milestone.durationDays)
   );
 };
 
@@ -38,35 +34,12 @@ export const validateProposalMilestones = (milestones = []) => {
     }
 
     const amount = Number(milestone.amount);
-    const orderIndex = Number(milestone.orderIndex || index + 1);
-    const deadlineOffsetDays = Number(milestone.deadlineOffsetDays);
-    const revisionLimit = Number(milestone.revisionLimit);
+    const durationDays = Number(milestone.durationDays);
 
     if (isEmpty(milestone.title)) {
       errors.title = "Milestone title is required.";
     } else if (milestone.title.trim().length < 3) {
       errors.title = "Milestone title must be at least 3 characters.";
-    }
-
-    if (isEmpty(milestone.description)) {
-      errors.description = "Milestone description is required.";
-    } else if (milestone.description.trim().length < 10) {
-      errors.description =
-        "Milestone description must be at least 10 characters.";
-    }
-
-    if (isEmpty(milestone.expectedDeliverable)) {
-      errors.expectedDeliverable = "Expected deliverable is required.";
-    } else if (milestone.expectedDeliverable.trim().length < 5) {
-      errors.expectedDeliverable =
-        "Expected deliverable must be at least 5 characters.";
-    }
-
-    if (isEmpty(milestone.acceptanceCriteria)) {
-      errors.acceptanceCriteria = "Acceptance criteria is required.";
-    } else if (milestone.acceptanceCriteria.trim().length < 10) {
-      errors.acceptanceCriteria =
-        "Acceptance criteria must be at least 10 characters.";
     }
 
     if (isEmpty(milestone.amount)) {
@@ -75,30 +48,15 @@ export const validateProposalMilestones = (milestones = []) => {
       errors.amount = "Milestone amount must be greater than 0.";
     }
 
-    if (Number.isNaN(orderIndex) || orderIndex <= 0) {
-      errors.orderIndex = "Order index must be greater than 0.";
-    }
-
-    if (isEmpty(milestone.deadlineOffsetDays)) {
-      errors.deadlineOffsetDays = "Deadline offset days is required.";
+    if (isEmpty(milestone.durationDays)) {
+      errors.durationDays = "Milestone duration days is required.";
     } else if (
-      Number.isNaN(deadlineOffsetDays) ||
-      deadlineOffsetDays <= 0 ||
-      !Number.isInteger(deadlineOffsetDays)
+      Number.isNaN(durationDays) ||
+      durationDays <= 0 ||
+      !Number.isInteger(durationDays)
     ) {
-      errors.deadlineOffsetDays =
-        "Deadline offset days must be an integer greater than 0.";
-    }
-
-    if (isEmpty(milestone.revisionLimit)) {
-      errors.revisionLimit = "Revision limit is required.";
-    } else if (
-      Number.isNaN(revisionLimit) ||
-      revisionLimit < 0 ||
-      !Number.isInteger(revisionLimit)
-    ) {
-      errors.revisionLimit =
-        "Revision limit must be an integer greater than or equal to 0.";
+      errors.durationDays =
+        "Milestone duration days must be an integer greater than 0.";
     }
 
     milestoneErrors[index] = errors;
@@ -143,20 +101,17 @@ export const validateProposalForm = (formData, options = {}) => {
   if (isEmpty(formData.expectedOutputs)) {
     errors.expectedOutputs = "Expected outputs are required.";
   } else if (formData.expectedOutputs.trim().length < 20) {
-    errors.expectedOutputs =
-      "Expected outputs must be at least 20 characters.";
+    errors.expectedOutputs = "Expected outputs must be at least 20 characters.";
   }
 
   if (isEmpty(formData.workingApproach)) {
     errors.workingApproach = "Working approach is required.";
   } else if (formData.workingApproach.trim().length < 30) {
-    errors.workingApproach =
-      "Working approach must be at least 30 characters.";
+    errors.workingApproach = "Working approach must be at least 30 characters.";
   }
 
   if (isEmpty(formData.preliminaryMilestonePlan)) {
-    errors.preliminaryMilestonePlan =
-      "Preliminary milestone plan is required.";
+    errors.preliminaryMilestonePlan = "Preliminary milestone plan is required.";
   } else if (formData.preliminaryMilestonePlan.trim().length < 20) {
     errors.preliminaryMilestonePlan =
       "Preliminary milestone plan must be at least 20 characters.";
@@ -172,8 +127,7 @@ export const validateProposalForm = (formData, options = {}) => {
     if (isEmpty(formData.resubmitNote)) {
       errors.resubmitNote = "Resubmit note is required.";
     } else if (formData.resubmitNote.trim().length < 10) {
-      errors.resubmitNote =
-        "Resubmit note must be at least 10 characters.";
+      errors.resubmitNote = "Resubmit note must be at least 10 characters.";
     }
   }
 

@@ -5,33 +5,28 @@ import jobService from "../../../services/job.service";
 import proposalService from "../../../services/proposal.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
-const emptyMilestone = {
+const createEmptyMilestone = () => ({
   title: "",
-  description: "",
-  expectedDeliverable: "",
-  acceptanceCriteria: "",
   amount: "",
-  orderIndex: 1,
-  deadlineOffsetDays: "",
-  revisionLimit: 1,
-};
+  durationDays: "",
+});
 
-const emptyForm = {
+const createEmptyForm = () => ({
   coverLetter: "",
   proposedPrice: "",
   proposedTimelineDays: "",
   expectedOutputs: "",
   workingApproach: "",
   preliminaryMilestonePlan: "",
-  milestones: [{ ...emptyMilestone }],
-};
+  milestones: [createEmptyMilestone()],
+});
 
 export default function SubmitProposalPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
 
   const [job, setJob] = useState(null);
-  const [formData, setFormData] = useState(emptyForm);
+  const [formData, setFormData] = useState(createEmptyForm);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -44,8 +39,19 @@ export default function SubmitProposalPage() {
 
   const formErrors = useMemo(() => validateProposalForm(formData), [formData]);
 
+  const milestoneTotal = useMemo(() => {
+    return formData.milestones.reduce((total, milestone) => {
+      const amount = Number(milestone.amount || 0);
+
+      return total + (Number.isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [formData.milestones]);
+
+  const priceDifference = Number(formData.proposedPrice || 0) - milestoneTotal;
+
   useEffect(() => {
     loadJobDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   const loadJobDetail = async () => {
@@ -88,10 +94,7 @@ export default function SubmitProposalPage() {
 
       return {
         ...prev,
-        milestones: nextMilestones.map((item, itemIndex) => ({
-          ...item,
-          orderIndex: itemIndex + 1,
-        })),
+        milestones: nextMilestones,
       };
     });
   };
@@ -99,13 +102,7 @@ export default function SubmitProposalPage() {
   const addMilestone = () => {
     setFormData((prev) => ({
       ...prev,
-      milestones: [
-        ...prev.milestones,
-        {
-          ...emptyMilestone,
-          orderIndex: prev.milestones.length + 1,
-        },
-      ],
+      milestones: [...prev.milestones, createEmptyMilestone()],
     }));
   };
 
@@ -116,12 +113,7 @@ export default function SubmitProposalPage() {
       return {
         ...prev,
         milestones:
-          nextMilestones.length > 0
-            ? nextMilestones.map((item, itemIndex) => ({
-                ...item,
-                orderIndex: itemIndex + 1,
-              }))
-            : [{ ...emptyMilestone }],
+          nextMilestones.length > 0 ? nextMilestones : [createEmptyMilestone()],
       };
     });
   };
@@ -139,6 +131,7 @@ export default function SubmitProposalPage() {
 
   const getFieldError = (name) => {
     if (!submitted && !touched[name]) return "";
+
     return formErrors[name] || "";
   };
 
@@ -276,6 +269,7 @@ export default function SubmitProposalPage() {
                     <NumberInput
                       label="Proposed Price"
                       required
+                      min="0"
                       value={formData.proposedPrice}
                       onChange={(value) => updateField("proposedPrice", value)}
                       onBlur={() => markTouched("proposedPrice")}
@@ -286,6 +280,7 @@ export default function SubmitProposalPage() {
                     <NumberInput
                       label="Proposed Timeline Days"
                       required
+                      min="1"
                       value={formData.proposedTimelineDays}
                       onChange={(value) =>
                         updateField("proposedTimelineDays", value)
@@ -341,6 +336,17 @@ export default function SubmitProposalPage() {
                 </Card>
 
                 <Card title="Milestones" icon="flag">
+                  <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <p className="text-sm font-bold text-cyan-300">
+                      Backend milestone schema
+                    </p>
+
+                    <p className="mt-2 text-xs leading-5 text-gray-400">
+                      Each milestone only requires title, amount and duration
+                      days.
+                    </p>
+                  </div>
+
                   <div className="space-y-5">
                     {formData.milestones.map((milestone, index) => (
                       <MilestoneEditor
@@ -365,6 +371,30 @@ export default function SubmitProposalPage() {
                       </span>
                       Add Milestone
                     </button>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Info
+                      label="Proposed Price"
+                      value={formatMoney(formData.proposedPrice)}
+                    />
+
+                    <Info
+                      label="Milestone Total"
+                      value={formatMoney(milestoneTotal)}
+                    />
+
+                    <Info
+                      label="Difference"
+                      value={formatMoney(priceDifference)}
+                      tone={
+                        Math.abs(priceDifference) < 0.01
+                          ? "green"
+                          : priceDifference > 0
+                          ? "warning"
+                          : "danger"
+                      }
+                    />
                   </div>
                 </Card>
 
@@ -471,8 +501,9 @@ function MilestoneEditor({
           <p className="text-sm font-extrabold text-white">
             Milestone {index + 1}
           </p>
+
           <p className="mt-1 text-xs text-gray-500">
-            Define scope, deliverable, payment, deadline, and revision limit.
+            Define title, payment amount and estimated duration.
           </p>
         </div>
 
@@ -487,7 +518,7 @@ function MilestoneEditor({
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_180px_180px]">
         <TextInput
           label="Title"
           required
@@ -501,6 +532,7 @@ function MilestoneEditor({
         <NumberInput
           label="Amount"
           required
+          min="0"
           value={milestone.amount}
           onChange={(value) => onChange(index, "amount", value)}
           onBlur={() => onBlur(index, "amount")}
@@ -509,58 +541,14 @@ function MilestoneEditor({
         />
 
         <NumberInput
-          label="Deadline Offset Days"
+          label="Duration Days"
           required
-          value={milestone.deadlineOffsetDays}
-          onChange={(value) => onChange(index, "deadlineOffsetDays", value)}
-          onBlur={() => onBlur(index, "deadlineOffsetDays")}
-          error={getError(index, "deadlineOffsetDays")}
+          min="1"
+          value={milestone.durationDays}
+          onChange={(value) => onChange(index, "durationDays", value)}
+          onBlur={() => onBlur(index, "durationDays")}
+          error={getError(index, "durationDays")}
           placeholder="7"
-        />
-
-        <NumberInput
-          label="Revision Limit"
-          required
-          value={milestone.revisionLimit}
-          onChange={(value) => onChange(index, "revisionLimit", value)}
-          onBlur={() => onBlur(index, "revisionLimit")}
-          error={getError(index, "revisionLimit")}
-          placeholder="1"
-        />
-      </div>
-
-      <div className="mt-5 space-y-5">
-        <TextArea
-          label="Description"
-          required
-          value={milestone.description}
-          onChange={(value) => onChange(index, "description", value)}
-          onBlur={() => onBlur(index, "description")}
-          error={getError(index, "description")}
-          placeholder="Describe what you will do in this milestone..."
-          rows={3}
-        />
-
-        <TextArea
-          label="Expected Deliverable"
-          required
-          value={milestone.expectedDeliverable}
-          onChange={(value) => onChange(index, "expectedDeliverable", value)}
-          onBlur={() => onBlur(index, "expectedDeliverable")}
-          error={getError(index, "expectedDeliverable")}
-          placeholder="Example: working UI prototype, API integration, test report..."
-          rows={3}
-        />
-
-        <TextArea
-          label="Acceptance Criteria"
-          required
-          value={milestone.acceptanceCriteria}
-          onChange={(value) => onChange(index, "acceptanceCriteria", value)}
-          onBlur={() => onBlur(index, "acceptanceCriteria")}
-          error={getError(index, "acceptanceCriteria")}
-          placeholder="Describe how the client can verify this milestone is complete..."
-          rows={3}
         />
       </div>
     </div>
@@ -588,7 +576,9 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -618,7 +608,9 @@ function TextArea({
         onBlur={onBlur}
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -634,6 +626,7 @@ function NumberInput({
   placeholder,
   required,
   error,
+  min = "0",
 }) {
   return (
     <div>
@@ -643,13 +636,15 @@ function NumberInput({
 
       <input
         type="number"
-        min="0"
+        min={min}
         step="1"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -663,11 +658,21 @@ function FieldError({ message }) {
   return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
 }
 
-function Info({ label, value }) {
+function Info({ label, value, tone = "default" }) {
+  const toneClass =
+    tone === "green"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : tone === "warning"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-200"
+      : tone === "danger"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-white/10 bg-white/[0.03] text-white";
+
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <div className={`rounded-xl border p-4 ${toneClass}`}>
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 font-bold text-white">{value}</p>
+
+      <p className="mt-1 font-bold">{value}</p>
     </div>
   );
 }
@@ -699,11 +704,31 @@ function formatBudget(min, max) {
   return "Budget not set";
 }
 
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(number) ? 0 : number);
+}
+
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || fallback;
 }

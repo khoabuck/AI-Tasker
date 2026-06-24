@@ -21,6 +21,7 @@ export default function ProposalDetailPage() {
 
   useEffect(() => {
     loadProposal();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
   const loadProposal = async () => {
@@ -98,9 +99,16 @@ export default function ProposalDetailPage() {
 
   const status = String(proposal.status || "").toUpperCase();
   const isAccepted = status === "ACCEPTED";
+  const currentProposalId = proposal.proposalId || proposal.id || proposalId;
+
   const milestones = Array.isArray(proposal.milestones)
     ? proposal.milestones
     : [];
+
+  const milestoneTotal = milestones.reduce((total, milestone) => {
+    const amount = Number(milestone.amount || 0);
+    return total + (Number.isNaN(amount) ? 0 : amount);
+  }, 0);
 
   return (
     <ExpertLayout>
@@ -146,7 +154,7 @@ export default function ProposalDetailPage() {
               <button
                 type="button"
                 onClick={() =>
-                  navigate(`/expert/proposals/${proposal.proposalId}/versions`)
+                  navigate(`/expert/proposals/${currentProposalId}/versions`)
                 }
                 className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
               >
@@ -167,7 +175,7 @@ export default function ProposalDetailPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    navigate(`/expert/proposals/${proposal.proposalId}/resubmit`)
+                    navigate(`/expert/proposals/${currentProposalId}/resubmit`)
                   }
                   className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
                 >
@@ -182,9 +190,7 @@ export default function ProposalDetailPage() {
                     if (proposal.contractId) {
                       navigate(`/expert/contracts/${proposal.contractId}`);
                     } else {
-                      navigate(
-                        `/expert/proposals/${proposal.proposalId}/contract`
-                      );
+                      navigate(`/expert/proposals/${currentProposalId}/contract`);
                     }
                   }}
                   className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
@@ -302,6 +308,11 @@ export default function ProposalDetailPage() {
 
                 <Info label="Milestones" value={`${milestones.length}`} />
 
+                <Info
+                  label="Milestone Total"
+                  value={formatMoney(milestoneTotal)}
+                />
+
                 <Info label="Status" value={getProposalStatusLabel(status)} />
 
                 <Info
@@ -310,7 +321,10 @@ export default function ProposalDetailPage() {
                 />
 
                 {proposal.updatedAt && (
-                  <Info label="Updated At" value={formatDate(proposal.updatedAt)} />
+                  <Info
+                    label="Updated At"
+                    value={formatDate(proposal.updatedAt)}
+                  />
                 )}
               </Card>
 
@@ -341,12 +355,18 @@ function Card({ title, children }) {
 }
 
 function MilestoneCard({ milestone, index }) {
+  const durationDays =
+    milestone.durationDays ??
+    milestone.DurationDays ??
+    milestone.deadlineOffsetDays ??
+    milestone.DeadlineOffsetDays;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-            Milestone {milestone.orderIndex || index + 1}
+            Milestone {index + 1}
           </p>
 
           <h3 className="mt-2 text-lg font-bold text-white">
@@ -361,40 +381,12 @@ function MilestoneCard({ milestone, index }) {
         )}
       </div>
 
-      <p className="whitespace-pre-line text-sm leading-7 text-gray-400">
-        {milestone.description || "No description."}
-      </p>
-
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info
-          label="Expected Deliverable"
-          value={milestone.expectedDeliverable || "N/A"}
-        />
-
-        <Info
-          label="Acceptance Criteria"
-          value={milestone.acceptanceCriteria || "N/A"}
-        />
-
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Info label="Amount" value={formatMoney(milestone.amount)} />
 
         <Info
-          label="Deadline Offset"
-          value={
-            milestone.deadlineOffsetDays
-              ? `${milestone.deadlineOffsetDays} days`
-              : "N/A"
-          }
-        />
-
-        <Info
-          label="Revision Limit"
-          value={
-            milestone.revisionLimit !== undefined &&
-            milestone.revisionLimit !== null
-              ? `${milestone.revisionLimit}`
-              : "N/A"
-          }
+          label="Duration"
+          value={durationDays ? `${durationDays} days` : "N/A"}
         />
       </div>
     </div>
@@ -453,9 +445,11 @@ function Alert({ type, title, message }) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
@@ -469,11 +463,17 @@ function formatDate(value) {
 }
 
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) return allErrors.join(" ");
+  }
+
+  return err?.message || fallback;
 }

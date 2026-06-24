@@ -15,12 +15,13 @@ export default function ProposalVersionsPage() {
 
   useEffect(() => {
     loadVersions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
   const sortedVersions = useMemo(() => {
     return [...versions].sort((a, b) => {
-      const versionA = Number(a.version || 0);
-      const versionB = Number(b.version || 0);
+      const versionA = Number(a.versionNumber || a.version || 0);
+      const versionB = Number(b.versionNumber || b.version || 0);
 
       if (versionA !== versionB) return versionB - versionA;
 
@@ -39,7 +40,7 @@ export default function ProposalVersionsPage() {
 
       const data = await proposalService.getProposalVersions(proposalId);
 
-      setVersions(data);
+      setVersions(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD PROPOSAL VERSIONS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load proposal versions."));
@@ -76,8 +77,8 @@ export default function ProposalVersionsPage() {
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
                 Review all submitted and resubmitted versions of this proposal,
-                including price, timeline, outputs, approach, milestone plan,
-                and detailed milestones.
+                including price, timeline, outputs, approach and milestone
+                plan.
               </p>
             </div>
 
@@ -97,7 +98,11 @@ export default function ProposalVersionsPage() {
           )}
 
           {error && (
-            <Alert type="danger" title="Proposal versions error" message={error} />
+            <Alert
+              type="danger"
+              title="Proposal versions error"
+              message={error}
+            />
           )}
 
           {loading && (
@@ -146,7 +151,7 @@ export default function ProposalVersionsPage() {
                 <VersionCard
                   key={
                     version.proposalVersionId ||
-                    `${version.proposalId}-${version.version}-${index}`
+                    `${version.proposalId}-${version.versionNumber || version.version}-${index}`
                   }
                   version={version}
                   index={index}
@@ -165,13 +170,20 @@ function VersionCard({ version, index }) {
     ? version.milestones
     : [];
 
+  const versionNumber = version.versionNumber || version.version || index + 1;
+
+  const milestoneTotal = milestones.reduce((total, milestone) => {
+    const amount = Number(milestone.amount || 0);
+    return total + (Number.isNaN(amount) ? 0 : amount);
+  }, 0);
+
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-purple-300">
-              Version {version.version || index + 1}
+              Version {versionNumber}
             </span>
 
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs text-gray-400">
@@ -180,7 +192,7 @@ function VersionCard({ version, index }) {
           </div>
 
           <h2 className="text-xl font-extrabold text-white">
-            Proposal Version {version.version || index + 1}
+            Proposal Version {versionNumber}
           </h2>
 
           {version.changeNote && (
@@ -205,6 +217,8 @@ function VersionCard({ version, index }) {
           />
 
           <Info label="Milestones" value={`${milestones.length}`} />
+
+          <Info label="Milestone Total" value={formatMoney(milestoneTotal)} />
         </div>
       </div>
 
@@ -268,12 +282,18 @@ function Card({ title, children }) {
 }
 
 function MilestoneCard({ milestone, index }) {
+  const durationDays =
+    milestone.durationDays ??
+    milestone.DurationDays ??
+    milestone.deadlineOffsetDays ??
+    milestone.DeadlineOffsetDays;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
       <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-            Milestone {milestone.orderIndex || index + 1}
+            Milestone {index + 1}
           </p>
 
           <h4 className="mt-2 text-lg font-bold text-white">
@@ -288,40 +308,12 @@ function MilestoneCard({ milestone, index }) {
         )}
       </div>
 
-      <p className="whitespace-pre-line text-sm leading-7 text-gray-400">
-        {milestone.description || "No description."}
-      </p>
-
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info
-          label="Expected Deliverable"
-          value={milestone.expectedDeliverable || "N/A"}
-        />
-
-        <Info
-          label="Acceptance Criteria"
-          value={milestone.acceptanceCriteria || "N/A"}
-        />
-
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <Info label="Amount" value={formatMoney(milestone.amount)} />
 
         <Info
-          label="Deadline Offset"
-          value={
-            milestone.deadlineOffsetDays
-              ? `${milestone.deadlineOffsetDays} days`
-              : "N/A"
-          }
-        />
-
-        <Info
-          label="Revision Limit"
-          value={
-            milestone.revisionLimit !== undefined &&
-            milestone.revisionLimit !== null
-              ? `${milestone.revisionLimit}`
-              : "N/A"
-          }
+          label="Duration"
+          value={durationDays ? `${durationDays} days` : "N/A"}
         />
       </div>
     </div>
@@ -354,9 +346,11 @@ function Alert({ type, title, message }) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
@@ -370,11 +364,17 @@ function formatDate(value) {
 }
 
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) return allErrors.join(" ");
+  }
+
+  return err?.message || fallback;
 }
