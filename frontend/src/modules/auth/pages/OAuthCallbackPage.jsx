@@ -1,7 +1,3 @@
-// src/modules/auth/pages/OAuthCallbackPage.jsx
-// Trang bắt token sau khi Google OAuth redirect về FE
-// URL: /oauth/callback?token=xxx&status=xxx
-
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
@@ -12,50 +8,51 @@ export default function OAuthCallbackPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    handleOAuthCallback();
+  }, []);
+
+  const handleOAuthCallback = async () => {
     const token = searchParams.get("token");
 
     if (!token) {
-      setError("Không tìm thấy token. Vui lòng thử lại.");
+      setError("Không tìm thấy token. Vui lòng đăng nhập lại.");
       return;
     }
 
-    // Lưu token vào localStorage
-    localStorage.setItem("accessToken", token);
+    try {
+      localStorage.setItem("accessToken", token);
 
-    // Gọi /auth/me để lấy thông tin user và status mới nhất
-    axiosInstance.get("/auth/me")
-      .then((res) => {
-        const user = res.data;
-        localStorage.setItem("user", JSON.stringify(user));
+      const response = await axiosInstance.get("/auth/me");
+      const user = normalizeUser(response.data);
 
-        // Redirect theo status
-        if (user.status === "PENDING_ROLE") {
-          navigate("/select-role");
-        } else if (user.status === "PENDING_PROFILE") {
-          navigate("/setup-profile");
-        } else if (user.status === "ACTIVE") {
-          if (user.role === "CLIENT") navigate("/client/dashboard");
-          else if (user.role === "EXPERT") navigate("/expert/dashboard");
-          else if (user.role === "ADMIN") navigate("/admin/dashboard");
-          else navigate("/");
-        } else {
-          navigate("/login");
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem("accessToken");
-        setError("Xác thực thất bại. Vui lòng thử lại.");
-      });
-  }, []);
+      localStorage.setItem("user", JSON.stringify(user));
+
+      navigate(getNextPath(user), { replace: true });
+    } catch (err) {
+      console.error("OAUTH CALLBACK ERROR:", err?.response?.data || err);
+
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("user");
+
+      setError("Xác thực Google thất bại. Vui lòng thử lại.");
+    }
+  };
 
   if (error) {
     return (
-      <div style={{ minHeight: "100vh", background: "#101319", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", color: "#e1e2eb" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 64, color: "#f87171", marginBottom: 16 }}>error</span>
-        <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Authentication Failed</h2>
-        <p style={{ color: "#8c90a0", marginBottom: 24 }}>{error}</p>
-        <button onClick={() => navigate("/login")}
-          style={{ padding: "12px 32px", background: "#00F0FF", color: "#002022", fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15 }}>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#101319] px-6 text-center text-[#e1e2eb]">
+        <span className="material-symbols-outlined mb-4 text-6xl text-red-400">
+          error
+        </span>
+
+        <h2 className="mb-2 text-2xl font-bold">Authentication Failed</h2>
+
+        <p className="mb-6 max-w-md text-sm text-gray-400">{error}</p>
+
+        <button
+          onClick={() => navigate("/login", { replace: true })}
+          className="rounded-xl bg-[#00F0FF] px-8 py-3 text-sm font-bold text-[#002022]"
+        >
           Back to Login
         </button>
       </div>
@@ -63,11 +60,51 @@ export default function OAuthCallbackPage() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "#101319", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif", color: "#e1e2eb" }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 64, color: "#00F0FF", marginBottom: 16, animation: "spin 1s linear infinite" }}>autorenew</span>
-      <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 24, fontWeight: 700, marginBottom: 8 }}>Signing you in...</h2>
-      <p style={{ color: "#8c90a0" }}>Please wait while we verify your account.</p>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#101319] text-[#e1e2eb]">
+      <span className="material-symbols-outlined mb-4 animate-spin text-6xl text-[#00F0FF]">
+        autorenew
+      </span>
+
+      <h2 className="mb-2 text-2xl font-bold">Signing you in...</h2>
+
+      <p className="text-sm text-gray-400">
+        Please wait while we verify your account.
+      </p>
     </div>
   );
+}
+
+function normalizeUser(user) {
+  return {
+    userId: user?.userId || user?.UserId || 0,
+    email: user?.email || user?.Email || "",
+    fullName: user?.fullName || user?.FullName || "",
+    role: user?.role || user?.Role || "",
+    status: user?.status || user?.Status || "",
+    authProvider: user?.authProvider || user?.AuthProvider || "",
+    avatarUrl: user?.avatarUrl || user?.AvatarUrl || null,
+  };
+}
+
+function getNextPath(user) {
+  const role = String(user?.role || "").toUpperCase();
+  const status = String(user?.status || "").toUpperCase();
+
+  if (status === "PENDING_ROLE") {
+    return "/select-role";
+  }
+
+  if (status === "PENDING_PROFILE") {
+    if (role === "EXPERT") return "/expert/setup-profile";
+    if (role === "CLIENT") return "/setup-profile";
+    return "/select-role";
+  }
+
+  if (status === "ACTIVE") {
+    if (role === "EXPERT") return "/expert/dashboard";
+    if (role === "CLIENT") return "/client/dashboard";
+    if (role === "ADMIN") return "/admin/dashboard";
+  }
+
+  return "/login";
 }

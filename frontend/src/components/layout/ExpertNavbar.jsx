@@ -1,90 +1,36 @@
-import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function ExpertNavbar() {
   const navigate = useNavigate();
-  const { user, handleLogout: logoutFromContext } = useAuth();
-
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isPinned, setIsPinned] = useState(false);
-  const menuRef = useRef(null);
+  const { user, handleLogout: logoutContext } = useAuth();
 
   const handleLogout = () => {
-    logoutFromContext();
-    setIsMenuOpen(false);
-    setIsPinned(false);
+    logoutContext();
     navigate("/login", { replace: true });
   };
 
   const navLinkClass = ({ isActive }) =>
-    `text-[11px] font-bold tracking-[0.18em] uppercase transition ${
+    `text-[11px] font-bold tracking-[0.16em] uppercase transition ${
       isActive ? "text-[#00F0FF]" : "text-gray-400 hover:text-white"
     }`;
 
   const getInitials = () => {
-    if (user?.fullName) {
-      return user.fullName
-        .split(" ")
-        .map((item) => item[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase();
-    }
+    const name =
+      user?.fullName ||
+      user?.displayName ||
+      user?.name ||
+      user?.userName ||
+      user?.email ||
+      "Expert";
 
-    if (user?.email) {
-      return user.email.slice(0, 2).toUpperCase();
-    }
-
-    return "EX";
+    return String(name)
+      .split(" ")
+      .map((item) => item[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase();
   };
-
-  const closeMenu = () => {
-    setIsMenuOpen(false);
-    setIsPinned(false);
-  };
-
-  const handleMouseEnter = () => {
-    setIsMenuOpen(true);
-  };
-
-  const handleMouseLeave = () => {
-    if (!isPinned) {
-      setIsMenuOpen(false);
-    }
-  };
-
-  const handleAvatarClick = () => {
-    if (isPinned) {
-      setIsPinned(false);
-      setIsMenuOpen(false);
-    } else {
-      setIsPinned(true);
-      setIsMenuOpen(true);
-    }
-  };
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        closeMenu();
-      }
-    };
-
-    const handleEsc = (event) => {
-      if (event.key === "Escape") {
-        closeMenu();
-      }
-    };
-
-    document.addEventListener("mousedown", handleClickOutside);
-    document.addEventListener("keydown", handleEsc);
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-      document.removeEventListener("keydown", handleEsc);
-    };
-  }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d1117]/95 backdrop-blur-xl">
@@ -97,7 +43,7 @@ export default function ExpertNavbar() {
           <span className="ml-1 text-white">Tasker</span>
         </Link>
 
-        <nav className="hidden items-center gap-8 md:flex">
+        <nav className="hidden items-center gap-6 md:flex">
           <NavLink to="/expert/dashboard" className={navLinkClass}>
             Home
           </NavLink>
@@ -110,12 +56,20 @@ export default function ExpertNavbar() {
             Find Jobs
           </NavLink>
 
+          <NavLink to="/expert/recommended-jobs" className={navLinkClass}>
+            AI Jobs
+          </NavLink>
+
           <NavLink to="/expert/proposals" className={navLinkClass}>
             Proposals
           </NavLink>
 
           <NavLink to="/expert/projects" className={navLinkClass}>
             Projects
+          </NavLink>
+
+          <NavLink to="/expert/messages" className={navLinkClass}>
+            Messages
           </NavLink>
 
           <NavLink to="/expert/wallet" className={navLinkClass}>
@@ -133,47 +87,47 @@ export default function ExpertNavbar() {
             </span>
           </button>
 
-          <div
-            ref={menuRef}
-            className="relative -my-4 px-4 py-4"
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
-          >
+          <div className="group relative">
             <button
               type="button"
-              onClick={handleAvatarClick}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400/20"
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-bold text-cyan-300"
             >
               {getInitials()}
             </button>
 
-            {isMenuOpen && (
-              <div className="absolute right-0 top-12 z-[9999] w-56 rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
+            <div className="invisible absolute right-0 top-full z-50 w-56 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100">
+              <div className="rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
                 <p className="truncate border-b border-white/10 px-3 py-2 text-xs text-gray-400">
                   {user?.email || "expert@aitasker.com"}
                 </p>
 
-                <Link
-                  to="/expert/profile"
-                  onClick={closeMenu}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    person
-                  </span>
-                  Profile
-                </Link>
-
-                <Link
-                  to="/expert/dashboard"
-                  onClick={closeMenu}
-                  className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    dashboard
-                  </span>
-                  Dashboard
-                </Link>
+                <DropdownLink to="/expert/profile" icon="person" label="Profile" />
+                <DropdownLink to="/expert/jobs" icon="work" label="Find Jobs" />
+                <DropdownLink
+                  to="/expert/recommended-jobs"
+                  icon="auto_awesome"
+                  label="AI Jobs"
+                />
+                <DropdownLink
+                  to="/expert/proposals"
+                  icon="description"
+                  label="Proposals"
+                />
+                <DropdownLink
+                  to="/expert/projects"
+                  icon="folder_managed"
+                  label="Projects"
+                />
+                <DropdownLink
+                  to="/expert/messages"
+                  icon="chat"
+                  label="Messages"
+                />
+                <DropdownLink
+                  to="/expert/wallet"
+                  icon="account_balance_wallet"
+                  label="Wallet"
+                />
 
                 <button
                   type="button"
@@ -186,10 +140,22 @@ export default function ExpertNavbar() {
                   Logout
                 </button>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
     </header>
+  );
+}
+
+function DropdownLink({ to, icon, label }) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/[0.05] hover:text-cyan-300"
+    >
+      <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      {label}
+    </Link>
   );
 }

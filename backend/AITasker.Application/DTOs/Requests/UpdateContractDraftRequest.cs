@@ -1,0 +1,19 @@
+namespace AITasker.Application.DTOs.Requests
+{
+    public class UpdateContractDraftRequest
+    {
+        public string ProjectScope { get; set; } = string.Empty;
+
+        public decimal FinalPrice { get; set; }
+
+        public int FinalTimelineDays { get; set; }
+
+        public string Deliverables { get; set; } = string.Empty;
+
+        public string AcceptanceCriteria { get; set; } = string.Empty;
+
+        public string PaymentTerms { get; set; } = string.Empty;
+
+        public string? ChatSummary { get; set; }
+    }
+}

@@ -1,0 +1,174 @@
+using System.Security.Claims;
+using AITasker.Application.DTOs.Requests;
+using AITasker.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+
+namespace AITasker.Api.Controllers
+{
+    [ApiController]
+    [Route("api/disputes")]
+    [Authorize]
+    public class DisputesController : ControllerBase
+    {
+        private readonly IDisputeService _disputeService;
+
+        public DisputesController(IDisputeService disputeService)
+        {
+            _disputeService = disputeService;
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> OpenDispute([FromBody] OpenDisputeRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.OpenDisputeAsync(
+                    currentUserId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Dispute opened successfully. Related escrow has been frozen.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("me")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> GetMyDisputes()
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.GetMyDisputesAsync(currentUserId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("{disputeId:int}")]
+        public async Task<IActionResult> GetDisputeById(int disputeId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.GetDisputeByIdAsync(
+                    currentUserId,
+                    disputeId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return NotFound(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{disputeId:int}/evidences")]
+        public async Task<IActionResult> AddEvidence(
+            int disputeId,
+            [FromBody] CreateDisputeEvidenceRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _disputeService.AddEvidenceAsync(
+                    currentUserId,
+                    disputeId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Dispute evidence submitted successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        private int GetCurrentUserId()
+        {
+            var userIdValue =
+                User.FindFirstValue("userId") ??
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ??
+                User.FindFirstValue("sub");
+
+            if (!int.TryParse(userIdValue, out var userId))
+            {
+                throw new InvalidOperationException("Authorization failed: Invalid token.");
+            }
+
+            return userId;
+        }
+    }
+}

@@ -104,12 +104,8 @@ public class RecommendationService : IRecommendationService
             })
             .ToList();
 
-        var warnings = aiResult.Warnings ?? new List<string>();
-
         if (matchedSkills.Count == 0)
         {
-            warnings.Add("AI could not match any skill from the current skill list.");
-
             return new PromptExpertRecommendationResponse
             {
                 Prompt = prompt,
@@ -121,7 +117,10 @@ public class RecommendationService : IRecommendationService
                 ExpectedDeliverables = aiResult.ExpectedDeliverables,
                 SuggestedSkillIds = new List<int>(),
                 SuggestedSkills = new List<JobAssistantSkillResponse>(),
-                Warnings = warnings,
+                Warnings = aiResult.Warnings ?? new List<string>
+                {
+                    "AI could not match any skill from the current skill list."
+                },
                 RecommendedExperts = new List<ExpertRecommendationResponse>()
             };
         }
@@ -199,7 +198,7 @@ public class RecommendationService : IRecommendationService
             ExpectedDeliverables = aiResult.ExpectedDeliverables,
             SuggestedSkillIds = matchedSkills.Select(x => x.SkillId).ToList(),
             SuggestedSkills = matchedSkills,
-            Warnings = warnings,
+            Warnings = aiResult.Warnings ?? new List<string>(),
             RecommendedExperts = recommendations
         };
     }

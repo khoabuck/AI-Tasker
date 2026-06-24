@@ -55,7 +55,7 @@ public class AuthController : ControllerBase
             });
         }
     }
-
+    
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login(LoginRequest request)

@@ -22,389 +22,387 @@ export default function ExpertProfilePage() {
       const data = await expertProfileService.getMyExpertProfile();
 
       setProfile(data);
+      updateLocalUserStatus(data?.userStatus || data?.UserStatus);
     } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data);
+      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
 
-      const message =
-        err?.response?.data?.message ||
-        err?.response?.data?.title ||
-        "Cannot load expert profile.";
-
-      if (
-        err?.response?.status === 404 ||
-        String(message).toLowerCase().includes("not found")
-      ) {
+      if (err?.response?.status === 404) {
         navigate("/expert/setup-profile", { replace: true });
         return;
       }
 
-      setError(message);
+      setError(
+        err?.response?.data?.message ||
+          err?.message ||
+          "Cannot load expert profile right now."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const formatMoney = (value) => {
-    const number = Number(value || 0);
-
-    return `$${number.toLocaleString("en-US")}`;
-  };
-
-  const formatDate = (value) => {
-    if (!value) return "No date";
-
-    const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-      return "No date";
-    }
-
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
-  };
-
-  const getSkills = () => {
-    if (!profile?.skills) return [];
-
-    return String(profile.skills)
-      .split(",")
-      .map((item) => item.trim())
-      .filter(Boolean);
-  };
-
-  const getAvatarText = () => {
-    const title = profile?.professionalTitle || "AI Expert";
-
-    return title
-      .split(" ")
-      .map((item) => item[0])
-      .join("")
-      .slice(0, 2)
-      .toUpperCase();
-  };
-
-  const certificates = Array.isArray(profile?.certificates)
-    ? profile.certificates
-    : [];
-
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
-
-  const actionButton =
-    "inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black";
-
   if (loading) {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          <div className="text-center">
-            <span className="material-symbols-outlined mb-3 block text-5xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
+          Loading expert profile...
+        </div>
+      </ExpertLayout>
+    );
+  }
 
-            <p>Loading expert profile...</p>
+  if (error) {
+    return (
+      <ExpertLayout>
+        <div className="px-5 py-10 md:px-8">
+          <div className="mx-auto max-w-5xl rounded-2xl border border-red-500/30 bg-red-500/10 p-6 text-red-300">
+            <p className="font-bold">Cannot load profile</p>
+
+            <p className="mt-2 text-sm">{error}</p>
+
+            <button
+              type="button"
+              onClick={loadProfile}
+              className="mt-5 rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+            >
+              Try Again
+            </button>
           </div>
         </div>
       </ExpertLayout>
     );
   }
 
+  const reviewStatus = getReviewStatus(profile);
+  const userStatus = String(profile?.userStatus || "").toUpperCase();
+
+  const canResubmit =
+    reviewStatus === "NEEDS_CORRECTION" || reviewStatus === "REJECTED";
+
+  const isApproved = reviewStatus === "APPROVED" || userStatus === "ACTIVE";
+
   return (
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                My Expert Profile
-              </p>
-
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                View your expert profile
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                This is your Expert profile. Clients can see your title, bio,
-                skills, experience, portfolio links and certificates.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/expert/dashboard"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  dashboard
-                </span>
-                Dashboard
-              </Link>
-
-              <Link to="/expert/profile/edit" className={actionButton}>
-                <span className="material-symbols-outlined text-[18px]">
-                  edit
-                </span>
-                Edit Profile
-              </Link>
-            </div>
-          </div>
-
-          {error && (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              <p className="font-bold">Cannot load profile</p>
-              <p className="mt-1">{error}</p>
-            </div>
-          )}
-
-          {!error && profile && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
-              <aside className={cardStyle}>
-                <div className="flex flex-col items-center text-center">
-                  <div className="mb-5 flex h-32 w-32 items-center justify-center overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
-                    {profile.avatarUrl ? (
-                      <img
-                        src={profile.avatarUrl}
-                        alt="Expert avatar"
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-4xl font-black text-cyan-300">
-                        {getAvatarText()}
+          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div className="flex gap-5">
+                <div className="h-24 w-24 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                  {profile?.avatarUrl ? (
+                    <img
+                      src={profile.avatarUrl}
+                      alt="Avatar"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-cyan-300">
+                      <span className="material-symbols-outlined text-5xl">
+                        person
                       </span>
-                    )}
-                  </div>
+                    </div>
+                  )}
+                </div>
 
-                  <h2 className="text-2xl font-bold text-white">
-                    {profile.professionalTitle || "AI Expert"}
-                  </h2>
-
-                  <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {profile.bio || "No bio yet."}
+                <div>
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                    Expert Profile
                   </p>
 
-                  <div
-                    className={`mt-5 rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${
-                      profile.availableForWork
-                        ? "border-green-400/30 bg-green-400/10 text-green-300"
-                        : "border-red-400/30 bg-red-400/10 text-red-300"
-                    }`}
+                  <h1 className="text-3xl font-extrabold text-white">
+                    {profile?.fullName || "Expert"}
+                  </h1>
+
+                  <p className="mt-2 text-lg font-semibold text-cyan-200">
+                    {profile?.professionalTitle || "No title"}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <StatusBadge
+                      label={`Review: ${reviewStatus || "UNKNOWN"}`}
+                      status={reviewStatus}
+                    />
+
+                    <StatusBadge
+                      label={`Account: ${userStatus || "UNKNOWN"}`}
+                      status={userStatus}
+                    />
+
+                    {profile?.level && (
+                      <StatusBadge label={profile.level} status="INFO" />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row md:flex-col">
+                {canResubmit && (
+                  <Link
+                    to="/expert/profile/edit"
+                    className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-center text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
                   >
-                    {profile.availableForWork
-                      ? "Available for work"
-                      : "Not available"}
-                  </div>
-                </div>
+                    Edit Profile Again
+                  </Link>
+                )}
 
-                <div className="my-6 border-t border-white/10" />
+                {isApproved && (
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-500"
+                    title="Backend update API for approved profile is not available yet."
+                  >
+                    Update Profile Coming Soon
+                  </button>
+                )}
 
-                <div className="space-y-5">
-                  <InfoItem
-                    icon="work_history"
-                    label="Experience"
-                    value={`${profile.yearsOfExperience || 0} years`}
-                  />
-
-                  <InfoItem
-                    icon="payments"
-                    label="Expected Budget"
-                    value={`${formatMoney(
-                      profile.expectedProjectBudgetMin
-                    )} - ${formatMoney(profile.expectedProjectBudgetMax)}`}
-                  />
-
-                  <InfoItem
-                    icon="schedule"
-                    label="Preferred Duration"
-                    value={`${profile.preferredProjectDurationDays || 0} days`}
-                  />
-                </div>
-              </aside>
-
-              <main className="space-y-6">
-                <section className={cardStyle}>
-                  <div className="mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#00F0FF]">
-                      psychology
-                    </span>
-
-                    <h3 className="text-lg font-bold text-white">Skills</h3>
-                  </div>
-
-                  {getSkills().length === 0 ? (
-                    <p className="text-sm text-gray-500">No skills yet.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {getSkills().map((skill) => (
-                        <span
-                          key={skill}
-                          className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300"
-                        >
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </section>
-
-                <section className={cardStyle}>
-                  <div className="mb-4 flex items-center gap-2">
-                    <span className="material-symbols-outlined text-[#00F0FF]">
-                      link
-                    </span>
-
-                    <h3 className="text-lg font-bold text-white">
-                      Portfolio Links
-                    </h3>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <ProfileLink
-                      label="Portfolio"
-                      value={profile.portfolioUrl}
-                      icon="language"
-                    />
-
-                    <ProfileLink
-                      label="LinkedIn"
-                      value={profile.linkedInUrl}
-                      icon="work"
-                    />
-
-                    <ProfileLink
-                      label="GitHub"
-                      value={profile.gitHubUrl}
-                      icon="code"
-                    />
-                  </div>
-                </section>
-
-                <section className={cardStyle}>
-                  <div className="mb-5 flex items-start justify-between gap-4">
-                    <div>
-                      <div className="mb-2 flex items-center gap-2">
-                        <span className="material-symbols-outlined text-[#00F0FF]">
-                          workspace_premium
-                        </span>
-
-                        <h3 className="text-lg font-bold text-white">
-                          Certificates
-                        </h3>
-                      </div>
-
-                      <p className="text-sm text-gray-500">
-                        Certificate links submitted in your Expert profile.
-                      </p>
-                    </div>
-                  </div>
-
-                  {certificates.length === 0 ? (
-                    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
-                        workspace_premium
-                      </span>
-
-                      <h4 className="font-bold text-white">
-                        No certificates
-                      </h4>
-
-                      <p className="mt-2 text-sm text-gray-500">
-                        You can add certificates when editing your profile.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      {certificates.map((certificate, index) => (
-                        <div
-                          key={index}
-                          className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/[0.04] p-4 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div>
-                            <p className="font-bold text-white">
-                              {certificate.certificateName ||
-                                `Certificate ${index + 1}`}
-                            </p>
-
-                            <p className="mt-1 text-sm text-gray-500">
-                              {certificate.certificateIssuer || "No issuer"}
-                            </p>
-
-                            <p className="mt-1 text-xs text-gray-600">
-                              Issued at: {formatDate(certificate.issuedAt)}
-                            </p>
-                          </div>
-
-                          {certificate.certificateUrl ? (
-                            <a
-                              href={certificate.certificateUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className={actionButton}
-                            >
-                              Open Certificate
-                            </a>
-                          ) : (
-                            <span className="text-sm text-gray-500">
-                              No link
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </section>
-              </main>
+                <Link
+                  to="/expert/jobs"
+                  className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                >
+                  Browse Jobs
+                </Link>
+              </div>
             </div>
+          </section>
+
+          {canResubmit && (
+            <section className="mb-6 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-5 text-yellow-200">
+              <p className="font-bold">Your profile needs correction</p>
+
+              <p className="mt-2 text-sm leading-6">
+                {profile?.profileReviewNote ||
+                  "Please update your profile information and submit again."}
+              </p>
+
+              {profile?.missingInformation && (
+                <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4 text-sm">
+                  <p className="font-bold">Missing information</p>
+                  <p className="mt-1">{profile.missingInformation}</p>
+                </div>
+              )}
+            </section>
           )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            <main className="space-y-6">
+              <Card title="Bio">
+                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                  {profile?.bio || "No bio."}
+                </p>
+              </Card>
+
+              <Card title="Skills">
+                <div className="flex flex-wrap gap-2">
+                  {toArray(profile?.skills).length > 0 ? (
+                    toArray(profile.skills).map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300"
+                      >
+                        {skill}
+                      </span>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500">No skills listed.</p>
+                  )}
+                </div>
+              </Card>
+
+              <Card title="Certificates">
+                {profile?.certificates?.length > 0 ? (
+                  <div className="space-y-3">
+                    {profile.certificates.map((cert, index) => (
+                      <a
+                        key={cert.expertCertificateId || index}
+                        href={cert.certificateUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/40"
+                      >
+                        <p className="font-bold text-white">
+                          {cert.certificateName}
+                        </p>
+
+                        <p className="mt-1 text-sm text-gray-400">
+                          Issuer: {cert.certificateIssuer}
+                        </p>
+
+                        <p className="mt-1 text-xs text-cyan-300">
+                          {cert.verificationStatus || "UNVERIFIED"}
+                        </p>
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No certificates.</p>
+                )}
+              </Card>
+            </main>
+
+            <aside className="space-y-6">
+              <Card title="Profile Review">
+                <Summary
+                  label="Profile Score"
+                  value={`${profile?.profileScore ?? 0}`}
+                />
+
+                <Summary
+                  label="Category"
+                  value={profile?.expertCategory || "N/A"}
+                />
+
+                <Summary label="Level" value={profile?.level || "N/A"} />
+
+                <Summary
+                  label="Review Status"
+                  value={reviewStatus || "N/A"}
+                />
+              </Card>
+
+              <Card title="Work Preferences">
+                <Summary
+                  label="Experience"
+                  value={`${profile?.yearsOfExperience ?? 0} years`}
+                />
+
+                <Summary
+                  label="Verified Experience"
+                  value={`${profile?.verifiedYearsOfExperience ?? 0} years`}
+                />
+
+                <Summary
+                  label="Budget"
+                  value={formatBudget(
+                    profile?.expectedProjectBudgetMin,
+                    profile?.expectedProjectBudgetMax
+                  )}
+                />
+
+                <Summary
+                  label="Duration"
+                  value={`${profile?.preferredProjectDurationDays ?? 0} days`}
+                />
+
+                <Summary
+                  label="Available"
+                  value={profile?.availableForWork ? "Yes" : "No"}
+                />
+              </Card>
+
+              <Card title="Public Links">
+                <LinkItem label="Portfolio" url={profile?.portfolioUrl} />
+                <LinkItem label="LinkedIn" url={profile?.linkedInUrl} />
+                <LinkItem label="GitHub" url={profile?.gitHubUrl} />
+              </Card>
+            </aside>
+          </div>
         </div>
       </div>
     </ExpertLayout>
   );
 }
 
-function InfoItem({ icon, label, value }) {
+function Card({ title, children }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined text-[20px]">{icon}</span>
-      </div>
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+      <h2 className="mb-4 text-xl font-extrabold text-white">{title}</h2>
+      {children}
+    </section>
+  );
+}
 
-      <div>
-        <p className="text-xs uppercase tracking-wider text-gray-500">
-          {label}
-        </p>
-
-        <p className="mt-1 font-bold text-white">{value}</p>
-      </div>
+function Summary({ label, value }) {
+  return (
+    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 font-bold text-white">{value || "N/A"}</p>
     </div>
   );
 }
 
-function ProfileLink({ label, value, icon }) {
+function LinkItem({ label, url }) {
+  if (!url) return <Summary label={label} value="N/A" />;
+
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-      <div className="mb-3 flex items-center gap-2 text-gray-400">
-        <span className="material-symbols-outlined text-[18px]">{icon}</span>
-
-        <span className="text-xs font-bold uppercase tracking-wider">
-          {label}
-        </span>
-      </div>
-
-      {value ? (
-        <a
-          href={value}
-          target="_blank"
-          rel="noreferrer"
-          className="break-all text-sm font-semibold text-cyan-300 hover:text-cyan-200"
-        >
-          {value}
-        </a>
-      ) : (
-        <p className="text-sm text-gray-600">No link</p>
-      )}
-    </div>
+    <a
+      href={url}
+      target="_blank"
+      rel="noreferrer"
+      className="mb-3 block rounded-xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/40"
+    >
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 truncate font-bold text-cyan-300">{url}</p>
+    </a>
   );
+}
+
+function StatusBadge({ label, status }) {
+  const normalized = String(status || "").toUpperCase();
+
+  const style =
+    normalized === "APPROVED" || normalized === "ACTIVE"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : normalized === "NEEDS_CORRECTION" ||
+        normalized === "PENDING_PROFILE"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+      : normalized === "REJECTED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+
+  return (
+    <span
+      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function getReviewStatus(profile) {
+  return String(
+    profile?.profileReviewStatus || profile?.ProfileReviewStatus || ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function updateLocalUserStatus(status) {
+  if (!status) return;
+
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+
+    localStorage.setItem(
+      "user",
+      JSON.stringify({
+        ...user,
+        role: "EXPERT",
+        status,
+      })
+    );
+  } catch (error) {
+    console.error("UPDATE LOCAL USER STATUS ERROR:", error);
+  }
+}
+
+function toArray(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+
+  return String(value)
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatBudget(min, max) {
+  const minValue = Number(min || 0);
+  const maxValue = Number(max || 0);
+
+  if (!minValue && !maxValue) return "Negotiable";
+  if (minValue && !maxValue) return `From $${minValue}`;
+  if (!minValue && maxValue) return `Up to $${maxValue}`;
+
+  return `$${minValue} - $${maxValue}`;
 }
