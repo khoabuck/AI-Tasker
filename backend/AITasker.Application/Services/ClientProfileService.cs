@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Application.Common;
 
 namespace AITasker.Application.Services;
 
@@ -496,7 +497,7 @@ public class ClientProfileService : IClientProfileService
             "Business phone"
         );
 
-        user.FullName = request.FullName!.Trim();
+        user.FullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (request.AvatarUrl != null)
         {
@@ -615,7 +616,7 @@ public class ClientProfileService : IClientProfileService
             throw new InvalidOperationException("Full name is required.");
         }
 
-        var fullName = request.FullName.Trim();
+        var fullName = NameNormalizer.NormalizeFullName(request.FullName);
 
         if (fullName.Length < 2 || fullName.Length > 255)
         {
