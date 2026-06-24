@@ -28,7 +28,7 @@ public class ExpertProfileReviewProviderRequest
 
     public decimal ExperienceMaxScore { get; set; } = 20m;
 
-    public decimal PortfolioMaxScore { get; set; } = 10m;
+    public decimal PortfolioMaxScore { get; set; } = 15m;
 
     public decimal GitHubMaxScore { get; set; } = 10m;
 
@@ -36,7 +36,7 @@ public class ExpertProfileReviewProviderRequest
 
     public decimal CertificateMaxScore { get; set; } = 15m;
 
-    public decimal RiskMaxPenalty { get; set; } = 10m;
+    public decimal RiskMaxPenalty { get; set; } = 15m;
 
     public decimal CertificateUnverifiedMaxProfileScore { get; set; } = 69m;
 
@@ -47,6 +47,8 @@ public class ExpertProfileReviewProviderRequest
 
 public class ExpertProfileReviewCertificateItem
 {
+    public string CertificateType { get; set; } = string.Empty;
+
     public string CertificateName { get; set; } = string.Empty;
 
     public string CertificateIssuer { get; set; } = string.Empty;

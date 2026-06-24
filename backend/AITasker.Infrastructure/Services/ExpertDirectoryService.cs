@@ -193,6 +193,7 @@ public class ExpertDirectoryService : IExpertDirectoryService
         return new ExpertDirectoryCertificateResponse
         {
             ExpertCertificateId = certificate.ExpertCertificateId,
+            CertificateType = certificate.CertificateType,
             CertificateName = certificate.CertificateName,
             CertificateIssuer = certificate.CertificateIssuer,
             CertificateUrl = certificate.CertificateUrl,
@@ -204,6 +205,9 @@ public class ExpertDirectoryService : IExpertDirectoryService
             VerificationNote = certificate.VerificationNote,
             DetectedIssuer = certificate.DetectedIssuer,
             DetectedCertificateName = certificate.DetectedCertificateName,
+            DetectedHolderName = certificate.DetectedHolderName,
+            DetectedIssuedDateText = certificate.DetectedIssuedDateText,
+            DetectedIssuedAt = certificate.DetectedIssuedAt,
             CheckedAt = certificate.CheckedAt
         };
     }

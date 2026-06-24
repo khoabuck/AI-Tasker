@@ -143,6 +143,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("BusinessProfileId");
 
+                    b.HasIndex("BusinessEmail")
+                        .IsUnique()
+                        .HasFilter("[BusinessEmail] IS NOT NULL");
+
                     b.HasIndex("ClientProfileId")
                         .IsUnique();
 
@@ -187,6 +191,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("ClientProfileId");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique();
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -764,13 +771,24 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("CertificateIssuer")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(255)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("CertificateName")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(255)")
+                        .HasDefaultValue("");
+
+                    b.Property<string>("CertificateType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("OTHER");
 
                     b.Property<string>("CertificateUrl")
                         .IsRequired()
@@ -786,6 +804,17 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<string>("DetectedCertificateName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("DetectedHolderName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("DetectedIssuedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DetectedIssuedDateText")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("DetectedIssuer")
                         .HasMaxLength(255)
@@ -811,9 +840,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("NEEDS_EVIDENCE");
+                        .HasDefaultValue("NEEDS_REVIEW");
 
                     b.HasKey("ExpertCertificateId");
+
+                    b.HasIndex("CertificateUrl");
 
                     b.HasIndex("ExpertProfileId", "CertificateUrl")
                         .IsUnique();

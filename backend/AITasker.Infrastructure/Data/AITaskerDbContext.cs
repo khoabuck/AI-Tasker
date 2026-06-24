@@ -395,6 +395,9 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.UserId)
                 .IsUnique();
 
+            entity.HasIndex(x => x.PhoneNumber)
+                .IsUnique();
+
             entity.Property(x => x.ClientType)
                 .HasMaxLength(20)
                 .IsRequired();
@@ -454,6 +457,10 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.BusinessEmail)
                 .HasMaxLength(255);
+
+            entity.HasIndex(x => x.BusinessEmail)
+                .IsUnique()
+                .HasFilter("[BusinessEmail] IS NOT NULL");
 
             entity.Property(x => x.BusinessPhone)
                 .HasMaxLength(30);
@@ -606,12 +613,21 @@ public class AITaskerDbContext : DbContext
                 x.CertificateUrl
             }).IsUnique();
 
+            entity.HasIndex(x => x.CertificateUrl);
+
+            entity.Property(x => x.CertificateType)
+                .HasMaxLength(50)
+                .HasDefaultValue("OTHER")
+                .IsRequired();
+
             entity.Property(x => x.CertificateName)
                 .HasMaxLength(255)
+                .HasDefaultValue(string.Empty)
                 .IsRequired();
 
             entity.Property(x => x.CertificateIssuer)
                 .HasMaxLength(255)
+                .HasDefaultValue(string.Empty)
                 .IsRequired();
 
             entity.Property(x => x.CertificateUrl)
@@ -625,7 +641,7 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerificationStatus)
                 .HasMaxLength(30)
-                .HasDefaultValue("NEEDS_EVIDENCE")
+                .HasDefaultValue("NEEDS_REVIEW")
                 .IsRequired();
 
             entity.Property(x => x.VerificationScore)
@@ -641,6 +657,14 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.DetectedCertificateName)
                 .HasMaxLength(255);
+
+            entity.Property(x => x.DetectedHolderName)
+                .HasMaxLength(255);
+
+            entity.Property(x => x.DetectedIssuedDateText)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.DetectedIssuedAt);
 
             entity.Property(x => x.CheckedAt);
 
