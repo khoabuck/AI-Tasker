@@ -42,8 +42,17 @@ function parseApiError(err) {
   }
 
   const fieldErrors = {};
+  
   if (resData.errors && typeof resData.errors === "object" && !Array.isArray(resData.errors)) {
     Object.assign(fieldErrors, resData.errors);
+  }
+
+  if (resData.message === "Phone number already exists.") {
+    fieldErrors.phoneNumber = "This phone number is already in use.";
+  }
+
+  if (resData.message === "Business email already exists.") {
+    fieldErrors.businessEmail = "This business email is already in use.";
   }
 
   const businessProfile = resData.businessProfile || null;
@@ -376,10 +385,25 @@ export default function SetupProfilePage() {
       }
 
       setGlobalError(message);
+
       if (Object.keys(beErrors).length > 0) {
         setFieldErrors(beErrors);
-      } else if (clientType === "business") {
-        setFieldErrors({ taxCode: message });
+      } else {
+        const mappedErrors = {};
+
+        if (message === "Phone number already exists.") {
+          mappedErrors.phoneNumber = "This phone number is already in use.";
+        }
+
+        if (message === "Business email already exists.") {
+          mappedErrors.businessEmail = "This business email is already in use.";
+        }
+
+        if (Object.keys(mappedErrors).length > 0) {
+          setFieldErrors(mappedErrors);
+        } else if (clientType === "business") {
+          setFieldErrors({ taxCode: message });
+        }
       }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
