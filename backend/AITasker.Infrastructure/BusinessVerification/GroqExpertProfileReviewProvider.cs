@@ -10,6 +10,8 @@ namespace AITasker.Infrastructure.BusinessVerification;
 
 public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 {
+    private const decimal ExpertProfilePassThreshold = 70m;
+
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
@@ -42,7 +44,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
         try
         {
-            var systemPrompt = BuildSystemPrompt(request);
             var prompt = BuildPrompt(request);
 
             var payload = new
@@ -53,7 +54,33 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                     new
                     {
                         role = "system",
-                        content = systemPrompt
+                        content = """
+                        You are an AI Expert Profile Checker for an AI freelance marketplace.
+                        You review whether an expert profile is credible, AI-related, and supported by URL evidence.
+                        The backend has already inspected URLs using HttpClient.
+                        Use the backend URL inspection evidence as the source of truth.
+
+                        Score the whole Expert Profile on a 100-point scale:
+                        - Profile completeness: 15 points
+                        - AI skill relevance: 15 points
+                        - Experience credibility: 20 points
+                        - Portfolio/GitHub/LinkedIn evidence: 25 points
+                        - Certificate evidence: 15 points
+                        - Trust and risk check: 10 points
+
+                        Skill relevance is only one criterion in the total profile score.
+                        Do not approve only because many skills are listed.
+                        Be strict with claimed years of experience.
+
+                        Expert profile review status returned by AI must be either APPROVED or NEEDS_CORRECTION.
+                        APPROVED means profileScore is 70 or higher.
+                        NEEDS_CORRECTION means profileScore is below 70.
+                        LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
+
+                        If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
+                        Return JSON only. Do not return markdown. Do not add text outside JSON.
+
+                        """
                     },
                     new
                     {
@@ -117,7 +144,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
             var result = ParseAiResult(content);
 
-            return NormalizeResult(result, request);
+            return NormalizeResult(result, request.YearsOfExperience);
         }
         catch
         {
@@ -127,55 +154,14 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         }
     }
 
-    private static string BuildSystemPrompt(ExpertProfileReviewProviderRequest request)
-    {
-        var portfolioEvidenceMaxScore = request.PortfolioMaxScore
-            + request.GitHubMaxScore
-            + request.LinkedInMaxScore;
-
-        return $$"""
-        You are an AI Expert Profile Checker for an AI freelance marketplace.
-        You review whether an expert profile is credible, AI-related, and supported by URL evidence.
-        The backend has already inspected URLs using HttpClient.
-        Use the backend URL inspection evidence as the source of truth.
-
-        Score the whole Expert Profile using the active Admin scoring policy:
-        - Profile completeness: {{request.ProfileCompletenessMaxScore:0.##}} points
-        - AI skill relevance: {{request.AiSkillMaxScore:0.##}} points
-        - Experience credibility: {{request.ExperienceMaxScore:0.##}} points
-        - Portfolio/GitHub/LinkedIn evidence: {{portfolioEvidenceMaxScore:0.##}} points total
-          - Portfolio: {{request.PortfolioMaxScore:0.##}}
-          - GitHub: {{request.GitHubMaxScore:0.##}}
-          - LinkedIn: {{request.LinkedInMaxScore:0.##}}
-        - Certificate evidence: {{request.CertificateMaxScore:0.##}} points
-        - Trust and risk check: {{request.RiskMaxPenalty:0.##}} points
-
-        Skill relevance is only one criterion in the total profile score.
-        Do not approve only because many skills are listed.
-        Be strict with claimed years of experience.
-
-        Expert profile review status returned by AI must be either APPROVED or NEEDS_CORRECTION.
-        APPROVED means profileScore is {{request.PassThreshold:0.##}} or higher.
-        NEEDS_CORRECTION means profileScore is below {{request.PassThreshold:0.##}}.
-        LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
-
-        If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
-        Return JSON only. Do not return markdown. Do not add text outside JSON.
-        """;
-    }
-
     private static string BuildPrompt(ExpertProfileReviewProviderRequest request)
     {
-        var portfolioEvidenceMaxScore = request.PortfolioMaxScore
-            + request.GitHubMaxScore
-            + request.LinkedInMaxScore;
-
         var certificatesText = request.Certificates.Count == 0
             ? "No certificates provided."
             : string.Join(
                 "\n",
                 request.Certificates.Select((c, index) =>
-                    $"{index + 1}. Name: {c.CertificateName}; Issuer: {c.CertificateIssuer}; Url: {c.CertificateUrl}; IssuedAt: {c.IssuedAt:yyyy-MM-dd}"
+                    $"{index + 1}. Type: {c.CertificateType}; Url: {c.CertificateUrl}"
                 )
             );
 
@@ -234,50 +220,41 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         Backend URL Inspection Evidence:
         {{urlEvidenceText}}
 
-        Active Admin scoring policy:
-        - Pass threshold: {{request.PassThreshold:0.##}}
-        - Profile completeness: {{request.ProfileCompletenessMaxScore:0.##}} points
-        - AI skill relevance: {{request.AiSkillMaxScore:0.##}} points
-        - Experience credibility: {{request.ExperienceMaxScore:0.##}} points
-        - Portfolio/GitHub/LinkedIn evidence: {{portfolioEvidenceMaxScore:0.##}} points total
-          - Portfolio: {{request.PortfolioMaxScore:0.##}}
-          - GitHub: {{request.GitHubMaxScore:0.##}}
-          - LinkedIn: {{request.LinkedInMaxScore:0.##}}
-        - Certificate evidence: {{request.CertificateMaxScore:0.##}} points
-        - Trust and risk check: {{request.RiskMaxPenalty:0.##}} points
-        - Certificate not fully verified max profile score: {{request.CertificateUnverifiedMaxProfileScore:0.##}}
-
         Evaluation rules:
-        - Skill relevance is not a separate pass condition.
+        - Score the whole Expert Profile on a 100-point scale:
+          1. Profile completeness: 15 points
+          2. AI skill relevance: 15 points
+          3. Experience credibility: 20 points
+          4. Portfolio/GitHub/LinkedIn evidence: 25 points
+          5. Certificate evidence: 15 points
+          6. Trust and risk check: 10 points.
+        - Skill relevance is only 15/100 points and is not a separate pass condition.
         - Do not approve only because many skills are listed.
         - Use Backend URL Inspection Evidence as the source of truth for whether links are reachable.
         - The yearsOfExperience field is claimed by the expert. Do not automatically trust it.
-        - The frontend and backend require Portfolio URL and GitHub URL as required proof links. LinkedIn URL is optional and is mainly displayed to Clients.
-        - At least one certificate is required.
-        - APPROVED only if profileScore is at least {{request.PassThreshold:0.##}} and the profile is AI-related with credible supporting evidence.
+        - Portfolio URL and GitHub URL are required proof links. LinkedIn URL is optional and should not block approval by itself.
+        - Certificates are optional. If certificates are provided, the user only provides certificate type and URL; name, issuer, and issued date may be detected from page content by backend.
+        - APPROVED only if profileScore is at least 70 and the profile is AI-related with credible supporting evidence.
         - Do not approve based only on user-written text.
-        - Even if the URL format is valid, only approve the profile when the required proof links and certificate evidence are reachable and relevant.
-        - Portfolio scoring rule: 0-{{request.PortfolioMaxScore:0.##}} points. Award full points for a credible real AI project portfolio such as RAG, chatbot, OCR, LLM, data, computer vision, or automation work; award partial points for a simple demo; award 0 when missing, unreachable, unrelated, fake, or not useful as evidence.
-        - GitHub scoring rule: 0-{{request.GitHubMaxScore:0.##}} points. Award full points for real AI repositories or meaningful AI project code; award partial points for basic or small repos; award 0 when missing, unreachable, unrelated, fake, or not useful as evidence.
-        - LinkedIn scoring rule: 0-{{request.LinkedInMaxScore:0.##}} points. Do not fetch or require LinkedIn content because LinkedIn may block crawlers. Award full LinkedIn points only when the provided URL text looks like a personal LinkedIn profile, for example linkedin.com/in/{username}. Award 0 when LinkedIn is missing, malformed, blocked, unreadable, non-LinkedIn, or a company page such as linkedin.com/company/{name}. LinkedIn must never directly reject the profile.
-        - If required proof links or certificate URLs are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION. This rule does not apply to optional LinkedIn.
-        - If a required Portfolio or GitHub URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION. This rule does not apply to optional LinkedIn.
+        - Even if the URL format is valid, only approve the profile when the required proof links are reachable and relevant. Certificate evidence can increase confidence but missing certificates should not automatically fail a profile.
+        - If required proof links are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION. If an optional certificate URL is blocked, mention it as weak certificate evidence instead of treating certificate absence as an automatic failure.
+        - If a required proof URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION.
         - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION.
         - If the expert claims 5+ years but has weak evidence, return NEEDS_CORRECTION.
-        - If the expert claims 7+ years but has no strong Portfolio, GitHub, reachable certificate, or detailed project evidence, return NEEDS_CORRECTION. LinkedIn alone is not enough to support senior experience.
+        - If the expert claims 7+ years but has no strong portfolio, GitHub, LinkedIn, reachable certificate, or detailed project evidence, return NEEDS_CORRECTION.
         - If claimed years are much higher than evidence, do not silently downgrade to MID_LEVEL and approve. Return NEEDS_CORRECTION.
         - Only approve SENIOR or LEAD when strong evidence supports that level.
         - If the profile is not related to AI, automation, data, LLM, chatbot, NLP, computer vision, prompt engineering, or AI consulting, return NEEDS_CORRECTION.
         - Return only APPROVED or NEEDS_CORRECTION as status.
-        - Return APPROVED only when profileScore is {{request.PassThreshold:0.##}} or higher.
-        - Return NEEDS_CORRECTION when profileScore is below {{request.PassThreshold:0.##}}.
+        - Return APPROVED only when profileScore is 70 or higher.
+        - Return NEEDS_CORRECTION when profileScore is below 70.
         - Do not return LOCKED. LOCKED is set by backend only after too many failed submissions or violations.
 
         Profile level must be one of:
         - FRESHER: 0-1 verified years, basic profile, little practical evidence.
         - JUNIOR: 1-2 verified years, some practical experience.
         - MID_LEVEL: 2-4 verified years, can handle normal projects independently.
-        - SENIOR: 5-6 verified years, strong project, Portfolio, GitHub, or certificate evidence. LinkedIn can add optional points but is not required evidence.
+        - SENIOR: 5-6 verified years, strong project, portfolio, GitHub, LinkedIn, or certificate evidence.
         - LEAD: 7+ verified years, strong evidence and ability to design or lead complex solutions.
 
         Do not use MID, BEGINNER, INTERMEDIATE, ADVANCED, EXPERT, or UNKNOWN as profile level.
@@ -334,7 +311,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
     private static ExpertProfileReviewProviderResult NormalizeResult(
         ExpertProfileReviewProviderResult result,
-        ExpertProfileReviewProviderRequest request
+        int claimedYearsOfExperience
     )
     {
         var allowedCategories = new HashSet<string>
@@ -353,16 +330,17 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         result.ProfileScore = Math.Clamp(result.ProfileScore, 0m, 100m);
 
         // Final backend policy for the AI provider result:
-        // - ProfileScore >= active policy pass threshold => APPROVED
-        // - ProfileScore < active policy pass threshold  => NEEDS_CORRECTION
-        // LOCKED is handled in ExpertProfileService when the expert fails verification too many times.
-        result.Status = result.ProfileScore >= request.PassThreshold
+        // - ProfileScore >= 70 => APPROVED
+        // - ProfileScore < 70  => NEEDS_CORRECTION
+        // LOCKED is not returned by AI. LOCKED is handled in ExpertProfileService
+        // when the expert fails verification too many times or violates policy.
+        result.Status = result.ProfileScore >= ExpertProfilePassThreshold
             ? "APPROVED"
             : "NEEDS_CORRECTION";
 
         result.Level = NormalizeProfileLevel(
             result.Level,
-            request.YearsOfExperience
+            claimedYearsOfExperience
         );
 
         result.ExpertCategory = NormalizeText(
@@ -378,8 +356,8 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         if (string.IsNullOrWhiteSpace(result.ReviewNote))
         {
             result.ReviewNote = result.Status == "APPROVED"
-                ? $"AI profile review completed. The profile meets the minimum score threshold of {request.PassThreshold:0.##}."
-                : $"AI profile review completed. The profile is below the minimum score threshold of {request.PassThreshold:0.##}.";
+                ? "AI profile review completed. The profile meets the minimum score threshold."
+                : "AI profile review completed. The profile is below the minimum score threshold.";
         }
 
         if (result.Status == "APPROVED")
@@ -389,10 +367,27 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         else if (string.IsNullOrWhiteSpace(result.MissingInformation))
         {
             result.MissingInformation =
-                $"ProfileScore is below {request.PassThreshold:0.##}. Please improve profile completeness, AI skill relevance, experience evidence, Portfolio/GitHub proof, optional LinkedIn score, certificate evidence, or trust/risk issues.";
+                "ProfileScore is below 70. Please improve profile completeness, AI skill relevance, experience evidence, portfolio/GitHub/LinkedIn proof, certificate evidence, or trust/risk issues.";
         }
 
         return result;
+    }
+
+    private static string NormalizeReviewStatus(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status))
+        {
+            return "NEEDS_CORRECTION";
+        }
+
+        var normalized = status.Trim()
+            .ToUpper()
+            .Replace("-", "_")
+            .Replace(" ", "_");
+
+        return normalized == "APPROVED"
+            ? "APPROVED"
+            : "NEEDS_CORRECTION";
     }
 
     private static string NormalizeProfileLevel(

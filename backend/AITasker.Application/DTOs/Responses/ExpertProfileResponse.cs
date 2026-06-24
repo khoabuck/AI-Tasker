@@ -39,6 +39,14 @@ public class ExpertProfileResponse
     public string ExpertCategory { get; set; } = string.Empty;
 
     public decimal ProfileScore { get; set; }
+    
+    public decimal ProfileScoreMax { get; set; } = 100;
+
+    public decimal ProfilePassScore { get; set; } = 70;
+
+    public string ProfileScoreText { get; set; } = string.Empty;
+
+    public ExpertProfileScoreBreakdownResponse ScoreBreakdown { get; set; } = new();
 
     public string Level { get; set; } = string.Empty;
 

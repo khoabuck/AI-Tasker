@@ -2,6 +2,8 @@ namespace AITasker.Application.DTOs.Responses;
 
 public class CertificateVerificationResult
 {
+    public string CertificateType { get; set; } = string.Empty;
+
     public string CertificateUrl { get; set; } = string.Empty;
 
     public string CertificateName { get; set; } = string.Empty;
@@ -16,10 +18,14 @@ public class CertificateVerificationResult
 
     public string? DetectedIssuedDateText { get; set; }
 
+    public DateTime? DetectedIssuedAt { get; set; }
+
+    public bool IsHolderNameMismatch { get; set; }
+
     public decimal VerificationScore { get; set; }
 
-    // VERIFIED / NEEDS_EVIDENCE / SUSPICIOUS / INVALID
-    public string VerificationStatus { get; set; } = "NEEDS_EVIDENCE";
+    // VERIFIED / NAME_MISMATCH / NEEDS_REVIEW / INVALID
+    public string VerificationStatus { get; set; } = "NEEDS_REVIEW";
 
     public string? VerificationNote { get; set; }
 
