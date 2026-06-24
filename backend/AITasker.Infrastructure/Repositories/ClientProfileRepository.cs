@@ -39,6 +39,24 @@ public class ClientProfileRepository : IClientProfileRepository
             );
     }
 
+
+    public async Task<bool> BusinessEmailExistsAsync(string businessEmail)
+    {
+        return await _dbContext.BusinessProfiles
+            .AnyAsync(x => x.BusinessEmail == businessEmail);
+    }
+
+    public async Task<bool> BusinessEmailExistsExceptBusinessProfileAsync(
+        string businessEmail,
+        int businessProfileId)
+    {
+        return await _dbContext.BusinessProfiles
+            .AnyAsync(x =>
+                x.BusinessEmail == businessEmail
+                && x.BusinessProfileId != businessProfileId
+            );
+    }
+
     public async Task<bool> TaxCodeExistsAsync(string taxCode)
     {
         return await _dbContext.BusinessProfiles

@@ -420,6 +420,10 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.BusinessEmail)
                 .HasMaxLength(255);
 
+            entity.HasIndex(x => x.BusinessEmail)
+                .IsUnique()
+                .HasFilter("[BusinessEmail] IS NOT NULL");
+
             entity.Property(x => x.BusinessPhone)
                 .HasMaxLength(30);
 

@@ -13,6 +13,14 @@ public interface IClientProfileRepository
         int clientProfileId
     );
 
+
+    Task<bool> BusinessEmailExistsAsync(string businessEmail);
+
+    Task<bool> BusinessEmailExistsExceptBusinessProfileAsync(
+        string businessEmail,
+        int businessProfileId
+    );
+
     Task<bool> TaxCodeExistsAsync(string taxCode);
 
     Task<bool> TaxCodeExistsExceptBusinessProfileAsync(
