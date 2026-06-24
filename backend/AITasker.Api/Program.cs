@@ -252,6 +252,8 @@ builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
 
+builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
+
 // =========================
 // BE2 - AI Job Assistant
 // =========================
