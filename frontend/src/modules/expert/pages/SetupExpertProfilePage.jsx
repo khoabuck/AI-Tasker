@@ -12,30 +12,12 @@ const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 const CERTIFICATE_TYPE_OPTIONS = [
-  {
-    label: "Chứng chỉ khóa học",
-    value: "COURSE_CERTIFICATE",
-  },
-  {
-    label: "Chứng chỉ nghề nghiệp/chuyên môn",
-    value: "PROFESSIONAL_CERTIFICATE",
-  },
-  {
-    label: "Chứng chỉ bootcamp/trung tâm",
-    value: "BOOTCAMP_CERTIFICATE",
-  },
-  {
-    label: "Bằng cấp chính quy",
-    value: "DEGREE_CERTIFICATE",
-  },
-  {
-    label: "Giải thưởng/thành tích",
-    value: "AWARD_CERTIFICATE",
-  },
-  {
-    label: "Khác",
-    value: "OTHER",
-  },
+  { label: "Course Certificate", value: "COURSE_CERTIFICATE" },
+  { label: "Professional Certificate", value: "PROFESSIONAL_CERTIFICATE" },
+  { label: "Bootcamp Certificate", value: "BOOTCAMP_CERTIFICATE" },
+  { label: "Degree Certificate", value: "DEGREE_CERTIFICATE" },
+  { label: "Award Certificate", value: "AWARD_CERTIFICATE" },
+  { label: "Other", value: "OTHER" },
 ];
 
 const CERTIFICATE_TYPES = CERTIFICATE_TYPE_OPTIONS.map((item) => item.value);
@@ -84,7 +66,7 @@ export default function SetupExpertProfilePage() {
     lockedUntil: "",
     reviewStatus: "",
     userStatus: "",
-    remainingAttempts: "",
+    remainingAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
     maxAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
   });
 
@@ -152,7 +134,10 @@ export default function SetupExpertProfilePage() {
           }
         }
       } catch (profileErr) {
-        if (profileErr?.response?.status !== 404 && profileErr?.status !== 404) {
+        if (
+          profileErr?.response?.status !== 404 &&
+          profileErr?.status !== 404
+        ) {
           throw profileErr;
         }
 
@@ -190,24 +175,28 @@ export default function SetupExpertProfilePage() {
 
       setFormData(createEmptyForm());
     } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      console.error("LOAD EXPERT PROFILE ERROR:", getRawBackendPayload(err));
+      setError(
+        "We could not load your expert profile right now. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshProfileLimitFromBackend = async () => {
+  const refreshProfileLimitFromServer = async () => {
     try {
       const profile = await expertProfileService.getMyExpertProfile();
       const nextLimit = extractExpertProfileReviewLimit(profile);
+
       setReviewLimit(nextLimit);
       return nextLimit;
     } catch (refreshError) {
       console.error(
         "REFRESH PROFILE LIMIT ERROR:",
-        refreshError?.response?.data || refreshError
+        getRawBackendPayload(refreshError)
       );
+
       return null;
     }
   };
@@ -300,18 +289,18 @@ export default function SetupExpertProfilePage() {
         } catch (avatarErr) {
           console.error(
             "SYNC AUTH AVATAR ERROR:",
-            avatarErr?.response?.data || avatarErr
+            getRawBackendPayload(avatarErr)
           );
         }
       }
     } catch (err) {
-      console.error("AVATAR UPLOAD ERROR:", err?.response?.data || err);
+      console.error("AVATAR UPLOAD ERROR:", getRawBackendPayload(err));
 
       setModal({
         type: "danger",
         title: "Upload failed",
-        message: getFriendlyError(err),
-        detail: "",
+        message: "We could not upload your avatar. Please try again.",
+        feedback: null,
         showResubmit: false,
         showClose: true,
       });
@@ -337,7 +326,7 @@ export default function SetupExpertProfilePage() {
 
     if (Object.keys(errors).length > 0) {
       setError(
-        "Please check the highlighted fields before submitting. Portfolio and GitHub are required. LinkedIn and certificates are optional."
+        "Please check the highlighted fields before submitting your profile."
       );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -351,21 +340,38 @@ export default function SetupExpertProfilePage() {
         certificates: normalizeCertificatesForPayload(formData.certificates),
       };
 
+      const previousLimit = reviewLimit;
+
       const result = isEditPage
         ? await expertProfileService.resubmitExpertProfile(submitPayload)
         : await expertProfileService.createExpertProfile(submitPayload);
 
-      const nextLimit = extractExpertProfileReviewLimit(result);
+      const nextLimitFromResult = extractExpertProfileReviewLimit(result);
+      const refreshedLimit = await refreshProfileLimitFromServer();
+
+      let nextLimit = chooseBestReviewLimit(
+        previousLimit,
+        nextLimitFromResult,
+        refreshedLimit
+      );
+
+      if (!didReviewLimitMoveForward(previousLimit, nextLimit)) {
+        nextLimit = advanceReviewLimitLocally(previousLimit, result);
+      }
+
       setReviewLimit(nextLimit);
 
       const reviewStatus = getReviewStatus(result);
       const userStatus = getUserStatus(result);
-      const reviewNote = getReviewNote(result);
       const missingInformation = getMissingInformation(result);
 
-      const lockedByBackend = shouldRedirectToLockedPage(nextLimit);
+      const feedback = buildReviewFeedback({
+        backendPayload: result,
+        missingInformation,
+        limit: nextLimit,
+      });
 
-      if (lockedByBackend) {
+      if (shouldRedirectToLockedPage(nextLimit)) {
         saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
 
@@ -379,9 +385,9 @@ export default function SetupExpertProfilePage() {
 
         setModal({
           type: "success",
-          title: "Setup profile successfully",
+          title: "Profile approved",
           message: "Your expert profile has been approved.",
-          detail: "Redirecting to dashboard...",
+          feedback,
           showResubmit: false,
           showClose: false,
         });
@@ -397,21 +403,11 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("PENDING_PROFILE");
 
-        const remaining = getRemainingExpertProfileAttempts(nextLimit);
-
         setModal({
           type: "warning",
-          title:
-            remaining <= 0
-              ? "Final review attempt used"
-              : "Profile needs correction",
-          message:
-            reviewNote ||
-            "Your profile was submitted, but it needs some corrections before approval.",
-          detail: `${
-            missingInformation ||
-            "Please review your bio, skills, Portfolio, GitHub, and certificate URLs if provided."
-          }\n\n${buildExpertProfileAttemptText(nextLimit)}`,
+          title: "Your profile needs improvement",
+          message: "Please update the items below and submit again.",
+          feedback,
           showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
@@ -423,21 +419,11 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("PENDING_PROFILE");
 
-        const remaining = getRemainingExpertProfileAttempts(nextLimit);
-
         setModal({
           type: "danger",
-          title:
-            remaining <= 0
-              ? "Final review attempt used"
-              : "Profile was rejected",
-          message:
-            reviewNote ||
-            "Your expert profile was rejected. Please update your information and submit again.",
-          detail: `${
-            missingInformation ||
-            "Please check your profile information, Portfolio, GitHub, and certificate URLs if provided."
-          }\n\n${buildExpertProfileAttemptText(nextLimit)}`,
+          title: "Your profile could not be approved",
+          message: "Please review the feedback below and submit again.",
+          feedback,
           showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
@@ -450,24 +436,19 @@ export default function SetupExpertProfilePage() {
       setModal({
         type: "info",
         title: "Profile submitted",
-        message:
-          "Your expert profile has been submitted. Please check your profile status later.",
-        detail: buildExpertProfileAttemptText(nextLimit),
+        message: "Your profile was submitted. Please review the feedback below.",
+        feedback,
         showResubmit: false,
         showClose: true,
       });
     } catch (err) {
-      console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data || err);
+      console.error("EXPERT PROFILE SUBMIT ERROR:", getRawBackendPayload(err));
 
       saveCorrectionDraft(formData);
 
-      const friendlyError = getFriendlyError(err);
-      const refreshedLimit = await refreshProfileLimitFromBackend();
+      const refreshedLimit = await refreshProfileLimitFromServer();
 
-      if (
-        friendlyError.toLowerCase().includes("locked") ||
-        shouldRedirectToLockedPage(refreshedLimit)
-      ) {
+      if (shouldRedirectToLockedPage(refreshedLimit)) {
         updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
         navigate("/expert/profile-locked", { replace: true });
         return;
@@ -476,9 +457,10 @@ export default function SetupExpertProfilePage() {
       setModal({
         type: "danger",
         title: "Submit failed",
-        message: friendlyError,
-        detail:
-          "Your form data has been saved. You can go to resubmit page and try again.",
+        message:
+          getSimpleSubmitError(err) ||
+          "We could not submit your profile. Please check your information and try again.",
+        feedback: null,
         showResubmit: true,
         showClose: true,
       });
@@ -534,7 +516,7 @@ export default function SetupExpertProfilePage() {
     return (
       <SetupShell onLogout={handleLogout}>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading expert profile form...
+          Loading your profile form...
         </div>
       </SetupShell>
     );
@@ -546,12 +528,12 @@ export default function SetupExpertProfilePage() {
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {isEditPage ? "Resubmit Expert Profile" : "Setup Expert Profile"}
+              {isEditPage ? "Update Expert Profile" : "Setup Expert Profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Update and resubmit your expert profile"
+                ? "Improve and resubmit your profile"
                 : "Create your expert profile"}
             </h1>
 
@@ -563,7 +545,7 @@ export default function SetupExpertProfilePage() {
           </div>
 
           {(isEditPage ||
-            reviewLimit.submissionCount > 0 ||
+            Number(reviewLimit.submissionCount || 0) > 0 ||
             reviewLimit.lockedUntil) && (
             <ExpertProfileReviewLimitNotice
               submissionCount={reviewLimit.submissionCount}
@@ -745,15 +727,15 @@ export default function SetupExpertProfilePage() {
             </section>
 
             <section className="border-t border-white/10 pt-6">
-              <div className="mb-4 flex items-center justify-between">
+              <div className="mb-4 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-lg font-bold text-white">
                     Certificates
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Optional. Maximum 10 certificates are allowed. If you add
-                    one, only Certificate URL and Certificate Type are required.
+                    Optional. If you add one, only Certificate URL and
+                    Certificate Type are required.
                   </p>
                 </div>
 
@@ -782,8 +764,8 @@ export default function SetupExpertProfilePage() {
                     No certificates added.
                   </p>
                   <p className="mt-1">
-                    You can submit without certificates. Certificates only help
-                    increase evidence score if the link can be verified.
+                    You can submit without certificates. Adding certificates can
+                    help strengthen your profile.
                   </p>
                 </div>
               ) : (
@@ -799,8 +781,7 @@ export default function SetupExpertProfilePage() {
                             Certificate {index + 1}
                           </p>
                           <p className="mt-1 text-xs text-gray-500">
-                            Backend will read the URL to detect holder,
-                            certificate name, and issuer if possible.
+                            We will review the certificate link automatically.
                           </p>
                         </div>
 
@@ -933,20 +914,18 @@ function ExpertProfileReviewLimitNotice({
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="font-bold">
-            {locked
-              ? "Profile review limit reached"
-              : "Profile review attempts"}
+            {locked ? "Submission limit reached" : "Profile submissions"}
           </p>
 
           <p className="mt-2 text-sm leading-6">
             {locked
-              ? "You have used all expert profile review submissions or your profile review is currently locked."
-              : "Each correction-required review uses one submission attempt."}
+              ? "You have no remaining profile submission attempts."
+              : "You have a limited number of attempts to improve and resubmit your profile."}
           </p>
 
           {lockedUntil && (
             <p className="mt-2 text-sm font-bold">
-              Locked until: {formatDateTime(lockedUntil)}
+              Available again: {formatDateTime(lockedUntil)}
             </p>
           )}
         </div>
@@ -997,32 +976,32 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
-        <div className="mb-5 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-            <span className={`material-symbols-outlined text-3xl ${color}`}>
-              {icon}
-            </span>
-          </div>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="border-b border-white/10 p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+              <span className={`material-symbols-outlined text-3xl ${color}`}>
+                {icon}
+              </span>
+            </div>
 
-          <div>
-            <h3 className="text-xl font-extrabold text-white">
-              {modal.title}
-            </h3>
+            <div>
+              <h3 className="text-xl font-extrabold text-white">
+                {modal.title}
+              </h3>
 
-            <p className="mt-2 text-sm leading-6 text-gray-300">
-              {modal.message}
-            </p>
+              <p className="mt-2 text-sm leading-6 text-gray-300">
+                {modal.message}
+              </p>
+            </div>
           </div>
         </div>
 
-        {modal.detail && (
-          <div className="mb-5 whitespace-pre-line rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
-            {modal.detail}
-          </div>
-        )}
+        {modal.feedback ? (
+          <SimpleReviewFeedback feedback={modal.feedback} />
+        ) : null}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-white/10 p-6 sm:flex-row sm:justify-end">
           {modal.showClose && (
             <button
               type="button"
@@ -1039,11 +1018,64 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
               onClick={onGoResubmit}
               className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${buttonColor}`}
             >
-              Go to Resubmit
+              Update Profile
             </button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SimpleReviewFeedback({ feedback }) {
+  return (
+    <div className="space-y-5 p-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FeedbackMetric label="Score" value={feedback.scoreText || "N/A"} />
+        <FeedbackMetric
+          label="Passing score"
+          value={feedback.passThreshold || "N/A"}
+        />
+        <FeedbackMetric
+          label="Attempts"
+          value={`${feedback.attempts.used}/${feedback.attempts.max}`}
+          subText={`${feedback.attempts.remaining} remaining`}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-200">
+          Main issue
+        </p>
+
+        <p className="mt-3 text-sm leading-6 text-gray-200">
+          {feedback.mainIssue}
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+          What to improve
+        </p>
+
+        <p className="mt-3 text-sm leading-6 text-gray-200">
+          {feedback.fixAction}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackMetric({ label, value, subText }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-2 text-lg font-black text-white">{value}</p>
+
+      {subText ? <p className="mt-1 text-xs text-gray-500">{subText}</p> : null}
     </div>
   );
 }
@@ -1068,7 +1100,8 @@ function validateForm(data) {
   if (isEmpty(data.professionalTitle)) {
     errors.professionalTitle = "Professional title is required.";
   } else if (String(data.professionalTitle).trim().length < 5) {
-    errors.professionalTitle = "Professional title should be at least 5 characters.";
+    errors.professionalTitle =
+      "Professional title should be at least 5 characters.";
   }
 
   if (isEmpty(data.bio)) {
@@ -1131,9 +1164,7 @@ function validateForm(data) {
     const certificateUrl = String(item?.certificateUrl || "").trim();
     const certificateType = String(item?.certificateType || "").trim();
 
-    if (!certificateUrl) {
-      return;
-    }
+    if (!certificateUrl) return;
 
     if (!isValidUrl(certificateUrl)) {
       errors[`certificateUrl_${index}`] =
@@ -1355,53 +1386,351 @@ function normalizeCertificatesForPayload(certificates) {
     .filter((item) => item.certificateUrl);
 }
 
-function extractExpertProfileReviewLimit(data) {
-  const maxAttempts =
-    Number(
-      data?.maxReviewAttempts ||
-        data?.MaxReviewAttempts ||
-        data?.profileReviewMaxSubmissions ||
-        data?.ProfileReviewMaxSubmissions ||
-        0
-    ) || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
+  const reviewNote = getReviewNote(backendPayload);
+
+  const scoreInfo = extractProfileScoreInfo(backendPayload);
+  const parsedScore = parseFinalProfileScore(reviewNote);
+
+  const scoreText =
+    parsedScore.text ||
+    scoreInfo.profileScoreText ||
+    buildScoreText(scoreInfo) ||
+    "N/A";
+
+  const passThreshold =
+    parsePassThreshold(reviewNote) ?? scoreInfo.profilePassScore ?? "N/A";
+
+  const normalizedLimit = normalizeReviewLimit(limit);
 
   return {
-    submissionCount: Number(
-      data?.profileReviewSubmissionCount ||
-        data?.ProfileReviewSubmissionCount ||
-        data?.reviewAttempts ||
-        data?.ReviewAttempts ||
-        data?.submissionCount ||
-        data?.SubmissionCount ||
-        0
-    ),
+    scoreText,
+    passThreshold,
+    mainIssue: buildMainIssue(reviewNote),
+    fixAction: buildFixAction({
+      reviewNote,
+      missingInformation,
+    }),
+    attempts: {
+      used: normalizedLimit.submissionCount,
+      remaining: normalizedLimit.remainingAttempts,
+      max: normalizedLimit.maxAttempts,
+    },
+  };
+}
+
+function buildMainIssue(reviewNote) {
+  const text = String(reviewNote || "").trim();
+
+  if (!text) {
+    return "Your profile needs stronger evidence before it can be approved.";
+  }
+
+  return (
+    extractSentence(text, /extremely high and not supported/i) ||
+    extractSentence(text, /claimed experience is much higher/i) ||
+    extractSentence(text, /lacks strong evidence/i) ||
+    firstSentence(text) ||
+    "Your profile needs stronger evidence before it can be approved."
+  );
+}
+
+function buildFixAction({ reviewNote, missingInformation }) {
+  const missingText = String(missingInformation || "").trim();
+
+  if (missingText) return missingText;
+
+  const text = String(reviewNote || "").trim();
+
+  return (
+    extractSentence(text, /Additional evidence is required/i) ||
+    "Add stronger evidence such as detailed project descriptions, certificates, GitHub repositories, portfolio links, or a LinkedIn profile."
+  );
+}
+
+function extractProfileScoreInfo(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const profileScore = toNumberOrNull(
+    pickFirst(
+      data?.profileScore,
+      data?.ProfileScore,
+      data?.score,
+      data?.Score,
+      raw?.profileScore,
+      raw?.ProfileScore,
+      raw?.score,
+      raw?.Score
+    )
+  );
+
+  const profileScoreMax = toNumberOrNull(
+    pickFirst(
+      data?.profileScoreMax,
+      data?.ProfileScoreMax,
+      data?.maxScore,
+      data?.MaxScore,
+      data?.scoreMax,
+      data?.ScoreMax,
+      raw?.profileScoreMax,
+      raw?.ProfileScoreMax,
+      raw?.maxScore,
+      raw?.MaxScore,
+      raw?.scoreMax,
+      raw?.ScoreMax
+    )
+  );
+
+  const profilePassScore = toNumberOrNull(
+    pickFirst(
+      data?.profilePassScore,
+      data?.ProfilePassScore,
+      data?.passScore,
+      data?.PassScore,
+      data?.requiredScore,
+      data?.RequiredScore,
+      raw?.profilePassScore,
+      raw?.ProfilePassScore,
+      raw?.passScore,
+      raw?.PassScore,
+      raw?.requiredScore,
+      raw?.RequiredScore
+    )
+  );
+
+  const profileScoreText =
+    pickFirst(
+      data?.profileScoreText,
+      data?.ProfileScoreText,
+      raw?.profileScoreText,
+      raw?.ProfileScoreText
+    ) || buildScoreText({ profileScore, profileScoreMax });
+
+  return {
+    profileScore,
+    profileScoreMax,
+    profilePassScore,
+    profileScoreText,
+  };
+}
+
+function parseFinalProfileScore(text) {
+  const match = String(text || "").match(
+    /Final profile score:\s*(\d+)\s*\/\s*(\d+)/i
+  );
+
+  if (!match) {
+    return {
+      score: null,
+      maxScore: null,
+      text: "",
+    };
+  }
+
+  return {
+    score: Number(match[1]),
+    maxScore: Number(match[2]),
+    text: `${match[1]}/${match[2]}`,
+  };
+}
+
+function parsePassThreshold(text) {
+  return extractNumber(text, /Pass threshold:\s*(\d+)/i);
+}
+
+function extractExpertProfileReviewLimit(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const maxAttempts =
+    toNumberOrNull(
+      pickFirst(
+        data?.maxReviewAttempts,
+        data?.MaxReviewAttempts,
+        data?.profileReviewMaxSubmissions,
+        data?.ProfileReviewMaxSubmissions,
+        data?.maxAttempts,
+        data?.MaxAttempts,
+        raw?.maxReviewAttempts,
+        raw?.MaxReviewAttempts,
+        raw?.profileReviewMaxSubmissions,
+        raw?.ProfileReviewMaxSubmissions,
+        raw?.maxAttempts,
+        raw?.MaxAttempts
+      )
+    ) || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const submissionCount =
+    toNumberOrNull(
+      pickFirst(
+        data?.profileReviewSubmissionCount,
+        data?.ProfileReviewSubmissionCount,
+        data?.reviewAttempts,
+        data?.ReviewAttempts,
+        data?.submissionCount,
+        data?.SubmissionCount,
+        data?.submissionCountUsed,
+        data?.SubmissionCountUsed,
+        raw?.profileReviewSubmissionCount,
+        raw?.ProfileReviewSubmissionCount,
+        raw?.reviewAttempts,
+        raw?.ReviewAttempts,
+        raw?.submissionCount,
+        raw?.SubmissionCount,
+        raw?.submissionCountUsed,
+        raw?.SubmissionCountUsed
+      )
+    ) || 0;
+
+  const explicitRemaining = toNumberOrNull(
+    pickFirst(
+      data?.remainingReviewAttempts,
+      data?.RemainingReviewAttempts,
+      data?.profileReviewRemainingAttempts,
+      data?.ProfileReviewRemainingAttempts,
+      data?.remainingAttempts,
+      data?.RemainingAttempts,
+      raw?.remainingReviewAttempts,
+      raw?.RemainingReviewAttempts,
+      raw?.profileReviewRemainingAttempts,
+      raw?.ProfileReviewRemainingAttempts,
+      raw?.remainingAttempts,
+      raw?.RemainingAttempts
+    )
+  );
+
+  const remainingAttempts =
+    explicitRemaining !== null
+      ? Math.max(0, explicitRemaining)
+      : Math.max(0, maxAttempts - submissionCount);
+
+  return {
+    submissionCount,
     lockedUntil:
-      data?.profileReviewLockedUntil ||
-      data?.ProfileReviewLockedUntil ||
-      data?.lockedUntil ||
-      data?.LockedUntil ||
-      "",
+      pickFirst(
+        data?.profileReviewLockedUntil,
+        data?.ProfileReviewLockedUntil,
+        data?.lockedUntil,
+        data?.LockedUntil,
+        raw?.profileReviewLockedUntil,
+        raw?.ProfileReviewLockedUntil,
+        raw?.lockedUntil,
+        raw?.LockedUntil
+      ) || "",
     reviewStatus: String(
-      data?.profileReviewStatus ||
-        data?.ProfileReviewStatus ||
-        data?.reviewStatus ||
-        data?.ReviewStatus ||
-        data?.status ||
-        data?.Status ||
-        ""
+      pickFirst(
+        data?.profileReviewStatus,
+        data?.ProfileReviewStatus,
+        data?.reviewStatus,
+        data?.ReviewStatus,
+        data?.status,
+        data?.Status,
+        raw?.profileReviewStatus,
+        raw?.ProfileReviewStatus,
+        raw?.reviewStatus,
+        raw?.ReviewStatus,
+        raw?.status,
+        raw?.Status
+      ) || ""
     )
       .trim()
       .toUpperCase(),
-    userStatus: String(data?.userStatus || data?.UserStatus || "")
+    userStatus: String(
+      pickFirst(
+        data?.userStatus,
+        data?.UserStatus,
+        raw?.userStatus,
+        raw?.UserStatus
+      ) || ""
+    )
       .trim()
       .toUpperCase(),
-    remainingAttempts:
-      data?.remainingReviewAttempts ??
-      data?.RemainingReviewAttempts ??
-      data?.profileReviewRemainingAttempts ??
-      data?.ProfileReviewRemainingAttempts ??
-      "",
+    remainingAttempts,
     maxAttempts,
+  };
+}
+
+function chooseBestReviewLimit(previousLimit, resultLimit, refreshedLimit) {
+  if (isMeaningfulReviewLimit(refreshedLimit)) {
+    return normalizeReviewLimit(refreshedLimit);
+  }
+
+  if (isMeaningfulReviewLimit(resultLimit)) {
+    return normalizeReviewLimit(resultLimit);
+  }
+
+  return normalizeReviewLimit(previousLimit);
+}
+
+function isMeaningfulReviewLimit(limit) {
+  if (!limit) return false;
+
+  return (
+    Number(limit.submissionCount || 0) > 0 ||
+    Number(limit.remainingAttempts || 0) <
+      Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
+    Boolean(limit.lockedUntil) ||
+    Boolean(limit.reviewStatus) ||
+    Boolean(limit.userStatus)
+  );
+}
+
+function normalizeReviewLimit(limit) {
+  const maxAttempts =
+    Number(limit?.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const submissionCount = Math.max(0, Number(limit?.submissionCount || 0));
+
+  const remainingAttempts =
+    limit?.remainingAttempts !== "" &&
+    limit?.remainingAttempts !== null &&
+    limit?.remainingAttempts !== undefined
+      ? Math.max(0, Number(limit.remainingAttempts || 0))
+      : Math.max(0, maxAttempts - submissionCount);
+
+  return {
+    submissionCount,
+    lockedUntil: limit?.lockedUntil || "",
+    reviewStatus: String(limit?.reviewStatus || "").toUpperCase(),
+    userStatus: String(limit?.userStatus || "").toUpperCase(),
+    remainingAttempts,
+    maxAttempts,
+  };
+}
+
+function didReviewLimitMoveForward(previousLimit, nextLimit) {
+  if (!previousLimit || !nextLimit) return false;
+
+  const previousUsed = Number(previousLimit.submissionCount || 0);
+  const nextUsed = Number(nextLimit.submissionCount || 0);
+
+  const previousRemaining = getRemainingExpertProfileAttempts(previousLimit);
+  const nextRemaining = getRemainingExpertProfileAttempts(nextLimit);
+
+  return nextUsed > previousUsed || nextRemaining < previousRemaining;
+}
+
+function advanceReviewLimitLocally(previousLimit, result) {
+  const base = normalizeReviewLimit(previousLimit);
+  const reviewStatus = getReviewStatus(result);
+
+  const shouldCountAttempt =
+    reviewStatus === "NEEDS_CORRECTION" ||
+    reviewStatus === "REJECTED" ||
+    reviewStatus === "PENDING" ||
+    reviewStatus === "";
+
+  if (!shouldCountAttempt) {
+    return base;
+  }
+
+  const nextUsed = Math.min(base.maxAttempts, Number(base.submissionCount) + 1);
+
+  return {
+    ...base,
+    submissionCount: nextUsed,
+    remainingAttempts: Math.max(0, base.maxAttempts - nextUsed),
+    reviewStatus: reviewStatus || base.reviewStatus,
   };
 }
 
@@ -1433,20 +1762,19 @@ function hasNoExpertProfileAttemptsLeft(limit) {
   if (isExpertProfileReviewLocked(limit)) return true;
 
   const max = Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS);
-  const used = Number(limit.submissionCount || 0);
+  const remaining = getRemainingExpertProfileAttempts(limit);
 
-  if (limit.remainingAttempts !== "" && limit.remainingAttempts !== null) {
-    const remaining = Number(limit.remainingAttempts);
-    return Number.isFinite(remaining) && remaining <= 0 && used >= max;
-  }
-
-  return used >= max;
+  return remaining <= 0 && Number(limit.submissionCount || 0) >= max;
 }
 
 function getRemainingExpertProfileAttempts(limit) {
   if (!limit) return MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
 
-  if (limit.remainingAttempts !== "" && limit.remainingAttempts !== null) {
+  if (
+    limit.remainingAttempts !== "" &&
+    limit.remainingAttempts !== null &&
+    limit.remainingAttempts !== undefined
+  ) {
     const remaining = Number(limit.remainingAttempts);
 
     if (Number.isFinite(remaining)) {
@@ -1469,57 +1797,92 @@ function shouldRedirectToLockedPage(limit) {
   );
 }
 
-function buildExpertProfileAttemptText(limit) {
-  if (!limit) return "";
+function buildScoreText(scoreInfo) {
+  const score = scoreInfo?.profileScore;
+  const maxScore = scoreInfo?.profileScoreMax;
 
-  const max = Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS);
-  const used = Number(limit.submissionCount || 0);
-  const remaining = getRemainingExpertProfileAttempts(limit);
+  if (score === null || score === undefined) return "";
+  if (maxScore === null || maxScore === undefined) return String(score);
 
-  return `Review attempts: ${used}/${max}. Remaining attempts: ${remaining}/${max}.`;
+  return `${score}/${maxScore}`;
 }
 
 function getReviewStatus(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
   return String(
-    data?.profileReviewStatus ||
-      data?.ProfileReviewStatus ||
-      data?.reviewStatus ||
-      data?.ReviewStatus ||
-      data?.status ||
-      data?.Status ||
-      ""
+    pickFirst(
+      data?.profileReviewStatus,
+      data?.ProfileReviewStatus,
+      data?.reviewStatus,
+      data?.ReviewStatus,
+      data?.status,
+      data?.Status,
+      raw?.profileReviewStatus,
+      raw?.ProfileReviewStatus,
+      raw?.reviewStatus,
+      raw?.ReviewStatus,
+      raw?.status,
+      raw?.Status
+    ) || ""
   )
     .trim()
     .toUpperCase();
 }
 
 function getUserStatus(data) {
-  return String(data?.userStatus || data?.UserStatus || "")
+  const raw = data?.raw || data?.Raw || data || {};
+
+  return String(
+    pickFirst(
+      data?.userStatus,
+      data?.UserStatus,
+      raw?.userStatus,
+      raw?.UserStatus
+    ) || ""
+  )
     .trim()
     .toUpperCase();
 }
 
 function getReviewNote(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
   return (
-    data?.reviewNote ||
-    data?.ReviewNote ||
-    data?.correctionNote ||
-    data?.CorrectionNote ||
-    data?.rejectionReason ||
-    data?.RejectionReason ||
-    data?.verificationNote ||
-    data?.VerificationNote ||
-    ""
+    pickFirst(
+      data?.reviewNote,
+      data?.ReviewNote,
+      data?.correctionNote,
+      data?.CorrectionNote,
+      data?.rejectionReason,
+      data?.RejectionReason,
+      data?.verificationNote,
+      data?.VerificationNote,
+      raw?.reviewNote,
+      raw?.ReviewNote,
+      raw?.correctionNote,
+      raw?.CorrectionNote,
+      raw?.rejectionReason,
+      raw?.RejectionReason,
+      raw?.verificationNote,
+      raw?.VerificationNote
+    ) || ""
   );
 }
 
 function getMissingInformation(data) {
-  const value =
-    data?.missingInformation ||
-    data?.MissingInformation ||
-    data?.missingFields ||
-    data?.MissingFields ||
-    "";
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const value = pickFirst(
+    data?.missingInformation,
+    data?.MissingInformation,
+    data?.missingFields,
+    data?.MissingFields,
+    raw?.missingInformation,
+    raw?.MissingInformation,
+    raw?.missingFields,
+    raw?.MissingFields
+  );
 
   if (Array.isArray(value)) return value.join(", ");
 
@@ -1600,70 +1963,95 @@ function extractUploadUrl(result) {
   );
 }
 
-function getFriendlyError(error) {
-  if (typeof expertProfileService.getFriendlyExpertProfileError === "function") {
-    try {
-      return expertProfileService.getFriendlyExpertProfileError(error);
-    } catch {
-      // fallback below
-    }
-  }
+function getRawBackendPayload(error) {
+  return (
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error
+  );
+}
 
-  const data = error?.response?.data;
+function getSimpleSubmitError(error) {
+  const payload = getRawBackendPayload(error);
+
+  if (typeof payload === "string") return payload;
+
   const message =
-    data?.message ||
-    data?.title ||
-    data?.error ||
-    data?.detail ||
-    (typeof data === "string" ? data : "") ||
+    payload?.message ||
+    payload?.title ||
+    payload?.detail ||
+    payload?.error ||
     error?.message ||
     "";
 
-  return cleanupBackendMessage(message);
+  if (!message) return "";
+
+  if (message.includes("Certificate URL is invalid")) {
+    return "One of your certificate links is invalid.";
+  }
+
+  if (message.includes("Certificate type is invalid")) {
+    return "One of your certificate types is invalid.";
+  }
+
+  if (message.includes("Duplicate certificate URL")) {
+    return "Certificate links must not be duplicated.";
+  }
+
+  if (message.includes("already used by another expert")) {
+    return "One of your certificate links is already used by another expert.";
+  }
+
+  return message;
 }
 
-function cleanupBackendMessage(message) {
-  const text = String(message || "").trim();
-
-  if (!text) return "Something went wrong. Please try again.";
-
-  if (text.includes("Certificate URL is invalid")) {
-    return "Certificate URL is invalid.";
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
   }
 
-  if (text.includes("Certificate type is invalid")) {
-    return "Certificate type is invalid.";
-  }
+  return undefined;
+}
 
-  if (text.includes("Duplicate certificate URL")) {
-    return "Certificate URLs must not be duplicated.";
-  }
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
 
-  if (text.includes("already used by another expert")) {
-    return "This certificate URL is already used by another expert.";
-  }
+  const number = Number(value);
 
-  if (text.includes("PortfolioUrl") || text.includes("portfolioUrl")) {
-    return "Portfolio URL is required or invalid.";
-  }
+  if (!Number.isFinite(number)) return null;
 
-  if (
-    text.includes("GitHubUrl") ||
-    text.includes("gitHubUrl") ||
-    text.includes("githubUrl")
-  ) {
-    return "GitHub URL is required or invalid.";
-  }
+  return number;
+}
 
-  if (
-    text.includes("LinkedInUrl") ||
-    text.includes("linkedInUrl") ||
-    text.includes("linkedinUrl")
-  ) {
-    return "LinkedIn is optional. You can leave it empty or check the URL again.";
-  }
+function extractNumber(text, regex) {
+  const match = String(text || "").match(regex);
 
-  return text;
+  if (!match) return null;
+
+  const value = Number(match[1]);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractSentence(text, regex) {
+  const sentences = String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  return sentences.find((sentence) => regex.test(sentence)) || "";
+}
+
+function firstSentence(text) {
+  return (
+    String(text || "")
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)[0] || ""
+  );
 }
 
 function isEmpty(value) {
@@ -1696,7 +2084,7 @@ function formatDateTime(value) {
   if (!value) return "";
 
   try {
-    return new Intl.DateTimeFormat("vi-VN", {
+    return new Intl.DateTimeFormat("en-US", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));
