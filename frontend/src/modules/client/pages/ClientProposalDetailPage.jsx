@@ -165,6 +165,7 @@ export default function ClientProposalDetailPage() {
   const [showMessage, setShowMessage] = useState(false);
   const [walletBalance, setWalletBalance] = useState(null);
   const [walletLoading, setWalletLoading] = useState(false);
+  const [clientProfile, setClientProfile] = useState(null);
   const [contractCreated, setContractCreated] = useState(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
 
@@ -207,26 +208,21 @@ export default function ClientProposalDetailPage() {
   }, [fetchProposal]);
 
   useEffect(() => {
-    const fetchWalletBalance = async () => {
-      setWalletLoading(true);
-
+    const fetchClientProfile = async () => {
       try {
-        const res = await axiosInstance.get("/wallets/balance");
+        const res = await axiosInstance.get("/client-profiles/me");
 
-        const balance =
-          res.data?.balance ??
-          res.data?.data?.balance ??
-          0;
+        const profile =
+          res.data?.data ??
+          res.data;
 
-        setWalletBalance(Number(balance));
+        setClientProfile(profile);
       } catch {
-        setWalletBalance(0);
-      } finally {
-        setWalletLoading(false);
+        setClientProfile(null);
       }
     };
 
-    fetchWalletBalance();
+    fetchClientProfile();
   }, []);
 
   // ── Accept ────────────────────────────────────────────────────────
@@ -372,9 +368,18 @@ export default function ClientProposalDetailPage() {
   const isSigning = actionLoading === "sign";
   const isProcessing = isAccepting || isDeclining;
   const expertName = proposal.expertName || proposal.fullName || "Expert";
-  const proposedPrice = Number(proposal.proposedPrice || proposal.bidAmount || 0);
-  const requiredDeposit = proposedPrice * 1.05;
-  const hasEnoughWallet = walletBalance !== null && walletBalance >= requiredDeposit;
+  const proposedPrice = Number(
+    proposal.proposedPrice || proposal.bidAmount || 0
+  );
+
+  const platformFeeRate = Number(clientProfile?.platformFeeRate ?? 5);
+
+  const requiredDeposit =
+    proposedPrice * (1 + platformFeeRate / 100);
+
+  const hasEnoughWallet =
+    walletBalance !== null &&
+    walletBalance >= requiredDeposit;
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -431,15 +436,13 @@ export default function ClientProposalDetailPage() {
               </div>
             </div>
 
-            <div
-                style={{
-                  marginTop: 14,
-                  fontSize: 12,
-                  color: hasEnoughWallet ? "#22c55e" : "#facc15",
-                }}
-              >
-                Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()} — Required deposit: ${requiredDeposit.toFixed(2)} (5% of proposal price)
-              </div>
+            <div style={{ marginTop: 14, fontSize: 12, color: hasEnoughWallet ? "#22c55e" : "#facc15",}}>
+                Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+                {" — "}
+                Required deposit: ${requiredDeposit.toFixed(2)}
+                {" "}
+                ({platformFeeRate}% platform fee)
+            </div>
 
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -536,7 +539,11 @@ export default function ClientProposalDetailPage() {
         fontSize: 13,
       }}
     >
-      Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()} — Required: ${requiredDeposit.toFixed(2)} (5% of proposal price)
+      Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+      {" — "}
+      Required: ${requiredDeposit.toFixed(2)}
+      {" "}
+      ({platformFeeRate}% platform fee)
     </div>
 
     {hasEnoughWallet ? (
@@ -712,7 +719,9 @@ export default function ClientProposalDetailPage() {
                     hasEnoughWallet ? "text-green-400" : "text-yellow-400"
                   }`}
                 >
-                  Wallet Balance: ${Number(walletBalance ?? 0).toLocaleString()}
+                  Required Deposit: ${requiredDeposit.toFixed(2)}
+                  {" "}
+                  ({platformFeeRate}% platform fee)
                 </div>
 
                 <div

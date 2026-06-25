@@ -1,5 +1,6 @@
 // src/modules/client/pages/ExpertSearchPage.jsx
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -23,20 +24,20 @@ function StarRating({ rating }) {
   );
 }
 
-function ExpertCard({ expert }) {
-  // Support cả mock data lẫn API data
-  const name = expert.fullName || expert.name;
-  const role = expert.professionalTitle || expert.role;
-  const skills = expert.expertSkills
-    ? expert.expertSkills.map(s => s.skillName)
-    : (expert.skills || []);
-  const bio = expert.bio;
-  const badge = expert.badge || (expert.level ? expert.level : null);
-  const badgeColor = expert.badgeColor || "#00F0FF";
-  const rating = expert.rating || (expert.profileScore ? expert.profileScore / 20 : null);
-  const highlight = expert.highlight || null;
-  const isTertiary = badge === "TOP PICK";
+function ExpertCard({ expert, onConnect }) {
+  const navigate = useNavigate();
 
+  const name = expert.fullName;
+  const role = expert.professionalTitle;
+  const skills = expert.expertSkills?.map((s) => s.skillName) ?? [];
+  const bio = expert.bio;
+  const badge = expert.level;
+  const badgeColor = "#00F0FF";
+  const rating = expert.profileScore ? expert.profileScore / 20 : 0;
+  const highlight = null;
+
+  const expertProfileId = expert.expertProfileId;
+  const isTertiary = badge === "TOP PICK";
   return (
     <div style={{ background: isTertiary ? "#101319" : "rgba(29,32,38,0.8)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 24, position: "relative", overflow: "hidden", transition: "border-color 0.3s" }}
       onMouseEnter={(e) => (e.currentTarget.style.borderColor = isTertiary ? "rgba(192,193,255,0.5)" : "rgba(0,240,255,0.5)")}
@@ -49,7 +50,7 @@ function ExpertCard({ expert }) {
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
         <img
-          src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId || expert.id}`}
+          src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expertProfileId}`}
           alt={name}
           style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.2)", flexShrink: 0 }} />
         <div>
@@ -71,12 +72,23 @@ function ExpertCard({ expert }) {
         </div>
       )}
       <div style={{ display: "flex", gap: 12 }}>
-        <button style={{ flex: 1, padding: "8px", fontSize: 12, fontWeight: 700, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, background: "transparent", color: "#e1e2eb", cursor: "pointer" }}
+        <button
+          onClick={() => navigate(`/client/experts/${expertProfileId}`)}
+          style={{ flex: 1, padding: "8px", fontSize: 12, fontWeight: 700, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, background: "transparent", color: "#e1e2eb", cursor: "pointer" }}
           onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(54,57,64,0.5)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>View Profile</button>
-        <button style={{ flex: 1, padding: "8px", fontSize: 12, fontWeight: 700, background: "#00F0FF", color: "#101319", borderRadius: 8, border: "none", cursor: "pointer", boxShadow: "0 0 15px rgba(0,240,255,0.3)" }}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+        >
+          View Profile
+        </button>
+
+        <button
+          onClick={() => onConnect(expert)}
+          style={{ flex: 1, padding: "8px", fontSize: 12, fontWeight: 700, background: "#00F0FF", color: "#101319", borderRadius: 8, border: "none", cursor: "pointer", boxShadow: "0 0 15px rgba(0,240,255,0.3)" }}
           onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.1)")}
-          onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}>Connect</button>
+          onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}
+        >
+          Connect
+        </button>
       </div>
     </div>
   );
@@ -88,11 +100,34 @@ export default function ExpertSearchPage() {
   const [searching, setSearching] = useState(false);
   const [experts, setExperts] = useState([]);
   const [hasSearched, setHasSearched] = useState(false);
-  const [minBudget, setMinBudget] = useState("");
-  const [maxBudget, setMaxBudget] = useState("");
+  
+
+  const navigate = useNavigate();
+
+  const handleConnect = async (expert) => {
+    try {
+      const res = await axiosInstance.post("/conversations", {
+        type: "DIRECT",
+        expertUserId: expert.userId,
+        expertProfileId: expert.expertProfileId,
+        initialMessage: `Hi ${expert.fullName}, I want to discuss a project with you.`,
+      });
+
+      const conversationId =
+        res.data?.conversationId ||
+        res.data?.id ||
+        res.data?.data?.conversationId ||
+        res.data?.data?.id;
+
+      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
+    } catch (err) {
+      console.error("Create conversation failed:", err);
+      alert("Không thể tạo cuộc trò chuyện với Expert.");
+    }
+  };
 
   const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val)); };
-  const isBudgetInvalid = minBudget && maxBudget && Number(minBudget) > Number(maxBudget);
+  
 
   // Load luôn khi vào trang
   useEffect(() => {
@@ -100,10 +135,6 @@ export default function ExpertSearchPage() {
   }, []);
 
   const handleSearch = async () => {
-    if (isBudgetInvalid) {
-      alert("Budget Min must be less than Budget Max");
-      return;
-    }
     setSearching(true);
     try {
       const res = await axiosInstance.get("/experts", {
@@ -138,8 +169,6 @@ export default function ExpertSearchPage() {
   const handleReset = () => {
     setQuery("");
     setSeniority("");
-    setMinBudget("");
-    setMaxBudget("");
     setExperts([]);
     setHasSearched(false);
     // Load lại all experts
@@ -214,25 +243,7 @@ export default function ExpertSearchPage() {
                 </div>
               </div>
 
-              <div className="mb-6">
-                <label className="mb-3 block font-mono text-[10px] uppercase tracking-[0.15em] text-gray-400">Project Budget</label>
-                <div className="mb-3">
-                  <label className="mb-1 block text-xs text-gray-400">Budget Min ($)</label>
-                  <input type="number" min="0" value={minBudget}
-                    onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) setMinBudget(v); }}
-                    placeholder="e.g. 500"
-                    className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none ${isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"}`} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-gray-400">Budget Max ($)</label>
-                  <input type="number" min="0" value={maxBudget}
-                    onChange={(e) => { const v = e.target.value; if (v === "" || Number(v) >= 0) setMaxBudget(v); }}
-                    placeholder="e.g. 2000"
-                    className={`w-full rounded-lg bg-[#0b0e14] px-3 py-2 text-sm text-white outline-none ${isBudgetInvalid ? "border border-red-500" : "border border-white/10 focus:border-cyan-400"}`} />
-                </div>
-              </div>
-
-              <div>
+               <div>
                 <button type="button" onClick={handleSearch} disabled={searching}
                   className="mt-4 w-full rounded-lg bg-cyan-400 px-4 py-2.5 text-sm font-bold text-[#101319] shadow-[0_0_15px_rgba(0,240,255,0.3)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70">
                   {searching ? "Applying..." : "Apply"}
@@ -264,7 +275,7 @@ export default function ExpertSearchPage() {
                 ) : (
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 24 }}>
                     {experts.map((expert) => (
-                      <ExpertCard key={expert.expertProfileId || expert.id} expert={expert} />
+                      <ExpertCard key={expert.expertProfileId} expert={expert} onConnect={handleConnect} />
                     ))}
                   </div>
                 )}

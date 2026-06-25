@@ -10,14 +10,6 @@ import axiosInstance from "../../../api/axiosInstance";
 function StarRating({ value, onChange, readonly }) {
   const [hovered, setHovered] = useState(0);
 
-  const labels = {
-    1: "Poor",
-    2: "Fair",
-    3: "Good",
-    4: "Very Good",
-    5: "Excellent",
-  };
-
   return (
     <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -53,11 +45,6 @@ function StarRating({ value, onChange, readonly }) {
           );
         })}
       </div>
-      {(hovered || value) > 0 && !readonly && (
-        <p style={{ fontSize: 14, color: "#facc15", fontWeight: 600, fontFamily: "JetBrains Mono, monospace", margin: 0 }}>
-          {labels[hovered || value]}
-        </p>
-      )}
     </div>
   );
 }
@@ -191,11 +178,6 @@ export default function ClientReviewPage() {
             <div style={{ display: "flex", justifyContent: "center" }}>
               <StarRating value={rating} onChange={setRating} readonly={isReadonly} />
             </div>
-            {isReadonly && rating > 0 && (
-              <p style={{ fontSize: 14, color: "#facc15", fontWeight: 600, fontFamily: "JetBrains Mono, monospace", marginTop: 8 }}>
-                {["", "Poor", "Fair", "Good", "Very Good", "Excellent"][rating]}
-              </p>
-            )}
           </div>
 
           {/* Divider */}

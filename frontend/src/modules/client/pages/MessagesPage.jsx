@@ -25,8 +25,20 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatMessageTime(dateStr) {
+  if (!dateStr) return "";
+
+  const date = new Date(dateStr);
+
+  return date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 // ── Proposal Review Modal — Client xem proposal, Accept hoặc Yêu cầu sửa ──
-function ProposalReviewModal({ state, onClose, onAccept, onRequestRevision }) {
+function ProposalReviewModal({ state, onClose, onRequestRevision }) {
   const [revisionNote, setRevisionNote] = useState("");
   const [showRevisionForm, setShowRevisionForm] = useState(false);
 
@@ -144,12 +156,7 @@ function ProposalReviewModal({ state, onClose, onAccept, onRequestRevision }) {
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>
                   Yêu cầu sửa
                 </button>
-                <button onClick={onAccept} disabled={state.accepting}
-                  style={{ flex: 1, padding: "12px", background: state.accepting ? "#1d2026" : "#22c55e", color: state.accepting ? "#8c90a0" : "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: state.accepting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  {state.accepting
-                    ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang xử lý...</>
-                    : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>check_circle</span>Accept & Tạo hợp đồng</>}
-                </button>
+                
               </div>
             </div>
           )
@@ -174,8 +181,6 @@ export default function MessagesPage() {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState("");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
-  const [contractModal, setContractModal] = useState(null); // { loading, error, data }
-  const [walletBalance, setWalletBalance] = useState(null);
   const [proposalModal, setProposalModal] = useState(null); // { loading, error, data, accepting, requestingRevision }
   const [openConversationMenu, setOpenConversationMenu] = useState(null);
 
@@ -222,7 +227,6 @@ export default function MessagesPage() {
             time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
             unread: c.unreadCount || 0,
             relatedProposalId: c.relatedProposalId,
-            relatedContractId: c.relatedContractId,
             relatedJobId: c.relatedJobId,
             relatedJobTitle: c.relatedJobTitle,
             pinned: pinnedIds.includes(convId),
@@ -270,23 +274,21 @@ export default function MessagesPage() {
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
       const normalized = list.map((m) => {
-        // Ưu tiên so sánh senderUserId với user hiện tại — đây là field tiêu chuẩn
-        // gần như chắc chắn BE trả về, đáng tin hơn isMine/senderType (có thể không tồn tại).
-        const senderId = m.senderUserId ?? m.senderId ?? m.userId;
-        const isMe = currentUserId != null && senderId != null
+      const senderId = m.senderUserId ?? m.senderId ?? m.userId;
+
+      const isMe =
+        currentUserId != null && senderId != null
           ? String(senderId) === String(currentUserId)
           : (m.isMine ?? m.senderType === "CLIENT" ?? false);
 
-        return {
-          id: m.messageId ?? m.id,
-          text: m.content,
-          isMe,
-          time: m.createdAt
-            ? new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-            : "",
-          avatar: m.senderAvatarUrl,
-        };
-      });
+      return {
+        id: m.messageId ?? m.id,
+        text: m.content,
+        isMe,
+        time: formatMessageTime(m.createdAt),
+        avatar: m.senderAvatarUrl,
+      };
+    });
 
       setMessages(normalized);
     } catch (err) {
@@ -316,10 +318,15 @@ export default function MessagesPage() {
     setInput("");
     // Optimistic UI: hiện tin nhắn ngay, rollback nếu lỗi
     const tempId = `temp-${Date.now()}`;
-    setMessages((prev) => [...prev, {
-      id: tempId, text: content, isMe: true,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: tempId,
+        text: content,
+        isMe: true,
+        time: formatMessageTime(new Date()),
+      },
+    ]);
 
     try {
       await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
@@ -367,7 +374,7 @@ export default function MessagesPage() {
   // MOCK/TẠM: cho hiện nút "Review Proposal" khi có relatedJobId (chưa cần relatedProposalId có sẵn).
   // Khi bấm, sẽ tự tìm proposalId đã ACCEPT/SUBMITTED của expert này trong job đó, hiện proposal
   // để client review trước, KHÔNG tạo contract ngay — chỉ tạo contract khi client bấm Accept.
-  const canReviewProposal = (activeChat?.relatedProposalId || activeChat?.relatedJobId) && !activeChat?.relatedContractId;
+  const canReviewProposal = activeChat?.relatedProposalId || activeChat?.relatedJobId;
 
   const handleReviewProposal = async () => {
     setShowAttachMenu(false);
@@ -420,45 +427,6 @@ export default function MessagesPage() {
     }
   };
 
-  // Client Accept proposal → mới thực sự tạo contract
-  // Lấy số dư ví — response thật: { success, balance } (không có wrapper "data").
-  const fetchWalletBalance = async () => {
-    try {
-      const res = await axiosInstance.get("/wallets/balance");
-      const bal = res.data?.balance ?? res.data?.data?.balance ?? null;
-      setWalletBalance(bal);
-      return bal;
-    } catch {
-      setWalletBalance(null);
-      return null;
-    }
-  };
-
-  const handleAcceptAndCreateContract = async () => {
-    if (!proposalModal?.data?.proposalId) return;
-    setProposalModal((prev) => ({ ...prev, accepting: true, error: "" }));
-    try {
-      try {
-        await axiosInstance.post(`/proposals/${proposalModal.data.proposalId}/decision?decision=ACCEPT`);
-      } catch (decisionErr) {
-        // Nếu BE báo proposal đã ACCEPTED từ trước, coi đây là thành công và tiếp tục
-        // sang bước tạo contract — không cần chặn lại vì kết quả mong muốn (đã accept) đã đạt.
-        const msg = decisionErr?.response?.data?.message || "";
-        const alreadyAccepted = /already accepted/i.test(msg);
-        if (!alreadyAccepted) throw decisionErr;
-      }
-
-      const res = await axiosInstance.post(`/contracts/from-proposal/${proposalModal.data.proposalId}`);
-      const contractData = res.data?.data ?? res.data;
-
-      setProposalModal(null);
-      setActiveChat((prev) => prev ? { ...prev, relatedContractId: contractData?.contractId } : prev);
-      setContractModal({ loading: false, error: "", data: contractData, proposal: proposalModal.data });
-      fetchWalletBalance();
-    } catch (err) {
-      setProposalModal((prev) => ({ ...prev, accepting: false, error: err?.response?.data?.message || "Accept proposal thất bại." }));
-    }
-  };
 
   // Client gửi yêu cầu sửa — gửi message kèm toàn bộ nội dung proposal hiện tại làm tham chiếu,
   // KHÔNG gọi resubmit (resubmit là việc của expert tự làm sau khi đọc feedback này).
@@ -492,84 +460,6 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
     }
   };
 
-  const handleViewContract = async () => {
-    setShowAttachMenu(false);
-    if (!activeChat?.relatedContractId) return;
-
-    setContractModal({ loading: true, error: "", data: null });
-    try {
-      const res = await axiosInstance.get(`/contracts/${activeChat.relatedContractId}`);
-      const data = res.data?.data ?? res.data;
-
-      let proposalData = null;
-      const proposalId = data?.relatedProposalId || data?.proposalId || activeChat?.relatedProposalId;
-      if (proposalId) {
-        try {
-          const propRes = await axiosInstance.get(`/proposals/${proposalId}`);
-          let rawProposal = propRes.data?.data ?? propRes.data;
-          if (Array.isArray(rawProposal)) rawProposal = rawProposal[0] ?? null;
-          proposalData = rawProposal;
-        } catch {
-          // Không chặn việc hiện contract nếu lookup proposal lỗi
-        }
-      }
-
-      setContractModal({ loading: false, error: "", data, proposal: proposalData });
-      fetchWalletBalance();
-    } catch (err) {
-      setContractModal({ loading: false, error: err?.response?.data?.message || "Không thể tải hợp đồng.", data: null });
-    }
-  };
-
-  const handleConfirmContract = async () => {
-    if (!contractModal?.data?.contractId) return;
-    setContractModal((prev) => ({ ...prev, confirming: true, error: "" }));
-    try {
-      const res = await axiosInstance.post(`/contracts/${contractModal.data.contractId}/confirm`);
-      const data = res.data?.data ?? res.data;
-
-      // Tự gửi message báo "đã ký" vào conversation để 2 bên thấy ngay trong chat
-      if (activeChat?.id) {
-        try {
-          await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
-            content: "Client đã xác nhận hợp đồng.",
-            messageType: "TEXT",
-            attachmentUrl: null,
-          });
-          await fetchMessages(activeChat.id, true);
-        } catch {
-          // Không chặn flow chính nếu gửi message lỗi
-        }
-      }
-
-      // Cả 2 bên đã confirm → tự động tạo Project
-      if (data?.clientConfirmedAt && data?.expertConfirmedAt) {
-        try {
-          const projRes = await axiosInstance.post(`/projects/from-contract/${data.contractId}`);
-          const projData = projRes.data?.data ?? projRes.data;
-
-          setContractModal({ loading: false, error: "", data, confirming: false, projectCreated: projData });
-
-          if (activeChat?.id) {
-            await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
-              content: "Cả hai bên đã xác nhận hợp đồng. Project đã được khởi tạo!",
-              messageType: "TEXT",
-              attachmentUrl: null,
-            });
-            await fetchMessages(activeChat.id, true);
-          }
-          return;
-        } catch (projErr) {
-          setContractModal({ loading: false, error: projErr?.response?.data?.message || "Cả 2 bên đã ký nhưng tạo Project thất bại. Vui lòng thử lại.", data, confirming: false });
-          return;
-        }
-      }
-
-      setContractModal(null);
-    } catch (err) {
-      setContractModal((prev) => ({ ...prev, confirming: false, error: err?.response?.data?.message || "Ký hợp đồng thất bại." }));
-    }
-  };
 
   // ── Pin / Unpin conversation ──────────────────────────────────────
   // Chưa có API pin thật từ BE — lưu vào localStorage để giữ qua reload.
@@ -740,22 +630,6 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
                 </div>
               </div>
 
-              <div style={{ display: "flex", gap: 8 }}>
-                {canReviewProposal && (
-                  <button onClick={handleReviewProposal}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>description</span>
-                    Tạo hợp đồng
-                  </button>
-                )}
-                {activeChat.relatedContractId && (
-                  <button onClick={handleViewContract}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
-                    Xem hợp đồng
-                  </button>
-                )}
-              </div>
             </div>
 
             {/* Messages area */}
@@ -796,73 +670,116 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
             )}
 
             {/* Input area */}
-            <div style={{ flexShrink: 0, padding: "10px 32px 16px" }}>
-              <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, padding: "8px 12px" }}>
-                <div style={{ display: "flex", alignItems: "flex-end", gap: 10 }}>
-
-                  {/* Nút "+" — popup tiện ích (Hợp đồng / Hình ảnh / File) */}
-                  <div style={{ position: "relative", flexShrink: 0 }}>
-                    <button onClick={() => setShowAttachMenu((v) => !v)}
-                      style={{ width: 36, height: 36, borderRadius: 10, background: showAttachMenu ? "rgba(0,240,255,0.1)" : "transparent", border: "none", color: showAttachMenu ? "#00F0FF" : "#8c90a0", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.15s" }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 22, transform: showAttachMenu ? "rotate(45deg)" : "none", transition: "transform 0.15s" }}>add</span>
-                    </button>
-
-                    {showAttachMenu && (
-                      <>
-                        <div onClick={() => setShowAttachMenu(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-                        <div style={{ position: "absolute", bottom: "calc(100% + 10px)", left: 0, width: 220, background: "rgba(16,19,25,0.98)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.6)", padding: 6, zIndex: 50 }}>
-                          {canReviewProposal && (
-                            <button onClick={handleReviewProposal}
-                              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 8, cursor: "pointer", textAlign: "left" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,240,255,0.08)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#00F0FF" }}>description</span>
-                              <span style={{ fontSize: 13, color: "#e1e2eb", fontWeight: 600 }}>Tạo hợp đồng</span>
-                            </button>
-                          )}
-                          {activeChat?.relatedContractId && (
-                            <button onClick={handleViewContract}
-                              style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 8, cursor: "pointer", textAlign: "left" }}
-                              onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,240,255,0.08)")}
-                              onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                              <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#00F0FF" }}>contract_edit</span>
-                              <span style={{ fontSize: 13, color: "#e1e2eb", fontWeight: 600 }}>Xem hợp đồng & Ký tên</span>
-                            </button>
-                          )}
-                          <button onClick={() => { setShowAttachMenu(false); document.getElementById("msg-image-input")?.click(); }}
-                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 8, cursor: "pointer", textAlign: "left" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#8c90a0" }}>image</span>
-                            <span style={{ fontSize: 13, color: "#c2c6d6" }}>Hình ảnh</span>
-                          </button>
-                          <button onClick={() => { setShowAttachMenu(false); document.getElementById("msg-file-input")?.click(); }}
-                            style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 8, cursor: "pointer", textAlign: "left" }}
-                            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-                            onMouseLeave={(e) => (e.currentTarget.style.background = "none")}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#8c90a0" }}>attach_file</span>
-                            <span style={{ fontSize: 13, color: "#c2c6d6" }}>File</span>
-                          </button>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Input file ẩn — dùng /api/uploads/images cho ảnh, file thường cần endpoint upload riêng (chưa có trong API list) */}
-                    <input id="msg-image-input" type="file" accept="image/*" style={{ display: "none" }}
-                      onChange={(e) => handleUploadFile(e.target.files?.[0], "IMAGE")} />
-                    <input id="msg-file-input" type="file" style={{ display: "none" }}
-                      onChange={(e) => handleUploadFile(e.target.files?.[0], "FILE")} />
-                  </div>
-
-                  <textarea value={input} onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                    placeholder="Type a message..." rows={1}
-                    style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#e1e2eb", fontSize: 14, fontFamily: "Inter, sans-serif", resize: "none", lineHeight: 1.6 }} />
-                  <button onClick={handleSend} disabled={!input.trim()}
-                    style={{ width: 36, height: 36, borderRadius: 10, background: input.trim() ? "#1772eb" : "#272a30", border: "none", color: input.trim() ? "#fff" : "#666b78", display: "flex", alignItems: "center", justifyContent: "center", cursor: input.trim() ? "pointer" : "not-allowed", boxShadow: input.trim() ? "0 4px 12px rgba(23,114,235,0.4)" : "none", flexShrink: 0, transition: "transform 0.1s" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>send</span>
+            <div className="shrink-0 px-8 pb-4 pt-2">
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-[#1a1d24] px-3 py-2 shadow-xl transition-all duration-200 focus-within:border-cyan-400/40">
+                
+                {/* Attach menu */}
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachMenu((v) => !v)}
+                    className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 ${
+                      showAttachMenu
+                        ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
+                        : "text-slate-400 hover:bg-cyan-500/10 hover:text-cyan-400"
+                    }`}
+                  >
+                    <span
+                      className={`material-symbols-outlined text-[22px] transition-transform ${
+                        showAttachMenu ? "rotate-45" : ""
+                      }`}
+                    >
+                      add
+                    </span>
                   </button>
+
+                  {showAttachMenu && (
+                    <>
+                      <div
+                        onClick={() => setShowAttachMenu(false)}
+                        className="fixed inset-0 z-40"
+                      />
+
+                      <div className="absolute bottom-[calc(100%+10px)] left-0 z-50 w-56 rounded-xl border border-white/10 bg-[#101319]/95 p-1.5 shadow-2xl shadow-black/60 backdrop-blur-xl">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("msg-image-input")?.click();
+                          }}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/5"
+                        >
+                          <span className="material-symbols-outlined text-[19px] text-slate-400">
+                            image
+                          </span>
+                          <span className="text-sm font-medium text-slate-300">
+                            Hình ảnh
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowAttachMenu(false);
+                            document.getElementById("msg-file-input")?.click();
+                          }}
+                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/5"
+                        >
+                          <span className="material-symbols-outlined text-[19px] text-slate-400">
+                            attach_file
+                          </span>
+                          <span className="text-sm font-medium text-slate-300">
+                            File
+                          </span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  <input
+                    id="msg-image-input"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => handleUploadFile(e.target.files?.[0], "IMAGE")}
+                  />
+
+                  <input
+                    id="msg-file-input"
+                    type="file"
+                    className="hidden"
+                    onChange={(e) => handleUploadFile(e.target.files?.[0], "FILE")}
+                  />
                 </div>
+
+                <textarea
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
+                  placeholder="Message..."
+                  rows={1}
+                  className="flex-1 resize-none bg-transparent py-2 text-[15px] leading-6 text-white placeholder:text-slate-500 outline-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={handleSend}
+                  disabled={!input.trim()}
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 ${
+                    input.trim()
+                      ? "bg-cyan-500 hover:bg-cyan-400 text-[#002022] shadow-lg shadow-cyan-500/25 hover:bg-cyan-300 active:scale-95"
+                      : "cursor-not-allowed bg-white/5 text-slate-600"
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[22px]">
+                    send
+                  </span>
+                </button>
               </div>
             </div>
           </div>
@@ -874,165 +791,11 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
         <ProposalReviewModal
           state={proposalModal}
           onClose={() => setProposalModal(null)}
-          onAccept={handleAcceptAndCreateContract}
           onRequestRevision={handleRequestRevision}
         />
       )}
 
-      {/* ── Modal hợp đồng (tạo mới / xem / ký) ── */}
-      {contractModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
-          onClick={(e) => e.target === e.currentTarget && setContractModal(null)}>
-          <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 19, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Hợp đồng dự án</h3>
-              <button onClick={() => setContractModal(null)} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
-              </button>
-            </div>
-
-            {contractModal.loading ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#8c90a0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 36, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-              </div>
-            ) : contractModal.error ? (
-              <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "12px 16px", color: "#f87171", fontSize: 13 }}>
-                {contractModal.error}
-              </div>
-            ) : contractModal.data ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-                {/* Status */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 12, color: "#8c90a0" }}>Mã hợp đồng: <span style={{ color: "#c2c6d6", fontFamily: "JetBrains Mono, monospace" }}>#{contractModal.data.contractId}</span></span>
-                  <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: "#facc15", background: "rgba(250,204,21,0.1)", border: "1px solid rgba(250,204,21,0.3)" }}>
-                    {contractModal.data.status || "DRAFT"}
-                  </span>
-                </div>
-
-                {/* Thông tin chính */}
-                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
-                  {contractModal.data.title && (
-                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Tiêu đề: </span><span style={{ fontSize: 13, color: "#e1e2eb" }}>{contractModal.data.title}</span></div>
-                  )}
-                  {(contractModal.data.totalAmount ?? contractModal.data.amount) != null && (
-                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Tổng giá trị: </span><span style={{ fontSize: 14, color: "#00F0FF", fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>${(contractModal.data.totalAmount ?? contractModal.data.amount)?.toLocaleString()}</span></div>
-                  )}
-                  {contractModal.data.deadline && (
-                    <div><span style={{ fontSize: 11, color: "#8c90a0" }}>Hạn hoàn thành: </span><span style={{ fontSize: 13, color: "#c2c6d6" }}>{new Date(contractModal.data.deadline).toLocaleDateString("vi-VN")}</span></div>
-                  )}
-                </div>
-
-                {/* Milestones */}
-                {Array.isArray(contractModal.data.milestoneDrafts ?? contractModal.data.milestones) && (contractModal.data.milestoneDrafts ?? contractModal.data.milestones).length > 0 && (
-                  <div>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: "#8c90a0", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Milestones</p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {(contractModal.data.milestoneDrafts ?? contractModal.data.milestones).map((m, i) => (
-                        <div key={m.milestoneDraftId ?? i} style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", gap: 10 }}>
-                          <span style={{ fontSize: 13, color: "#c2c6d6" }}>{m.title || `Milestone ${i + 1}`}</span>
-                          {m.amount != null && <span style={{ fontSize: 13, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>${m.amount.toLocaleString()}</span>}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Trạng thái xác nhận 2 bên */}
-                {(contractModal.data.clientConfirmedAt || contractModal.data.expertConfirmedAt) && (
-                  <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: 8, background: contractModal.data.clientConfirmedAt ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${contractModal.data.clientConfirmedAt ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.08)"}` }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: contractModal.data.clientConfirmedAt ? "#22c55e" : "#666b78" }}>
-                        {contractModal.data.clientConfirmedAt ? "check_circle" : "schedule"}
-                      </span>
-                      <p style={{ fontSize: 11, color: "#8c90a0", margin: "2px 0 0" }}>Client {contractModal.data.clientConfirmedAt ? "đã ký" : "chưa ký"}</p>
-                    </div>
-                    <div style={{ flex: 1, textAlign: "center", padding: "8px", borderRadius: 8, background: contractModal.data.expertConfirmedAt ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.03)", border: `1px solid ${contractModal.data.expertConfirmedAt ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.08)"}` }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16, color: contractModal.data.expertConfirmedAt ? "#22c55e" : "#666b78" }}>
-                        {contractModal.data.expertConfirmedAt ? "check_circle" : "schedule"}
-                      </span>
-                      <p style={{ fontSize: 11, color: "#8c90a0", margin: "2px 0 0" }}>Expert {contractModal.data.expertConfirmedAt ? "đã ký" : "chưa ký"}</p>
-                    </div>
-                  </div>
-                )}
-
-                {contractModal.error && (
-                  <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{contractModal.error}</div>
-                )}
-
-                {/* Project đã khởi tạo (cả 2 bên đã confirm) */}
-                {contractModal.projectCreated && (
-                  <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 10, padding: "14px 16px", display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 20, color: "#22c55e" }}>celebration</span>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: "#22c55e", margin: "0 0 2px" }}>Project đã được khởi tạo!</p>
-                      <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>Cả 2 bên đã xác nhận hợp đồng.</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                  <button onClick={() => setContractModal(null)}
-                    style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-                    Đóng
-                  </button>
-                  {contractModal.projectCreated ? (
-                    <button onClick={() => { setContractModal(null); navigate(`/client/projects/${contractModal.projectCreated.projectId}`); }}
-                      style={{ flex: 2, padding: "12px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>visibility</span>
-                      Xem Project
-                    </button>
-                  ) : contractModal.data.status !== "CONFIRMED" && !contractModal.data.clientConfirmedAt ? (
-                    (() => {
-                      // Client chỉ ký được khi ví đủ tiền — so với giá đã chốt trong proposal.
-                      // Nếu chưa load được balance (null) thì coi như chưa xác định, không
-                      // chặn cứng nhưng cũng không cho ký nhầm — hiện nút nạp tiền để an toàn.
-                      const requiredAmount = contractModal.proposal?.proposedPrice ?? null;
-                      const hasEnoughFunds = requiredAmount != null && walletBalance != null && walletBalance >= requiredAmount;
-
-                      if (requiredAmount != null && !hasEnoughFunds) {
-                        return (
-                          <button onClick={() => { setContractModal(null); navigate("/client/wallet"); }}
-                            style={{ flex: 2, padding: "12px", background: "rgba(250,204,21,0.1)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>account_balance_wallet</span>
-                            Nạp thêm tiền vào ví
-                          </button>
-                        );
-                      }
-
-                      return (
-                        <button onClick={handleConfirmContract} disabled={contractModal.confirming}
-                          style={{ flex: 2, padding: "12px", background: contractModal.confirming ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: contractModal.confirming ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                          {contractModal.confirming
-                            ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang ký...</>
-                            : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>draw</span>Ký hợp đồng</>}
-                        </button>
-                      );
-                    })()
-                  ) : null}
-                </div>
-
-                {/* Cảnh báo thiếu tiền — hiện ngay trên nút để rõ lý do bị ẩn nút Ký */}
-                {!contractModal.projectCreated
-                  && contractModal.data.status !== "CONFIRMED"
-                  && !contractModal.data.clientConfirmedAt
-                  && contractModal.proposal?.proposedPrice != null
-                  && walletBalance != null
-                  && walletBalance < contractModal.proposal.proposedPrice && (
-                  <div style={{ display: "flex", gap: 10, padding: "10px 14px", background: "rgba(250,204,21,0.06)", border: "1px solid rgba(250,204,21,0.2)", borderRadius: 8, fontSize: 12.5, color: "#facc15" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16, flexShrink: 0 }}>info</span>
-                    <span>
-                      Số dư ví hiện tại: <strong>{walletBalance.toLocaleString()}đ</strong> — cần ít nhất <strong>{contractModal.proposal.proposedPrice.toLocaleString()}đ</strong> để ký hợp đồng này.
-                    </span>
-                  </div>
-                )}
-              </div>
-            ) : null}
-          </div>
-        </div>
-      )}
+      
     </>
   );
 }
