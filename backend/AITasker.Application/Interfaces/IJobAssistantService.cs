@@ -5,5 +5,5 @@ namespace AITasker.Application.Interfaces;
 
 public interface IJobAssistantService
 {
-    Task<JobAssistantResponse> AnalyzeJobAsync(JobAssistantRequest request);
+    Task<JobAssistantResponse> AnalyzeJobAsync(int userId, JobAssistantRequest request);
 }

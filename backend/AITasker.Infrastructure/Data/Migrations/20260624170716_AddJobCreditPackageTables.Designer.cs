@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624170716_AddJobCreditPackageTables")]
+    partial class AddJobCreditPackageTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1368,86 +1371,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("JobPostings", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPostingAiPolicy", b =>
-                {
-                    b.Property<int>("JobPostingAiPolicyId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobPostingAiPolicyId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("InitialFreeAiGenerationCredits")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(3);
-
-                    b.Property<int>("InitialFreeJobPostCredits")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("MaxDraftJobsPerClient")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(10);
-
-                    b.Property<int>("MaxRecommendationResults")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(50);
-
-                    b.Property<int>("MaxSkillsPerJob")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(8);
-
-                    b.Property<int>("MaxSuggestedSkills")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(8);
-
-                    b.Property<int>("MinimumRecommendationMatchScore")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1);
-
-                    b.Property<int>("MinimumSkillRelevanceScore")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(60);
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.HasKey("JobPostingAiPolicyId");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("UpdatedByAdminId");
-
-                    b.ToTable("JobPostingAiPolicies", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Credits", "[InitialFreeJobPostCredits] >= 0 AND [InitialFreeAiGenerationCredits] >= 0");
-
-                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Limits", "[MaxDraftJobsPerClient] BETWEEN 1 AND 100 AND [MaxSkillsPerJob] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] <= [MaxSkillsPerJob]");
-
-                            t.HasCheckConstraint("CK_JobPostingAiPolicies_RecommendationResults", "[MaxRecommendationResults] BETWEEN 1 AND 100");
-
-                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Scores", "[MinimumSkillRelevanceScore] BETWEEN 0 AND 100 AND [MinimumRecommendationMatchScore] BETWEEN 0 AND 100");
-                        });
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
                 {
                     b.Property<int>("JobSkillId")
@@ -1652,11 +1575,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<decimal>("ExpertFeeRate")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("decimal(5,2)")
-                        .HasDefaultValue(15.00m);
 
                     b.Property<decimal>("IndividualClientFeeRate")
                         .HasColumnType("decimal(5,2)");
@@ -2723,16 +2641,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ClientProfile");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.JobPostingAiPolicy", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("UpdatedByAdmin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>

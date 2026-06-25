@@ -20,17 +20,20 @@ public class ClientProfileService : IClientProfileService
     private readonly IClientProfileRepository _clientProfileRepository;
     private readonly IBusinessVerificationProvider _businessVerificationProvider;
     private readonly IPlatformFeePolicyService _platformFeePolicyService;
+    private readonly IJobPostingAiPolicyService _jobPostingAiPolicyService;
 
     public ClientProfileService(
         IUserRepository userRepository,
         IClientProfileRepository clientProfileRepository,
         IBusinessVerificationProvider businessVerificationProvider,
-        IPlatformFeePolicyService platformFeePolicyService)
+        IPlatformFeePolicyService platformFeePolicyService,
+        IJobPostingAiPolicyService jobPostingAiPolicyService)
     {
         _userRepository = userRepository;
         _clientProfileRepository = clientProfileRepository;
         _businessVerificationProvider = businessVerificationProvider;
         _platformFeePolicyService = platformFeePolicyService;
+        _jobPostingAiPolicyService = jobPostingAiPolicyService;
     }
 
     public async Task<ClientProfileResponse> CreateIndividualAsync(
@@ -55,6 +58,9 @@ public class ClientProfileService : IClientProfileService
 
         ValidateMaxLength(address, 500, "Address");
 
+        var jobPostingAiPolicy = await _jobPostingAiPolicyService
+            .GetOrCreateActivePolicyEntityAsync();
+
         var clientProfile = new ClientProfile
         {
             UserId = user.UserId,
@@ -62,6 +68,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = phoneNumber,
             Address = address,
             PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL"),
+            FreeJobPostCredits = jobPostingAiPolicy.InitialFreeJobPostCredits,
+            PaidJobPostCredits = 0,
+            FreeAiGenerationCredits = jobPostingAiPolicy.InitialFreeAiGenerationCredits,
+            PaidAiGenerationCredits = 0,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -178,6 +188,9 @@ public class ClientProfileService : IClientProfileService
             CreatedAt = DateTime.UtcNow
         };
 
+        var jobPostingAiPolicy = await _jobPostingAiPolicyService
+            .GetOrCreateActivePolicyEntityAsync();
+
         var clientProfile = new ClientProfile
         {
             UserId = user.UserId,
@@ -185,6 +198,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = phoneNumber,
             Address = representativeAddress,
             PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("BUSINESS"),
+            FreeJobPostCredits = jobPostingAiPolicy.InitialFreeJobPostCredits,
+            PaidJobPostCredits = 0,
+            FreeAiGenerationCredits = jobPostingAiPolicy.InitialFreeAiGenerationCredits,
+            PaidAiGenerationCredits = 0,
             CreatedAt = DateTime.UtcNow,
             BusinessProfile = businessProfile
         };
@@ -886,6 +903,10 @@ public class ClientProfileService : IClientProfileService
             PhoneNumber = clientProfile.PhoneNumber,
             Address = clientProfile.Address,
             PlatformFeeRate = clientProfile.PlatformFeeRate,
+            FreeJobPostCredits = clientProfile.FreeJobPostCredits,
+            PaidJobPostCredits = clientProfile.PaidJobPostCredits,
+            FreeAiGenerationCredits = clientProfile.FreeAiGenerationCredits,
+            PaidAiGenerationCredits = clientProfile.PaidAiGenerationCredits,
             UserStatus = clientProfile.User.Status,
             BusinessProfile = clientProfile.BusinessProfile == null
                 ? null
