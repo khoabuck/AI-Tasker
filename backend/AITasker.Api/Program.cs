@@ -225,6 +225,8 @@ builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>(
 
 builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
+builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
+
 // =========================
 // Upload Images - Cloudinary
 // =========================

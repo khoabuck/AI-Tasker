@@ -18,6 +18,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<ExpertProfileScoringPolicy> ExpertProfileScoringPolicies => Set<ExpertProfileScoringPolicy>();
 
+    public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -306,6 +308,87 @@ public class AITaskerDbContext : DbContext
                 .IsRequired();
 
             entity.Property(x => x.MaxCertificates)
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        // =========================
+        // JobPostingAiPolicies
+        // =========================
+        modelBuilder.Entity<JobPostingAiPolicy>(entity =>
+        {
+            entity.ToTable("JobPostingAiPolicies", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_JobPostingAiPolicies_Credits",
+                    "[InitialFreeJobPostCredits] >= 0 AND [InitialFreeAiGenerationCredits] >= 0"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_JobPostingAiPolicies_Limits",
+                    "[MaxDraftJobsPerClient] BETWEEN 1 AND 100 AND [MaxSkillsPerJob] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] <= [MaxSkillsPerJob]"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_JobPostingAiPolicies_Scores",
+                    "[MinimumSkillRelevanceScore] BETWEEN 0 AND 100 AND [MinimumRecommendationMatchScore] BETWEEN 0 AND 100"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_JobPostingAiPolicies_RecommendationResults",
+                    "[MaxRecommendationResults] BETWEEN 1 AND 100"
+                );
+            });
+
+            entity.HasKey(x => x.JobPostingAiPolicyId);
+
+            entity.Property(x => x.InitialFreeJobPostCredits)
+                .HasDefaultValue(1)
+                .IsRequired();
+
+            entity.Property(x => x.InitialFreeAiGenerationCredits)
+                .HasDefaultValue(3)
+                .IsRequired();
+
+            entity.Property(x => x.MaxDraftJobsPerClient)
+                .HasDefaultValue(10)
+                .IsRequired();
+
+            entity.Property(x => x.MaxSkillsPerJob)
+                .HasDefaultValue(8)
+                .IsRequired();
+
+            entity.Property(x => x.MaxSuggestedSkills)
+                .HasDefaultValue(8)
+                .IsRequired();
+
+            entity.Property(x => x.MinimumSkillRelevanceScore)
+                .HasDefaultValue(60)
+                .IsRequired();
+
+            entity.Property(x => x.MaxRecommendationResults)
+                .HasDefaultValue(50)
+                .IsRequired();
+
+            entity.Property(x => x.MinimumRecommendationMatchScore)
+                .HasDefaultValue(1)
                 .IsRequired();
 
             entity.Property(x => x.IsActive)
