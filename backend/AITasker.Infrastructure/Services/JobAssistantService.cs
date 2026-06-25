@@ -88,6 +88,8 @@ public class JobAssistantService : IJobAssistantService
                 warnings.Add("AI could not match any active skill from the system.");
             }
 
+            var suggestedBudget = ResolveSuggestedBudget(request, aiResult, warnings);
+
             return new JobAssistantResponse
             {
                 SuggestedTitle = aiResult.SuggestedTitle,
@@ -95,6 +97,11 @@ public class JobAssistantService : IJobAssistantService
                 AiGeneratedDescription = aiResult.AiGeneratedDescription,
                 SuggestedProjectType = aiResult.SuggestedProjectType,
                 SuggestedComplexity = aiResult.SuggestedComplexity,
+                SuggestedBudgetMin = suggestedBudget.Min,
+                SuggestedBudgetMax = suggestedBudget.Max,
+                SuggestedBudgetSource = suggestedBudget.Source,
+                IsBudgetEstimated = suggestedBudget.IsEstimated,
+                BudgetSuggestionNote = suggestedBudget.Note,
                 ExpectedDeliverables = aiResult.ExpectedDeliverables,
                 SuggestedSkillIds = matchedSkills.Select(x => x.SkillId).ToList(),
                 SuggestedSkills = matchedSkills,
@@ -167,7 +174,7 @@ public class JobAssistantService : IJobAssistantService
         }
 
         throw new InvalidOperationException(
-            "You have used all AI generation credits. Please edit manually or buy an AI generation package."
+            "You have used all AI generation credits. Please edit manually or buy a job credit package to get more AI generation credits."
         );
     }
 
@@ -186,5 +193,99 @@ public class JobAssistantService : IJobAssistantService
 
         clientProfile.UpdatedAt = DateTime.UtcNow;
         await _context.SaveChangesAsync();
+    }
+
+    private static (
+        decimal? Min,
+        decimal? Max,
+        string Source,
+        bool IsEstimated,
+        string Note
+    ) ResolveSuggestedBudget(
+        JobAssistantRequest request,
+        JobAiAnalysisResult aiResult,
+        List<string> warnings)
+    {
+        var hasFormBudget = request.BudgetMin.HasValue || request.BudgetMax.HasValue;
+
+        var budgetMin = hasFormBudget
+            ? request.BudgetMin
+            : aiResult.SuggestedBudgetMin;
+
+        var budgetMax = hasFormBudget
+            ? request.BudgetMax
+            : aiResult.SuggestedBudgetMax;
+
+        var source = hasFormBudget
+            ? "FORM"
+            : NormalizeBudgetSource(aiResult.SuggestedBudgetSource);
+
+        var note = string.IsNullOrWhiteSpace(aiResult.BudgetSuggestionNote)
+            ? string.Empty
+            : aiResult.BudgetSuggestionNote.Trim();
+
+        if (budgetMin.HasValue && budgetMin.Value < 0)
+        {
+            warnings.Add("BudgetMin was ignored because it is negative.");
+            budgetMin = null;
+        }
+
+        if (budgetMax.HasValue && budgetMax.Value < 0)
+        {
+            warnings.Add("BudgetMax was ignored because it is negative.");
+            budgetMax = null;
+        }
+
+        if (budgetMin.HasValue && budgetMax.HasValue && budgetMin.Value > budgetMax.Value)
+        {
+            warnings.Add("BudgetMin was greater than BudgetMax, so the suggested budget range was normalized.");
+            (budgetMin, budgetMax) = (budgetMax, budgetMin);
+        }
+
+        if (!budgetMin.HasValue && !budgetMax.HasValue)
+        {
+            source = "UNKNOWN";
+            note = string.IsNullOrWhiteSpace(note)
+                ? "No budget range could be suggested from the requirement."
+                : note;
+        }
+        else if (source == "AI_ESTIMATE")
+        {
+            var estimateWarning = "Budget is AI-estimated from requirement complexity and should be reviewed by the client.";
+            if (!warnings.Contains(estimateWarning))
+            {
+                warnings.Add(estimateWarning);
+            }
+
+            note = string.IsNullOrWhiteSpace(note)
+                ? "AI estimated this budget range because the client did not provide a clear budget."
+                : note;
+        }
+
+        return (
+            budgetMin,
+            budgetMax,
+            source,
+            source == "AI_ESTIMATE",
+            note
+        );
+    }
+
+    private static string NormalizeBudgetSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return "UNKNOWN";
+        }
+
+        var normalized = source.Trim().ToUpperInvariant();
+
+        return normalized switch
+        {
+            "FORM" => "FORM",
+            "RAW_REQUIREMENT" => "RAW_REQUIREMENT",
+            "AI_ESTIMATE" => "AI_ESTIMATE",
+            _ => "UNKNOWN"
+        };
     }
 }

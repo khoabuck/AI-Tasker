@@ -12,6 +12,15 @@ public class JobAiAnalysisResult
 
     public string SuggestedComplexity { get; set; } = "UNKNOWN";
 
+    public decimal? SuggestedBudgetMin { get; set; }
+
+    public decimal? SuggestedBudgetMax { get; set; }
+
+    // FORM | RAW_REQUIREMENT | AI_ESTIMATE | UNKNOWN
+    public string SuggestedBudgetSource { get; set; } = "UNKNOWN";
+
+    public string BudgetSuggestionNote { get; set; } = string.Empty;
+
     public string ExpectedDeliverables { get; set; } = string.Empty;
 
     public List<string> SuggestedSkillNames { get; set; } = new();
