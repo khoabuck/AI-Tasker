@@ -65,23 +65,34 @@ function ProjectCard({ project }) {
           )}
         </div>
 
-        {project.status === "COMPLETED" && (
+        <div style={{ display: "flex", gap: 8 }}>
+          {/* View Detail — xuất hiện ở cả 3 trạng thái, dẫn vào trang chi tiết để xem
+              milestone, deliverable, và (nếu cần) mở dispute mới ngay tại đó. */}
           <button
-            onClick={(e) => { e.stopPropagation(); navigate(`/client/projects/${project.projectId}/review`); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>star</span>
-            Leave Review
+            onClick={(e) => { e.stopPropagation(); navigate(`/client/projects/${project.projectId}`); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
+            View Detail
           </button>
-        )}
 
-        {project.status === "DISPUTED" && (
-          <button
-            onClick={(e) => { e.stopPropagation(); navigate(`/client/disputes?projectId=${project.projectId}`); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>gavel</span>
-            View Dispute
-          </button>
-        )}
+          {project.status === "COMPLETED" && (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/client/projects/${project.projectId}/review`); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>star</span>
+              Leave Review
+            </button>
+          )}
+
+          {project.status === "DISPUTED" && (
+            <button
+              onClick={(e) => { e.stopPropagation(); navigate(`/client/disputes?projectId=${project.projectId}`); }}
+              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>gavel</span>
+              View Dispute
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -126,7 +137,7 @@ export default function ProjectsListPage() {
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Projects</h1>
-          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Theo dõi tiến độ các project đang hợp tác.</p>
+          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Monitor the progress of ongoing collaborative projects.</p>
         </div>
 
         {/* Tabs */}
