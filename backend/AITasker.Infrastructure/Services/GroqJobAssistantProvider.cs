@@ -67,7 +67,7 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
                 }
             },
             temperature = 0.2,
-            max_tokens = 1200
+            max_tokens = 1400
         };
 
         var jsonBody = JsonSerializer.Serialize(body);
@@ -116,6 +116,7 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         Client raw requirement:
         {{request.RawRequirement}}
 
+        Client form values, if already provided:
         BudgetMin: {{request.BudgetMin}}
         BudgetMax: {{request.BudgetMax}}
         Deadline: {{request.Deadline}}
@@ -131,6 +132,17 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         - Do not invent skill names outside the available skills list.
         - If the requirement is vague, still suggest a practical improved version.
         - Keep the result practical for a real software project.
+        - Budget suggestion rules:
+          1. If BudgetMin or BudgetMax is already provided in the form values, return those values for the matching fields and set suggestedBudgetSource = "FORM".
+          2. If the raw requirement explicitly states a budget, extract it and set suggestedBudgetSource = "RAW_REQUIREMENT".
+          3. If the raw requirement does not clearly mention budget and form values are empty, estimate a practical VND budget range based on scope, complexity, required skills, likely deliverables, and deadline. Set suggestedBudgetSource = "AI_ESTIMATE".
+        - If the raw requirement says a range like "5 million to 10 million VND", "5-10 triệu", or "khoảng 5 tới 10 triệu", return suggestedBudgetMin = 5000000 and suggestedBudgetMax = 10000000.
+        - If the raw requirement says a single maximum budget like "budget 10 million VND", return suggestedBudgetMax = 10000000 and suggestedBudgetMin = null.
+        - If the raw requirement says a minimum budget, return suggestedBudgetMin.
+        - When estimating budget, do not return null unless the requirement is too vague to price at all.
+        - Estimated budget must be realistic for Vietnam freelance AI/software projects, not too low, and not enterprise-inflated.
+        - Add a short budgetSuggestionNote explaining why the budget was extracted or estimated.
+        - Budget values must be numeric VND amounts without commas, currency symbols, or text.
         - Return JSON only.
         - Do not wrap the JSON in markdown.
         - Do not add explanation outside JSON.
@@ -142,6 +154,10 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
           "aiGeneratedDescription": "string",
           "suggestedProjectType": "string",
           "suggestedComplexity": "SIMPLE | MEDIUM | COMPLEX | UNKNOWN",
+          "suggestedBudgetMin": 0,
+          "suggestedBudgetMax": 0,
+          "suggestedBudgetSource": "FORM | RAW_REQUIREMENT | AI_ESTIMATE | UNKNOWN",
+          "budgetSuggestionNote": "string",
           "expectedDeliverables": "string",
           "suggestedSkillNames": ["string"],
           "warnings": ["string"]
@@ -194,6 +210,18 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         result.SuggestedProjectType = result.SuggestedProjectType?.Trim() ?? string.Empty;
         result.ExpectedDeliverables = result.ExpectedDeliverables?.Trim() ?? string.Empty;
         result.SuggestedComplexity = NormalizeComplexity(result.SuggestedComplexity);
+        result.SuggestedBudgetMin = NormalizeBudgetValue(result.SuggestedBudgetMin);
+        result.SuggestedBudgetMax = NormalizeBudgetValue(result.SuggestedBudgetMax);
+        result.SuggestedBudgetSource = NormalizeBudgetSource(result.SuggestedBudgetSource);
+        result.BudgetSuggestionNote = result.BudgetSuggestionNote?.Trim() ?? string.Empty;
+
+        if (result.SuggestedBudgetMin.HasValue &&
+            result.SuggestedBudgetMax.HasValue &&
+            result.SuggestedBudgetMin.Value > result.SuggestedBudgetMax.Value)
+        {
+            (result.SuggestedBudgetMin, result.SuggestedBudgetMax) =
+                (result.SuggestedBudgetMax, result.SuggestedBudgetMin);
+        }
 
         result.SuggestedSkillNames = result.SuggestedSkillNames?
             .Where(x => !string.IsNullOrWhiteSpace(x))
@@ -249,5 +277,38 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         }
 
         return "UNKNOWN";
+    }
+
+    private static string NormalizeBudgetSource(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return "UNKNOWN";
+        }
+
+        var normalized = source.Trim().ToUpperInvariant();
+
+        return normalized switch
+        {
+            "FORM" => "FORM",
+            "RAW_REQUIREMENT" => "RAW_REQUIREMENT",
+            "AI_ESTIMATE" => "AI_ESTIMATE",
+            _ => "UNKNOWN"
+        };
+    }
+
+    private static decimal? NormalizeBudgetValue(decimal? value)
+    {
+        if (!value.HasValue)
+        {
+            return null;
+        }
+
+        if (value.Value <= 0)
+        {
+            return null;
+        }
+
+        return decimal.Round(value.Value, 0, MidpointRounding.AwayFromZero);
     }
 }

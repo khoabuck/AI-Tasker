@@ -20,20 +20,39 @@ public class JobService : IJobService
     private const string ClientTypeBusiness = "BUSINESS";
     private const string BusinessVerificationVerified = "VERIFIED";
 
-    private readonly AITaskerDbContext _context;
+    private const string ChargeNone = "NONE";
+    private const string ChargeFree = "FREE";
+    private const string ChargePaid = "PAID";
 
-    public JobService(AITaskerDbContext context)
+    private readonly AITaskerDbContext _context;
+    private readonly IJobSkillRelevanceValidator _jobSkillRelevanceValidator;
+    private readonly IJobPostingAiPolicyService _jobPostingAiPolicyService;
+
+    public JobService(
+        AITaskerDbContext context,
+        IJobSkillRelevanceValidator jobSkillRelevanceValidator,
+        IJobPostingAiPolicyService jobPostingAiPolicyService)
     {
         _context = context;
+        _jobSkillRelevanceValidator = jobSkillRelevanceValidator;
+        _jobPostingAiPolicyService = jobPostingAiPolicyService;
     }
 
     public async Task<JobResponse> CreateDraftAsync(int userId, CreateJobRequest request)
     {
         var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
 
-        ValidateJobRequest(request, requireSkill: false);
+        ValidateJobRequest(request, requireSkill: false, policy.MaxSkillsPerJob);
+
+        await EnsureClientCanCreateDraftAsync(
+            clientProfile.ClientProfileId,
+            policy.MaxDraftJobsPerClient
+        );
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var now = DateTime.UtcNow;
 
         var job = new JobPosting
         {
@@ -51,13 +70,18 @@ public class JobService : IJobService
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
             Status = StatusDraft,
             IsAiAssisted = request.IsAiAssisted,
-            CreatedAt = DateTime.UtcNow
+            PostingChargeType = ChargeNone,
+            CreatedAt = now
         };
 
         _context.JobPostings.Add(job);
         await _context.SaveChangesAsync();
 
-        await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
+        await ReplaceJobSkillsAsync(
+            job.JobPostingId,
+            request.SkillIds,
+            policy.MaxSkillsPerJob
+        );
 
         await transaction.CommitAsync();
 
@@ -68,10 +92,26 @@ public class JobService : IJobService
     public async Task<JobResponse> SubmitJobAsync(int userId, CreateJobRequest request)
     {
         var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
 
-        ValidateJobRequest(request, requireSkill: true);
+        ValidateJobRequest(request, requireSkill: true, policy.MaxSkillsPerJob);
+
+        await EnsureSelectedSkillsMatchJobAsync(
+            request.Title,
+            request.Description,
+            request.AiGeneratedDescription,
+            request.ProjectType,
+            request.Complexity,
+            request.ExpectedDeliverables,
+            request.SkillIds,
+            policy.MaxSkillsPerJob,
+            policy.MinimumSkillRelevanceScore
+        );
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var postingChargeType = ApplyJobPostingCredit(clientProfile);
+        var now = DateTime.UtcNow;
 
         var job = new JobPosting
         {
@@ -89,13 +129,19 @@ public class JobService : IJobService
             ExpectedDeliverables = request.ExpectedDeliverables.Trim(),
             Status = StatusOpen,
             IsAiAssisted = request.IsAiAssisted,
-            CreatedAt = DateTime.UtcNow
+            PostingChargeType = postingChargeType,
+            PublishedAt = now,
+            CreatedAt = now
         };
 
         _context.JobPostings.Add(job);
         await _context.SaveChangesAsync();
 
-        await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
+        await ReplaceJobSkillsAsync(
+            job.JobPostingId,
+            request.SkillIds,
+            policy.MaxSkillsPerJob
+        );
 
         await transaction.CommitAsync();
 
@@ -106,9 +152,11 @@ public class JobService : IJobService
     public async Task<JobResponse?> SubmitDraftAsync(int userId, int jobPostingId)
     {
         var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
 
         var job = await _context.JobPostings
             .Include(x => x.JobSkills)
+                .ThenInclude(x => x.Skill)
             .FirstOrDefaultAsync(x =>
                 x.JobPostingId == jobPostingId &&
                 x.ClientProfileId == clientProfile.ClientProfileId
@@ -124,14 +172,28 @@ public class JobService : IJobService
             throw new InvalidOperationException("Only draft jobs can be submitted.");
         }
 
-        ValidateDraftBeforeSubmit(job);
+        ValidateDraftBeforeSubmit(job, policy.MaxSkillsPerJob);
 
         await EnsureJobSkillsAreStillActiveAsync(job.JobPostingId);
 
+        await EnsureExistingJobSkillsMatchJobAsync(
+            job,
+            policy.MaxSkillsPerJob,
+            policy.MinimumSkillRelevanceScore
+        );
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        var postingChargeType = ApplyJobPostingCredit(clientProfile);
+        var now = DateTime.UtcNow;
+
         job.Status = StatusOpen;
-        job.UpdatedAt = DateTime.UtcNow;
+        job.PostingChargeType = postingChargeType;
+        job.PublishedAt = now;
+        job.UpdatedAt = now;
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         return await GetJobResponseByIdAsync(job.JobPostingId);
     }
@@ -241,6 +303,7 @@ public class JobService : IJobService
         UpdateJobRequest request)
     {
         var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
 
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
@@ -258,7 +321,26 @@ public class JobService : IJobService
             throw new InvalidOperationException("Only draft or open jobs can be updated.");
         }
 
-        ValidateUpdateJobRequest(request, requireSkill: job.Status == StatusOpen);
+        ValidateUpdateJobRequest(
+            request,
+            requireSkill: job.Status == StatusOpen,
+            policy.MaxSkillsPerJob
+        );
+
+        if (job.Status == StatusOpen)
+        {
+            await EnsureSelectedSkillsMatchJobAsync(
+                request.Title,
+                request.Description,
+                request.AiGeneratedDescription,
+                request.ProjectType,
+                request.Complexity,
+                request.ExpectedDeliverables,
+                request.SkillIds,
+                policy.MaxSkillsPerJob,
+                policy.MinimumSkillRelevanceScore
+            );
+        }
 
         await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -278,7 +360,11 @@ public class JobService : IJobService
 
         await _context.SaveChangesAsync();
 
-        await ReplaceJobSkillsAsync(job.JobPostingId, request.SkillIds);
+        await ReplaceJobSkillsAsync(
+            job.JobPostingId,
+            request.SkillIds,
+            policy.MaxSkillsPerJob
+        );
 
         await transaction.CommitAsync();
 
@@ -288,6 +374,7 @@ public class JobService : IJobService
     public async Task<bool> CancelJobAsync(int userId, int jobPostingId)
     {
         var clientProfile = await GetEligibleClientProfileForJobAsync(userId);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
 
         var job = await _context.JobPostings
             .FirstOrDefaultAsync(x =>
@@ -368,6 +455,198 @@ public class JobService : IJobService
                clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
     }
 
+    private async Task EnsureClientCanCreateDraftAsync(
+        int clientProfileId,
+        int maxDraftJobsPerClient)
+    {
+        var currentDraftCount = await _context.JobPostings
+            .CountAsync(x =>
+                x.ClientProfileId == clientProfileId &&
+                x.Status == StatusDraft
+            );
+
+        if (currentDraftCount >= maxDraftJobsPerClient)
+        {
+            throw new InvalidOperationException(
+                $"You can keep up to {maxDraftJobsPerClient} draft jobs at the same time. Please submit, update, or cancel an existing draft before creating a new one."
+            );
+        }
+    }
+
+    private static string ApplyJobPostingCredit(ClientProfile clientProfile)
+    {
+        if (clientProfile.FreeJobPostCredits > 0)
+        {
+            clientProfile.FreeJobPostCredits -= 1;
+            clientProfile.UpdatedAt = DateTime.UtcNow;
+            return ChargeFree;
+        }
+
+        if (clientProfile.PaidJobPostCredits > 0)
+        {
+            clientProfile.PaidJobPostCredits -= 1;
+            clientProfile.UpdatedAt = DateTime.UtcNow;
+            return ChargePaid;
+        }
+
+        throw new InvalidOperationException(
+            "You have no job posting credits left. Please buy a job posting package to publish more jobs."
+        );
+    }
+
+    private async Task EnsureSelectedSkillsMatchJobAsync(
+        string title,
+        string description,
+        string? aiGeneratedDescription,
+        string projectType,
+        string? complexity,
+        string expectedDeliverables,
+        List<int>? skillIds,
+        int maxSkillsPerJob,
+        int minimumSkillRelevanceScore)
+    {
+        var distinctSkillIds = (skillIds ?? new List<int>())
+            .Distinct()
+            .ToList();
+
+        if (distinctSkillIds.Count == 0)
+        {
+            throw new InvalidOperationException("At least one skill is required.");
+        }
+
+        if (distinctSkillIds.Count > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
+        }
+
+        var selectedSkills = await _context.Skills
+            .AsNoTracking()
+            .Where(x =>
+                distinctSkillIds.Contains(x.SkillId) &&
+                x.IsActive
+            )
+            .Select(x => new
+            {
+                x.SkillId,
+                x.SkillName
+            })
+            .ToListAsync();
+
+        if (selectedSkills.Count != distinctSkillIds.Count)
+        {
+            throw new InvalidOperationException("One or more skills are invalid or inactive.");
+        }
+
+        var selectedSkillNames = selectedSkills
+            .Select(x => x.SkillName)
+            .ToList();
+
+        await EnsureSkillNamesMatchJobAsync(
+            title,
+            description,
+            aiGeneratedDescription,
+            projectType,
+            complexity,
+            expectedDeliverables,
+            selectedSkillNames,
+            minimumSkillRelevanceScore
+        );
+    }
+
+    private async Task EnsureExistingJobSkillsMatchJobAsync(
+        JobPosting job,
+        int maxSkillsPerJob,
+        int minimumSkillRelevanceScore)
+    {
+        var selectedSkillNames = job.JobSkills
+            .Where(x => x.Skill != null && x.Skill.IsActive)
+            .Select(x => x.Skill!.SkillName)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (selectedSkillNames.Count == 0)
+        {
+            throw new InvalidOperationException("At least one active skill is required.");
+        }
+
+        if (selectedSkillNames.Count > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
+        }
+
+        await EnsureSkillNamesMatchJobAsync(
+            job.Title,
+            job.Description,
+            job.AiGeneratedDescription,
+            job.ProjectType,
+            job.Complexity,
+            job.ExpectedDeliverables,
+            selectedSkillNames,
+            minimumSkillRelevanceScore
+        );
+    }
+
+    private async Task EnsureSkillNamesMatchJobAsync(
+        string title,
+        string description,
+        string? aiGeneratedDescription,
+        string projectType,
+        string? complexity,
+        string expectedDeliverables,
+        List<string> selectedSkillNames,
+        int minimumSkillRelevanceScore)
+    {
+        var availableSkillNames = await _context.Skills
+            .AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.SkillName)
+            .Select(x => x.SkillName)
+            .ToListAsync();
+
+        var validationResult = await _jobSkillRelevanceValidator.ValidateAsync(
+            new JobSkillRelevanceValidationRequest
+            {
+                Title = title.Trim(),
+                Description = description.Trim(),
+                AiGeneratedDescription = string.IsNullOrWhiteSpace(aiGeneratedDescription)
+                    ? null
+                    : aiGeneratedDescription.Trim(),
+                ProjectType = projectType.Trim(),
+                Complexity = NormalizeComplexity(complexity),
+                ExpectedDeliverables = expectedDeliverables.Trim(),
+                SelectedSkillNames = selectedSkillNames,
+                AvailableSkillNames = availableSkillNames
+            }
+        );
+
+        if (validationResult.IsRelevant &&
+            validationResult.RelevanceScore >= minimumSkillRelevanceScore)
+        {
+            return;
+        }
+
+        var irrelevantSkills = validationResult.IrrelevantSkills.Count == 0
+            ? "none"
+            : string.Join(", ", validationResult.IrrelevantSkills);
+
+        var missingCoreSkills = validationResult.MissingCoreSkills.Count == 0
+            ? "none"
+            : string.Join(", ", validationResult.MissingCoreSkills);
+
+        var suggestedSkills = validationResult.SuggestedSkillNames.Count == 0
+            ? "none"
+            : string.Join(", ", validationResult.SuggestedSkillNames);
+
+        throw new InvalidOperationException(
+            $"Selected skills do not match the job requirement. " +
+            $"Relevance score: {validationResult.RelevanceScore}/100. " +
+            $"Irrelevant skills: {irrelevantSkills}. " +
+            $"Missing core skills: {missingCoreSkills}. " +
+            $"Suggested skills: {suggestedSkills}. " +
+            $"Reason: {validationResult.Reason}"
+        );
+    }
+
     private async Task EnsureJobSkillsAreStillActiveAsync(int jobPostingId)
     {
         var hasInactiveSkill = await _context.JobSkills
@@ -384,7 +663,10 @@ public class JobService : IJobService
         }
     }
 
-    private async Task ReplaceJobSkillsAsync(int jobPostingId, List<int>? skillIds)
+    private async Task ReplaceJobSkillsAsync(
+        int jobPostingId,
+        List<int>? skillIds,
+        int maxSkillsPerJob)
     {
         var oldSkills = await _context.JobSkills
             .Where(x => x.JobPostingId == jobPostingId)
@@ -395,6 +677,11 @@ public class JobService : IJobService
         var distinctSkillIds = (skillIds ?? new List<int>())
             .Distinct()
             .ToList();
+
+        if (distinctSkillIds.Count > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
+        }
 
         if (distinctSkillIds.Count > 0)
         {
@@ -452,6 +739,8 @@ public class JobService : IJobService
             ExpectedDeliverables = job.ExpectedDeliverables,
             Status = job.Status,
             IsAiAssisted = job.IsAiAssisted,
+            PostingChargeType = job.PostingChargeType,
+            PublishedAt = job.PublishedAt,
             CreatedAt = job.CreatedAt,
             UpdatedAt = job.UpdatedAt,
             Skills = job.JobSkills.Select(js => new JobSkillResponse
@@ -490,7 +779,10 @@ public class JobService : IJobService
         return false;
     }
 
-    private static void ValidateJobRequest(CreateJobRequest request, bool requireSkill)
+    private static void ValidateJobRequest(
+        CreateJobRequest request,
+        bool requireSkill,
+        int maxSkillsPerJob)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
@@ -526,9 +818,18 @@ public class JobService : IJobService
         {
             throw new InvalidOperationException("At least one skill is required.");
         }
+
+        if (request.SkillIds != null &&
+            request.SkillIds.Distinct().Count() > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
+        }
     }
 
-    private static void ValidateUpdateJobRequest(UpdateJobRequest request, bool requireSkill)
+    private static void ValidateUpdateJobRequest(
+        UpdateJobRequest request,
+        bool requireSkill,
+        int maxSkillsPerJob)
     {
         if (string.IsNullOrWhiteSpace(request.Title))
         {
@@ -564,9 +865,17 @@ public class JobService : IJobService
         {
             throw new InvalidOperationException("At least one skill is required.");
         }
+
+        if (request.SkillIds != null &&
+            request.SkillIds.Distinct().Count() > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
+        }
     }
 
-    private static void ValidateDraftBeforeSubmit(JobPosting job)
+    private static void ValidateDraftBeforeSubmit(
+        JobPosting job,
+        int maxSkillsPerJob)
     {
         if (string.IsNullOrWhiteSpace(job.Title))
         {
@@ -601,6 +910,11 @@ public class JobService : IJobService
         if (job.JobSkills.Count == 0)
         {
             throw new InvalidOperationException("At least one skill is required.");
+        }
+
+        if (job.JobSkills.Count > maxSkillsPerJob)
+        {
+            throw new InvalidOperationException($"A job can have up to {maxSkillsPerJob} skills.");
         }
     }
 

@@ -8,6 +8,8 @@ public class PlatformFeePolicyResponse
 
     public decimal BusinessClientFeeRate { get; set; }
 
+    public decimal ExpertFeeRate { get; set; }
+
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }

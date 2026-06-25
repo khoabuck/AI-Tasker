@@ -6,5 +6,7 @@ public class UpdatePlatformFeePolicyRequest
 
     public decimal BusinessClientFeeRate { get; set; }
 
+    public decimal ExpertFeeRate { get; set; }
+
     public string? Reason { get; set; }
 }
