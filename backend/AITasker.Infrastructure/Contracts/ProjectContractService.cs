@@ -64,9 +64,16 @@ namespace AITasker.Infrastructure.Contracts
 
             if (existingContract != null)
             {
-                await EnsureContractMilestoneDraftsCopiedFromProposalAsync(
-                    proposal.ProposalId,
-                    existingContract.ContractId);
+                var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
+                    .AnyAsync(x => x.ContractId == existingContract.ContractId);
+
+                if (!hasMilestoneDrafts)
+                {
+                    await CopyLatestProposalMilestonesToContractDraftAsync(
+                        proposal.ProposalId,
+                        existingContract.ContractId);
+                }
+
                 return await MapToContractResponseAsync(existingContract);
             }
 
@@ -1111,8 +1118,8 @@ namespace AITasker.Infrastructure.Contracts
                     ContractId = contractId,
                     Title = x.Title,
                     Description = x.Description,
-                    ExpectedDeliverable = x.ExpectedDeliverable,
-                    AcceptanceCriteria = x.AcceptanceCriteria,
+                    ExpectedDeliverable = string.Empty,
+                    AcceptanceCriteria = string.Empty,
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
