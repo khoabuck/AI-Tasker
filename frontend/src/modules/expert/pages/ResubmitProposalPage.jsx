@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import jobService from "../../../services/job.service";
 import proposalService, {
   getFriendlyProposalError,
 } from "../../../services/proposal.service";
@@ -20,14 +19,15 @@ const createEmptyForm = () => ({
   expectedOutputs: "",
   workingApproach: "",
   preliminaryMilestonePlan: "",
+  resubmitNote: "",
   milestones: [createEmptyMilestone()],
 });
 
-export default function SubmitProposalPage() {
-  const { jobId } = useParams();
+export default function ResubmitProposalPage() {
+  const { proposalId } = useParams();
   const navigate = useNavigate();
 
-  const [job, setJob] = useState(null);
+  const [proposal, setProposal] = useState(null);
   const [formData, setFormData] = useState(createEmptyForm);
 
   const [loading, setLoading] = useState(true);
@@ -39,12 +39,17 @@ export default function SubmitProposalPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const formErrors = useMemo(() => validateProposalForm(formData), [formData]);
+  const formErrors = useMemo(
+    () =>
+      validateProposalForm(formData, {
+        isResubmit: true,
+      }),
+    [formData]
+  );
 
   const milestoneTotal = useMemo(() => {
     return formData.milestones.reduce((total, milestone) => {
       const amount = Number(milestone.amount || 0);
-
       return total + (Number.isNaN(amount) ? 0 : amount);
     }, 0);
   }, [formData.milestones]);
@@ -52,7 +57,6 @@ export default function SubmitProposalPage() {
   const milestoneDuration = useMemo(() => {
     return formData.milestones.reduce((total, milestone) => {
       const durationDays = Number(milestone.durationDays || 0);
-
       return total + (Number.isNaN(durationDays) ? 0 : durationDays);
     }, 0);
   }, [formData.milestones]);
@@ -60,23 +64,24 @@ export default function SubmitProposalPage() {
   const priceDifference = Number(formData.proposedPrice || 0) - milestoneTotal;
 
   useEffect(() => {
-    loadJobDetail();
+    loadProposal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+  }, [proposalId]);
 
-  const loadJobDetail = async () => {
+  const loadProposal = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const response = await jobService.getJobById(jobId);
-      const data = unwrapData(response);
+      const result = await proposalService.getProposalById(proposalId);
+      const data = unwrapMaybe(result);
 
-      setJob(data);
+      setProposal(data);
+      setFormData(buildFormFromProposal(data));
     } catch (err) {
-      console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load job detail."));
-      setJob(null);
+      console.error("LOAD PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyProposalError(err, "Cannot load proposal."));
+      setProposal(null);
     } finally {
       setLoading(false);
     }
@@ -154,7 +159,6 @@ export default function SubmitProposalPage() {
 
   const getFieldError = (name) => {
     if (!submitted && !touched[name]) return "";
-
     return formErrors[name] || "";
   };
 
@@ -173,16 +177,20 @@ export default function SubmitProposalPage() {
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData);
+    const normalizedFormData = {
+      ...formData,
+      proposedPrice: String(formData.proposedPrice || milestoneTotal || ""),
+      proposedTimelineDays: String(
+        formData.proposedTimelineDays || milestoneDuration || ""
+      ),
+    };
+
+    const errors = validateProposalForm(normalizedFormData, {
+      isResubmit: true,
+    });
 
     if (Object.keys(errors).length > 0) {
-      setError("Please check the highlighted fields before submitting.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
-    if (!jobId) {
-      setError("Job information is missing. Please go back and choose a job.");
+      setError("Please check the highlighted fields before resubmitting.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -190,41 +198,33 @@ export default function SubmitProposalPage() {
     try {
       setSubmitting(true);
 
-      const proposal = await proposalService.submitProposal(jobId, formData);
-      const proposalId = proposal?.proposalId || proposal?.id;
-
-      setMessage("Proposal submitted successfully.");
-
-      setTimeout(() => {
-        if (proposalId) {
-          navigate(`/expert/proposals/${proposalId}`, { replace: true });
-          return;
-        }
-
-        navigate("/expert/proposals", { replace: true });
-      }, 700);
-    } catch (err) {
-      console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
-
-      setError(
-        getFriendlyProposalError
-          ? getFriendlyProposalError(err, "Cannot submit proposal.")
-          : getFriendlyError(err, "Cannot submit proposal.")
+      const updatedProposal = await proposalService.resubmitProposal(
+        proposalId,
+        normalizedFormData
       );
 
+      const nextProposalId =
+        updatedProposal?.proposalId || updatedProposal?.id || proposalId;
+
+      setMessage("Proposal resubmitted successfully.");
+
+      setTimeout(() => {
+        navigate(`/expert/proposals/${nextProposalId}`, { replace: true });
+      }, 700);
+    } catch (err) {
+      console.error("RESUBMIT PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyProposalError(err, "Cannot resubmit proposal."));
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
-
   if (loading) {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job information...
+          Loading proposal...
         </div>
       </ExpertLayout>
     );
@@ -236,26 +236,27 @@ export default function SubmitProposalPage() {
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
-            onClick={() => navigate(`/expert/jobs/${jobId}`)}
+            onClick={() => navigate(`/expert/proposals/${proposalId}`)}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
             <span className="material-symbols-outlined text-sm">
               arrow_back
             </span>
-            Back to job detail
+            Back to proposal detail
           </button>
 
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Submit Proposal
+              Resubmit Proposal
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Send proposal to client
+              Update and resubmit your proposal
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in your price, timeline, delivery plan, and milestones.
+              Improve your proposal details and submit a new version for client
+              review.
             </p>
           </div>
 
@@ -267,30 +268,35 @@ export default function SubmitProposalPage() {
             <Alert type="success" title="Success" message={message} />
           )}
 
-          {!job && (
+          {!proposal && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
-              <p className="text-gray-400">Job not found.</p>
+              <p className="text-gray-400">Proposal not found.</p>
 
               <button
                 type="button"
-                onClick={() => navigate("/expert/jobs")}
+                onClick={() => navigate("/expert/proposals")}
                 className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Back to Jobs
+                Back to Proposals
               </button>
             </div>
           )}
 
-          {job && (
+          {proposal && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
               <form onSubmit={handleSubmit} className="space-y-6">
-                {!isJobOpen && (
-                  <Alert
-                    type="warning"
-                    title="Job is not open"
-                    message="This job is not open for proposals right now."
+                <Card title="Resubmit Note" icon="edit_note">
+                  <TextArea
+                    label="What did you change?"
+                    required
+                    value={formData.resubmitNote}
+                    onChange={(value) => updateField("resubmitNote", value)}
+                    onBlur={() => markTouched("resubmitNote")}
+                    error={getFieldError("resubmitNote")}
+                    placeholder="Briefly explain what you improved in this version..."
+                    rows={4}
                   />
-                )}
+                </Card>
 
                 <Card title="Proposal Content" icon="description">
                   <TextArea
@@ -391,8 +397,8 @@ export default function SubmitProposalPage() {
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only needs title, payment amount, and
-                      duration days.
+                      Each milestone only sends title, amount, and duration days
+                      to backend.
                     </p>
                   </div>
 
@@ -450,7 +456,7 @@ export default function SubmitProposalPage() {
                 <div className="flex justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => navigate(`/expert/jobs/${jobId}`)}
+                    onClick={() => navigate(`/expert/proposals/${proposalId}`)}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
                   >
                     Cancel
@@ -458,10 +464,10 @@ export default function SubmitProposalPage() {
 
                   <button
                     type="submit"
-                    disabled={submitting || !isJobOpen}
+                    disabled={submitting}
                     className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Submitting..." : "Submit Proposal"}
+                    {submitting ? "Resubmitting..." : "Resubmit Proposal"}
                   </button>
                 </div>
               </form>
@@ -469,49 +475,46 @@ export default function SubmitProposalPage() {
               <aside className="space-y-6">
                 <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                   <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
-                    Job Summary
+                    Current Proposal
                   </p>
 
                   <h2 className="text-xl font-bold text-white">
-                    {getJobTitle(job)}
+                    {formatDisplayValue(proposal.jobTitle || "Untitled Job")}
                   </h2>
 
-                  <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {getJobDescription(job)}
-                  </p>
-
                   <div className="mt-5 space-y-3">
-                    <Info label="Client" value={getClientName(job)} />
+                    <Info label="Status" value={proposal.status || "N/A"} />
 
                     <Info
-                      label="Budget"
-                      value={formatBudget(
-                        getValue(job?.budgetMin, job?.BudgetMin),
-                        getValue(job?.budgetMax, job?.BudgetMax)
-                      )}
+                      label="Current Price"
+                      value={formatMoney(proposal.proposedPrice)}
                     />
 
                     <Info
-                      label="Duration"
-                      value={
-                        getJobDuration(job)
-                          ? `${getJobDuration(job)} days`
-                          : "N/A"
-                      }
+                      label="Current Timeline"
+                      value={`${proposal.proposedTimelineDays || 0} days`}
                     />
 
-                    <Info label="Status" value={getJobStatus(job) || "OPEN"} />
+                    <Info
+                      label="Version"
+                      value={formatProposalVersion(proposal)}
+                    />
                   </div>
                 </section>
 
-                <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
-                  <p className="font-bold">Before submitting</p>
+                {(proposal.rejectionReason || proposal.decisionNote) && (
+                  <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
+                    <p className="font-bold">Client feedback</p>
 
-                  <p className="mt-2 text-sm leading-6">
-                    Make sure your milestone total matches your proposed price
-                    and your timeline is realistic.
-                  </p>
-                </section>
+                    <p className="mt-2 text-sm leading-6">
+                      {formatDisplayValue(
+                        proposal.rejectionReason ||
+                          proposal.decisionNote ||
+                          "Please improve your proposal and submit again."
+                      )}
+                    </p>
+                  </section>
+                )}
               </aside>
             </div>
           )}
@@ -726,7 +729,9 @@ function Info({ label, value, tone = "default" }) {
     <div className={`rounded-xl border p-4 ${toneClass}`}>
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
 
-      <p className="mt-1 font-bold">{value}</p>
+      <p className="mt-1 break-words font-bold">
+        {formatDisplayValue(value)}
+      </p>
     </div>
   );
 }
@@ -747,15 +752,28 @@ function Alert({ type, title, message }) {
   );
 }
 
-function formatBudget(min, max) {
-  const minValue = Number(min || 0);
-  const maxValue = Number(max || 0);
+function buildFormFromProposal(proposal) {
+  const milestones = Array.isArray(proposal?.milestones)
+    ? proposal.milestones
+    : [];
 
-  if (minValue && maxValue) return `$${minValue} - $${maxValue}`;
-  if (minValue) return `From $${minValue}`;
-  if (maxValue) return `Up to $${maxValue}`;
-
-  return "Budget not set";
+  return {
+    coverLetter: proposal?.coverLetter || "",
+    proposedPrice: String(proposal?.proposedPrice || ""),
+    proposedTimelineDays: String(proposal?.proposedTimelineDays || ""),
+    expectedOutputs: proposal?.expectedOutputs || "",
+    workingApproach: proposal?.workingApproach || "",
+    preliminaryMilestonePlan: proposal?.preliminaryMilestonePlan || "",
+    resubmitNote: "",
+    milestones:
+      milestones.length > 0
+        ? milestones.map((item) => ({
+            title: item?.title || "",
+            amount: String(item?.amount || ""),
+            durationDays: String(item?.durationDays || ""),
+          }))
+        : [createEmptyMilestone()],
+  };
 }
 
 function formatMoney(value) {
@@ -768,71 +786,58 @@ function formatMoney(value) {
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
-function unwrapData(response) {
-  if (!response) return response;
-  if (response.data?.data) return response.data.data;
-  if (response.data) return response.data;
-  return response;
-}
+function formatProposalVersion(proposal) {
+  const version = proposal?.version || proposal?.latestVersion;
 
-function getValue(...values) {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
-  );
-}
+  if (!version) return "N/A";
 
-function getJobTitle(job) {
-  return getValue(job?.title, job?.Title, job?.projectTitle, "Untitled Job");
-}
+  if (typeof version === "object") {
+    const versionNumber =
+      version.versionNumber ||
+      version.VersionNumber ||
+      version.version ||
+      version.Version ||
+      version.proposalVersionId ||
+      version.ProposalVersionId ||
+      "N/A";
 
-function getJobDescription(job) {
-  return getValue(
-    job?.description,
-    job?.Description,
-    job?.projectDescription,
-    "No description."
-  );
-}
-
-function getClientName(job) {
-  return getValue(
-    job?.clientName,
-    job?.ClientName,
-    job?.client?.fullName,
-    job?.Client?.FullName,
-    "Client"
-  );
-}
-
-function getJobStatus(job) {
-  return getValue(job?.status, job?.Status, "OPEN");
-}
-
-function getJobDuration(job) {
-  return getValue(
-    job?.durationDays,
-    job?.DurationDays,
-    job?.projectDurationDays,
-    job?.ProjectDurationDays,
-    ""
-  );
-}
-
-function getFriendlyError(err, fallback) {
-  const data = err?.response?.data;
-
-  if (typeof data === "string") return data;
-
-  if (data?.message) return data.message;
-  if (data?.title) return data.title;
-
-  if (data?.errors) {
-    const allErrors = Object.values(data.errors).flat();
-
-    if (allErrors.length > 0) {
-      return allErrors.join(" ");
-    }
+    return `Version ${versionNumber}`;
   }
 
-  return err?.message || fallback;
+  return `Version ${version}`;
+}
+
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") return "N/A";
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatDisplayValue).join(", ") : "N/A";
+  }
+
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.Name ||
+      value.title ||
+      value.Title ||
+      value.label ||
+      value.Label ||
+      value.status ||
+      value.Status ||
+      value.versionNumber ||
+      value.VersionNumber ||
+      value.message ||
+      value.Message ||
+      "N/A"
+    );
+  }
+
+  return String(value);
+}
+
+function unwrapMaybe(result) {
+  if (!result) return result;
+  if (result.data?.data) return result.data.data;
+  if (result.data) return result.data;
+  return result;
 }

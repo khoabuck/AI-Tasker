@@ -8,6 +8,21 @@ const getValue = (...values) => {
 
 const trim = (value) => String(value || "").trim();
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
+const toInteger = (value, fallback = 0) => {
+  const number = Number(value);
+  if (Number.isNaN(number)) return fallback;
+  return Math.trunc(number);
+};
+
+const isInvalidId = (value) => {
+  return !value || value === "undefined" || value === "null";
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -32,508 +47,337 @@ const unwrapListData = (response) => {
 
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.Items)) return data.Items;
   if (Array.isArray(data?.result)) return data.result;
-  if (Array.isArray(data?.Result)) return data.Result;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.Results)) return data.Results;
-
   if (Array.isArray(data?.milestones)) return data.milestones;
-  if (Array.isArray(data?.Milestones)) return data.Milestones;
   if (Array.isArray(data?.milestoneDrafts)) return data.milestoneDrafts;
-  if (Array.isArray(data?.MilestoneDrafts)) return data.MilestoneDrafts;
-  if (Array.isArray(data?.contractMilestoneDrafts)) {
-    return data.contractMilestoneDrafts;
-  }
-  if (Array.isArray(data?.ContractMilestoneDrafts)) {
-    return data.ContractMilestoneDrafts;
-  }
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
-  if (Array.isArray(data?.data?.Items)) return data.data.Items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
-  if (Array.isArray(data?.data?.Result)) return data.data.Result;
-  if (Array.isArray(data?.data?.results)) return data.data.results;
-  if (Array.isArray(data?.data?.Results)) return data.data.Results;
-
   if (Array.isArray(data?.data?.milestones)) return data.data.milestones;
-  if (Array.isArray(data?.data?.Milestones)) return data.data.Milestones;
   if (Array.isArray(data?.data?.milestoneDrafts)) {
     return data.data.milestoneDrafts;
-  }
-  if (Array.isArray(data?.data?.MilestoneDrafts)) {
-    return data.data.MilestoneDrafts;
-  }
-  if (Array.isArray(data?.data?.contractMilestoneDrafts)) {
-    return data.data.contractMilestoneDrafts;
-  }
-  if (Array.isArray(data?.data?.ContractMilestoneDrafts)) {
-    return data.data.ContractMilestoneDrafts;
   }
 
   return [];
 };
 
-const cleanPayload = (payload = {}) => {
-  return Object.fromEntries(
-    Object.entries(payload).filter(([, value]) => {
-      if (value === undefined || value === null) return false;
-      if (typeof value === "string" && value.trim() === "") return false;
-      return true;
-    })
-  );
-};
-
-const normalizeStatus = (status) => {
-  return String(status || "DRAFT").trim().toUpperCase();
-};
-
-const normalizeContract = (item) => {
-  if (!item) return null;
+export const normalizeContract = (contract) => {
+  if (!contract) return null;
 
   const contractId = getValue(
-    item.contractId,
-    item.ContractId,
-    item.id,
-    item.Id
-  );
-
-  const proposalId = getValue(item.proposalId, item.ProposalId);
-
-  const projectId = getValue(item.projectId, item.ProjectId);
-
-  const jobId = getValue(
-    item.jobId,
-    item.JobId,
-    item.jobPostingId,
-    item.JobPostingId
-  );
-
-  const totalBudget = Number(
-    getValue(
-      item.totalBudget,
-      item.TotalBudget,
-      item.budget,
-      item.Budget,
-      item.contractValue,
-      item.ContractValue,
-      item.price,
-      item.Price,
-      0
-    )
-  );
-
-  const durationDays = Number(
-    getValue(
-      item.durationDays,
-      item.DurationDays,
-      item.estimatedDurationDays,
-      item.EstimatedDurationDays,
-      item.timelineDays,
-      item.TimelineDays,
-      0
-    )
+    contract.contractId,
+    contract.ContractId,
+    contract.id,
+    contract.Id
   );
 
   return {
-    ...item,
-
     contractId,
     id: contractId,
 
-    proposalId,
-    projectId,
-    jobId,
-    jobPostingId: jobId,
+    proposalId: getValue(contract.proposalId, contract.ProposalId, null),
 
-    title: getValue(
-      item.title,
-      item.Title,
-      item.contractTitle,
-      item.ContractTitle,
-      item.projectTitle,
-      item.ProjectTitle,
-      item.jobTitle,
-      item.JobTitle,
+    jobId: getValue(
+      contract.jobId,
+      contract.JobId,
+      contract.projectId,
+      contract.ProjectId,
+      contract.job?.jobId,
+      contract.Job?.JobId,
+      null
+    ),
+
+    jobTitle: getValue(
+      contract.jobTitle,
+      contract.JobTitle,
+      contract.projectTitle,
+      contract.ProjectTitle,
+      contract.job?.title,
+      contract.Job?.Title,
+      contract.title,
+      contract.Title,
       "Contract"
     ),
 
-    description: getValue(
-      item.description,
-      item.Description,
-      item.scope,
-      item.Scope,
-      item.contractScope,
-      item.ContractScope,
-      ""
-    ),
-
     clientName: getValue(
-      item.clientName,
-      item.ClientName,
-      item.customerName,
-      item.CustomerName,
+      contract.clientName,
+      contract.ClientName,
+      contract.client?.fullName,
+      contract.Client?.FullName,
+      contract.client?.name,
+      contract.Client?.Name,
       "Client"
     ),
 
     expertName: getValue(
-      item.expertName,
-      item.ExpertName,
-      item.expertFullName,
-      item.ExpertFullName,
+      contract.expertName,
+      contract.ExpertName,
+      contract.expert?.fullName,
+      contract.Expert?.FullName,
+      contract.expert?.name,
+      contract.Expert?.Name,
       "Expert"
     ),
 
+    status: String(getValue(contract.status, contract.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
+
+    totalAmount: toNumber(
+      getValue(
+        contract.totalAmount,
+        contract.TotalAmount,
+        contract.amount,
+        contract.Amount,
+        contract.contractAmount,
+        contract.ContractAmount,
+        contract.price,
+        contract.Price,
+        0
+      )
+    ),
+
+    timelineDays: toInteger(
+      getValue(
+        contract.timelineDays,
+        contract.TimelineDays,
+        contract.durationDays,
+        contract.DurationDays,
+        contract.estimatedDurationDays,
+        contract.EstimatedDurationDays,
+        0
+      )
+    ),
+
     terms: getValue(
-      item.terms,
-      item.Terms,
-      item.contractTerms,
-      item.ContractTerms,
+      contract.terms,
+      contract.Terms,
+      contract.description,
+      contract.Description,
+      contract.note,
+      contract.Note,
       ""
     ),
 
     cancellationReason: getValue(
-      item.cancellationReason,
-      item.CancellationReason,
-      item.cancelReason,
-      item.CancelReason,
+      contract.cancellationReason,
+      contract.CancellationReason,
+      contract.cancelReason,
+      contract.CancelReason,
       ""
     ),
 
-    totalBudget: Number.isNaN(totalBudget) ? 0 : totalBudget,
-    budget: Number.isNaN(totalBudget) ? 0 : totalBudget,
+    createdAt: getValue(contract.createdAt, contract.CreatedAt, ""),
+    updatedAt: getValue(contract.updatedAt, contract.UpdatedAt, ""),
+    confirmedAt: getValue(contract.confirmedAt, contract.ConfirmedAt, ""),
+    cancelledAt: getValue(contract.cancelledAt, contract.CancelledAt, ""),
 
-    durationDays: Number.isNaN(durationDays) ? 0 : durationDays,
-
-    status: normalizeStatus(getValue(item.status, item.Status)),
-
-    createdAt: getValue(item.createdAt, item.CreatedAt, ""),
-    updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
-    confirmedAt: getValue(item.confirmedAt, item.ConfirmedAt, ""),
-    cancelledAt: getValue(item.cancelledAt, item.CancelledAt, ""),
-
-    raw: item,
+    raw: contract,
   };
 };
 
-const normalizeMilestoneDraft = (item) => {
-  if (!item) return null;
+export const normalizeContractMilestone = (milestone, index = 0) => {
+  if (!milestone) return null;
 
-  const milestoneDraftId = getValue(
-    item.milestoneDraftId,
-    item.MilestoneDraftId,
-    item.contractMilestoneDraftId,
-    item.ContractMilestoneDraftId,
-    item.id,
-    item.Id
-  );
-
-  const amount = Number(
-    getValue(
-      item.amount,
-      item.Amount,
-      item.budget,
-      item.Budget,
-      item.price,
-      item.Price,
-      0
-    )
-  );
-
-  const orderIndex = Number(
-    getValue(
-      item.orderIndex,
-      item.OrderIndex,
-      item.sortOrder,
-      item.SortOrder,
-      item.index,
-      item.Index,
-      0
-    )
-  );
-
-  const durationDays = Number(
-    getValue(
-      item.durationDays,
-      item.DurationDays,
-      item.estimatedDurationDays,
-      item.EstimatedDurationDays,
-      0
-    )
+  const durationDays = getValue(
+    milestone.durationDays,
+    milestone.DurationDays,
+    milestone.deadlineOffsetDays,
+    milestone.DeadlineOffsetDays,
+    0
   );
 
   return {
-    ...item,
-
-    milestoneDraftId,
-    id: milestoneDraftId,
-
-    contractId: getValue(item.contractId, item.ContractId),
+    id: getValue(
+      milestone.contractMilestoneId,
+      milestone.ContractMilestoneId,
+      milestone.milestoneDraftId,
+      milestone.MilestoneDraftId,
+      milestone.contractMilestoneDraftId,
+      milestone.ContractMilestoneDraftId,
+      milestone.id,
+      milestone.Id,
+      index
+    ),
 
     title: getValue(
-      item.title,
-      item.Title,
-      item.name,
-      item.Name,
-      `Milestone ${orderIndex || ""}`.trim()
+      milestone.title,
+      milestone.Title,
+      milestone.name,
+      milestone.Name,
+      `Milestone ${index + 1}`
     ),
 
     description: getValue(
-      item.description,
-      item.Description,
-      item.deliverables,
-      item.Deliverables,
+      milestone.description,
+      milestone.Description,
+      milestone.expectedDeliverable,
+      milestone.ExpectedDeliverable,
       ""
     ),
 
-    amount: Number.isNaN(amount) ? 0 : amount,
-    budget: Number.isNaN(amount) ? 0 : amount,
+    acceptanceCriteria: getValue(
+      milestone.acceptanceCriteria,
+      milestone.AcceptanceCriteria,
+      ""
+    ),
 
-    durationDays: Number.isNaN(durationDays) ? 0 : durationDays,
+    amount: toNumber(getValue(milestone.amount, milestone.Amount, 0)),
 
-    orderIndex: Number.isNaN(orderIndex) ? 0 : orderIndex,
+    durationDays: toInteger(durationDays, 0),
 
-    dueDate: getValue(item.dueDate, item.DueDate, item.deadline, item.Deadline, ""),
+    deadlineOffsetDays: toInteger(durationDays, 0),
 
-    createdAt: getValue(item.createdAt, item.CreatedAt, ""),
-    updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
+    revisionLimit: toInteger(
+      getValue(milestone.revisionLimit, milestone.RevisionLimit, 0),
+      0
+    ),
 
-    raw: item,
+    orderIndex: toInteger(
+      getValue(milestone.orderIndex, milestone.OrderIndex, index + 1),
+      index + 1
+    ),
+
+    status: String(getValue(milestone.status, milestone.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
+
+    raw: milestone,
   };
 };
 
-const buildCreateContractPayload = (payload = {}) => {
-  return cleanPayload({
-    ...payload,
+export const getFriendlyContractError = (
+  error,
+  fallback = "Something went wrong."
+) => {
+  const payload =
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error;
 
-    proposalId: getValue(payload.proposalId, payload.ProposalId),
-    title: trim(getValue(payload.title, payload.contractTitle, "")),
-    description: trim(
-      getValue(payload.description, payload.scope, payload.contractScope, "")
-    ),
-    terms: trim(getValue(payload.terms, payload.contractTerms, "")),
+  const message =
+    typeof payload === "string"
+      ? payload
+      : payload?.message ||
+        payload?.title ||
+        payload?.detail ||
+        payload?.error ||
+        error?.message ||
+        "";
 
-    totalBudget: Number(
-      getValue(payload.totalBudget, payload.budget, payload.contractValue, 0)
-    ),
+  if (message.includes("not found")) {
+    return "Contract could not be found.";
+  }
 
-    durationDays: Number(
-      getValue(payload.durationDays, payload.estimatedDurationDays, 0)
-    ),
-  });
-};
+  if (message.includes("already")) {
+    return "This contract has already been processed.";
+  }
 
-const buildUpdateContractDraftPayload = (payload = {}) => {
-  return cleanPayload({
-    ...payload,
+  if (message.includes("confirm")) {
+    return "This contract cannot be confirmed right now.";
+  }
 
-    title: trim(getValue(payload.title, payload.contractTitle, "")),
-    description: trim(
-      getValue(payload.description, payload.scope, payload.contractScope, "")
-    ),
-    terms: trim(getValue(payload.terms, payload.contractTerms, "")),
+  if (message.includes("cancel")) {
+    return "This contract cannot be cancelled right now.";
+  }
 
-    totalBudget: Number(
-      getValue(payload.totalBudget, payload.budget, payload.contractValue, 0)
-    ),
+  if (message.includes("proposal")) {
+    return "Cannot find a contract for this proposal.";
+  }
 
-    durationDays: Number(
-      getValue(payload.durationDays, payload.estimatedDurationDays, 0)
-    ),
-  });
-};
-
-const buildMilestoneDraftItemPayload = (item = {}, index = 0) => {
-  return cleanPayload({
-    ...item,
-
-    title: trim(getValue(item.title, item.name, "")),
-    description: trim(getValue(item.description, item.deliverables, "")),
-
-    amount: Number(getValue(item.amount, item.budget, item.price, 0)),
-
-    durationDays: Number(
-      getValue(item.durationDays, item.estimatedDurationDays, 0)
-    ),
-
-    orderIndex: Number(getValue(item.orderIndex, item.sortOrder, index + 1)),
-
-    dueDate: getValue(item.dueDate, item.deadline, ""),
-  });
-};
-
-const buildReplaceMilestoneDraftsPayload = (payload = {}) => {
-  const source = Array.isArray(payload)
-    ? payload
-    : getValue(
-        payload.milestones,
-        payload.milestoneDrafts,
-        payload.items,
-        payload.contractMilestoneDrafts,
-        []
-      );
-
-  const milestoneDrafts = Array.isArray(source)
-    ? source.map(buildMilestoneDraftItemPayload)
-    : [];
-
-  return {
-    milestoneDrafts,
-    milestones: milestoneDrafts,
-    items: milestoneDrafts,
-  };
-};
-
-const buildConfirmContractPayload = (payload = {}) => {
-  return cleanPayload({
-    ...payload,
-    note: trim(getValue(payload.note, payload.message, "")),
-  });
-};
-
-const buildCancelContractPayload = (payload = {}) => {
-  return cleanPayload({
-    ...payload,
-    reason: trim(
-      getValue(payload.reason, payload.cancelReason, payload.message, "")
-    ),
-  });
+  return message || fallback;
 };
 
 const contractService = {
-  async createContractFromProposal(proposalId, payload = {}) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
+  async createFromProposal(proposalId, data = undefined) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
     }
-
-    const request = buildCreateContractPayload({
-      ...payload,
-      proposalId,
-    });
 
     const response = await contractApi.createContractFromProposal(
       proposalId,
-      request
+      data
     );
-
-    return normalizeContract(unwrapData(response));
-  },
-
-  async createContractDraft(payload) {
-    const request = buildCreateContractPayload(payload);
-    const response = await contractApi.createContractDraft(request);
-
-    return normalizeContract(unwrapData(response));
-  },
-
-  async updateContractDraft(contractId, payload) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
-    }
-
-    const request = buildUpdateContractDraftPayload(payload);
-    const response = await contractApi.updateContractDraft(contractId, request);
-
-    return normalizeContract(unwrapData(response));
-  },
-
-  async getContractMilestoneDrafts(contractId) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
-    }
-
-    const response = await contractApi.getContractMilestoneDrafts(contractId);
-
-    return unwrapListData(response).map(normalizeMilestoneDraft).filter(Boolean);
-  },
-
-  async replaceContractMilestoneDrafts(contractId, payload) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
-    }
-
-    const request = buildReplaceMilestoneDraftsPayload(payload);
-
-    const response = await contractApi.replaceContractMilestoneDrafts(
-      contractId,
-      request
-    );
-
-    const data = unwrapData(response);
-
-    if (Array.isArray(data)) {
-      return data.map(normalizeMilestoneDraft).filter(Boolean);
-    }
-
-    const list = unwrapListData(response);
-
-    if (list.length > 0) {
-      return list.map(normalizeMilestoneDraft).filter(Boolean);
-    }
-
-    return data;
-  },
-
-  async getContract(contractId) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
-    }
-
-    const response = await contractApi.getContract(contractId);
 
     return normalizeContract(unwrapData(response));
   },
 
   async getContractById(contractId) {
-    return this.getContract(contractId);
-  },
-
-  async getContractDetail(contractId) {
-    return this.getContract(contractId);
-  },
-
-  async getContractByProposal(proposalId) {
-    if (!proposalId) {
-      throw new Error("proposalId is required.");
+    if (isInvalidId(contractId)) {
+      throw new Error("Invalid contract id.");
     }
 
-    const response = await contractApi.getContractByProposal(proposalId);
+    const response = await contractApi.getContractById(contractId);
 
     return normalizeContract(unwrapData(response));
   },
 
   async getContractByProposalId(proposalId) {
-    return this.getContractByProposal(proposalId);
-  },
-
-  async getProposalContract(proposalId) {
-    return this.getContractByProposal(proposalId);
-  },
-
-  async confirmContract(contractId, payload = {}) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
     }
 
-    const request = buildConfirmContractPayload(payload);
-    const response = await contractApi.confirmContract(contractId, request);
+    const response = await contractApi.getContractByProposalId(proposalId);
 
     return normalizeContract(unwrapData(response));
   },
 
-  async cancelContract(contractId, payload = {}) {
-    if (!contractId) {
-      throw new Error("contractId is required.");
+  async getMilestoneDrafts(contractId) {
+    if (isInvalidId(contractId)) {
+      throw new Error("Invalid contract id.");
     }
 
-    const request = buildCancelContractPayload(payload);
-    const response = await contractApi.cancelContract(contractId, request);
+    const response = await contractApi.getContractMilestoneDrafts(contractId);
+
+    return unwrapListData(response)
+      .map((item, index) => normalizeContractMilestone(item, index))
+      .filter(Boolean)
+      .sort((a, b) => Number(a.orderIndex || 0) - Number(b.orderIndex || 0));
+  },
+
+  async confirmContract(contractId, data = undefined) {
+    if (isInvalidId(contractId)) {
+      throw new Error("Invalid contract id.");
+    }
+
+    const response = await contractApi.confirmContract(contractId, data);
 
     return normalizeContract(unwrapData(response));
   },
 
-  normalizeContract,
-  normalizeMilestoneDraft,
+  async cancelContract(contractId, reason) {
+    if (isInvalidId(contractId)) {
+      throw new Error("Invalid contract id.");
+    }
+
+    const payload =
+      typeof reason === "object"
+        ? reason
+        : {
+            reason: trim(reason),
+          };
+
+    const response = await contractApi.cancelContract(contractId, payload);
+
+    return normalizeContract(unwrapData(response));
+  },
+
+  async getContract(contractId) {
+    return this.getContractById(contractId);
+  },
+
+  async getContractByProposal(proposalId) {
+    return this.getContractByProposalId(proposalId);
+  },
+
+  async getContractMilestoneDrafts(contractId) {
+    return this.getMilestoneDrafts(contractId);
+  },
+
+  async createContractFromProposal(proposalId, data = undefined) {
+    return this.createFromProposal(proposalId, data);
+  },
 };
 
 export default contractService;

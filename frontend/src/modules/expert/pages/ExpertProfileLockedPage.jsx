@@ -12,14 +12,18 @@ export default function ExpertProfileLockedPage() {
 
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState("");
 
-  const reviewInfo = useMemo(() => extractReviewInfo(profile), [profile]);
+  const reviewLimit = useMemo(
+    () => extractExpertProfileReviewLimit(profile),
+    [profile]
+  );
 
-  const locked = isExpertProfileCurrentlyLocked(reviewInfo);
-  const lockExpired = isLockExpired(reviewInfo.lockedUntil);
-  const remainingAttempts = getRemainingAttempts(reviewInfo.submissionCount);
+  const scoreInfo = useMemo(() => extractProfileScoreInfo(profile), [profile]);
+
+  const feedback = useMemo(
+    () => buildFriendlyFeedback(profile),
+    [profile]
+  );
 
   useEffect(() => {
     loadProfile();
@@ -29,56 +33,39 @@ export default function ExpertProfileLockedPage() {
   const loadProfile = async () => {
     try {
       setLoading(true);
-      setError("");
 
-      const data = await expertProfileService.getMyExpertProfile();
-      setProfile(data);
+      const result = await expertProfileService.getMyExpertProfile();
+      const data = unwrapData(result);
 
-      const nextInfo = extractReviewInfo(data);
+      const reviewStatus = getReviewStatus(data);
+      const userStatus = getUserStatus(data);
+      const limit = extractExpertProfileReviewLimit(data);
 
-      if (isExpertProfileCurrentlyLocked(nextInfo)) {
-        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
-        return;
-      }
-
-      if (
-        nextInfo.userStatus === "ACTIVE" ||
-        nextInfo.reviewStatus === "APPROVED"
-      ) {
-        updateLocalUserStatus("ACTIVE");
+      if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         navigate("/expert/dashboard", { replace: true });
         return;
       }
 
-      updateLocalUserStatus("PENDING_PROFILE");
-      navigate("/expert/profile/edit", { replace: true });
-    } catch (err) {
-      console.error("LOAD LOCKED PROFILE ERROR:", err?.response?.data || err);
+      if (!isProfileLocked(limit)) {
+        navigate("/expert/profile", { replace: true });
+        return;
+      }
 
-      if (err?.response?.status === 404) {
-        updateLocalUserStatus("PENDING_PROFILE");
+      setProfile(data);
+    } catch (err) {
+      console.error("LOAD LOCKED PROFILE ERROR:", getRawPayload(err));
+
+      const status = err?.response?.status || err?.status;
+
+      if (status === 404) {
         navigate("/expert/setup-profile", { replace: true });
         return;
       }
 
-      setError(getFriendlyError(err));
+      setProfile(null);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleRefresh = async () => {
-    try {
-      setRefreshing(true);
-      await loadProfile();
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const handleGoResubmit = () => {
-    updateLocalUserStatus("PENDING_PROFILE");
-    navigate("/expert/profile/edit", { replace: true });
   };
 
   const handleLogout = async () => {
@@ -86,16 +73,16 @@ export default function ExpertProfileLockedPage() {
       if (typeof logoutContext === "function") {
         logoutContext();
       }
-    } catch (error) {
-      console.error("AUTH CONTEXT LOGOUT ERROR:", error);
+    } catch (logoutError) {
+      console.error("AUTH CONTEXT LOGOUT ERROR:", logoutError);
     }
 
     try {
       if (typeof authService.logout === "function") {
         await authService.logout();
       }
-    } catch (error) {
-      console.error("AUTH SERVICE LOGOUT ERROR:", error);
+    } catch (logoutError) {
+      console.error("AUTH SERVICE LOGOUT ERROR:", logoutError);
     }
 
     localStorage.removeItem("token");
@@ -113,7 +100,7 @@ export default function ExpertProfileLockedPage() {
     return (
       <LockedShell onLogout={handleLogout}>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading locked profile status...
+          Loading your profile information...
         </div>
       </LockedShell>
     );
@@ -122,151 +109,93 @@ export default function ExpertProfileLockedPage() {
   return (
     <LockedShell onLogout={handleLogout}>
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center px-5 py-10 md:px-8">
-        <section className="w-full max-w-2xl rounded-3xl border border-red-500/30 bg-[#151a22] p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.55)] md:p-8">
-          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl border border-red-400/40 bg-red-400/10">
-            <span className="material-symbols-outlined text-5xl text-red-300">
-              lock
-            </span>
-          </div>
-
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-red-300">
-            Expert Profile Locked
-          </p>
-
-          <h1 className="text-3xl font-black text-white md:text-4xl">
-            Your profile review is temporarily locked
-          </h1>
-
-          <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-gray-400">
-            Backend has temporarily locked your expert profile review. Please
-            wait until the lock time expires before trying again.
-          </p>
-
-          {error && (
-            <div className="mt-6 rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-left text-sm text-red-300">
-              <p className="font-bold">Cannot refresh profile status</p>
-              <p className="mt-1">{error}</p>
-            </div>
-          )}
-
-          <div className="mt-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-            <InfoCard
-              label="Review submissions used"
-              value={`${reviewInfo.submissionCount}/${MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS}`}
-              icon="counter_5"
-            />
-
-            <InfoCard
-              label="Attempts remaining"
-              value={`${remainingAttempts}/${MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS}`}
-              icon="published_with_changes"
-            />
-
-            <InfoCard
-              label="Review status"
-              value={reviewInfo.reviewStatus || "UNKNOWN"}
-              icon="fact_check"
-            />
-
-            <InfoCard
-              label="Account status"
-              value={reviewInfo.userStatus || "UNKNOWN"}
-              icon="manage_accounts"
-            />
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-left">
-            <p className="font-bold text-white">Locked time from backend</p>
-
-            {reviewInfo.lockedUntil ? (
-              <>
-                <p className="mt-2 text-sm leading-6 text-gray-300">
-                  Locked until:{" "}
-                  <span className="font-bold text-red-200">
-                    {formatDateTime(reviewInfo.lockedUntil)}
+        <div className="w-full max-w-5xl">
+          <section className="rounded-3xl border border-red-400/25 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-8">
+            <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10 text-red-300">
+                  <span className="material-symbols-outlined text-4xl">
+                    lock
                   </span>
+                </div>
+
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-red-300">
+                  Profile Review Paused
                 </p>
 
-                {locked && (
-                  <p className="mt-2 text-sm leading-6 text-gray-400">
-                    Please wait until this time before resubmitting.
-                  </p>
-                )}
+                <h1 className="text-3xl font-extrabold text-white md:text-4xl">
+                  You have no profile submission attempts left
+                </h1>
 
-                {lockExpired && (
-                  <p className="mt-2 text-sm leading-6 text-green-300">
-                    The lock time has expired. You can resubmit your profile
-                    again.
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="mt-2 text-sm leading-6 text-gray-400">
-                Backend has not returned a locked time. Press Refresh Status or
-                contact admin.
-              </p>
-            )}
-          </div>
+                <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400">
+                  Your profile cannot be submitted again right now. You can
+                  prepare stronger evidence and update your information when
+                  submissions become available again.
+                </p>
 
-          {getProfileReviewNote(profile) && (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-left">
-              <p className="font-bold text-white">Review note</p>
+                {reviewLimit.lockedUntil ? (
+                  <div className="mt-5 rounded-2xl border border-yellow-400/25 bg-yellow-400/10 p-4 text-yellow-100">
+                    <p className="font-bold">Available again</p>
+                    <p className="mt-1 text-sm">
+                      {formatDateTime(reviewLimit.lockedUntil)}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
 
-              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-gray-400">
-                {getProfileReviewNote(profile)}
-              </p>
+              <div className="grid w-full gap-3 sm:grid-cols-3 md:w-[430px] md:grid-cols-1">
+                <SummaryCard
+                  label="Attempts Used"
+                  value={`${reviewLimit.submissionCount}/${reviewLimit.maxAttempts}`}
+                />
+
+                <SummaryCard
+                  label="Attempts Remaining"
+                  value={`${reviewLimit.remainingAttempts}/${reviewLimit.maxAttempts}`}
+                />
+
+                <SummaryCard
+                  label="Profile Score"
+                  value={scoreInfo.scoreText || "N/A"}
+                  subText={
+                    scoreInfo.passScoreText
+                      ? `Passing score: ${scoreInfo.passScoreText}`
+                      : ""
+                  }
+                />
+              </div>
             </div>
-          )}
 
-          {getMissingInformation(profile) && (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-5 text-left">
-              <p className="font-bold text-white">Missing information</p>
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
+              <FriendlyCard
+                icon="priority_high"
+                tone="warning"
+                title="Main issue"
+                message={feedback.mainIssue}
+              />
 
-              <p className="mt-2 whitespace-pre-line text-sm leading-6 text-gray-400">
-                {getMissingInformation(profile)}
-              </p>
+              <FriendlyCard
+                icon="tips_and_updates"
+                tone="danger"
+                title="What to improve"
+                message={feedback.fixAction}
+              />
             </div>
-          )}
 
-          <div className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5 text-left">
-            <p className="font-bold text-white">What should you do now?</p>
+            <div className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5">
+              <h2 className="text-lg font-black text-white">
+                What you can prepare next
+              </h2>
 
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-400">
-              <li>• Wait until the backend lock time expires.</li>
-              <li>• Prepare stronger proof links, certificates, and portfolio.</li>
-              <li>• After unlock, resubmit your expert profile carefully.</li>
-            </ul>
-          </div>
-
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <button
-              type="button"
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {refreshing ? "Refreshing..." : "Refresh Status"}
-            </button>
-
-            {lockExpired && (
-              <button
-                type="button"
-                onClick={handleGoResubmit}
-                className="rounded-xl border border-green-400/50 bg-green-400/10 px-6 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-              >
-                Try Resubmit
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-red-400/50 bg-red-400/10 px-6 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
-            >
-              Logout
-            </button>
-          </div>
-        </section>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <TipItem text="Use a realistic years-of-experience value that matches your public evidence." />
+                <TipItem text="Add detailed project descriptions to your portfolio and GitHub repositories." />
+                <TipItem text="Add public certificate links if you have them." />
+                <TipItem text="Add a LinkedIn profile or other public proof of experience." />
+              </div>
+            </div>
+          </section>
+        </div>
       </div>
     </LockedShell>
   );
@@ -300,171 +229,458 @@ function LockedShell({ children, onLogout }) {
   );
 }
 
-function InfoCard({ label, value, icon }) {
+function SummaryCard({ label, value, subText }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 text-left">
-      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-red-400/30 bg-red-400/10 text-red-300">
-        <span className="material-symbols-outlined text-[22px]">{icon}</span>
-      </div>
-
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-2 break-words text-lg font-black text-white">{value}</p>
+      <p className="mt-2 text-2xl font-black text-white">{value || "N/A"}</p>
+      {subText ? <p className="mt-1 text-xs text-gray-500">{subText}</p> : null}
     </div>
   );
 }
 
-function extractReviewInfo(profile) {
+function FriendlyCard({ icon, tone, title, message }) {
+  const style =
+    tone === "danger"
+      ? "border-red-400/25 bg-red-400/10"
+      : "border-yellow-400/25 bg-yellow-400/10";
+
+  const iconStyle = tone === "danger" ? "text-red-300" : "text-yellow-300";
+
+  return (
+    <div className={`rounded-2xl border p-5 ${style}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <span className={`material-symbols-outlined text-xl ${iconStyle}`}>
+          {icon}
+        </span>
+
+        <p className="font-black text-white">{title}</p>
+      </div>
+
+      <p className="text-sm leading-7 text-gray-300">
+        {message || "Please improve your profile evidence."}
+      </p>
+    </div>
+  );
+}
+
+function TipItem({ text }) {
+  return (
+    <div className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <span className="material-symbols-outlined mt-0.5 text-[18px] text-cyan-300">
+        check_circle
+      </span>
+      <p className="text-sm leading-6 text-gray-400">{text}</p>
+    </div>
+  );
+}
+
+function buildFriendlyFeedback(profile) {
+  const reviewNote = getReviewNote(profile);
+  const missingInformation = getMissingInformation(profile);
+
   return {
-    submissionCount: Number(
-      profile?.profileReviewSubmissionCount ||
-        profile?.ProfileReviewSubmissionCount ||
-        0
-    ),
-
-    lockedUntil:
-      profile?.profileReviewLockedUntil ||
-      profile?.ProfileReviewLockedUntil ||
-      "",
-
-    reviewStatus: String(
-      profile?.profileReviewStatus ||
-        profile?.ProfileReviewStatus ||
-        profile?.reviewStatus ||
-        profile?.ReviewStatus ||
-        ""
-    )
-      .trim()
-      .toUpperCase(),
-
-    userStatus: String(profile?.userStatus || profile?.UserStatus || "")
-      .trim()
-      .toUpperCase(),
+    mainIssue: buildMainIssue(reviewNote),
+    fixAction: buildFixAction({
+      reviewNote,
+      missingInformation,
+    }),
   };
 }
 
-function isExpertProfileCurrentlyLocked(info) {
-  if (!info) return false;
+function buildMainIssue(reviewNote) {
+  const text = String(reviewNote || "").trim();
 
-  return isFutureDate(info.lockedUntil);
-}
+  if (!text) {
+    return "Your profile needs stronger evidence before it can be approved.";
+  }
 
-function getRemainingAttempts(submissionCount) {
-  return Math.max(
-    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS - Number(submissionCount || 0),
-    0
-  );
-}
-
-function isFutureDate(value) {
-  if (!value) return false;
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return false;
-
-  return date.getTime() > Date.now();
-}
-
-function isLockExpired(value) {
-  if (!value) return false;
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return false;
-
-  return date.getTime() <= Date.now();
-}
-
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function getProfileReviewNote(profile) {
   return (
-    profile?.profileReviewNote ||
-    profile?.ProfileReviewNote ||
-    profile?.reviewNote ||
-    profile?.ReviewNote ||
-    profile?.aiReviewNote ||
-    profile?.AiReviewNote ||
-    ""
+    extractSentence(text, /extremely high and not supported/i) ||
+    extractSentence(text, /claimed experience is much higher/i) ||
+    extractSentence(text, /lacks strong evidence/i) ||
+    firstSentence(text) ||
+    "Your profile needs stronger evidence before it can be approved."
   );
 }
 
-function getMissingInformation(profile) {
-  const value =
-    profile?.missingInformation ||
-    profile?.MissingInformation ||
-    profile?.missingInfo ||
-    profile?.MissingInfo ||
-    "";
+function buildFixAction({ reviewNote, missingInformation }) {
+  const missingText = String(missingInformation || "").trim();
+
+  if (missingText) return missingText;
+
+  const text = String(reviewNote || "").trim();
+
+  return (
+    extractSentence(text, /Additional evidence is required/i) ||
+    "Add stronger evidence such as detailed project descriptions, certificates, GitHub repositories, portfolio links, or a LinkedIn profile."
+  );
+}
+
+function extractProfileScoreInfo(profile) {
+  const raw = profile?.raw || profile?.Raw || profile || {};
+  const reviewNote = getReviewNote(profile);
+  const parsedScore = parseFinalProfileScore(reviewNote);
+
+  const profileScore =
+    parsedScore.score ??
+    toNumberOrNull(
+      pickFirst(
+        profile?.profileScore,
+        profile?.ProfileScore,
+        profile?.score,
+        profile?.Score,
+        raw?.profileScore,
+        raw?.ProfileScore,
+        raw?.score,
+        raw?.Score
+      )
+    );
+
+  const profileScoreMax =
+    parsedScore.maxScore ??
+    toNumberOrNull(
+      pickFirst(
+        profile?.profileScoreMax,
+        profile?.ProfileScoreMax,
+        profile?.maxScore,
+        profile?.MaxScore,
+        raw?.profileScoreMax,
+        raw?.ProfileScoreMax,
+        raw?.maxScore,
+        raw?.MaxScore
+      )
+    );
+
+  const passScore =
+    parsePassThreshold(reviewNote) ??
+    toNumberOrNull(
+      pickFirst(
+        profile?.profilePassScore,
+        profile?.ProfilePassScore,
+        profile?.passScore,
+        profile?.PassScore,
+        raw?.profilePassScore,
+        raw?.ProfilePassScore,
+        raw?.passScore,
+        raw?.PassScore
+      )
+    );
+
+  const scoreText =
+    parsedScore.text ||
+    profile?.profileScoreText ||
+    profile?.ProfileScoreText ||
+    raw?.profileScoreText ||
+    raw?.ProfileScoreText ||
+    buildScoreText({
+      profileScore,
+      profileScoreMax,
+    });
+
+  return {
+    scoreText,
+    passScoreText:
+      passScore !== null && passScore !== undefined ? String(passScore) : "",
+  };
+}
+
+function extractExpertProfileReviewLimit(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const maxAttempts =
+    toNumberOrNull(
+      pickFirst(
+        data?.maxReviewAttempts,
+        data?.MaxReviewAttempts,
+        data?.profileReviewMaxSubmissions,
+        data?.ProfileReviewMaxSubmissions,
+        data?.maxAttempts,
+        data?.MaxAttempts,
+        raw?.maxReviewAttempts,
+        raw?.MaxReviewAttempts,
+        raw?.profileReviewMaxSubmissions,
+        raw?.ProfileReviewMaxSubmissions,
+        raw?.maxAttempts,
+        raw?.MaxAttempts
+      )
+    ) || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const submissionCount =
+    toNumberOrNull(
+      pickFirst(
+        data?.profileReviewSubmissionCount,
+        data?.ProfileReviewSubmissionCount,
+        data?.reviewAttempts,
+        data?.ReviewAttempts,
+        data?.submissionCount,
+        data?.SubmissionCount,
+        data?.submissionCountUsed,
+        data?.SubmissionCountUsed,
+        raw?.profileReviewSubmissionCount,
+        raw?.ProfileReviewSubmissionCount,
+        raw?.reviewAttempts,
+        raw?.ReviewAttempts,
+        raw?.submissionCount,
+        raw?.SubmissionCount,
+        raw?.submissionCountUsed,
+        raw?.SubmissionCountUsed
+      )
+    ) || 0;
+
+  const explicitRemaining = toNumberOrNull(
+    pickFirst(
+      data?.remainingReviewAttempts,
+      data?.RemainingReviewAttempts,
+      data?.profileReviewRemainingAttempts,
+      data?.ProfileReviewRemainingAttempts,
+      data?.remainingAttempts,
+      data?.RemainingAttempts,
+      raw?.remainingReviewAttempts,
+      raw?.RemainingReviewAttempts,
+      raw?.profileReviewRemainingAttempts,
+      raw?.ProfileReviewRemainingAttempts,
+      raw?.remainingAttempts,
+      raw?.RemainingAttempts
+    )
+  );
+
+  const remainingAttempts =
+    explicitRemaining !== null
+      ? Math.max(0, explicitRemaining)
+      : Math.max(0, maxAttempts - submissionCount);
+
+  return {
+    submissionCount,
+    remainingAttempts,
+    maxAttempts,
+    lockedUntil:
+      pickFirst(
+        data?.profileReviewLockedUntil,
+        data?.ProfileReviewLockedUntil,
+        data?.lockedUntil,
+        data?.LockedUntil,
+        raw?.profileReviewLockedUntil,
+        raw?.ProfileReviewLockedUntil,
+        raw?.lockedUntil,
+        raw?.LockedUntil
+      ) || "",
+    reviewStatus: getReviewStatus(data),
+    userStatus: getUserStatus(data),
+  };
+}
+
+function isProfileLocked(limit) {
+  if (!limit) return false;
+
+  const reviewStatus = String(limit.reviewStatus || "").toUpperCase();
+  const userStatus = String(limit.userStatus || "").toUpperCase();
+
+  if (
+    reviewStatus === "LOCKED" ||
+    userStatus === "EXPERT_PROFILE_LOCKED" ||
+    userStatus === "LOCKED"
+  ) {
+    return true;
+  }
+
+  if (Number(limit.remainingAttempts || 0) <= 0) {
+    return true;
+  }
+
+  if (!limit.lockedUntil) return false;
+
+  const time = new Date(limit.lockedUntil).getTime();
+
+  return Number.isFinite(time) && time > Date.now();
+}
+
+function getReviewStatus(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  return String(
+    pickFirst(
+      data?.profileReviewStatus,
+      data?.ProfileReviewStatus,
+      data?.reviewStatus,
+      data?.ReviewStatus,
+      data?.status,
+      data?.Status,
+      raw?.profileReviewStatus,
+      raw?.ProfileReviewStatus,
+      raw?.reviewStatus,
+      raw?.ReviewStatus,
+      raw?.status,
+      raw?.Status
+    ) || ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function getUserStatus(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  return String(
+    pickFirst(
+      data?.userStatus,
+      data?.UserStatus,
+      raw?.userStatus,
+      raw?.UserStatus
+    ) || ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function getReviewNote(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  return (
+    pickFirst(
+      data?.profileReviewNote,
+      data?.ProfileReviewNote,
+      data?.reviewNote,
+      data?.ReviewNote,
+      data?.correctionNote,
+      data?.CorrectionNote,
+      data?.rejectionReason,
+      data?.RejectionReason,
+      raw?.profileReviewNote,
+      raw?.ProfileReviewNote,
+      raw?.reviewNote,
+      raw?.ReviewNote,
+      raw?.correctionNote,
+      raw?.CorrectionNote,
+      raw?.rejectionReason,
+      raw?.RejectionReason
+    ) || ""
+  );
+}
+
+function getMissingInformation(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const value = pickFirst(
+    data?.missingInformation,
+    data?.MissingInformation,
+    data?.missingFields,
+    data?.MissingFields,
+    raw?.missingInformation,
+    raw?.MissingInformation,
+    raw?.missingFields,
+    raw?.MissingFields
+  );
 
   if (Array.isArray(value)) return value.join(", ");
-
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).flat().join(", ");
-  }
 
   return String(value || "");
 }
 
-function updateLocalUserStatus(status) {
-  if (!status) return;
+function unwrapData(result) {
+  if (!result) return result;
 
-  try {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+  if (result.data?.data) return result.data.data;
+  if (result.data) return result.data;
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify({
-        ...user,
-        role: "EXPERT",
-        status,
-      })
-    );
-  } catch (error) {
-    console.error("UPDATE LOCAL USER STATUS ERROR:", error);
-  }
+  return result;
 }
 
-function getFriendlyError(err) {
-  const status = err?.response?.status;
+function getRawPayload(error) {
+  return error?.response?.data || error?.data || error;
+}
 
-  if (status === 401) {
-    return "Your session has expired. Please login again.";
+function parseFinalProfileScore(text) {
+  const match = String(text || "").match(
+    /Final profile score:\s*(\d+)\s*\/\s*(\d+)/i
+  );
+
+  if (!match) {
+    return {
+      score: null,
+      maxScore: null,
+      text: "",
+    };
   }
 
-  if (status === 403) {
-    return "Backend blocked this request because the current token does not have EXPERT permission.";
-  }
+  return {
+    score: Number(match[1]),
+    maxScore: Number(match[2]),
+    text: `${match[1]}/${match[2]}`,
+  };
+}
 
-  const data = err?.response?.data;
+function parsePassThreshold(text) {
+  return extractNumber(text, /Pass threshold:\s*(\d+)/i);
+}
 
-  if (typeof data === "string") return data;
+function buildScoreText(scoreInfo) {
+  const score = scoreInfo?.profileScore;
+  const maxScore = scoreInfo?.profileScoreMax;
 
-  if (data?.message) return data.message;
+  if (score === null || score === undefined) return "";
+  if (maxScore === null || maxScore === undefined) return String(score);
 
-  if (data?.title) return data.title;
+  return `${score}/${maxScore}`;
+}
 
-  if (data?.errors) {
-    const allErrors = Object.values(data.errors).flat();
-
-    if (allErrors.length > 0) {
-      return allErrors.join(" ");
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
     }
   }
 
-  return err?.message || "Something went wrong. Please try again.";
+  return undefined;
+}
+
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return null;
+
+  return number;
+}
+
+function extractNumber(text, regex) {
+  const match = String(text || "").match(regex);
+
+  if (!match) return null;
+
+  const value = Number(match[1]);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractSentence(text, regex) {
+  const sentences = String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  return sentences.find((sentence) => regex.test(sentence)) || "";
+}
+
+function firstSentence(text) {
+  return (
+    String(text || "")
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)[0] || ""
+  );
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
 }

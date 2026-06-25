@@ -5,15 +5,15 @@ const proposalApi = {
     return axiosInstance.post("/proposals/submit", data);
   },
 
-  getMyProposals(params = {}) {
-    return axiosInstance.get("/proposals/me", { params });
+  getMyProposals() {
+    return axiosInstance.get("/proposals/me");
   },
 
-  getJobProposals(jobId, params = {}) {
-    return axiosInstance.get(`/jobs/${jobId}/proposals`, { params });
+  getJobProposals(jobId) {
+    return axiosInstance.get(`/jobs/${jobId}/proposals`);
   },
 
-  getProposal(proposalId) {
+  getProposalById(proposalId) {
     return axiosInstance.get(`/proposals/${proposalId}`);
   },
 
@@ -25,8 +25,10 @@ const proposalApi = {
     return axiosInstance.post(`/proposals/${proposalId}/resubmit`, data);
   },
 
-  decideProposal(proposalId, data) {
-    return axiosInstance.post(`/proposals/${proposalId}/decision`, data);
+  decideProposal(proposalId, decision) {
+    return axiosInstance.post(`/proposals/${proposalId}/decision`, null, {
+      params: { decision },
+    });
   },
 
   withdrawProposal(proposalId) {

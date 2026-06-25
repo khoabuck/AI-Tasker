@@ -17,7 +17,7 @@ const unwrapData = (response) => {
   if (data?.data?.message) return data.data.message;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
+  if (data?.data !== undefined) return data.data;
 
   if (data?.conversation) return data.conversation;
   if (data?.message) return data.message;
@@ -78,7 +78,9 @@ const normalizeConversation = (item) => {
     item.conversationId,
     item.ConversationId,
     item.id,
-    item.Id
+    item.Id,
+    item.conversationID,
+    item.ConversationID
   );
 
   const otherUserName = getValue(
@@ -94,6 +96,10 @@ const normalizeConversation = (item) => {
     item.ClientName,
     item.expertName,
     item.ExpertName,
+    item.otherUser?.fullName,
+    item.OtherUser?.FullName,
+    item.otherUser?.name,
+    item.OtherUser?.Name,
     "User"
   );
 
@@ -123,10 +129,32 @@ const normalizeConversation = (item) => {
       item.receiverUserId,
       item.ReceiverUserId,
       item.senderUserId,
-      item.SenderUserId
+      item.SenderUserId,
+      item.otherUser?.userId,
+      item.OtherUser?.UserId,
+      item.otherUser?.id,
+      item.OtherUser?.Id
     ),
 
     otherUserName,
+
+    otherUserEmail: getValue(
+      item.otherUserEmail,
+      item.OtherUserEmail,
+      item.participantEmail,
+      item.ParticipantEmail,
+      item.receiverEmail,
+      item.ReceiverEmail,
+      item.senderEmail,
+      item.SenderEmail,
+      item.clientEmail,
+      item.ClientEmail,
+      item.expertEmail,
+      item.ExpertEmail,
+      item.otherUser?.email,
+      item.OtherUser?.Email,
+      ""
+    ),
 
     otherUserAvatarUrl: getValue(
       item.otherUserAvatarUrl,
@@ -137,6 +165,8 @@ const normalizeConversation = (item) => {
       item.ReceiverAvatarUrl,
       item.senderAvatarUrl,
       item.SenderAvatarUrl,
+      item.otherUser?.avatarUrl,
+      item.OtherUser?.AvatarUrl,
       ""
     ),
 
@@ -147,6 +177,8 @@ const normalizeConversation = (item) => {
       item.LastMessageContent,
       item.latestMessage,
       item.LatestMessage,
+      item.messagePreview,
+      item.MessagePreview,
       ""
     ),
 
@@ -186,6 +218,8 @@ const normalizeMessage = (item) => {
   const senderUserId = getValue(
     item.senderUserId,
     item.SenderUserId,
+    item.senderId,
+    item.SenderId,
     item.userId,
     item.UserId,
     item.createdByUserId,
@@ -199,6 +233,7 @@ const normalizeMessage = (item) => {
     conversationId: getValue(item.conversationId, item.ConversationId),
 
     senderUserId,
+    senderId: senderUserId,
 
     senderName: getValue(
       item.senderName,
@@ -209,6 +244,10 @@ const normalizeMessage = (item) => {
       item.CreatedByName,
       "User"
     ),
+
+    senderRole: String(
+      getValue(item.senderRole, item.SenderRole, "")
+    ).toUpperCase(),
 
     senderAvatarUrl: getValue(
       item.senderAvatarUrl,
@@ -240,29 +279,82 @@ const normalizeMessage = (item) => {
 
     isMine: Boolean(getValue(item.isMine, item.IsMine, false)),
 
-    createdAt: getValue(item.createdAt, item.CreatedAt, item.sentAt, item.SentAt, ""),
+    createdAt: getValue(
+      item.createdAt,
+      item.CreatedAt,
+      item.sentAt,
+      item.SentAt,
+      ""
+    ),
 
     raw: item,
   };
 };
 
 const buildCreateConversationPayload = (payload = {}) => {
-  return {
-    participantUserId: getValue(
-      payload.participantUserId,
-      payload.receiverUserId,
-      payload.otherUserId
-    ),
-    projectId: getValue(payload.projectId, null),
-    proposalId: getValue(payload.proposalId, null),
-    contractId: getValue(payload.contractId, null),
+  const participantUserId = getValue(
+    payload.participantUserId,
+    payload.ParticipantUserId,
+    payload.clientUserId,
+    payload.ClientUserId,
+    payload.receiverUserId,
+    payload.ReceiverUserId,
+    payload.otherUserId,
+    payload.OtherUserId,
+    payload.targetUserId,
+    payload.TargetUserId
+  );
+
+  const clientProfileId = getValue(
+    payload.clientProfileId,
+    payload.ClientProfileId,
+    payload.participantClientProfileId,
+    payload.ParticipantClientProfileId
+  );
+
+  const jobPostingId = getValue(
+    payload.jobPostingId,
+    payload.JobPostingId,
+    payload.jobId,
+    payload.JobId
+  );
+
+  const request = {
+    participantUserId: participantUserId
+      ? Number(participantUserId)
+      : clientProfileId
+      ? Number(clientProfileId)
+      : undefined,
+    projectId: getValue(payload.projectId, payload.ProjectId, null),
+    proposalId: getValue(payload.proposalId, payload.ProposalId, null),
+    contractId: getValue(payload.contractId, payload.ContractId, null),
     initialMessage: trim(
       getValue(payload.initialMessage, payload.message, payload.content, "")
     ),
   };
+
+  if (clientProfileId) request.clientProfileId = Number(clientProfileId);
+  if (jobPostingId) {
+    request.jobPostingId = Number(jobPostingId);
+    request.jobId = Number(jobPostingId);
+  }
+
+  Object.keys(request).forEach((key) => {
+    if (request[key] === undefined || request[key] === null || request[key] === "") {
+      delete request[key];
+    }
+  });
+
+  return request;
 };
 
 const buildSendMessagePayload = (payload = {}) => {
+  if (typeof payload === "string") {
+    return {
+      content: trim(payload),
+    };
+  }
+
   return {
     content: trim(getValue(payload.content, payload.message, payload.messageText, "")),
     messageText: trim(
@@ -275,6 +367,13 @@ const buildSendMessagePayload = (payload = {}) => {
 const conversationService = {
   async createConversation(payload) {
     const request = buildCreateConversationPayload(payload);
+
+    if (!request.participantUserId) {
+      throw new Error("participantUserId is required to create conversation.");
+    }
+
+    console.log("CREATE CONVERSATION PAYLOAD:", request);
+
     const response = await conversationApi.createConversation(request);
 
     return normalizeConversation(unwrapData(response));
@@ -286,6 +385,10 @@ const conversationService = {
     return unwrapListData(response).map(normalizeConversation).filter(Boolean);
   },
 
+  async getConversations(params = {}) {
+    return conversationService.getMyConversations(params);
+  },
+
   async getConversation(conversationId) {
     if (!conversationId) {
       throw new Error("conversationId is required.");
@@ -294,6 +397,10 @@ const conversationService = {
     const response = await conversationApi.getConversation(conversationId);
 
     return normalizeConversation(unwrapData(response));
+  },
+
+  async getConversationById(conversationId) {
+    return conversationService.getConversation(conversationId);
   },
 
   async getConversationMessages(conversationId, params = {}) {
@@ -307,6 +414,10 @@ const conversationService = {
     );
 
     return unwrapListData(response).map(normalizeMessage).filter(Boolean);
+  },
+
+  async getMessages(conversationId, params = {}) {
+    return conversationService.getConversationMessages(conversationId, params);
   },
 
   async sendMessage(conversationId, payload) {
