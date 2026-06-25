@@ -81,7 +81,8 @@ import AdminAuditLogsPage from "../../modules/admin/pages/AdminAuditLogsPage";
 import AdminAuditLogDetailPage from "../../modules/admin/pages/AdminAuditLogDetailPage";
 import AdminExpertScoringPolicyPage from "../../modules/admin/pages/AdminExpertScoringPolicyPage";
 import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformFeePolicyPage";
-
+import AdminJobPostingAiPolicyPage from "../../modules/admin/pages/AdminJobPostingAiPolicyPage";
+import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCreditPackagesPage";
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -202,9 +203,11 @@ export default function AppRouter() {
       <Route path="/admin/audit-logs/:auditLogId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogDetailPage /></ProtectedRoute>} />
       <Route path="/admin/expert-profile-scoring-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminExpertScoringPolicyPage /></ProtectedRoute>} />
       <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />  
+      <Route path="/admin/job-posting-ai-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobPostingAiPolicyPage /></ProtectedRoute>} />
+      <Route path="/admin/job-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobCreditPackagesPage /></ProtectedRoute>} /> 
 
 
-      
+
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

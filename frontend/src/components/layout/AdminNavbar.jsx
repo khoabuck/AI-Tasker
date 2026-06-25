@@ -11,10 +11,9 @@ export default function AdminNavbar() {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
-      isActive
-        ? "border border-cyan-400/30 bg-cyan-400/10 text-[#00F0FF]"
-        : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${isActive
+      ? "border border-cyan-400/30 bg-cyan-400/10 text-[#00F0FF]"
+      : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
     }`;
 
   const adminInitials = getInitials(user?.fullName || user?.name || "Admin");
@@ -89,6 +88,16 @@ export default function AdminNavbar() {
             rule_settings
           </span>
           Expert Scoring
+        </NavLink>
+
+        <NavLink to="/admin/job-posting-ai-policy" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">smart_toy</span>
+          Job AI Policy
+        </NavLink>
+
+        <NavLink to="/admin/job-credit-packages" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">inventory_2</span>
+          Credit Packages
         </NavLink>
 
         <NavLink to="/admin/platform-fee-policy" className={navLinkClass}>

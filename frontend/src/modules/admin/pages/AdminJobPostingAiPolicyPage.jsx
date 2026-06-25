@@ -1,108 +1,69 @@
 import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
-import adminPolicyService from "../../../services/adminPolicy.service";
+import adminJobPostingAiPolicyService from "../../../services/adminJobPostingAiPolicy.service";
 
 const EMPTY_FORM = {
-  passThreshold: 0,
-  maxReviewSubmissions: 0,
-  reviewLockDurationHours: 0,
-  profileCompletenessMaxScore: 0,
-  aiSkillMaxScore: 0,
-  experienceMaxScore: 0,
-  portfolioMaxScore: 0,
-  gitHubMaxScore: 0,
-  linkedInMaxScore: 0,
-  certificateMaxScore: 0,
-  riskMaxPenalty: 0,
-  certificateUnverifiedMaxProfileScore: 0,
-  bioMinimumLength: 0,
-  skillsMinimumLength: 0,
-  maxCertificates: 0,
+  initialFreeJobPostCredits: 0,
+  initialFreeAiGenerationCredits: 0,
+  maxDraftJobsPerClient: 0,
+  maxSkillsPerJob: 0,
+  maxSuggestedSkills: 0,
+  minimumSkillRelevanceScore: 0,
+  maxRecommendationResults: 0,
+  minimumRecommendationMatchScore: 0,
   reason: "",
 };
 
+const CREDIT_FIELDS = [
+  {
+    name: "initialFreeJobPostCredits",
+    label: "Initial Free Job Post Credits",
+    helper: "Free job posting credits given to a new client.",
+  },
+  {
+    name: "initialFreeAiGenerationCredits",
+    label: "Initial Free AI Generation Credits",
+    helper: "Free AI generation credits given to a new client.",
+  },
+];
+
+const LIMIT_FIELDS = [
+  {
+    name: "maxDraftJobsPerClient",
+    label: "Max Draft Jobs Per Client",
+    helper: "Maximum draft jobs a client can keep.",
+  },
+  {
+    name: "maxSkillsPerJob",
+    label: "Max Skills Per Job",
+    helper: "Maximum skills that can be attached to one job.",
+  },
+  {
+    name: "maxSuggestedSkills",
+    label: "Max Suggested Skills",
+    helper: "Maximum AI suggested skills returned to client.",
+  },
+  {
+    name: "maxRecommendationResults",
+    label: "Max Recommendation Results",
+    helper: "Maximum recommended jobs or experts returned by AI.",
+  },
+];
+
 const SCORE_FIELDS = [
   {
-    name: "profileCompletenessMaxScore",
-    label: "Profile Completeness Max Score",
-    helper: "Maximum score for profile completeness.",
+    name: "minimumSkillRelevanceScore",
+    label: "Minimum Skill Relevance Score",
+    helper: "Minimum AI relevance score required for suggested skills.",
   },
   {
-    name: "aiSkillMaxScore",
-    label: "AI Skill Max Score",
-    helper: "Maximum score from AI skill evaluation.",
-  },
-  {
-    name: "experienceMaxScore",
-    label: "Experience Max Score",
-    helper: "Maximum score for expert experience.",
-  },
-  {
-    name: "portfolioMaxScore",
-    label: "Portfolio Max Score",
-    helper: "Maximum score for portfolio quality.",
-  },
-  {
-    name: "gitHubMaxScore",
-    label: "GitHub Max Score",
-    helper: "Maximum score for GitHub profile.",
-  },
-  {
-    name: "linkedInMaxScore",
-    label: "LinkedIn Max Score",
-    helper: "Maximum score for LinkedIn profile.",
-  },
-  {
-    name: "certificateMaxScore",
-    label: "Certificate Max Score",
-    helper: "Maximum score for certificates.",
+    name: "minimumRecommendationMatchScore",
+    label: "Minimum Recommendation Match Score",
+    helper: "Minimum match score required for AI recommendations.",
   },
 ];
 
-const RULE_FIELDS = [
-  {
-    name: "passThreshold",
-    label: "Pass Threshold",
-    helper: "Minimum score required to pass expert profile review.",
-  },
-  {
-    name: "maxReviewSubmissions",
-    label: "Max Review Submissions",
-    helper: "Maximum number of review submissions allowed.",
-  },
-  {
-    name: "reviewLockDurationHours",
-    label: "Review Lock Duration Hours",
-    helper: "Lock duration after exceeding review submission limits.",
-  },
-  {
-    name: "riskMaxPenalty",
-    label: "Risk Max Penalty",
-    helper: "Maximum penalty deducted for risky profile signals.",
-  },
-  {
-    name: "certificateUnverifiedMaxProfileScore",
-    label: "Certificate Unverified Max Profile Score",
-    helper: "Maximum profile score if certificates are not verified.",
-  },
-  {
-    name: "bioMinimumLength",
-    label: "Bio Minimum Length",
-    helper: "Minimum bio length required for profile completeness.",
-  },
-  {
-    name: "skillsMinimumLength",
-    label: "Skills Minimum Length",
-    helper: "Minimum number of skills required.",
-  },
-  {
-    name: "maxCertificates",
-    label: "Max Certificates",
-    helper: "Maximum number of certificates allowed.",
-  },
-];
-
-export default function AdminExpertScoringPolicyPage() {
+export default function AdminJobPostingAiPolicyPage() {
   const [policy, setPolicy] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -111,12 +72,6 @@ export default function AdminExpertScoringPolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-
-  const totalMaxScore = useMemo(() => {
-    return SCORE_FIELDS.reduce((sum, field) => {
-      return sum + Number(form[field.name] || 0);
-    }, 0);
-  }, [form]);
 
   const hasChanged = useMemo(() => {
     if (!policy) return true;
@@ -140,16 +95,13 @@ export default function AdminExpertScoringPolicyPage() {
       setError("");
       setSuccess("");
 
-      const data = await adminPolicyService.getExpertProfileScoringPolicy();
+      const data = await adminJobPostingAiPolicyService.getPolicy();
 
       setPolicy(data);
       setForm(toFormState(data));
     } catch (err) {
-      console.error(
-        "LOAD EXPERT SCORING POLICY ERROR:",
-        err?.response?.data || err
-      );
-      setError(getFriendlyError(err, "Cannot load expert scoring policy."));
+      console.error("LOAD JOB AI POLICY ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load job posting AI policy."));
     } finally {
       setLoading(false);
     }
@@ -183,19 +135,16 @@ export default function AdminExpertScoringPolicyPage() {
       setError("");
       setSuccess("");
 
-      const updated = await adminPolicyService.updateExpertProfileScoringPolicy(
+      const updated = await adminJobPostingAiPolicyService.updatePolicy(
         buildPayload(form)
       );
 
       setPolicy(updated);
       setForm(toFormState(updated));
-      setSuccess("Expert scoring policy has been updated successfully.");
+      setSuccess("Job posting AI policy has been updated successfully.");
     } catch (err) {
-      console.error(
-        "UPDATE EXPERT SCORING POLICY ERROR:",
-        err?.response?.data || err
-      );
-      setError(getFriendlyError(err, "Cannot update expert scoring policy."));
+      console.error("UPDATE JOB AI POLICY ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot update job posting AI policy."));
     } finally {
       setSaving(false);
     }
@@ -211,12 +160,12 @@ export default function AdminExpertScoringPolicyPage() {
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Expert scoring policy
+              Job posting AI policy
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure profile scoring rules used to review expert profiles.
-              Each update requires an admin reason.
+              Configure free credits, draft limits, skill suggestion limits, and
+              AI recommendation score thresholds for job posting flow.
             </p>
           </div>
 
@@ -253,7 +202,7 @@ export default function AdminExpertScoringPolicyPage() {
             <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
               hourglass_empty
             </span>
-            Loading expert scoring policy...
+            Loading job posting AI policy...
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
@@ -263,76 +212,45 @@ export default function AdminExpertScoringPolicyPage() {
             >
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-white">
-                  Update scoring rules
+                  Update AI policy
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Keep all numeric values greater than or equal to 0. The reason
-                  field is required when saving.
+                  All numeric values must be greater than or equal to 0. The
+                  reason field is required when saving.
                 </p>
               </div>
 
-              <section className="mb-8">
-                <div className="mb-4 flex items-center justify-between gap-4 border-b border-white/10 pb-3">
-                  <div>
-                    <h3 className="font-bold text-white">Review Rules</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Threshold, retry limits, lock duration, and validation
-                      requirements.
-                    </p>
-                  </div>
-                </div>
+              <PolicySection
+                title="Initial Credits"
+                description="Free credits for new clients."
+                fields={CREDIT_FIELDS}
+                form={form}
+                onChange={handleChange}
+              />
 
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  {RULE_FIELDS.map((field) => (
-                    <NumberInput
-                      key={field.name}
-                      label={field.label}
-                      value={form[field.name]}
-                      onChange={(value) => handleChange(field.name, value)}
-                      helper={field.helper}
-                    />
-                  ))}
-                </div>
-              </section>
+              <PolicySection
+                title="Job Posting Limits"
+                description="Limits applied to draft jobs, skills, and recommendations."
+                fields={LIMIT_FIELDS}
+                form={form}
+                onChange={handleChange}
+              />
 
-              <section className="mb-8">
-                <div className="mb-4 flex items-center justify-between gap-4 border-b border-white/10 pb-3">
-                  <div>
-                    <h3 className="font-bold text-white">Score Weights</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Maximum score allocated to each profile evaluation area.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-right">
-                    <p className="text-[11px] uppercase tracking-wider text-cyan-300">
-                      Total Max Score
-                    </p>
-                    <p className="text-lg font-black text-white">
-                      {formatNumber(totalMaxScore)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  {SCORE_FIELDS.map((field) => (
-                    <NumberInput
-                      key={field.name}
-                      label={field.label}
-                      value={form[field.name]}
-                      onChange={(value) => handleChange(field.name, value)}
-                      helper={field.helper}
-                    />
-                  ))}
-                </div>
-              </section>
+              <PolicySection
+                title="AI Score Thresholds"
+                description="Minimum score required for AI suggestions and recommendations."
+                fields={SCORE_FIELDS}
+                form={form}
+                onChange={handleChange}
+                step="0.0001"
+              />
 
               <TextArea
                 label="Update Reason"
                 value={form.reason}
                 onChange={(value) => handleChange("reason", value)}
-                placeholder="Example: Adjust scoring rules for the new expert verification process."
+                placeholder="Example: Adjust AI limits for new job posting workflow."
               />
 
               <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
@@ -363,34 +281,34 @@ export default function AdminExpertScoringPolicyPage() {
 
                 <div className="space-y-4">
                   <SummaryCard
-                    icon="workspace_premium"
-                    label="Pass Threshold"
-                    value={policy?.passThreshold}
-                    description="Minimum score required"
+                    icon="work"
+                    label="Free Job Credits"
+                    value={policy?.initialFreeJobPostCredits}
+                    description="Initial job post credits"
                     tone="cyan"
                   />
 
                   <SummaryCard
-                    icon="score"
-                    label="Total Max Score"
-                    value={totalMaxScore}
-                    description="Sum of score weights"
+                    icon="smart_toy"
+                    label="Free AI Credits"
+                    value={policy?.initialFreeAiGenerationCredits}
+                    description="Initial AI generation credits"
                     tone="purple"
                   />
 
                   <SummaryCard
-                    icon="lock_clock"
-                    label="Review Lock Hours"
-                    value={policy?.reviewLockDurationHours}
-                    description="Lock duration after review limit"
+                    icon="inventory_2"
+                    label="Max Draft Jobs"
+                    value={policy?.maxDraftJobsPerClient}
+                    description="Draft jobs per client"
                     tone="yellow"
                   />
 
                   <SummaryCard
-                    icon="replay"
-                    label="Max Submissions"
-                    value={policy?.maxReviewSubmissions}
-                    description="Allowed review attempts"
+                    icon="recommend"
+                    label="Max Recommendations"
+                    value={policy?.maxRecommendationResults}
+                    description="AI result limit"
                     tone="green"
                   />
                 </div>
@@ -422,7 +340,38 @@ export default function AdminExpertScoringPolicyPage() {
   );
 }
 
-function NumberInput({ label, value, onChange, helper }) {
+function PolicySection({
+  title,
+  description,
+  fields,
+  form,
+  onChange,
+  step = "1",
+}) {
+  return (
+    <section className="mb-8">
+      <div className="mb-4 border-b border-white/10 pb-3">
+        <h3 className="font-bold text-white">{title}</h3>
+        <p className="mt-1 text-sm text-gray-500">{description}</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {fields.map((field) => (
+          <NumberInput
+            key={field.name}
+            label={field.label}
+            value={form[field.name]}
+            onChange={(value) => onChange(field.name, value)}
+            helper={field.helper}
+            step={step}
+          />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NumberInput({ label, value, onChange, helper, step = "1" }) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -432,7 +381,7 @@ function NumberInput({ label, value, onChange, helper }) {
       <input
         type="number"
         min="0"
-        step="1"
+        step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
         className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
@@ -535,45 +484,31 @@ function toFormState(policy) {
   if (!policy) return EMPTY_FORM;
 
   return {
-    passThreshold: policy.passThreshold ?? 0,
-    maxReviewSubmissions: policy.maxReviewSubmissions ?? 0,
-    reviewLockDurationHours: policy.reviewLockDurationHours ?? 0,
-    profileCompletenessMaxScore: policy.profileCompletenessMaxScore ?? 0,
-    aiSkillMaxScore: policy.aiSkillMaxScore ?? 0,
-    experienceMaxScore: policy.experienceMaxScore ?? 0,
-    portfolioMaxScore: policy.portfolioMaxScore ?? 0,
-    gitHubMaxScore: policy.gitHubMaxScore ?? 0,
-    linkedInMaxScore: policy.linkedInMaxScore ?? 0,
-    certificateMaxScore: policy.certificateMaxScore ?? 0,
-    riskMaxPenalty: policy.riskMaxPenalty ?? 0,
-    certificateUnverifiedMaxProfileScore:
-      policy.certificateUnverifiedMaxProfileScore ?? 0,
-    bioMinimumLength: policy.bioMinimumLength ?? 0,
-    skillsMinimumLength: policy.skillsMinimumLength ?? 0,
-    maxCertificates: policy.maxCertificates ?? 0,
+    initialFreeJobPostCredits: policy.initialFreeJobPostCredits ?? 0,
+    initialFreeAiGenerationCredits: policy.initialFreeAiGenerationCredits ?? 0,
+    maxDraftJobsPerClient: policy.maxDraftJobsPerClient ?? 0,
+    maxSkillsPerJob: policy.maxSkillsPerJob ?? 0,
+    maxSuggestedSkills: policy.maxSuggestedSkills ?? 0,
+    minimumSkillRelevanceScore: policy.minimumSkillRelevanceScore ?? 0,
+    maxRecommendationResults: policy.maxRecommendationResults ?? 0,
+    minimumRecommendationMatchScore:
+      policy.minimumRecommendationMatchScore ?? 0,
     reason: "",
   };
 }
 
 function buildPayload(form) {
   return {
-    passThreshold: Number(form.passThreshold),
-    maxReviewSubmissions: Number(form.maxReviewSubmissions),
-    reviewLockDurationHours: Number(form.reviewLockDurationHours),
-    profileCompletenessMaxScore: Number(form.profileCompletenessMaxScore),
-    aiSkillMaxScore: Number(form.aiSkillMaxScore),
-    experienceMaxScore: Number(form.experienceMaxScore),
-    portfolioMaxScore: Number(form.portfolioMaxScore),
-    gitHubMaxScore: Number(form.gitHubMaxScore),
-    linkedInMaxScore: Number(form.linkedInMaxScore),
-    certificateMaxScore: Number(form.certificateMaxScore),
-    riskMaxPenalty: Number(form.riskMaxPenalty),
-    certificateUnverifiedMaxProfileScore: Number(
-      form.certificateUnverifiedMaxProfileScore
+    initialFreeJobPostCredits: Number(form.initialFreeJobPostCredits),
+    initialFreeAiGenerationCredits: Number(form.initialFreeAiGenerationCredits),
+    maxDraftJobsPerClient: Number(form.maxDraftJobsPerClient),
+    maxSkillsPerJob: Number(form.maxSkillsPerJob),
+    maxSuggestedSkills: Number(form.maxSuggestedSkills),
+    minimumSkillRelevanceScore: Number(form.minimumSkillRelevanceScore),
+    maxRecommendationResults: Number(form.maxRecommendationResults),
+    minimumRecommendationMatchScore: Number(
+      form.minimumRecommendationMatchScore
     ),
-    bioMinimumLength: Number(form.bioMinimumLength),
-    skillsMinimumLength: Number(form.skillsMinimumLength),
-    maxCertificates: Number(form.maxCertificates),
     reason: String(form.reason || "").trim(),
   };
 }
@@ -647,7 +582,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Expert scoring policy API was not found. Please check backend route.";
+    return "Job posting AI policy API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;
