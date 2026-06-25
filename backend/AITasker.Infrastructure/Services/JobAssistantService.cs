@@ -15,13 +15,16 @@ public class JobAssistantService : IJobAssistantService
 
     private readonly AITaskerDbContext _context;
     private readonly IJobAssistantProvider _jobAssistantProvider;
+    private readonly IJobPostingAiPolicyService _jobPostingAiPolicyService;
 
     public JobAssistantService(
         AITaskerDbContext context,
-        IJobAssistantProvider jobAssistantProvider)
+        IJobAssistantProvider jobAssistantProvider,
+        IJobPostingAiPolicyService jobPostingAiPolicyService)
     {
         _context = context;
         _jobAssistantProvider = jobAssistantProvider;
+        _jobPostingAiPolicyService = jobPostingAiPolicyService;
     }
 
     public async Task<JobAssistantResponse> AnalyzeJobAsync(
@@ -52,6 +55,11 @@ public class JobAssistantService : IJobAssistantService
 
         var clientProfile = await GetEligibleClientProfileForAiAssistantAsync(userId);
 
+        var jobPostingAiPolicy = await _jobPostingAiPolicyService
+            .GetOrCreateActivePolicyEntityAsync();
+
+        var maxSuggestedSkills = Math.Max(1, jobPostingAiPolicy.MaxSuggestedSkills);
+
         var reservedCreditType = await ReserveAiGenerationCreditAsync(clientProfile);
 
         try
@@ -65,14 +73,31 @@ public class JobAssistantService : IJobAssistantService
                 availableSkillNames
             );
 
+            var rawSuggestedSkillCount = aiResult.SuggestedSkillNames
+                .Count(x => !string.IsNullOrWhiteSpace(x));
+
             var normalizedAiSkillNames = aiResult.SuggestedSkillNames
                 .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(x => x.Trim().ToLower())
+                .Select(x => x.Trim().ToLowerInvariant())
                 .Distinct()
+                .Take(maxSuggestedSkills)
                 .ToList();
 
+            var skillOrder = normalizedAiSkillNames
+                .Select((skillName, index) => new
+                {
+                    SkillName = skillName,
+                    Index = index
+                })
+                .ToDictionary(
+                    x => x.SkillName,
+                    x => x.Index
+                );
+
             var matchedSkills = activeSkills
-                .Where(x => normalizedAiSkillNames.Contains(x.SkillName.Trim().ToLower()))
+                .Where(x => skillOrder.ContainsKey(x.SkillName.Trim().ToLowerInvariant()))
+                .OrderBy(x => skillOrder[x.SkillName.Trim().ToLowerInvariant()])
+                .Take(maxSuggestedSkills)
                 .Select(x => new JobAssistantSkillResponse
                 {
                     SkillId = x.SkillId,
@@ -82,6 +107,13 @@ public class JobAssistantService : IJobAssistantService
                 .ToList();
 
             var warnings = aiResult.Warnings ?? new List<string>();
+
+            if (rawSuggestedSkillCount > maxSuggestedSkills)
+            {
+                warnings.Add(
+                    $"AI suggested more skills than the current admin policy allows. Only the top {maxSuggestedSkills} matched skills were returned."
+                );
+            }
 
             if (matchedSkills.Count == 0)
             {
