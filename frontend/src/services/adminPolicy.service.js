@@ -11,26 +11,6 @@ const toNumber = (value, fallback = 0) => {
   return Number.isNaN(number) ? fallback : number;
 };
 
-const toNullableNumber = (value) => {
-  if (value === undefined || value === null || value === "") return null;
-
-  const number = Number(value);
-  return Number.isNaN(number) ? null : number;
-};
-
-const toBoolean = (value, fallback = true) => {
-  if (value === undefined || value === null || value === "") return fallback;
-
-  if (typeof value === "boolean") return value;
-
-  const normalized = String(value).trim().toLowerCase();
-
-  if (normalized === "true") return true;
-  if (normalized === "false") return false;
-
-  return fallback;
-};
-
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -51,136 +31,111 @@ const unwrapData = (response) => {
 export const normalizeExpertProfileScoringPolicy = (policy) => {
   if (!policy) {
     return {
-      minimumProfileScore: 70,
-
-      portfolioWeight: 25,
-      githubWeight: 25,
-      linkedinWeight: 5,
-      skillsWeight: 15,
-      experienceWeight: 15,
-      certificatesWeight: 10,
-      educationWeight: 5,
-
-      isActive: true,
+      passThreshold: 0,
+      maxReviewSubmissions: 0,
+      reviewLockDurationHours: 0,
+      profileCompletenessMaxScore: 0,
+      aiSkillMaxScore: 0,
+      experienceMaxScore: 0,
+      portfolioMaxScore: 0,
+      gitHubMaxScore: 0,
+      linkedInMaxScore: 0,
+      certificateMaxScore: 0,
+      riskMaxPenalty: 0,
+      certificateUnverifiedMaxProfileScore: 0,
+      bioMinimumLength: 0,
+      skillsMinimumLength: 0,
+      maxCertificates: 0,
+      reason: "",
       updatedAt: "",
       raw: null,
     };
   }
 
   return {
-    policyId: getValue(
-      policy.policyId,
-      policy.PolicyId,
-      policy.id,
-      policy.Id,
-      null
+    policyId: getValue(policy.policyId, policy.PolicyId, policy.id, policy.Id, null),
+
+    passThreshold: toNumber(
+      getValue(policy.passThreshold, policy.PassThreshold, policy.minimumProfileScore, 0)
     ),
 
-    minimumProfileScore: toNumber(
+    maxReviewSubmissions: toNumber(
+      getValue(policy.maxReviewSubmissions, policy.MaxReviewSubmissions, 0)
+    ),
+
+    reviewLockDurationHours: toNumber(
+      getValue(policy.reviewLockDurationHours, policy.ReviewLockDurationHours, 0)
+    ),
+
+    profileCompletenessMaxScore: toNumber(
       getValue(
-        policy.minimumProfileScore,
-        policy.MinimumProfileScore,
-        policy.minimumScoreToPass,
-        policy.MinimumScoreToPass,
-        policy.passScore,
-        policy.PassScore,
-        70
-      ),
-      70
+        policy.profileCompletenessMaxScore,
+        policy.ProfileCompletenessMaxScore,
+        0
+      )
     ),
 
-    portfolioWeight: toNumber(
+    aiSkillMaxScore: toNumber(
+      getValue(policy.aiSkillMaxScore, policy.AiSkillMaxScore, policy.AISkillMaxScore, 0)
+    ),
+
+    experienceMaxScore: toNumber(
+      getValue(policy.experienceMaxScore, policy.ExperienceMaxScore, 0)
+    ),
+
+    portfolioMaxScore: toNumber(
+      getValue(policy.portfolioMaxScore, policy.PortfolioMaxScore, 0)
+    ),
+
+    gitHubMaxScore: toNumber(
       getValue(
-        policy.portfolioWeight,
-        policy.PortfolioWeight,
-        policy.portfolioScoreWeight,
-        policy.PortfolioScoreWeight,
-        25
-      ),
-      25
+        policy.gitHubMaxScore,
+        policy.GitHubMaxScore,
+        policy.githubMaxScore,
+        policy.GithubMaxScore,
+        0
+      )
     ),
 
-    githubWeight: toNumber(
+    linkedInMaxScore: toNumber(
       getValue(
-        policy.githubWeight,
-        policy.GithubWeight,
-        policy.gitHubWeight,
-        policy.GitHubWeight,
-        policy.githubScoreWeight,
-        policy.GithubScoreWeight,
-        policy.gitHubScoreWeight,
-        policy.GitHubScoreWeight,
-        25
-      ),
-      25
+        policy.linkedInMaxScore,
+        policy.LinkedInMaxScore,
+        policy.linkedinMaxScore,
+        policy.LinkedinMaxScore,
+        0
+      )
     ),
 
-    linkedinWeight: toNumber(
+    certificateMaxScore: toNumber(
+      getValue(policy.certificateMaxScore, policy.CertificateMaxScore, 0)
+    ),
+
+    riskMaxPenalty: toNumber(
+      getValue(policy.riskMaxPenalty, policy.RiskMaxPenalty, 0)
+    ),
+
+    certificateUnverifiedMaxProfileScore: toNumber(
       getValue(
-        policy.linkedinWeight,
-        policy.LinkedinWeight,
-        policy.linkedInWeight,
-        policy.LinkedInWeight,
-        policy.linkedinScoreWeight,
-        policy.LinkedinScoreWeight,
-        policy.linkedInScoreWeight,
-        policy.LinkedInScoreWeight,
-        5
-      ),
-      5
+        policy.certificateUnverifiedMaxProfileScore,
+        policy.CertificateUnverifiedMaxProfileScore,
+        0
+      )
     ),
 
-    skillsWeight: toNumber(
-      getValue(
-        policy.skillsWeight,
-        policy.SkillsWeight,
-        policy.skillWeight,
-        policy.SkillWeight,
-        15
-      ),
-      15
+    bioMinimumLength: toNumber(
+      getValue(policy.bioMinimumLength, policy.BioMinimumLength, 0)
     ),
 
-    experienceWeight: toNumber(
-      getValue(
-        policy.experienceWeight,
-        policy.ExperienceWeight,
-        policy.yearsOfExperienceWeight,
-        policy.YearsOfExperienceWeight,
-        15
-      ),
-      15
+    skillsMinimumLength: toNumber(
+      getValue(policy.skillsMinimumLength, policy.SkillsMinimumLength, 0)
     ),
 
-    certificatesWeight: toNumber(
-      getValue(
-        policy.certificatesWeight,
-        policy.CertificatesWeight,
-        policy.certificateWeight,
-        policy.CertificateWeight,
-        policy.certificationWeight,
-        policy.CertificationWeight,
-        10
-      ),
-      10
+    maxCertificates: toNumber(
+      getValue(policy.maxCertificates, policy.MaxCertificates, 0)
     ),
 
-    educationWeight: toNumber(
-      getValue(
-        policy.educationWeight,
-        policy.EducationWeight,
-        policy.degreeWeight,
-        policy.DegreeWeight,
-        5
-      ),
-      5
-    ),
-
-    isActive: toBoolean(
-      getValue(policy.isActive, policy.IsActive, policy.active, policy.Active),
-      true
-    ),
-
+    reason: getValue(policy.reason, policy.Reason, ""),
     createdAt: getValue(policy.createdAt, policy.CreatedAt, ""),
     updatedAt: getValue(policy.updatedAt, policy.UpdatedAt, ""),
 
@@ -191,93 +146,39 @@ export const normalizeExpertProfileScoringPolicy = (policy) => {
 export const normalizePlatformFeePolicy = (policy) => {
   if (!policy) {
     return {
-      feePercent: 10,
-      minimumFee: 0,
-      maximumFee: null,
-      fixedFee: 0,
-      isActive: true,
-      effectiveFrom: "",
-      effectiveTo: "",
+      individualClientFeeRate: 0,
+      businessClientFeeRate: 0,
+      expertFeeRate: 0,
+      reason: "",
       updatedAt: "",
       raw: null,
     };
   }
 
   return {
-    policyId: getValue(
-      policy.policyId,
-      policy.PolicyId,
-      policy.id,
-      policy.Id,
-      null
-    ),
+    policyId: getValue(policy.policyId, policy.PolicyId, policy.id, policy.Id, null),
 
-    feePercent: toNumber(
+    individualClientFeeRate: toNumber(
       getValue(
-        policy.feePercent,
-        policy.FeePercent,
-        policy.platformFeePercent,
-        policy.PlatformFeePercent,
-        policy.percentage,
-        policy.Percentage,
-        10
-      ),
-      10
-    ),
-
-    minimumFee: toNumber(
-      getValue(
-        policy.minimumFee,
-        policy.MinimumFee,
-        policy.minFee,
-        policy.MinFee,
+        policy.individualClientFeeRate,
+        policy.IndividualClientFeeRate,
         0
-      ),
-      0
-    ),
-
-    maximumFee: toNullableNumber(
-      getValue(
-        policy.maximumFee,
-        policy.MaximumFee,
-        policy.maxFee,
-        policy.MaxFee,
-        null
       )
     ),
 
-    fixedFee: toNumber(
+    businessClientFeeRate: toNumber(
       getValue(
-        policy.fixedFee,
-        policy.FixedFee,
-        policy.baseFee,
-        policy.BaseFee,
+        policy.businessClientFeeRate,
+        policy.BusinessClientFeeRate,
         0
-      ),
-      0
+      )
     ),
 
-    isActive: toBoolean(
-      getValue(policy.isActive, policy.IsActive, policy.active, policy.Active),
-      true
+    expertFeeRate: toNumber(
+      getValue(policy.expertFeeRate, policy.ExpertFeeRate, 0)
     ),
 
-    effectiveFrom: getValue(
-      policy.effectiveFrom,
-      policy.EffectiveFrom,
-      policy.startDate,
-      policy.StartDate,
-      ""
-    ),
-
-    effectiveTo: getValue(
-      policy.effectiveTo,
-      policy.EffectiveTo,
-      policy.endDate,
-      policy.EndDate,
-      ""
-    ),
-
+    reason: getValue(policy.reason, policy.Reason, ""),
     createdAt: getValue(policy.createdAt, policy.CreatedAt, ""),
     updatedAt: getValue(policy.updatedAt, policy.UpdatedAt, ""),
 
@@ -287,77 +188,57 @@ export const normalizePlatformFeePolicy = (policy) => {
 
 const buildExpertProfileScoringPolicyPayload = (formData = {}) => {
   return {
-    minimumProfileScore: toNumber(
-      getValue(formData.minimumProfileScore, formData.minimumScoreToPass, 70),
-      70
+    passThreshold: toNumber(formData.passThreshold),
+    maxReviewSubmissions: toNumber(formData.maxReviewSubmissions),
+    reviewLockDurationHours: toNumber(formData.reviewLockDurationHours),
+    profileCompletenessMaxScore: toNumber(formData.profileCompletenessMaxScore),
+    aiSkillMaxScore: toNumber(formData.aiSkillMaxScore),
+    experienceMaxScore: toNumber(formData.experienceMaxScore),
+    portfolioMaxScore: toNumber(formData.portfolioMaxScore),
+    gitHubMaxScore: toNumber(formData.gitHubMaxScore),
+    linkedInMaxScore: toNumber(formData.linkedInMaxScore),
+    certificateMaxScore: toNumber(formData.certificateMaxScore),
+    riskMaxPenalty: toNumber(formData.riskMaxPenalty),
+    certificateUnverifiedMaxProfileScore: toNumber(
+      formData.certificateUnverifiedMaxProfileScore
     ),
-
-    portfolioWeight: toNumber(formData.portfolioWeight, 0),
-    githubWeight: toNumber(formData.githubWeight, 0),
-
-    // LinkedIn optional: missing/bad LinkedIn should only score 0, not block profile.
-    linkedinWeight: toNumber(formData.linkedinWeight, 0),
-
-    skillsWeight: toNumber(formData.skillsWeight, 0),
-    experienceWeight: toNumber(formData.experienceWeight, 0),
-    certificatesWeight: toNumber(formData.certificatesWeight, 0),
-    educationWeight: toNumber(formData.educationWeight, 0),
-
-    isActive: toBoolean(formData.isActive, true),
+    bioMinimumLength: toNumber(formData.bioMinimumLength),
+    skillsMinimumLength: toNumber(formData.skillsMinimumLength),
+    maxCertificates: toNumber(formData.maxCertificates),
+    reason: String(formData.reason || "").trim(),
   };
 };
 
 const buildPlatformFeePolicyPayload = (formData = {}) => {
   return {
-    feePercent: toNumber(formData.feePercent, 0),
-    minimumFee: toNumber(formData.minimumFee, 0),
-    maximumFee: toNullableNumber(formData.maximumFee),
-    fixedFee: toNumber(formData.fixedFee, 0),
-    isActive: toBoolean(formData.isActive, true),
-    effectiveFrom: formData.effectiveFrom || null,
-    effectiveTo: formData.effectiveTo || null,
+    individualClientFeeRate: toNumber(formData.individualClientFeeRate),
+    businessClientFeeRate: toNumber(formData.businessClientFeeRate),
+    expertFeeRate: toNumber(formData.expertFeeRate),
+    reason: String(formData.reason || "").trim(),
   };
 };
 
 const adminPolicyService = {
   async getExpertProfileScoringPolicy() {
     const response = await adminPolicyApi.getExpertProfileScoringPolicy();
-
-    console.log("ADMIN EXPERT SCORING POLICY RESPONSE:", response?.data);
-
     return normalizeExpertProfileScoringPolicy(unwrapData(response));
   },
 
   async updateExpertProfileScoringPolicy(formData) {
     const payload = buildExpertProfileScoringPolicyPayload(formData);
-
-    console.log("UPDATE EXPERT SCORING POLICY PAYLOAD:", payload);
-
-    const response = await adminPolicyApi.updateExpertProfileScoringPolicy(
-      payload
-    );
-
-    console.log("UPDATE EXPERT SCORING POLICY RESPONSE:", response?.data);
+    const response = await adminPolicyApi.updateExpertProfileScoringPolicy(payload);
 
     return normalizeExpertProfileScoringPolicy(unwrapData(response));
   },
 
   async getPlatformFeePolicy() {
     const response = await adminPolicyApi.getPlatformFeePolicy();
-
-    console.log("ADMIN PLATFORM FEE POLICY RESPONSE:", response?.data);
-
     return normalizePlatformFeePolicy(unwrapData(response));
   },
 
   async updatePlatformFeePolicy(formData) {
     const payload = buildPlatformFeePolicyPayload(formData);
-
-    console.log("UPDATE PLATFORM FEE POLICY PAYLOAD:", payload);
-
     const response = await adminPolicyApi.updatePlatformFeePolicy(payload);
-
-    console.log("UPDATE PLATFORM FEE POLICY RESPONSE:", response?.data);
 
     return normalizePlatformFeePolicy(unwrapData(response));
   },

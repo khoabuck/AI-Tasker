@@ -1,676 +1,849 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
+const EMPTY_ACTION = {
+  type: "",
+};
+
+const EMPTY_LOCK_FORM = {
+  durationMinutes: 60,
+  reason: "",
+};
+
+const EMPTY_UNLOCK_FORM = {
+  reason: "",
+};
+
+const EMPTY_BAN_FORM = {
+  reason: "",
+};
+
 export default function AdminUserDetailPage() {
   const { userId } = useParams();
+  const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
-
-  const [lockForm, setLockForm] = useState({
-    reason: "",
-    lockoutEnd: "",
-  });
-
-  const [banForm, setBanForm] = useState({
-    reason: "",
-  });
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const computedStatus = useMemo(() => getComputedStatus(user), [user]);
-  const locked = useMemo(() => isLocked(user), [user]);
-  const banned = useMemo(() => isBanned(user), [user]);
+  const [action, setAction] = useState(EMPTY_ACTION);
+  const [lockForm, setLockForm] = useState(EMPTY_LOCK_FORM);
+  const [unlockForm, setUnlockForm] = useState(EMPTY_UNLOCK_FORM);
+  const [banForm, setBanForm] = useState(EMPTY_BAN_FORM);
+
+  const userStatus = useMemo(() => getUserStatus(user), [user]);
+  const isLocked = userStatus === "LOCKED";
+  const isBanned = userStatus === "BANNED";
 
   useEffect(() => {
     loadUser();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const loadUser = async () => {
+  const loadUser = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
+
+      if (!keepMessage) {
+        setSuccess("");
+      }
 
       const data = await adminUserService.getUserById(userId);
-
       setUser(data);
-
-      setLockForm({
-        reason: data?.lockReason || "",
-        lockoutEnd: toDateTimeLocalValue(data?.lockoutEnd),
-      });
-
-      setBanForm({
-        reason: data?.banReason || "",
-      });
     } catch (err) {
       console.error("LOAD ADMIN USER DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
-      setUser(null);
+      setError(getFriendlyError(err, "Cannot load user detail."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleLockUser = async (event) => {
-    event.preventDefault();
+  const openLockModal = () => {
+    setAction({ type: "LOCK" });
+    setLockForm(EMPTY_LOCK_FORM);
+    setError("");
+    setSuccess("");
+  };
 
-    if (!lockForm.reason.trim()) {
-      setError("Lock reason is required.");
+  const openUnlockModal = () => {
+    setAction({ type: "UNLOCK" });
+    setUnlockForm(EMPTY_UNLOCK_FORM);
+    setError("");
+    setSuccess("");
+  };
+
+  const openBanModal = () => {
+    setAction({ type: "BAN" });
+    setBanForm(EMPTY_BAN_FORM);
+    setError("");
+    setSuccess("");
+  };
+
+  const closeActionModal = () => {
+    if (actionLoading) return;
+
+    setAction(EMPTY_ACTION);
+    setLockForm(EMPTY_LOCK_FORM);
+    setUnlockForm(EMPTY_UNLOCK_FORM);
+    setBanForm(EMPTY_BAN_FORM);
+  };
+
+  const handleLockUser = async () => {
+    if (!user?.userId) return;
+
+    if (!Number(lockForm.durationMinutes) || Number(lockForm.durationMinutes) <= 0) {
+      setError("Lock duration must be greater than 0 minutes.");
       return;
     }
 
-    const confirmed = window.confirm("Are you sure you want to lock this user?");
-
-    if (!confirmed) return;
+    if (!lockForm.reason.trim()) {
+      setError("Please enter a lock reason.");
+      return;
+    }
 
     try {
       setActionLoading(true);
       setError("");
-      setMessage("");
+      setSuccess("");
 
-      await adminUserService.lockUser(userId, {
-        reason: lockForm.reason.trim(),
-        lockoutEnd: lockForm.lockoutEnd || null,
+      await adminUserService.lockUser(user.userId, {
+        durationMinutes: Number(lockForm.durationMinutes),
+        reason: lockForm.reason,
       });
 
-      setMessage("User locked successfully.");
-      await loadUser();
+      closeActionModal();
+      await loadUser({ keepMessage: true });
+      setSuccess("User has been locked successfully.");
     } catch (err) {
       console.error("LOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      setError(getFriendlyError(err, "Cannot lock user."));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUnlockUser = async () => {
-    const confirmed = window.confirm(
-      "Are you sure you want to unlock this user?"
-    );
+    if (!user?.userId) return;
 
-    if (!confirmed) return;
-
-    try {
-      setActionLoading(true);
-      setError("");
-      setMessage("");
-
-      await adminUserService.unlockUser(userId);
-
-      setMessage("User unlocked successfully.");
-      await loadUser();
-    } catch (err) {
-      console.error("UNLOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleBanUser = async (event) => {
-    event.preventDefault();
-
-    if (!banForm.reason.trim()) {
-      setError("Ban reason is required.");
+    if (!unlockForm.reason.trim()) {
+      setError("Please enter an unlock reason.");
       return;
     }
 
-    const confirmed = window.confirm(
-      "Are you sure you want to ban this user? This action may be permanent."
-    );
-
-    if (!confirmed) return;
-
     try {
       setActionLoading(true);
       setError("");
-      setMessage("");
+      setSuccess("");
 
-      await adminUserService.banUser(userId, {
-        reason: banForm.reason.trim(),
+      await adminUserService.unlockUser(user.userId, {
+        reason: unlockForm.reason,
       });
 
-      setMessage("User banned successfully.");
-      await loadUser();
+      closeActionModal();
+      await loadUser({ keepMessage: true });
+      setSuccess("User has been unlocked successfully.");
     } catch (err) {
-      console.error("BAN USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      console.error("UNLOCK USER ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot unlock user."));
     } finally {
       setActionLoading(false);
     }
   };
 
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+  const handleBanUser = async () => {
+    if (!user?.userId) return;
 
-  const inputStyle =
-    "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
+    if (!banForm.reason.trim()) {
+      setError("Please enter a ban reason.");
+      return;
+    }
 
-  const labelStyle =
-    "mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400";
+    try {
+      setActionLoading(true);
+      setError("");
+      setSuccess("");
+
+      await adminUserService.banUser(user.userId, {
+        reason: banForm.reason,
+      });
+
+      closeActionModal();
+      await loadUser({ keepMessage: true });
+      setSuccess("User has been banned successfully.");
+    } catch (err) {
+      console.error("BAN USER ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot ban user."));
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   return (
     <AdminLayout>
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-6xl">
-          {/* Header */}
-          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <Link
-                to="/admin/users"
-                className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 transition hover:text-cyan-200"
-              >
-                <span className="material-symbols-outlined text-base">
-                  arrow_back
-                </span>
-                Back to users
-              </Link>
-
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                User Detail
-              </p>
-
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {user?.fullName || "Admin User Detail"}
-              </h1>
-
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Review account information, security status, lock history and
-                ban state.
-              </p>
-            </div>
-
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div>
             <button
               type="button"
-              onClick={loadUser}
-              disabled={loading || actionLoading}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => navigate("/admin/users")}
+              className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
             >
-              Refresh
+              <span className="material-symbols-outlined text-[18px]">
+                arrow_back
+              </span>
+              Back to Users
             </button>
+
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+              User Detail
+            </p>
+
+            <h1 className="text-3xl font-bold text-white md:text-4xl">
+              Account information
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+              Review account status, role, profile links, security status, and
+              administrative restrictions.
+            </p>
           </div>
 
-          {/* Message */}
-          {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={() => loadUser()}
+            disabled={loading || actionLoading}
+            className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
+        </div>
 
-          {/* Error */}
-          {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
-          )}
+        {error && (
+          <Alert
+            type="danger"
+            title="Action failed"
+            message={error}
+            onClose={() => setError("")}
+          />
+        )}
 
-          {/* Loading */}
-          {loading && (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading user detail...
-            </div>
-          )}
+        {success && (
+          <Alert
+            type="success"
+            title="Success"
+            message={success}
+            onClose={() => setSuccess("")}
+          />
+        )}
 
-          {/* Not found */}
-          {!loading && !user && (
-            <div className={`${cardStyle} p-12 text-center`}>
-              <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
-                person_off
-              </span>
+        {loading ? (
+          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
+              hourglass_empty
+            </span>
+            Loading user detail...
+          </div>
+        ) : !user ? (
+          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+              person_off
+            </span>
 
-              <h2 className="text-xl font-bold text-white">User not found</h2>
+            <h2 className="text-xl font-bold text-white">User not found</h2>
 
-              <p className="mt-2 text-sm text-gray-400">
-                The selected user does not exist or you do not have permission
-                to view this account.
-              </p>
-            </div>
-          )}
+            <p className="mt-2 text-sm text-gray-400">
+              The requested user does not exist or cannot be loaded.
+            </p>
+          </div>
+        ) : (
+          <>
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
+                  <UserAvatar
+                    name={user.fullName || user.email}
+                    avatarUrl={user.avatarUrl}
+                  />
 
-          {!loading && user && (
-            <>
-              {/* Top profile card */}
-              <section className={`${cardStyle} mb-6 p-6`}>
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="flex gap-5">
-                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-2xl font-bold text-cyan-300">
-                      {getInitials(user.fullName)}
+                  <div className="min-w-0">
+                    <div className="mb-3 flex flex-wrap items-center gap-2">
+                      <RoleBadge role={user.role} />
+                      <StatusBadge status={userStatus} />                     
                     </div>
 
-                    <div>
-                      <div className="mb-3 flex flex-wrap items-center gap-2">
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${getRoleClass(
-                            user.role
-                          )}`}
-                        >
-                          {user.role || "USER"}
-                        </span>
+                    <h2 className="truncate text-2xl font-black text-white">
+                      {user.fullName || "Unknown User"}
+                    </h2>
 
-                        <span
-                          className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${getStatusClass(
-                            computedStatus
-                          )}`}
-                        >
-                          {computedStatus}
-                        </span>
+                    <p className="mt-1 break-all text-sm text-gray-400">
+                      {user.email || "No email"}
+                    </p>
 
-                        {user.isEmailVerified && (
-                          <span className="rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-green-300">
-                            Email Verified
-                          </span>
-                        )}
-                      </div>
-
-                      <h2 className="text-2xl font-bold text-white">
-                        {user.fullName || "Unknown User"}
-                      </h2>
-
-                      <p className="mt-1 text-sm text-gray-400">
-                        {user.email || "No email"}
-                      </p>
-
-                      <p className="mt-2 text-xs text-gray-500">
-                        User ID: {user.userId || user.id || "N/A"}
-                      </p>
-                    </div>
+                    <p className="mt-2 text-xs text-gray-500">
+                      User ID: {user.userId || "N/A"}
+                    </p>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-2 gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 md:grid-cols-4 lg:w-[520px]">
-                    <MiniStat label="Status" value={computedStatus} />
-                    <MiniStat label="Role" value={user.role || "USER"} />
-                    <MiniStat
-                      label="Lock Count"
-                      value={user.lockoutCount ?? 0}
+                <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                  {isLocked ? (
+                    <button
+                      type="button"
+                      onClick={openUnlockModal}
+                      disabled={actionLoading || isBanned}
+                      className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Unlock User
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={openLockModal}
+                      disabled={actionLoading || isBanned}
+                      className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Lock User
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={openBanModal}
+                    disabled={actionLoading || isBanned}
+                    className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Ban User
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <InfoCard
+                icon="badge"
+                label="Role"
+                value={formatLabel(user.role)}
+                tone="cyan"
+              />
+
+              <InfoCard
+                icon="verified_user"
+                label="Status"
+                value={formatLabel(userStatus)}
+                tone={userStatus === "ACTIVE" ? "green" : "yellow"}
+              />
+
+              <InfoCard
+                icon="login"
+                label="Last Login"
+                value={formatDateTime(user.lastLoginAt)}
+                tone="purple"
+              />
+
+              <InfoCard
+                icon="calendar_month"
+                label="Created At"
+                value={formatDateTime(user.createdAt)}
+                tone="cyan"
+              />
+            </section>
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                <h2 className="mb-5 text-xl font-bold text-white">
+                  Account Details
+                </h2>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <DetailItem label="Full Name" value={user.fullName} />
+                  <DetailItem label="Email" value={user.email} />
+                  <DetailItem label="Phone Number" value={user.phoneNumber} />
+                  <DetailItem
+                    label="Auth Provider"
+                    value={user.authProvider || "Local"}
+                  />
+                  <DetailItem
+                    label="Email Verification"
+                    value={user.isEmailVerified ? "Verified" : "Not Verified"}
+                  />
+                  <DetailItem
+                    label="Updated At"
+                    value={formatDateTime(user.updatedAt)}
+                  />
+                </div>
+
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  <h3 className="mb-4 text-base font-bold text-white">
+                    Linked Profiles
+                  </h3>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <DetailItem
+                      label="Expert Profile ID"
+                      value={user.expertProfileId || "N/A"}
                     />
-                    <MiniStat
-                      label="Provider"
-                      value={user.authProvider || "N/A"}
+                    <DetailItem
+                      label="Client Profile ID"
+                      value={user.clientProfileId || "N/A"}
                     />
                   </div>
                 </div>
               </section>
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_380px]">
-                {/* Left */}
-                <div className="space-y-6">
-                  {/* Account info */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle
-                      icon="account_circle"
-                      title="Account Information"
+              <aside className="space-y-6">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <h2 className="mb-5 text-xl font-bold text-white">
+                    Restriction Status
+                  </h2>
+
+                  <div className="space-y-4">
+                    <DetailItem
+                      label="Status Before Suspension"
+                      value={user.statusBeforeSuspension || "N/A"}
                     />
 
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <InfoItem label="Full Name" value={user.fullName} />
-                      <InfoItem label="Email" value={user.email} />
-                      <InfoItem label="Phone Number" value={user.phoneNumber} />
-                      <InfoItem label="Role" value={user.role} />
-                      <InfoItem label="Status" value={computedStatus} />
-                      <InfoItem
-                        label="Email Verified"
-                        value={user.isEmailVerified ? "Yes" : "No"}
+                    <DetailItem
+                      label="Lockout Count"
+                      value={user.lockoutCount ?? 0}
+                    />
+
+                    <DetailItem
+                      label="Lockout End"
+                      value={formatDateTime(user.lockoutEnd)}
+                    />
+
+                    <DetailItem
+                      label="Last Locked At"
+                      value={formatDateTime(user.lastLockedAt)}
+                    />
+
+                    <DetailItem
+                      label="Banned At"
+                      value={formatDateTime(user.bannedAt)}
+                    />
+                  </div>
+                </section>
+
+                {(user.lockReason || user.banReason) && (
+                  <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                    <h2 className="mb-5 text-xl font-bold text-white">
+                      Admin Notes
+                    </h2>
+
+                    {user.lockReason && (
+                      <ReasonBox
+                        title="Lock Reason"
+                        value={user.lockReason}
+                        tone="yellow"
                       />
-                      <InfoItem
-                        label="Auth Provider"
-                        value={user.authProvider}
+                    )}
+
+                    {user.banReason && (
+                      <ReasonBox
+                        title="Ban Reason"
+                        value={user.banReason}
+                        tone="red"
                       />
-                      <InfoItem
-                        label="Status Before Suspension"
-                        value={user.statusBeforeSuspension}
-                      />
-                    </div>
-                  </section>
-
-                  {/* Profile linkage */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="badge" title="Profile Links" />
-
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <InfoItem
-                        label="Expert Profile ID"
-                        value={user.expertProfileId}
-                      />
-                      <InfoItem
-                        label="Client Profile ID"
-                        value={user.clientProfileId}
-                      />
-                    </div>
-                  </section>
-
-                  {/* Security / restriction */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="security" title="Restriction State" />
-
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                      <InfoItem
-                        label="Lock Reason"
-                        value={user.lockReason || "Not locked"}
-                      />
-                      <InfoItem
-                        label="Lockout Count"
-                        value={user.lockoutCount ?? 0}
-                      />
-                      <InfoItem
-                        label="Lockout End"
-                        value={formatDateTime(user.lockoutEnd)}
-                      />
-                      <InfoItem
-                        label="Last Locked At"
-                        value={formatDateTime(user.lastLockedAt)}
-                      />
-                      <InfoItem
-                        label="Ban Reason"
-                        value={user.banReason || "Not banned"}
-                      />
-                      <InfoItem
-                        label="Banned At"
-                        value={formatDateTime(user.bannedAt)}
-                      />
-                    </div>
-                  </section>
-
-                  {/* Dates */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="event" title="Account Timeline" />
-
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                      <InfoItem
-                        label="Created At"
-                        value={formatDateTime(user.createdAt)}
-                      />
-                      <InfoItem
-                        label="Updated At"
-                        value={formatDateTime(user.updatedAt)}
-                      />
-                      <InfoItem
-                        label="Last Login At"
-                        value={formatDateTime(user.lastLoginAt)}
-                      />
-                    </div>
-                  </section>
-
-                  {/* Raw debug */}
-                  <section className={`${cardStyle} p-6`}>
-                    <details>
-                      <summary className="cursor-pointer text-sm font-bold text-gray-300">
-                        Raw user data
-                      </summary>
-
-                      <pre className="mt-4 max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-5 text-gray-300">
-                        {JSON.stringify(user.raw || user, null, 2)}
-                      </pre>
-                    </details>
-                  </section>
-                </div>
-
-                {/* Right action panel */}
-                <aside className="space-y-6">
-                  {/* Lock panel */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="lock" title="Lock User" />
-
-                    <p className="mb-5 text-sm leading-6 text-gray-400">
-                      Lock prevents the user from using the account until the
-                      lockout end time, depending on backend rules.
-                    </p>
-
-                    <form onSubmit={handleLockUser} className="space-y-4">
-                      <div>
-                        <label className={labelStyle}>Lock Reason</label>
-
-                        <textarea
-                          value={lockForm.reason}
-                          onChange={(event) =>
-                            setLockForm((prev) => ({
-                              ...prev,
-                              reason: event.target.value,
-                            }))
-                          }
-                          rows={4}
-                          placeholder="Explain why this account is locked..."
-                          className={inputStyle}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={labelStyle}>
-                          Lockout End Optional
-                        </label>
-
-                        <input
-                          type="datetime-local"
-                          value={lockForm.lockoutEnd}
-                          onChange={(event) =>
-                            setLockForm((prev) => ({
-                              ...prev,
-                              lockoutEnd: event.target.value,
-                            }))
-                          }
-                          className={inputStyle}
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={actionLoading || locked || banned}
-                        className="w-full rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {locked ? "User Already Locked" : "Lock User"}
-                      </button>
-                    </form>
-                  </section>
-
-                  {/* Unlock panel */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="lock_open" title="Unlock User" />
-
-                    <p className="mb-5 text-sm leading-6 text-gray-400">
-                      Unlock removes the current lock state. It does not unban a
-                      banned account.
-                    </p>
-
-                    <button
-                      type="button"
-                      onClick={handleUnlockUser}
-                      disabled={actionLoading || !locked || banned}
-                      className="w-full rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Unlock User
-                    </button>
-
-                    {banned && (
-                      <p className="mt-3 rounded-lg border border-red-400/20 bg-red-400/10 px-3 py-2 text-xs text-red-300">
-                        This account is banned. Unlock is disabled.
-                      </p>
                     )}
                   </section>
+                )}
+              </aside>
+            </div>
+          </>
+        )}
 
-                  {/* Ban panel */}
-                  <section className={`${cardStyle} p-6`}>
-                    <SectionTitle icon="block" title="Ban User" />
+        {action.type === "LOCK" && (
+          <ActionModal
+            title="Lock User"
+            subtitle={user?.email || user?.fullName}
+            confirmLabel="Lock User"
+            confirmTone="yellow"
+            loading={actionLoading}
+            onClose={closeActionModal}
+            onConfirm={handleLockUser}
+          >
+            <div className="space-y-4">
+              <NumberInput
+                label="Duration Minutes"
+                value={lockForm.durationMinutes}
+                onChange={(value) =>
+                  setLockForm((prev) => ({
+                    ...prev,
+                    durationMinutes: value,
+                  }))
+                }
+                placeholder="60"
+              />
 
-                    <p className="mb-5 text-sm leading-6 text-gray-400">
-                      Ban is a stronger restriction than lock. Use this only for
-                      severe policy violations.
-                    </p>
+              <TextArea
+                label="Lock Reason"
+                value={lockForm.reason}
+                onChange={(value) =>
+                  setLockForm((prev) => ({
+                    ...prev,
+                    reason: value,
+                  }))
+                }
+                placeholder="Example: Suspicious activity detected."
+              />
+            </div>
+          </ActionModal>
+        )}
 
-                    <form onSubmit={handleBanUser} className="space-y-4">
-                      <div>
-                        <label className={labelStyle}>Ban Reason</label>
+        {action.type === "UNLOCK" && (
+          <ActionModal
+            title="Unlock User"
+            subtitle={user?.email || user?.fullName}
+            confirmLabel="Unlock User"
+            confirmTone="green"
+            loading={actionLoading}
+            onClose={closeActionModal}
+            onConfirm={handleUnlockUser}
+          >
+            <TextArea
+              label="Unlock Reason"
+              value={unlockForm.reason}
+              onChange={(value) =>
+                setUnlockForm((prev) => ({
+                  ...prev,
+                  reason: value,
+                }))
+              }
+              placeholder="Example: User identity has been verified."
+            />
+          </ActionModal>
+        )}
 
-                        <textarea
-                          value={banForm.reason}
-                          onChange={(event) =>
-                            setBanForm((prev) => ({
-                              ...prev,
-                              reason: event.target.value,
-                            }))
-                          }
-                          rows={4}
-                          placeholder="Explain why this account is banned..."
-                          className={inputStyle}
-                        />
-                      </div>
-
-                      <button
-                        type="submit"
-                        disabled={actionLoading || banned}
-                        className="w-full rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {banned ? "User Already Banned" : "Ban User"}
-                      </button>
-                    </form>
-                  </section>
-                </aside>
-              </div>
-            </>
-          )}
-        </div>
+        {action.type === "BAN" && (
+          <ActionModal
+            title="Ban User"
+            subtitle={user?.email || user?.fullName}
+            confirmLabel="Ban User"
+            confirmTone="red"
+            loading={actionLoading}
+            onClose={closeActionModal}
+            onConfirm={handleBanUser}
+          >
+            <TextArea
+              label="Ban Reason"
+              value={banForm.reason}
+              onChange={(value) =>
+                setBanForm((prev) => ({
+                  ...prev,
+                  reason: value,
+                }))
+              }
+              placeholder="Example: Repeated platform policy violation."
+            />
+          </ActionModal>
+        )}
       </div>
     </AdminLayout>
   );
 }
 
-function SectionTitle({ icon, title }) {
+function UserAvatar({ name, avatarUrl }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || "User"}
+        className="h-24 w-24 rounded-3xl border border-white/10 object-cover"
+      />
+    );
+  }
+
   return (
-    <div className="mb-5 flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-cyan-400/30 bg-cyan-400/10 text-3xl font-black text-cyan-300">
+      {getInitials(name)}
+    </div>
+  );
+}
+
+function InfoCard({ icon, label, value, tone = "cyan" }) {
+  const toneClass = {
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    green: "border-green-400/20 bg-green-400/10 text-green-300",
+    yellow: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
+          toneClass[tone] || toneClass.cyan
+        }`}
+      >
         <span className="material-symbols-outlined">{icon}</span>
       </div>
 
-      <h2 className="text-lg font-bold text-white">{title}</h2>
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+
+      <p className="mt-2 break-words text-lg font-bold text-white">
+        {value || "N/A"}
+      </p>
     </div>
   );
 }
 
-function MiniStat({ label, value }) {
+function DetailItem({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 break-words text-sm font-bold text-white">
+        {value || "N/A"}
+      </p>
+    </div>
+  );
+}
+
+function ReasonBox({ title, value, tone = "yellow" }) {
+  const className =
+    tone === "red"
+      ? "border-red-400/30 bg-red-400/10 text-red-100"
+      : "border-yellow-400/30 bg-yellow-400/10 text-yellow-100";
+
+  return (
+    <div className={`mb-4 rounded-xl border p-4 last:mb-0 ${className}`}>
+      <p className="text-sm font-bold">{title}</p>
+
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 opacity-80">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function RoleBadge({ role }) {
+  const value = String(role || "USER").toUpperCase();
+
+  const className =
+    value === "ADMIN"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : value === "EXPERT"
+      ? "border-purple-400/30 bg-purple-400/10 text-purple-300"
+      : value === "CLIENT"
+      ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+      : "border-white/10 bg-white/[0.04] text-gray-300";
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+    >
+      {formatLabel(value)}
+    </span>
+  );
+}
+
+function StatusBadge({ status }) {
+  const value = String(status || "ACTIVE").toUpperCase();
+
+  const className =
+    value === "ACTIVE"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : value === "LOCKED"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+      : value === "BANNED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-gray-400/30 bg-gray-400/10 text-gray-300";
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+    >
+      {formatLabel(value)}
+    </span>
+  );
+}
+
+function Badge({ label, tone = "default" }) {
+  const toneClass =
+    tone === "green"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : tone === "yellow"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+      : "border-white/10 bg-white/[0.04] text-gray-400";
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function ActionModal({
+  title,
+  subtitle,
+  children,
+  confirmLabel,
+  confirmTone = "cyan",
+  loading,
+  onClose,
+  onConfirm,
+}) {
+  const confirmClass =
+    confirmTone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : confirmTone === "yellow"
+      ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black"
+      : confirmTone === "green"
+      ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+      : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-6 py-5">
+          <h2 className="text-xl font-bold text-white">{title}</h2>
+          <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
+        </div>
+
+        <div className="px-6 py-5">{children}</div>
+
+        <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className={`rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NumberInput({ label, value, onChange, placeholder }) {
   return (
     <div>
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
-      </p>
+      </label>
 
-      <p className="mt-1 truncate text-sm font-bold text-white">
-        {value || "N/A"}
+      <input
+        type="number"
+        min="1"
+        step="1"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+      />
+
+      <p className="mt-2 text-xs leading-5 text-gray-500">
+        Backend expects duration in minutes. Example: 60 means 1 hour.
       </p>
     </div>
   );
 }
 
-function InfoItem({ label, value }) {
+function TextArea({ label, value, onChange, placeholder }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+    <div>
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
-      </p>
+      </label>
 
-      <p className="mt-2 break-words text-sm font-semibold text-gray-200">
-        {value || "N/A"}
-      </p>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={4}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+      />
     </div>
   );
 }
 
-function isLocked(user) {
-  if (!user) return false;
+function Alert({ type, title, message, onClose }) {
+  const className =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : "border-red-500/30 bg-red-500/10 text-red-200";
 
-  const status = String(user.status || "").toUpperCase();
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 ${className}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-bold">{title}</p>
+          <p className="mt-1 text-sm opacity-90">{message}</p>
+        </div>
 
-  if (status === "LOCKED" || status === "SUSPENDED") {
-    return true;
-  }
-
-  if (!user.lockoutEnd) {
-    return false;
-  }
-
-  const lockoutEndDate = new Date(user.lockoutEnd);
-
-  if (Number.isNaN(lockoutEndDate.getTime())) {
-    return false;
-  }
-
-  return lockoutEndDate.getTime() > Date.now();
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm font-bold opacity-70 hover:opacity-100"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
 }
 
-function isBanned(user) {
-  if (!user) return false;
+function getUserStatus(user) {
+  const rawStatus = String(user?.status || "").toUpperCase();
 
-  const status = String(user.status || "").toUpperCase();
+  if (rawStatus === "BANNED" || user?.bannedAt || user?.banReason) {
+    return "BANNED";
+  }
 
-  return status === "BANNED" || Boolean(user.bannedAt);
-}
+  if (
+    rawStatus === "LOCKED" ||
+    rawStatus === "SUSPENDED" ||
+    user?.lockoutEnd ||
+    user?.lockReason
+  ) {
+    return "LOCKED";
+  }
 
-function getComputedStatus(user) {
-  if (!user) return "UNKNOWN";
-
-  if (isBanned(user)) return "BANNED";
-  if (isLocked(user)) return "LOCKED";
-
-  return String(user.status || "ACTIVE").toUpperCase();
+  return rawStatus || "ACTIVE";
 }
 
 function getInitials(name) {
-  if (!name) return "U";
+  if (!name) return "US";
 
-  return name
+  return String(name)
+    .trim()
     .split(" ")
+    .filter(Boolean)
     .map((item) => item[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
 }
 
-function getRoleClass(role) {
-  const value = String(role || "").toUpperCase();
+function formatLabel(value) {
+  if (!value) return "N/A";
 
-  if (value === "ADMIN") {
-    return "border-red-400/30 bg-red-400/10 text-red-300";
-  }
-
-  if (value === "EXPERT") {
-    return "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
-  }
-
-  if (value === "CLIENT") {
-    return "border-green-400/30 bg-green-400/10 text-green-300";
-  }
-
-  return "border-gray-400/30 bg-gray-400/10 text-gray-300";
-}
-
-function getStatusClass(status) {
-  const value = String(status || "").toUpperCase();
-
-  if (value === "ACTIVE" || value === "VERIFIED") {
-    return "border-green-400/30 bg-green-400/10 text-green-300";
-  }
-
-  if (value === "PENDING") {
-    return "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
-  }
-
-  if (value === "LOCKED" || value === "SUSPENDED") {
-    return "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
-  }
-
-  if (value === "BANNED") {
-    return "border-red-400/30 bg-red-400/10 text-red-300";
-  }
-
-  return "border-gray-400/30 bg-gray-400/10 text-gray-300";
+  return String(value)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatDateTime(value) {
@@ -678,9 +851,7 @@ function formatDateTime(value) {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
-    return "N/A";
-  }
+  if (Number.isNaN(date.getTime())) return "N/A";
 
   return date.toLocaleString("en-US", {
     year: "numeric",
@@ -691,22 +862,7 @@ function formatDateTime(value) {
   });
 }
 
-function toDateTimeLocalValue(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "";
-  }
-
-  const timezoneOffset = date.getTimezoneOffset() * 60000;
-  const localDate = new Date(date.getTime() - timezoneOffset);
-
-  return localDate.toISOString().slice(0, 16);
-}
-
-function getFriendlyError(err) {
+function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;
 
   if (status === 401) {
@@ -718,16 +874,15 @@ function getFriendlyError(err) {
   }
 
   if (status === 404) {
-    return "Admin user API was not found. Please check backend route.";
+    return "Admin user detail API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;
 
   if (typeof data === "string") return data;
-
   if (data?.message) return data.message;
-
   if (data?.title) return data.title;
+  if (data?.detail) return data.detail;
 
   if (data?.errors) {
     const allErrors = Object.values(data.errors).flat();
@@ -737,5 +892,5 @@ function getFriendlyError(err) {
     }
   }
 
-  return err?.message || "Something went wrong. Please try again.";
+  return err?.message || fallback;
 }

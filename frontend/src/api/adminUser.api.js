@@ -2,7 +2,13 @@ import axiosInstance from "./axiosInstance";
 
 const adminUserApi = {
   getAllUsers(params = {}) {
-    return axiosInstance.get("/admin/users", { params });
+    const query = {};
+
+    if (params.search) query.search = params.search;
+    if (params.role && params.role !== "ALL") query.role = params.role;
+    if (params.status && params.status !== "ALL") query.status = params.status;
+
+    return axiosInstance.get("/admin/users", { params: query });
   },
 
   getUserById(userId) {
@@ -13,21 +19,12 @@ const adminUserApi = {
     return axiosInstance.patch(`/admin/users/${userId}/lock`, data);
   },
 
-  unlockUser(userId, data = undefined) {
+  unlockUser(userId, data = {}) {
     return axiosInstance.patch(`/admin/users/${userId}/unlock`, data);
   },
 
   banUser(userId, data = {}) {
     return axiosInstance.patch(`/admin/users/${userId}/ban`, data);
-  },
-
-  // Legacy aliases giữ tương thích với page cũ nếu còn gọi
-  updateUserStatus(userId, data) {
-    return axiosInstance.patch(`/admin/users/${userId}/status`, data);
-  },
-
-  updateUserRole(userId, data) {
-    return axiosInstance.patch(`/admin/users/${userId}/role`, data);
   },
 };
 

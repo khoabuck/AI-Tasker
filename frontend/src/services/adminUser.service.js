@@ -8,6 +8,29 @@ const getValue = (...values) => {
 
 const trim = (value) => String(value || "").trim();
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1;
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (["true", "1", "yes", "verified", "confirmed", "active"].includes(normalized)) {
+    return true;
+  }
+
+  if (["false", "0", "no", "unverified", "pending"].includes(normalized)) {
+    return false;
+  }
+
+  return fallback;
+};
+
 const isInvalidId = (value) => {
   return !value || value === "undefined" || value === "null";
 };
@@ -46,6 +69,50 @@ const unwrapListData = (response) => {
   return [];
 };
 
+const getEmailVerified = (user) => {
+  const directValue = getValue(
+    user.isEmailVerified,
+    user.IsEmailVerified,
+    user.emailVerified,
+    user.EmailVerified,
+    user.emailConfirmed,
+    user.EmailConfirmed,
+    user.isEmailConfirmed,
+    user.IsEmailConfirmed,
+    null
+  );
+
+  if (directValue !== null) {
+    return toBoolean(directValue, false);
+  }
+
+  const status = getValue(
+    user.emailVerificationStatus,
+    user.EmailVerificationStatus,
+    user.verificationStatus,
+    user.VerificationStatus,
+    ""
+  );
+
+  if (status) {
+    return ["VERIFIED", "CONFIRMED", "APPROVED", "ACTIVE"].includes(
+      String(status).trim().toUpperCase()
+    );
+  }
+
+  const verifiedAt = getValue(
+    user.emailVerifiedAt,
+    user.EmailVerifiedAt,
+    user.emailConfirmedAt,
+    user.EmailConfirmedAt,
+    user.verifiedAt,
+    user.VerifiedAt,
+    null
+  );
+
+  return Boolean(verifiedAt);
+};
+
 export const normalizeAdminUser = (user) => {
   if (!user) return null;
 
@@ -59,15 +126,12 @@ export const normalizeAdminUser = (user) => {
     .trim()
     .toUpperCase();
 
-  const lockoutCount = Number(
-    getValue(user.lockoutCount, user.LockoutCount, 0)
-  );
-
   return {
     userId,
     id: userId,
 
     email: getValue(user.email, user.Email, ""),
+
     fullName: getValue(
       user.fullName,
       user.FullName,
@@ -92,16 +156,13 @@ export const normalizeAdminUser = (user) => {
       ""
     ),
 
-    isEmailVerified: Boolean(
-      getValue(user.isEmailVerified, user.IsEmailVerified, user.emailVerified, false)
-    ),
+    isEmailVerified: getEmailVerified(user),
 
-    // Lock / Ban fields from new backend
     banReason: getValue(user.banReason, user.BanReason, ""),
     bannedAt: getValue(user.bannedAt, user.BannedAt, null),
 
     lockReason: getValue(user.lockReason, user.LockReason, ""),
-    lockoutCount,
+    lockoutCount: toNumber(getValue(user.lockoutCount, user.LockoutCount, 0)),
     lockoutEnd: getValue(user.lockoutEnd, user.LockoutEnd, null),
     lastLockedAt: getValue(user.lastLockedAt, user.LastLockedAt, null),
 
@@ -137,15 +198,24 @@ export const normalizeAdminUser = (user) => {
 
 const buildLockPayload = (formData = {}) => {
   return {
-    reason: trim(
-      getValue(formData.reason, formData.lockReason, formData.message)
+    durationMinutes: toNumber(
+      getValue(
+        formData.durationMinutes,
+        formData.lockDurationMinutes,
+        formData.minutes,
+        60
+      ),
+      60
     ),
-    lockoutEnd: getValue(
-      formData.lockoutEnd,
-      formData.lockUntil,
-      formData.until,
-      null
-    ),
+    reason: trim(getValue(formData.reason, formData.lockReason, formData.message)),
+  };
+};
+
+const buildUnlockPayload = (formData = {}) => {
+  return {
+    reason:
+      trim(getValue(formData.reason, formData.unlockReason, formData.message)) ||
+      "Unlock user account.",
   };
 };
 
@@ -158,9 +228,6 @@ const buildBanPayload = (formData = {}) => {
 const adminUserService = {
   async getAllUsers(params = {}) {
     const response = await adminUserApi.getAllUsers(params);
-
-    console.log("ADMIN USERS RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeAdminUser).filter(Boolean);
   },
 
@@ -170,9 +237,6 @@ const adminUserService = {
     }
 
     const response = await adminUserApi.getUserById(userId);
-
-    console.log("ADMIN USER DETAIL RESPONSE:", response?.data);
-
     return normalizeAdminUser(unwrapData(response));
   },
 
@@ -182,24 +246,18 @@ const adminUserService = {
     }
 
     const payload = buildLockPayload(formData);
-
-    console.log("LOCK USER PAYLOAD:", payload);
-
     const response = await adminUserApi.lockUser(userId, payload);
-
-    console.log("LOCK USER RESPONSE:", response?.data);
 
     return normalizeAdminUser(unwrapData(response));
   },
 
-  async unlockUser(userId) {
+  async unlockUser(userId, formData = {}) {
     if (isInvalidId(userId)) {
       throw new Error("Invalid user id.");
     }
 
-    const response = await adminUserApi.unlockUser(userId);
-
-    console.log("UNLOCK USER RESPONSE:", response?.data);
+    const payload = buildUnlockPayload(formData);
+    const response = await adminUserApi.unlockUser(userId, payload);
 
     return normalizeAdminUser(unwrapData(response));
   },
@@ -210,42 +268,17 @@ const adminUserService = {
     }
 
     const payload = buildBanPayload(formData);
-
-    console.log("BAN USER PAYLOAD:", payload);
-
     const response = await adminUserApi.banUser(userId, payload);
 
-    console.log("BAN USER RESPONSE:", response?.data);
-
     return normalizeAdminUser(unwrapData(response));
   },
 
-  // Legacy methods giữ để ManageUsersPage cũ chưa vỡ.
-  // Nếu backend mới đã bỏ /status và /role thì page mới sẽ không dùng 2 hàm này nữa.
-  async updateUserStatus(userId, status) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
-    const payload = {
-      status,
-    };
-
-    const response = await adminUserApi.updateUserStatus(userId, payload);
-    return normalizeAdminUser(unwrapData(response));
+  async updateUserStatus() {
+    throw new Error("This backend no longer supports admin user status update.");
   },
 
-  async updateUserRole(userId, role) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
-    const payload = {
-      role,
-    };
-
-    const response = await adminUserApi.updateUserRole(userId, payload);
-    return normalizeAdminUser(unwrapData(response));
+  async updateUserRole() {
+    throw new Error("This backend no longer supports admin user role update.");
   },
 };
 
