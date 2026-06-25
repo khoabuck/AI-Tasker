@@ -13,18 +13,113 @@ export default function ContractDetailPage() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
 
-  const [showRejectBox, setShowRejectBox] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
+  const [showDeclineBox, setShowDeclineBox] = useState(false);
+  const [declineReason, setDeclineReason] = useState("");
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  const realContractId = contract?.contractId || contractId;
-  const status = normalizeStatus(contract?.status);
+  const realContractId = getContractId(contract) || contractId;
+  const realProposalId = getProposalId(contract) || proposalId;
+  const realJobId = getJobId(contract);
+  const realProjectId = getProjectId(contract);
+
+  const status = normalizeStatus(
+    getField(contract, ["status", "Status"], "DRAFT")
+  );
 
   const canRespond = useMemo(() => {
-    return canAcceptContract(status) || canRejectContract(status);
+    return canAcceptContract(status) || canDeclineContract(status);
   }, [status]);
+
+  const contractTitle = getField(
+    contract,
+    [
+      "jobTitle",
+      "JobTitle",
+      "projectTitle",
+      "ProjectTitle",
+      "title",
+      "Title",
+      "job.title",
+      "Job.Title",
+    ],
+    "Contract"
+  );
+
+  const projectScope = getField(
+    contract,
+    [
+      "projectScope",
+      "ProjectScope",
+      "scopeOfWork",
+      "ScopeOfWork",
+      "description",
+      "Description",
+      "job.description",
+      "Job.Description",
+    ],
+    ""
+  );
+
+  const contractTerms = getField(
+    contract,
+    [
+      "paymentTerms",
+      "PaymentTerms",
+      "contractTerms",
+      "ContractTerms",
+      "terms",
+      "Terms",
+      "note",
+      "Note",
+    ],
+    ""
+  );
+
+  const deliverables = getField(
+    contract,
+    [
+      "deliverables",
+      "Deliverables",
+      "expectedDeliverables",
+      "ExpectedDeliverables",
+      "expectedOutputs",
+      "ExpectedOutputs",
+    ],
+    ""
+  );
+
+  const acceptanceCriteria = getField(
+    contract,
+    ["acceptanceCriteria", "AcceptanceCriteria", "criteria", "Criteria"],
+    ""
+  );
+
+  const clientMessage = getField(
+    contract,
+    [
+      "chatSummary",
+      "ChatSummary",
+      "clientMessage",
+      "ClientMessage",
+      "message",
+      "Message",
+    ],
+    ""
+  );
+
+  const clientName = getField(
+    contract,
+    ["clientName", "ClientName", "client.fullName", "Client.FullName"],
+    "Client"
+  );
+
+  const expertName = getField(
+    contract,
+    ["expertName", "ExpertName", "expert.fullName", "Expert.FullName"],
+    "Expert"
+  );
 
   useEffect(() => {
     loadContract();
@@ -49,12 +144,16 @@ export default function ContractDetailPage() {
 
       setContract(contractData);
 
-      const id = contractData?.contractId || contractId;
+      const id = getContractId(contractData) || contractId;
+      const fallbackMilestones = getMilestonesFromContract(contractData);
 
       if (id) {
-        await loadMilestoneDrafts(id, contractData);
+        const apiMilestones = await loadMilestoneDrafts(id);
+        setMilestoneDrafts(
+          apiMilestones.length > 0 ? apiMilestones : fallbackMilestones
+        );
       } else {
-        setMilestoneDrafts(contractData?.milestoneDrafts || []);
+        setMilestoneDrafts(fallbackMilestones);
       }
     } catch (err) {
       console.error("LOAD CONTRACT ERROR:", err?.response?.data || err);
@@ -66,13 +165,36 @@ export default function ContractDetailPage() {
     }
   };
 
-  const loadMilestoneDrafts = async (id, contractData = contract) => {
+  const loadMilestoneDrafts = async (id) => {
     try {
-      const data = await contractService.getContractMilestoneDrafts(id);
-      setMilestoneDrafts(Array.isArray(data) ? data : []);
+      const fn =
+        contractService.getContractMilestoneDrafts ||
+        contractService.getMilestoneDrafts;
+
+      if (!fn) return [];
+
+      const data = await fn.call(contractService, id);
+
+      return Array.isArray(data)
+        ? data.map((item, index) => normalizeMilestone(item, index))
+        : [];
     } catch (err) {
       console.warn("LOAD MILESTONE DRAFTS WARNING:", err?.response?.data || err);
-      setMilestoneDrafts(contractData?.milestoneDrafts || []);
+      return [];
+    }
+  };
+
+  const refreshAfterAction = async (updatedContract) => {
+    setContract(updatedContract);
+
+    const id = getContractId(updatedContract) || realContractId;
+    const fallbackMilestones = getMilestonesFromContract(updatedContract);
+
+    if (id) {
+      const apiMilestones = await loadMilestoneDrafts(id);
+      setMilestoneDrafts(
+        apiMilestones.length > 0 ? apiMilestones : fallbackMilestones
+      );
     }
   };
 
@@ -86,59 +208,46 @@ export default function ContractDetailPage() {
       setError("");
       setMessage("");
 
-      const updatedContract = await contractService.confirmContract(
-        realContractId
-      );
+      const updatedContract = await contractService.confirmContract(realContractId);
 
-      setContract(updatedContract);
-
-      if (updatedContract?.contractId) {
-        await loadMilestoneDrafts(updatedContract.contractId, updatedContract);
-      }
+      await refreshAfterAction(updatedContract);
 
       setMessage("Contract accepted successfully.");
     } catch (err) {
       console.error("ACCEPT CONTRACT ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot accept contract."));
+      setError(getFriendlyError(err, "Cannot accept contract right now."));
     } finally {
       setActionLoading("");
     }
   };
 
-  const handleRejectContract = async () => {
-    if (!rejectReason.trim()) {
-      setError("Please enter a reason before rejecting this contract.");
+  const handleDeclineContract = async () => {
+    if (!declineReason.trim()) {
+      setError("Please enter a reason before declining this contract.");
       return;
     }
 
-    const ok = window.confirm("Are you sure you want to reject this contract?");
+    const ok = window.confirm("Are you sure you want to decline this contract?");
 
     if (!ok) return;
 
     try {
-      setActionLoading("reject");
+      setActionLoading("decline");
       setError("");
       setMessage("");
 
-      const updatedContract = await contractService.cancelContract(
-        realContractId,
-        {
-          reason: rejectReason,
-        }
-      );
+      const updatedContract = await contractService.cancelContract(realContractId, {
+        reason: declineReason.trim(),
+      });
 
-      setContract(updatedContract);
-      setShowRejectBox(false);
-      setRejectReason("");
+      await refreshAfterAction(updatedContract);
 
-      if (updatedContract?.contractId) {
-        await loadMilestoneDrafts(updatedContract.contractId, updatedContract);
-      }
-
-      setMessage("Contract rejected successfully.");
+      setShowDeclineBox(false);
+      setDeclineReason("");
+      setMessage("Contract declined successfully.");
     } catch (err) {
-      console.error("REJECT CONTRACT ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot reject contract."));
+      console.error("DECLINE CONTRACT ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot decline contract right now."));
     } finally {
       setActionLoading("");
     }
@@ -185,8 +294,8 @@ export default function ContractDetailPage() {
           <button
             type="button"
             onClick={() => {
-              if (contract.proposalId) {
-                navigate(`/expert/proposals/${contract.proposalId}`);
+              if (realProposalId) {
+                navigate(`/expert/proposals/${realProposalId}`);
                 return;
               }
 
@@ -194,163 +303,82 @@ export default function ContractDetailPage() {
             }}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
-            <span className="material-symbols-outlined text-sm">
-              arrow_back
-            </span>
+            <span className="material-symbols-outlined text-sm">arrow_back</span>
             Back to proposal
           </button>
 
           <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
-            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                  Contract Detail
-                </p>
-
-                <h1 className="text-2xl font-bold text-white md:text-3xl">
-                  {formatDisplayValue(contract.title || contract.jobTitle)}
-                </h1>
-
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review the contract terms and milestone drafts before making
-                  your decision.
-                </p>
-
-                <div className="mt-4 flex flex-wrap items-center gap-2">
+                <div className="mb-4 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} />
 
-                  {contract.contractId && (
+                  {realContractId && (
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-300">
-                      Contract #{contract.contractId}
+                      Contract #{realContractId}
+                    </span>
+                  )}
+
+                  {getField(
+                    contract,
+                    ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
+                    ""
+                  ) && (
+                    <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
+                      Proposal Version{" "}
+                      {getField(
+                        contract,
+                        ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
+                        ""
+                      )}
                     </span>
                   )}
                 </div>
+
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                  Contract Review
+                </p>
+
+                <h1 className="max-w-3xl text-2xl font-bold text-white md:text-3xl">
+                  {formatDisplayValue(contractTitle)}
+                </h1>
+
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                  Please review the contract details carefully before accepting.
+                  You may decline if the contract terms are not acceptable.
+                </p>
+
+                <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <QuickStat label="Client" value={clientName} />
+                  <QuickStat
+                    label="Timeline"
+                    value={`${getTimelineDays(contract)} days`}
+                  />
+                  <QuickStat
+                    label="Your Earnings"
+                    value={formatMoney(getExpertReceivable(contract))}
+                  />
+                </div>
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                {contract.proposalId && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(`/expert/proposals/${contract.proposalId}`)
-                    }
-                    className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white"
-                  >
-                    Proposal
-                  </button>
-                )}
+              <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5 lg:w-[320px]">
+                <p className="text-sm font-bold text-cyan-100">
+                  What happens next?
+                </p>
 
-                {contract.projectId && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      navigate(`/expert/projects/${contract.projectId}`)
-                    }
-                    className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                  >
-                    Project
-                  </button>
-                )}
-              </div>
-            </div>
-          </section>
+                <p className="mt-2 text-sm leading-6 text-cyan-100/80">
+                  Once you accept, the contract can move forward to the project
+                  stage based on the platform workflow.
+                </p>
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
-
-          {error && (
-            <Alert type="danger" title="Contract error" message={error} />
-          )}
-
-          {isContractRejected(status) && contract.cancelReason && (
-            <Alert
-              type="warning"
-              title="Contract rejected"
-              message={contract.cancelReason}
-            />
-          )}
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-            <main className="space-y-6">
-              <Card title="Project Scope">
-                <TextValue
-                  value={
-                    contract.projectScope ||
-                    contract.scopeOfWork ||
-                    contract.description ||
-                    "No project scope provided."
-                  }
-                />
-              </Card>
-
-              <Card title="Contract Terms">
-                <TextValue
-                  value={
-                    contract.terms ||
-                    contract.contractTerms ||
-                    contract.paymentTerms ||
-                    "No contract terms provided."
-                  }
-                />
-              </Card>
-
-              {contract.deliverables && (
-                <Card title="Deliverables">
-                  <TextValue value={contract.deliverables} />
-                </Card>
-              )}
-
-              {contract.acceptanceCriteria && (
-                <Card title="Acceptance Criteria">
-                  <TextValue value={contract.acceptanceCriteria} />
-                </Card>
-              )}
-
-              {contract.chatSummary && (
-                <Card title="Client Message">
-                  <TextValue value={contract.chatSummary} />
-                </Card>
-              )}
-
-              <Card title={`Milestone Drafts (${milestoneDrafts.length})`}>
-                {milestoneDrafts.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    No milestone drafts returned from backend.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {milestoneDrafts.map((milestone, index) => (
-                      <MilestoneDraftCard
-                        key={
-                          milestone.milestoneDraftId ||
-                          milestone.contractMilestoneDraftId ||
-                          milestone.id ||
-                          index
-                        }
-                        milestone={milestone}
-                        index={index}
-                      />
-                    ))}
-                  </div>
-                )}
-              </Card>
-
-              {canRespond && (
-                <Card title="Your Decision">
-                  <p className="mb-5 text-sm leading-6 text-gray-400">
-                    Accept this contract if the terms and milestone drafts are
-                    correct. Reject it if the client needs to revise the
-                    contract.
-                  </p>
-
-                  <div className="flex flex-wrap gap-3">
+                {canRespond && (
+                  <div className="mt-4 flex flex-col gap-2">
                     {canAcceptContract(status) && (
                       <button
                         type="button"
                         disabled={actionLoading === "accept"}
                         onClick={handleAcceptContract}
-                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {actionLoading === "accept"
                           ? "Accepting..."
@@ -358,142 +386,182 @@ export default function ContractDetailPage() {
                       </button>
                     )}
 
-                    {canRejectContract(status) && (
+                    {canDeclineContract(status) && (
                       <button
                         type="button"
-                        disabled={actionLoading === "reject"}
-                        onClick={() => setShowRejectBox((prev) => !prev)}
-                        className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={actionLoading === "decline"}
+                        onClick={() => setShowDeclineBox((prev) => !prev)}
+                        className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        Reject Contract
+                        Decline Contract
                       </button>
                     )}
                   </div>
+                )}
+              </div>
+            </div>
+          </section>
 
-                  {showRejectBox && (
-                    <div className="mt-5 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
-                      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-red-200">
-                        Reject Reason
-                      </label>
+          {message && <Alert type="success" title="Success" message={message} />}
+          {error && <Alert type="danger" title="Contract error" message={error} />}
 
-                      <textarea
-                        value={rejectReason}
-                        onChange={(event) => {
-                          setRejectReason(event.target.value);
-                          setError("");
-                        }}
-                        rows={4}
-                        placeholder="Explain why you reject this contract."
-                        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300"
-                      />
+          {isContractDeclined(status) && getCancelReason(contract) && (
+            <Alert
+              type="warning"
+              title="Contract declined"
+              message={getCancelReason(contract)}
+            />
+          )}
 
-                      <div className="mt-4 flex justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowRejectBox(false);
-                            setRejectReason("");
-                          }}
-                          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white"
-                        >
-                          Cancel
-                        </button>
+          {showDeclineBox && (
+            <section className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-red-200">
+                Reason for declining
+              </label>
 
-                        <button
-                          type="button"
-                          disabled={actionLoading === "reject"}
-                          onClick={handleRejectContract}
-                          className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {actionLoading === "reject"
-                            ? "Rejecting..."
-                            : "Confirm Reject"}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+              <textarea
+                value={declineReason}
+                onChange={(event) => {
+                  setDeclineReason(event.target.value);
+                  setError("");
+                }}
+                rows={4}
+                placeholder="Explain why you cannot accept this contract."
+                className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300"
+              />
+
+              <div className="mt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDeclineBox(false);
+                    setDeclineReason("");
+                  }}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  disabled={actionLoading === "decline"}
+                  onClick={handleDeclineContract}
+                  className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {actionLoading === "decline" ? "Declining..." : "Submit Reason"}
+                </button>
+              </div>
+            </section>
+          )}
+
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+            <main className="space-y-6">
+              <Card title="Scope of Work" icon="assignment">
+                <TextValue value={projectScope || "No project scope provided."} />
+              </Card>
+
+              <Card title="Deliverables" icon="task_alt">
+                <TextValue value={deliverables || "No deliverables provided."} />
+              </Card>
+
+              <Card title="Acceptance Criteria" icon="verified">
+                <TextValue
+                  value={
+                    acceptanceCriteria || "No acceptance criteria provided."
+                  }
+                />
+              </Card>
+
+              <Card title="Payment Terms" icon="payments">
+                <TextValue value={contractTerms || "No payment terms provided."} />
+              </Card>
+
+              {clientMessage && (
+                <Card title="Client Message" icon="chat">
+                  <TextValue value={clientMessage} />
                 </Card>
               )}
+
+              <Card title={`Milestones (${milestoneDrafts.length})`} icon="flag">
+                {milestoneDrafts.length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-sm font-bold text-white">
+                      Milestones are not available yet.
+                    </p>
+
+                    <p className="mt-2 text-sm leading-6 text-gray-400">
+                      You can still review the overall scope, deliverables, and
+                      payment terms. Milestones may be added by the client before
+                      the project starts.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {milestoneDrafts.map((milestone, index) => (
+                      <MilestoneDraftCard
+                        key={milestone.id || index}
+                        milestone={milestone}
+                        index={index}
+                      />
+                    ))}
+                  </div>
+                )}
+              </Card>
             </main>
 
             <aside className="space-y-6">
-              <Card title="Summary">
-                <Info label="Client" value={contract.clientName || "Client"} />
-                <Info label="Expert" value={contract.expertName || "Expert"} />
+              <PaymentSummary contract={contract} />
 
-                <Info
-                  label="Final Price"
-                  value={formatMoney(contract.finalPrice || contract.totalAmount)}
-                />
-
-                <Info
-                  label="Expert Amount"
-                  value={formatMoney(contract.expertAmount)}
-                />
-
-                <Info
-                  label="Platform Fee"
-                  value={formatMoney(contract.platformFee)}
-                />
-
-                <Info
-                  label="Timeline"
-                  value={`${
-                    contract.finalTimelineDays ||
-                    contract.timelineDays ||
-                    contract.durationDays ||
-                    0
-                  } days`}
-                />
-
+              <Card title="Contract Info" icon="info">
                 <Info label="Status" value={getContractStatusLabel(status)} />
+                <Info label="Client" value={clientName} />
+                <Info label="Expert" value={expertName} />
 
-                {contract.proposalId && (
-                  <Info label="Proposal ID" value={`#${contract.proposalId}`} />
-                )}
+                <Info
+                  label="Client Confirmed"
+                  value={formatBoolean(
+                    getField(contract, ["clientConfirmed", "ClientConfirmed"], false)
+                  )}
+                />
 
-                {contract.projectId && (
-                  <Info label="Project ID" value={`#${contract.projectId}`} />
-                )}
+                <Info
+                  label="Expert Confirmed"
+                  value={formatBoolean(
+                    getField(contract, ["expertConfirmed", "ExpertConfirmed"], false)
+                  )}
+                />
+
+                {realProposalId && <Info label="Proposal" value={`#${realProposalId}`} />}
+                {realJobId && <Info label="Job" value={`#${realJobId}`} />}
+                {realProjectId && <Info label="Project" value={`#${realProjectId}`} />}
               </Card>
 
-              <Card title="Dates">
-                <Info label="Created At" value={formatDate(contract.createdAt)} />
+              <Card title="Dates" icon="event">
+                <Info
+                  label="Created"
+                  value={formatDate(
+                    getField(contract, ["createdAt", "CreatedAt"], "")
+                  )}
+                />
 
-                {contract.updatedAt && (
-                  <Info label="Updated At" value={formatDate(contract.updatedAt)} />
-                )}
-
-                {contract.startDate && (
-                  <Info label="Start Date" value={formatDate(contract.startDate)} />
-                )}
-
-                {contract.endDate && (
-                  <Info label="End Date" value={formatDate(contract.endDate)} />
-                )}
-
-                {contract.confirmedAt && (
+                {getField(contract, ["confirmedAt", "ConfirmedAt"], "") && (
                   <Info
-                    label="Confirmed At"
-                    value={formatDate(contract.confirmedAt)}
+                    label="Confirmed"
+                    value={formatDate(
+                      getField(contract, ["confirmedAt", "ConfirmedAt"], "")
+                    )}
                   />
                 )}
 
-                {contract.cancelledAt && (
+                {getField(contract, ["cancelledAt", "CancelledAt"], "") && (
                   <Info
-                    label="Cancelled At"
-                    value={formatDate(contract.cancelledAt)}
+                    label="Declined"
+                    value={formatDate(
+                      getField(contract, ["cancelledAt", "CancelledAt"], "")
+                    )}
                   />
                 )}
               </Card>
-
-              <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5 text-cyan-100">
-                <p className="font-bold">Contract flow</p>
-                <p className="mt-2 text-sm leading-6">
-                  Expert only reviews, accepts, or rejects the contract. Contract
-                  creation and draft editing belong to the client flow.
-                </p>
-              </section>
             </aside>
           </div>
         </div>
@@ -502,10 +570,86 @@ export default function ContractDetailPage() {
   );
 }
 
-function Card({ title, children }) {
+function PaymentSummary({ contract }) {
+  const finalPrice = getFinalPrice(contract);
+  const platformFee = getPlatformFee(contract);
+  const totalClientPayment = getTotalClientPayment(contract);
+  const expertReceivable = getExpertReceivable(contract);
+
+  return (
+    <section className="rounded-2xl border border-green-400/30 bg-green-400/10 p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-green-400/20">
+          <span className="material-symbols-outlined text-green-300">
+            account_balance_wallet
+          </span>
+        </div>
+
+        <div>
+          <h2 className="font-extrabold text-white">Payment Summary</h2>
+          <p className="text-xs text-green-100/70">
+            Clear breakdown for this contract
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <PaymentRow label="Contract Amount" value={formatMoney(finalPrice)} />
+        <PaymentRow label="Platform Fee" value={formatMoney(platformFee)} />
+        <PaymentRow label="Client Pays" value={formatMoney(totalClientPayment)} />
+      </div>
+
+      <div className="mt-4 rounded-xl border border-green-400/30 bg-black/20 p-4">
+        <p className="text-xs uppercase tracking-wider text-green-100/70">
+          You receive
+        </p>
+
+        <p className="mt-1 text-2xl font-black text-green-300">
+          {formatMoney(expertReceivable)}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PaymentRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+      <p className="text-sm text-green-100/80">{label}</p>
+      <p className="font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function QuickStat({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-bold text-white">
+        {formatDisplayValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
-      <h2 className="mb-4 text-lg font-extrabold text-white">{title}</h2>
+      <div className="mb-4 flex items-center gap-3">
+        {icon && (
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+            <span className="material-symbols-outlined text-lg text-cyan-300">
+              {icon}
+            </span>
+          </div>
+        )}
+
+        <h2 className="text-lg font-extrabold text-white">{title}</h2>
+      </div>
+
       {children}
     </section>
   );
@@ -548,20 +692,10 @@ function MilestoneDraftCard({ milestone, index }) {
         <Info label="Amount" value={formatMoney(milestone.amount)} />
 
         <Info
-          label="Deadline Offset"
+          label="Deadline"
           value={
-            milestone.deadlineOffsetDays
-              ? `${milestone.deadlineOffsetDays} days`
-              : "N/A"
-          }
-        />
-
-        <Info
-          label="Revision Limit"
-          value={
-            milestone.revisionLimit !== undefined &&
-            milestone.revisionLimit !== null
-              ? `${milestone.revisionLimit}`
+            milestone.deadlineOffsetDays || milestone.durationDays
+              ? `${milestone.deadlineOffsetDays || milestone.durationDays} days`
               : "N/A"
           }
         />
@@ -572,7 +706,7 @@ function MilestoneDraftCard({ milestone, index }) {
 
 function Info({ label, value }) {
   return (
-    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 last:mb-0">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
       <p className="mt-1 break-words text-sm font-bold text-white">
         {formatDisplayValue(value)}
@@ -594,7 +728,7 @@ function StatusBadge({ status }) {
 
   const style = isContractAccepted(normalized)
     ? "border-green-400/30 bg-green-400/10 text-green-300"
-    : isContractRejected(normalized)
+    : isContractDeclined(normalized)
     ? "border-red-400/30 bg-red-400/10 text-red-300"
     : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
@@ -623,6 +757,302 @@ function Alert({ type, title, message }) {
   );
 }
 
+function getContainers(entity) {
+  return [entity, entity?.raw, entity?.Raw].filter(Boolean);
+}
+
+function getField(entity, paths = [], fallback = "") {
+  const containers = getContainers(entity);
+
+  for (const container of containers) {
+    for (const path of paths) {
+      const value = getByPath(container, path);
+
+      if (value !== undefined && value !== null && value !== "") {
+        return value;
+      }
+    }
+  }
+
+  return fallback;
+}
+
+function getByPath(object, path) {
+  if (!object || !path) return undefined;
+
+  return String(path)
+    .split(".")
+    .reduce((result, key) => {
+      if (result === undefined || result === null) return undefined;
+      return result[key];
+    }, object);
+}
+
+function getNumberField(entity, paths = [], fallback = 0) {
+  const value = getField(entity, paths, fallback);
+  const number = Number(value);
+
+  return Number.isNaN(number) ? fallback : number;
+}
+
+function getContractId(contract) {
+  return getField(contract, ["contractId", "ContractId", "id", "Id"], "");
+}
+
+function getProposalId(contract) {
+  return getField(contract, ["proposalId", "ProposalId"], "");
+}
+
+function getJobId(contract) {
+  return getField(contract, ["jobId", "JobId"], "");
+}
+
+function getProjectId(contract) {
+  return getField(contract, ["projectId", "ProjectId"], "");
+}
+
+function getFinalPrice(contract) {
+  const direct = getNumberField(
+    contract,
+    [
+      "finalPrice",
+      "FinalPrice",
+      "contractAmount",
+      "ContractAmount",
+      "totalAmount",
+      "TotalAmount",
+      "amount",
+      "Amount",
+      "price",
+      "Price",
+    ],
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  return getExpertReceivable(contract);
+}
+
+function getPlatformFee(contract) {
+  return getNumberField(
+    contract,
+    ["platformFeeAmount", "PlatformFeeAmount", "platformFee", "PlatformFee"],
+    0
+  );
+}
+
+function getTotalClientPayment(contract) {
+  return getNumberField(
+    contract,
+    [
+      "totalClientPayment",
+      "TotalClientPayment",
+      "clientPaymentAmount",
+      "ClientPaymentAmount",
+    ],
+    getFinalPrice(contract) + getPlatformFee(contract)
+  );
+}
+
+function getExpertReceivable(contract) {
+  return getNumberField(
+    contract,
+    [
+      "expertReceivableAmount",
+      "ExpertReceivableAmount",
+      "expertAmount",
+      "ExpertAmount",
+    ],
+    0
+  );
+}
+
+function getTimelineDays(contract) {
+  return getNumberField(
+    contract,
+    [
+      "finalTimelineDays",
+      "FinalTimelineDays",
+      "timelineDays",
+      "TimelineDays",
+      "durationDays",
+      "DurationDays",
+      "estimatedDurationDays",
+      "EstimatedDurationDays",
+    ],
+    0
+  );
+}
+
+function getCancelReason(contract) {
+  return getField(
+    contract,
+    [
+      "cancelReason",
+      "CancelReason",
+      "cancellationReason",
+      "CancellationReason",
+      "rejectReason",
+      "RejectReason",
+    ],
+    ""
+  );
+}
+
+function getMilestonesFromContract(contract) {
+  const containers = getContainers(contract);
+
+  for (const container of containers) {
+    const direct =
+      container.milestoneDrafts ||
+      container.MilestoneDrafts ||
+      container.contractMilestoneDrafts ||
+      container.ContractMilestoneDrafts ||
+      container.milestones ||
+      container.Milestones ||
+      container.contractMilestones ||
+      container.ContractMilestones;
+
+    if (Array.isArray(direct) && direct.length > 0) {
+      return direct.map((item, index) => normalizeMilestone(item, index));
+    }
+
+    const json =
+      container.milestonePlanJson ||
+      container.MilestonePlanJson ||
+      container.milestonesJson ||
+      container.MilestonesJson ||
+      "";
+
+    const parsed = parseMilestoneJson(json);
+
+    if (parsed.length > 0) return parsed;
+  }
+
+  return [];
+}
+
+function parseMilestoneJson(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeMilestone(item, index));
+  }
+
+  if (typeof value === "object") {
+    return extractMilestoneArray(value).map((item, index) =>
+      normalizeMilestone(item, index)
+    );
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+
+    if (typeof parsed === "string") {
+      return parseMilestoneJson(parsed);
+    }
+
+    return extractMilestoneArray(parsed).map((item, index) =>
+      normalizeMilestone(item, index)
+    );
+  } catch {
+    return [];
+  }
+}
+
+function extractMilestoneArray(value) {
+  if (Array.isArray(value)) return value;
+
+  if (!value || typeof value !== "object") return [];
+
+  if (Array.isArray(value.milestones)) return value.milestones;
+  if (Array.isArray(value.Milestones)) return value.Milestones;
+
+  if (Array.isArray(value.milestoneDrafts)) return value.milestoneDrafts;
+  if (Array.isArray(value.MilestoneDrafts)) return value.MilestoneDrafts;
+
+  if (Array.isArray(value.contractMilestoneDrafts)) {
+    return value.contractMilestoneDrafts;
+  }
+
+  if (Array.isArray(value.ContractMilestoneDrafts)) {
+    return value.ContractMilestoneDrafts;
+  }
+
+  if (Array.isArray(value.items)) return value.items;
+  if (Array.isArray(value.Items)) return value.Items;
+
+  if (Array.isArray(value.data)) return value.data;
+  if (Array.isArray(value.Data)) return value.Data;
+
+  return [];
+}
+
+function normalizeMilestone(item, index = 0) {
+  const duration =
+    item?.durationDays ??
+    item?.DurationDays ??
+    item?.deadlineOffsetDays ??
+    item?.DeadlineOffsetDays ??
+    0;
+
+  return {
+    id:
+      item?.contractMilestoneDraftId ||
+      item?.ContractMilestoneDraftId ||
+      item?.milestoneDraftId ||
+      item?.MilestoneDraftId ||
+      item?.contractMilestoneId ||
+      item?.ContractMilestoneId ||
+      item?.id ||
+      item?.Id ||
+      index,
+
+    title:
+      item?.title ||
+      item?.Title ||
+      item?.name ||
+      item?.Name ||
+      `Milestone ${index + 1}`,
+
+    description:
+      item?.description ||
+      item?.Description ||
+      item?.expectedDeliverable ||
+      item?.ExpectedDeliverable ||
+      "",
+
+    expectedDeliverable:
+      item?.expectedDeliverable ||
+      item?.ExpectedDeliverable ||
+      item?.deliverable ||
+      item?.Deliverable ||
+      "",
+
+    acceptanceCriteria:
+      item?.acceptanceCriteria ||
+      item?.AcceptanceCriteria ||
+      item?.criteria ||
+      item?.Criteria ||
+      "",
+
+    amount: Number(item?.amount ?? item?.Amount ?? 0),
+
+    durationDays: Number(duration),
+
+    deadlineOffsetDays: Number(duration),
+
+    revisionLimit: item?.revisionLimit ?? item?.RevisionLimit ?? null,
+
+    orderIndex: Number(item?.orderIndex ?? item?.OrderIndex ?? index + 1),
+
+    status: String(item?.status || item?.Status || "PENDING").toUpperCase(),
+
+    raw: item,
+  };
+}
+
 function normalizeStatus(status) {
   return String(status || "DRAFT").trim().toUpperCase();
 }
@@ -633,8 +1063,10 @@ function isContractAccepted(status) {
   );
 }
 
-function isContractRejected(status) {
-  return ["REJECTED", "CANCELLED", "CANCELED"].includes(normalizeStatus(status));
+function isContractDeclined(status) {
+  return ["REJECTED", "CANCELLED", "CANCELED", "DECLINED"].includes(
+    normalizeStatus(status)
+  );
 }
 
 function canAcceptContract(status) {
@@ -643,7 +1075,7 @@ function canAcceptContract(status) {
   );
 }
 
-function canRejectContract(status) {
+function canDeclineContract(status) {
   return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
     normalizeStatus(status)
   );
@@ -661,9 +1093,10 @@ function getContractStatusLabel(status) {
     CONFIRMED: "Confirmed",
     ACTIVE: "Active",
     SIGNED: "Signed",
-    REJECTED: "Rejected",
-    CANCELLED: "Cancelled",
-    CANCELED: "Cancelled",
+    REJECTED: "Declined",
+    DECLINED: "Declined",
+    CANCELLED: "Declined",
+    CANCELED: "Declined",
   };
 
   return map[value] || value;
@@ -677,6 +1110,10 @@ function formatMoney(value) {
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function formatBoolean(value) {
+  return value === true || String(value).toLowerCase() === "true" ? "Yes" : "No";
 }
 
 function formatDate(value) {
@@ -735,16 +1172,18 @@ function getFriendlyError(error, fallback = "Something went wrong.") {
         error?.message ||
         "";
 
-  if (message.toLowerCase().includes("not found")) {
+  const lower = String(message || "").toLowerCase();
+
+  if (lower.includes("not found")) {
     return "Contract could not be found.";
   }
 
-  if (message.toLowerCase().includes("confirm")) {
+  if (lower.includes("confirm")) {
     return "This contract cannot be accepted right now.";
   }
 
-  if (message.toLowerCase().includes("cancel")) {
-    return "This contract cannot be rejected right now.";
+  if (lower.includes("cancel") || lower.includes("decline")) {
+    return "This contract cannot be declined right now.";
   }
 
   return message || fallback;
