@@ -8,6 +8,8 @@ public class PlatformFeePolicy
 
     public decimal BusinessClientFeeRate { get; set; } = 10.00m;
 
+    public decimal ExpertFeeRate { get; set; } = 15.00m;
+
     public bool IsActive { get; set; } = true;
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

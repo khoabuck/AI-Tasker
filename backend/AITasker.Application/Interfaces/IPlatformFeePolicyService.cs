@@ -15,5 +15,7 @@ public interface IPlatformFeePolicyService
 
     Task<decimal> GetFeeRateForClientTypeAsync(string clientType);
 
+    Task<decimal> GetExpertFeeRateAsync();
+
     Task<PlatformFeePolicy> GetOrCreateActivePolicyEntityAsync();
 }
