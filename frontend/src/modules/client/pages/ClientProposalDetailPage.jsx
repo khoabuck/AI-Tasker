@@ -168,6 +168,7 @@ export default function ClientProposalDetailPage() {
   const [clientProfile, setClientProfile] = useState(null);
   const [contractCreated, setContractCreated] = useState(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showWaitingExpertModal, setShowWaitingExpertModal] = useState(false);
 
   const fetchProposal = useCallback(async (signal) => {
     setLoading(true);
@@ -295,18 +296,17 @@ export default function ClientProposalDetailPage() {
       confirmedContract?.expertSignedAt;
 
     if (clientSigned && expertSigned) {
-      const projectRes = await axiosInstance.post(
+      await axiosInstance.post(
         `/projects/from-contract/${contractId}`
       );
 
-      const project = projectRes.data?.data ?? projectRes.data;
+      alert("Both parties signed successfully. Project has been created.");
 
-      alert("Both parties signed. Project is now in progress.");
-      navigate(`/client/projects/${project.projectId ?? project.id}`);
+      navigate("/client/projects?status=ACTIVE");
       return;
     }
 
-    alert("Client signed. Waiting for AI Expert signature.");
+    setShowWaitingExpertModal(true);
   } catch (err) {
     alert(
       err?.response?.data?.message ||
@@ -724,13 +724,6 @@ export default function ClientProposalDetailPage() {
                   ({platformFeeRate}% platform fee)
                 </div>
 
-                <div
-                  className={`font-semibold ${
-                    hasEnoughWallet ? "text-green-400" : "text-yellow-400"
-                  }`}
-                >
-                  Required Deposit: ${requiredDeposit.toFixed(2)}
-                </div>
               </div>
 
               {!hasEnoughWallet && (
@@ -763,6 +756,31 @@ export default function ClientProposalDetailPage() {
                     Deposit Wallet
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showWaitingExpertModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-md rounded-2xl border border-cyan-400/20 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
+              <h2 className="mb-3 text-center text-2xl font-bold text-white">
+                Contract Signed Successfully
+              </h2>
+
+              <p className="mb-6 text-center leading-7 text-slate-300">
+                You have signed the contract successfully.
+                <br />
+                Please wait for the AI Expert to sign it.
+              </p>
+
+              <div className="flex justify-center">
+                <button
+                  onClick={() => setShowWaitingExpertModal(false)}
+                  className="rounded-lg bg-cyan-400 px-8 py-3 font-bold text-white transition hover:brightness-110"
+                >
+                  OK
+                </button>
               </div>
             </div>
           </div>

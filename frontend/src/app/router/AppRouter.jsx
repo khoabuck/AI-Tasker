@@ -42,6 +42,7 @@ import ClientReviewPage from "../../modules/client/pages/ClientReviewPage";
 import JobsPage from "../../modules/client/pages/JobsPage";
 import ProjectsListPage from "../../modules/client/pages/ProjectsListPage";
 import ClientProjectDetailPage from "../../modules/client/pages/ClientProjectDetailPage";
+import JobCreditPackagesPage from "../../modules/client/pages/JobCreditPackagesPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -125,6 +126,7 @@ export default function AppRouter() {
   <Route path="/client/messages" element={<RequireAuth><MessagesPage /></RequireAuth>} />
   <Route path="/client/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
   <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
+  <Route path="/client/job-credit-packages" element={<JobCreditPackagesPage />} />
 
   {/* Client jobs */}
   <Route path="/client/jobs" element={<RequireAuth><JobsPage /></RequireAuth>} />

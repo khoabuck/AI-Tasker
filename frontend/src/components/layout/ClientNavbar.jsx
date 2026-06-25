@@ -197,6 +197,17 @@ export default function ClientNavbar() {
                 Profile
               </Link>
 
+              <Link
+                to="/client/job-credit-packages"
+                onClick={() => setAvatarOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-300 transition-all hover:bg-cyan-400/10 hover:text-cyan-400"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  local_activity
+                </span>
+                Job Credit Packages
+              </Link>
+
               <button
                 type="button"
                 onClick={handleLogout}

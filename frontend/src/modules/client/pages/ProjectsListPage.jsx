@@ -117,7 +117,7 @@ export default function ProjectsListPage() {
     return () => controller.abort();
   }, [fetchProjects, location.key]);
 
-  const filteredProjects = allProjects.filter((p) => p.status === activeStatus);
+  const filteredProjects = allProjects.filter( (p) => (p.status || "").toUpperCase() === activeStatus);
 
   return (
     <ClientLayout>
