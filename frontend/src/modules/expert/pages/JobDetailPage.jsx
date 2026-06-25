@@ -35,21 +35,18 @@ export function JobDetailModal({ jobId, onClose }) {
       setActionError("");
 
       const data = await jobService.getJobById(jobId);
-      const normalizedJobId = getJobId(data);
+      const normalizedJob = normalizeLoadedJob(data);
 
-      if (!normalizedJobId) {
-        throw new Error("Job detail does not have a valid id.");
+      if (!normalizedJob.id) {
+        throw new Error("This job is unavailable right now.");
       }
 
-      setJob(normalizeLoadedJob(data));
+      setJob(normalizedJob);
     } catch (err) {
       console.error("LOAD JOB DETAIL MODAL ERROR:", err?.response?.data || err);
 
-      setLoadError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "We could not load this job right now. Please try again."
-      );
+      setLoadError(getFriendlyError(err, "We could not load this job right now."));
+      setJob(null);
     } finally {
       setLoading(false);
     }
@@ -74,20 +71,19 @@ export function JobDetailModal({ jobId, onClose }) {
 
   return (
     <div
-      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[999] flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-5xl overflow-hidden rounded-3xl border border-white/10 bg-[#0f141d] shadow-[0_30px_120px_rgba(0,0,0,0.7)]"
+        className="relative w-full max-w-5xl overflow-hidden rounded-2xl border border-white/10 bg-[#0f141d] shadow-2xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-white/10 bg-[#0f141d]/95 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-white/10 bg-[#101722] px-5 py-3">
           <div>
-            <p className="text-[11px] font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Project Detail
+            <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#00F0FF]">
+              Job Detail
             </p>
-
-            <h2 className="mt-1 text-lg font-extrabold text-white">
+            <h2 className="mt-0.5 text-base font-extrabold text-white">
               Review before applying
             </h2>
           </div>
@@ -95,43 +91,25 @@ export function JobDetailModal({ jobId, onClose }) {
           <button
             type="button"
             onClick={onClose}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-400 transition hover:border-red-400/50 hover:text-red-300"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-400 transition hover:border-red-400/50 hover:text-red-300"
           >
-            <span className="material-symbols-outlined">close</span>
+            <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        <div className="custom-scrollbar max-h-[82vh] overflow-y-auto p-5 md:p-6">
+        <div className="custom-scrollbar max-h-[84vh] overflow-y-auto p-4 md:p-5">
           {loading && (
-            <div className="flex min-h-[45vh] items-center justify-center text-gray-400">
-              Loading project detail...
+            <div className="flex min-h-[40vh] items-center justify-center text-gray-400">
+              Loading job detail...
             </div>
           )}
 
           {!loading && loadError && (
-            <div className="rounded-3xl border border-red-500/30 bg-red-500/10 px-6 py-12 text-center text-red-300">
-              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
-                <span className="material-symbols-outlined text-3xl">
-                  error
-                </span>
-              </div>
-
-              <h2 className="text-xl font-bold text-white">
-                Cannot load this job
-              </h2>
-
-              <p className="mx-auto mt-2 max-w-lg text-sm leading-6">
-                {loadError}
-              </p>
-
-              <button
-                type="button"
-                onClick={loadJobDetail}
-                className="mt-6 rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-200 transition hover:bg-red-400 hover:text-black"
-              >
-                Try Again
-              </button>
-            </div>
+            <FriendlyError
+              title="Cannot load this job"
+              message={loadError}
+              onRetry={loadJobDetail}
+            />
           )}
 
           {!loading && !loadError && job && (
@@ -140,9 +118,7 @@ export function JobDetailModal({ jobId, onClose }) {
               actionError={actionError}
               startingChat={startingChat}
               compact
-              canMessageClient={Boolean(
-                getClientUserId(job) || getClientProfileId(job)
-              )}
+              canMessageClient={Boolean(job.clientUserId || job.clientProfileId)}
               onSubmitProposal={handleSubmitProposal}
               onMessageClient={handleMessageClient}
             />
@@ -202,21 +178,18 @@ export default function JobDetailPage() {
       setActionError("");
 
       const data = await jobService.getJobById(jobId);
-      const normalizedJobId = getJobId(data);
+      const normalizedJob = normalizeLoadedJob(data);
 
-      if (!normalizedJobId) {
-        throw new Error("Job detail does not have a valid id.");
+      if (!normalizedJob.id) {
+        throw new Error("This job is unavailable right now.");
       }
 
-      setJob(normalizeLoadedJob(data));
+      setJob(normalizedJob);
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
 
-      setLoadError(
-        err?.response?.data?.message ||
-          err?.message ||
-          "We could not load this job right now. Please try again."
-      );
+      setLoadError(getFriendlyError(err, "We could not load this job right now."));
+      setJob(null);
     } finally {
       setLoading(false);
     }
@@ -224,7 +197,6 @@ export default function JobDetailPage() {
 
   const handleSubmitProposal = () => {
     if (!job?.id) return;
-
     navigate(`/expert/jobs/${job.id}/proposal`);
   };
 
@@ -250,33 +222,14 @@ export default function JobDetailPage() {
   if (loadError) {
     return (
       <ExpertLayout>
-        <div className="px-5 py-10 md:px-8">
+        <div className="px-5 py-8 md:px-8">
           <div className="mx-auto max-w-5xl">
             <BackButton onClick={() => navigate("/expert/jobs")} />
-
-            <div className="rounded-3xl border border-red-500/30 bg-red-500/10 px-6 py-12 text-center text-red-300">
-              <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
-                <span className="material-symbols-outlined text-3xl">
-                  error
-                </span>
-              </div>
-
-              <h2 className="text-xl font-bold text-white">
-                Cannot load this job
-              </h2>
-
-              <p className="mx-auto mt-2 max-w-lg text-sm leading-6">
-                {loadError}
-              </p>
-
-              <button
-                type="button"
-                onClick={loadJobDetail}
-                className="mt-6 rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-200 transition hover:bg-red-400 hover:text-black"
-              >
-                Try Again
-              </button>
-            </div>
+            <FriendlyError
+              title="Cannot load this job"
+              message={loadError}
+              onRetry={loadJobDetail}
+            />
           </div>
         </div>
       </ExpertLayout>
@@ -285,7 +238,7 @@ export default function JobDetailPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-5 py-6 md:px-8">
         <div className="mx-auto max-w-7xl">
           <BackButton onClick={() => navigate("/expert/jobs")} />
 
@@ -293,9 +246,7 @@ export default function JobDetailPage() {
             job={job}
             actionError={actionError}
             startingChat={startingChat}
-            canMessageClient={Boolean(
-              getClientUserId(job) || getClientProfileId(job)
-            )}
+            canMessageClient={Boolean(job?.clientUserId || job?.clientProfileId)}
             onSubmitProposal={handleSubmitProposal}
             onMessageClient={handleMessageClient}
           />
@@ -315,54 +266,65 @@ function JobDetailContent({
   compact = false,
 }) {
   const skills = useMemo(() => normalizeSkills(job?.skills), [job]);
-
-  const hasExpectedDeliverables = Boolean(
-    String(job?.expectedDeliverables || "").trim()
-  );
+  const canApply = isOpenJob(job?.status);
 
   return (
     <>
       {actionError && (
-        <div className="mb-5 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm leading-6 text-red-300">
+        <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-300">
           {actionError}
         </div>
       )}
 
       <div
-        className={`grid grid-cols-1 gap-5 ${
+        className={`grid grid-cols-1 gap-4 ${
           compact ? "xl:grid-cols-[1fr_280px]" : "xl:grid-cols-[1fr_320px]"
         }`}
       >
-        <main className="space-y-5">
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="border-b border-white/10 bg-white/[0.02] p-5 md:p-6">
-              <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge tone="green">{formatStatus(job.status)}</Badge>
-                <Badge>{job.category || job.projectType || "General"}</Badge>
-                {job.complexity && (
-                  <Badge tone="purple">{job.complexity}</Badge>
-                )}
+        <main className="space-y-4">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={job.status} />
+                  <Badge>{job.category || job.projectType || "General"}</Badge>
+                  {job.complexity && <Badge tone="purple">{job.complexity}</Badge>}
+                </div>
+
+                <h1
+                  className={`font-extrabold leading-tight text-white ${
+                    compact ? "text-2xl" : "text-2xl md:text-3xl"
+                  }`}
+                >
+                  {job.title || "Untitled Job"}
+                </h1>
+
+                <p className="mt-2 text-sm leading-6 text-gray-400">
+                  Posted by{" "}
+                  <span className="font-bold text-white">
+                    {job.clientName || "Client"}
+                  </span>
+                  {job.createdAt ? (
+                    <>
+                      {" "}
+                      · <span>{formatDate(job.createdAt)}</span>
+                    </>
+                  ) : null}
+                </p>
+
+                <p className="mt-3 line-clamp-2 max-w-4xl text-sm leading-6 text-gray-400">
+                  {job.description || "No project description provided."}
+                </p>
               </div>
 
-              <h1
-                className={`max-w-4xl font-extrabold leading-tight text-white ${
-                  compact ? "text-2xl md:text-3xl" : "text-3xl md:text-5xl"
-                }`}
-              >
-                {job.title || "Untitled Job"}
-              </h1>
-
-              <p className="mt-4 max-w-4xl whitespace-pre-line text-sm leading-7 text-gray-400">
-                {job.description || "No project description provided."}
-              </p>
-
-              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:w-[260px] lg:flex-col">
                 <button
                   type="button"
                   onClick={onSubmitProposal}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  disabled={!canApply}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
                 >
-                  <span className="material-symbols-outlined text-[20px]">
+                  <span className="material-symbols-outlined text-[18px]">
                     send
                   </span>
                   Submit Proposal
@@ -372,119 +334,169 @@ function JobDetailContent({
                   type="button"
                   onClick={onMessageClient}
                   disabled={startingChat || !canMessageClient}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-400/60 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-green-400/60 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <span className="material-symbols-outlined text-[20px]">
+                  <span className="material-symbols-outlined text-[18px]">
                     chat
                   </span>
-                  {startingChat ? "Opening Chat..." : "Message Client"}
+                  {startingChat ? "Opening..." : "Message Client"}
                 </button>
               </div>
-
-              {!canMessageClient && (
-                <p className="mt-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 px-4 py-3 text-sm leading-6 text-yellow-200">
-                  Messaging is currently unavailable for this job. You can still
-                  submit a proposal to contact the client through your
-                  application.
-                </p>
-              )}
             </div>
 
-            <div className="grid grid-cols-1 gap-3 p-5 md:grid-cols-3 md:p-6">
-              <MiniInfo
-                icon="payments"
-                label="Budget"
-                value={formatBudget(job.budgetMin, job.budgetMax)}
-              />
+            {!canMessageClient && (
+              <p className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-sm leading-6 text-yellow-100/90">
+                Messaging is not available for this job yet. You can still
+                submit a proposal and include your questions there.
+              </p>
+            )}
+          </section>
 
-              <MiniInfo
-                icon="schedule"
-                label="Timeline"
-                value={job.durationDays ? `${job.durationDays} days` : "Flexible"}
-              />
+          <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <QuickInfo
+              icon="payments"
+              label="Budget"
+              value={formatBudget(job.budgetMin, job.budgetMax)}
+            />
 
-              <MiniInfo
-                icon="event"
-                label="Deadline"
-                value={formatDate(job.deadline)}
-              />
-            </div>
+            <QuickInfo
+              icon="schedule"
+              label="Timeline"
+              value={formatDuration(job.durationDays)}
+            />
+
+            <QuickInfo
+              icon="event"
+              label="Deadline"
+              value={formatDate(job.deadline)}
+            />
           </section>
 
           <InfoSection
             icon="article"
             title="Project Description"
-            description="Review the client’s requirements carefully before submitting your proposal."
+            description="Understand what the client needs before writing your proposal."
           >
-            <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-              {job.description || "No project description provided."}
-            </p>
+            <TextBlock value={job.description || "No project description provided."} />
+          </InfoSection>
+
+          <InfoSection
+            icon="task_alt"
+            title="Expected Outcomes"
+            description="What the client expects to receive after the project."
+          >
+            <TextBlock
+              value={
+                job.expectedDeliverables ||
+                "The client has not listed specific deliverables yet. You can clarify expected outcomes in your proposal."
+              }
+            />
           </InfoSection>
 
           <InfoSection
             icon="psychology"
-            title="Required Skills"
-            description="Skills the client expects for this project."
+            title="Skills Needed"
+            description="Skills that may help you complete this project."
           >
             {skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {skills.map((skill) => (
                   <span
                     key={skill}
-                    className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300"
+                    className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300"
                   >
                     {skill}
                   </span>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">No specific skills listed.</p>
+              <p className="text-sm text-gray-500">
+                No specific skills listed by the client.
+              </p>
             )}
-          </InfoSection>
-
-          <InfoSection
-            icon="task_alt"
-            title="Expected Outcomes"
-            description="What the client expects to receive when the project is completed."
-          >
-            <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-              {hasExpectedDeliverables
-                ? job.expectedDeliverables
-                : "The client has not listed specific deliverables yet. You can clarify expected outcomes in your proposal or message."}
-            </p>
           </InfoSection>
         </main>
 
-        <aside className="xl:sticky xl:top-24 xl:self-start">
-          <CompactSnapshot job={job} />
+        <aside className="space-y-4 xl:sticky xl:top-24 xl:self-start">
+          <ApplyCard
+            job={job}
+            canApply={canApply}
+            startingChat={startingChat}
+            canMessageClient={canMessageClient}
+            onSubmitProposal={onSubmitProposal}
+            onMessageClient={onMessageClient}
+          />
+
+          <SnapshotCard job={job} />
         </aside>
       </div>
     </>
   );
 }
 
-function CompactSnapshot({ job }) {
+function ApplyCard({
+  job,
+  canApply,
+  startingChat,
+  canMessageClient,
+  onSubmitProposal,
+  onMessageClient,
+}) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_18px_50px_rgba(0,0,0,0.25)]">
-      <h2 className="mb-4 text-lg font-extrabold text-white">
-        Project Snapshot
+    <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+      <p className="text-sm font-extrabold text-white">Ready to apply?</p>
+
+      <p className="mt-2 text-sm leading-6 text-cyan-100/80">
+        Send a proposal explaining your approach, timeline, and expected
+        deliverables.
+      </p>
+
+      <div className="mt-4 space-y-2">
+        <button
+          type="button"
+          onClick={onSubmitProposal}
+          disabled={!canApply}
+          className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
+        >
+          {canApply ? "Submit Proposal" : "Not accepting proposals"}
+        </button>
+
+        <button
+          type="button"
+          onClick={onMessageClient}
+          disabled={startingChat || !canMessageClient}
+          className="w-full rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {startingChat ? "Opening Chat..." : "Message Client"}
+        </button>
+      </div>
+
+      <p className="mt-3 text-xs leading-5 text-cyan-100/60">
+        Job status: {formatStatus(job.status)}
+      </p>
+    </section>
+  );
+}
+
+function SnapshotCard({ job }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
+      <h2 className="mb-3 text-base font-extrabold text-white">
+        Job Snapshot
       </h2>
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         <SnapshotRow
           label="Budget"
           value={formatBudget(job.budgetMin, job.budgetMax)}
         />
 
-        <SnapshotRow
-          label="Timeline"
-          value={job.durationDays ? `${job.durationDays} days` : "Flexible"}
-        />
+        <SnapshotRow label="Timeline" value={formatDuration(job.durationDays)} />
 
         <SnapshotRow label="Deadline" value={formatDate(job.deadline)} />
 
         <SnapshotRow
-          label="Project Type"
+          label="Category"
           value={job.projectType || job.category || "General"}
         />
 
@@ -496,15 +508,131 @@ function CompactSnapshot({ job }) {
 
 function SnapshotRow({ label, value }) {
   return (
-    <div className="flex items-start justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
-      <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">
+    <div className="flex items-start justify-between gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+      <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
         {label}
       </span>
 
-      <span className="max-w-[55%] text-right text-sm font-bold text-white">
+      <span className="max-w-[58%] text-right text-sm font-bold text-white">
         {value || "N/A"}
       </span>
     </div>
+  );
+}
+
+function QuickInfo({ icon, label, value }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
+      <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+        <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      </div>
+
+      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 text-sm font-bold text-white">{value || "N/A"}</p>
+    </div>
+  );
+}
+
+function InfoSection({ icon, title, description, children }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
+      <div className="mb-3 flex gap-3">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined text-[18px]">{icon}</span>
+        </div>
+
+        <div>
+          <h2 className="text-base font-extrabold text-white">{title}</h2>
+
+          {description && (
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              {description}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function TextBlock({ value }) {
+  return (
+    <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+      {formatDisplayValue(value)}
+    </p>
+  );
+}
+
+function BackButton({ onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
+    >
+      <span className="material-symbols-outlined text-[18px]">arrow_back</span>
+      Back to jobs
+    </button>
+  );
+}
+
+function FriendlyError({ title, message, onRetry }) {
+  return (
+    <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-10 text-center text-red-300">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/30 bg-red-400/10">
+        <span className="material-symbols-outlined text-2xl">error</span>
+      </div>
+
+      <h2 className="text-lg font-bold text-white">{title}</h2>
+
+      <p className="mx-auto mt-2 max-w-lg text-sm leading-6">{message}</p>
+
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-5 rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-2.5 text-sm font-bold text-red-200 transition hover:bg-red-400 hover:text-black"
+      >
+        Try Again
+      </button>
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  const active = isOpenJob(status);
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+        active
+          ? "border-green-400/30 bg-green-400/10 text-green-300"
+          : "border-gray-400/20 bg-white/[0.04] text-gray-400"
+      }`}
+    >
+      {formatStatus(status)}
+    </span>
+  );
+}
+
+function Badge({ children, tone = "cyan" }) {
+  const style =
+    tone === "green"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : tone === "purple"
+      ? "border-purple-400/30 bg-purple-400/10 text-purple-300"
+      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -517,13 +645,11 @@ async function startConversationFromJob({
 }) {
   if (!job) return;
 
-  const clientUserId = getClientUserId(job);
-  const clientProfileId = getClientProfileId(job);
-  const conversationTargetId = clientUserId || clientProfileId;
+  const conversationTargetId = job.clientUserId || job.clientProfileId;
 
   if (!conversationTargetId) {
     setActionError(
-      "Messaging is not available for this job right now. Please try again later."
+      "Messaging is not available for this job right now. You can still submit a proposal."
     );
     return;
   }
@@ -534,9 +660,9 @@ async function startConversationFromJob({
 
     const conversation = await conversationService.createConversation({
       participantUserId: conversationTargetId,
-      clientUserId,
-      clientProfileId,
-      jobPostingId: getJobId(job),
+      clientUserId: job.clientUserId,
+      clientProfileId: job.clientProfileId,
+      jobPostingId: job.id,
       initialMessage: `Hello ${
         job.clientName || "Client"
       }, I am interested in your job "${
@@ -572,137 +698,192 @@ async function startConversationFromJob({
 }
 
 function normalizeLoadedJob(data) {
+  const job = unwrapData(data);
+
   return {
-    ...data,
-    id: getJobId(data),
-    clientUserId: getClientUserId(data),
-    clientProfileId: getClientProfileId(data),
-    clientName: getClientName(data),
+    raw: job,
+
+    id: getJobId(job),
+
+    title:
+      getField(job, ["title", "Title", "jobTitle", "JobTitle"]) ||
+      "Untitled Job",
+
+    description:
+      getField(job, [
+        "description",
+        "Description",
+        "jobDescription",
+        "JobDescription",
+        "projectScope",
+        "ProjectScope",
+      ]) || "",
+
+    expectedDeliverables:
+      getField(job, [
+        "expectedDeliverables",
+        "ExpectedDeliverables",
+        "deliverables",
+        "Deliverables",
+        "expectedOutputs",
+        "ExpectedOutputs",
+      ]) || "",
+
+    status: getField(job, ["status", "Status"]) || "OPEN",
+
+    category:
+      getField(job, ["category", "Category", "projectType", "ProjectType"]) ||
+      "General",
+
+    projectType:
+      getField(job, ["projectType", "ProjectType", "category", "Category"]) ||
+      "General",
+
+    complexity: getField(job, ["complexity", "Complexity"]) || "",
+
+    skills: normalizeSkills(
+      getField(job, [
+        "skills",
+        "Skills",
+        "requiredSkills",
+        "RequiredSkills",
+        "skillNames",
+        "SkillNames",
+      ])
+    ),
+
+    budgetMin: Number(
+      getField(job, ["budgetMin", "BudgetMin", "minBudget", "MinBudget"], 0)
+    ),
+
+    budgetMax: Number(
+      getField(
+        job,
+        ["budgetMax", "BudgetMax", "maxBudget", "MaxBudget", "fixedBudget", "FixedBudget"],
+        0
+      )
+    ),
+
+    durationDays: Number(
+      getField(
+        job,
+        [
+          "durationDays",
+          "DurationDays",
+          "estimatedDurationDays",
+          "EstimatedDurationDays",
+          "timelineDays",
+          "TimelineDays",
+        ],
+        0
+      )
+    ),
+
+    deadline:
+      getField(job, [
+        "deadline",
+        "Deadline",
+        "proposalDeadline",
+        "ProposalDeadline",
+        "expiresAt",
+        "ExpiresAt",
+      ]) || null,
+
+    createdAt: getField(job, ["createdAt", "CreatedAt"]) || null,
+
+    clientName: getClientName(job),
+    clientUserId: getClientUserId(job),
+    clientProfileId: getClientProfileId(job),
   };
 }
 
-function BackButton({ onClick }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="mb-6 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
-    >
-      <span className="material-symbols-outlined text-[20px]">arrow_back</span>
-      Back to jobs
-    </button>
-  );
+function unwrapData(value) {
+  if (!value) return value;
+
+  if (value?.data?.data !== undefined) return value.data.data;
+  if (value?.data !== undefined && value?.success !== undefined) return value.data;
+  if (value?.data !== undefined && value?.status !== undefined) return value.data;
+
+  return value;
 }
 
-function Badge({ children, tone = "cyan" }) {
-  const style =
-    tone === "green"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : tone === "purple"
-      ? "border-purple-400/30 bg-purple-400/10 text-purple-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+function getField(object, keys = [], fallback = "") {
+  for (const key of keys) {
+    const value = getByPath(object, key);
 
-  return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
-    >
-      {children}
-    </span>
-  );
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  return fallback;
 }
 
-function MiniInfo({ icon, label, value }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined text-[20px]">{icon}</span>
-      </div>
+function getByPath(object, path) {
+  if (!object || !path) return undefined;
 
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 font-bold text-white">{value || "N/A"}</p>
-    </div>
-  );
-}
-
-function InfoSection({ icon, title, description, children }) {
-  return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 md:p-6">
-      <SectionHeader icon={icon} title={title} description={description} />
-
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
-
-function SectionHeader({ icon, title, description }) {
-  return (
-    <div className="flex gap-4">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined">{icon}</span>
-      </div>
-
-      <div>
-        <h2 className="text-xl font-extrabold text-white">{title}</h2>
-
-        {description && (
-          <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
-        )}
-      </div>
-    </div>
-  );
+  return String(path)
+    .split(".")
+    .reduce((result, key) => {
+      if (result === undefined || result === null) return undefined;
+      return result[key];
+    }, object);
 }
 
 function getJobId(job) {
-  return (
-    job?.id ||
-    job?.jobId ||
-    job?.JobId ||
-    job?.jobPostingId ||
-    job?.JobPostingId ||
-    job?.ID ||
-    job?.Id
-  );
+  return getField(job, [
+    "id",
+    "Id",
+    "jobId",
+    "JobId",
+    "jobPostingId",
+    "JobPostingId",
+    "ID",
+  ]);
 }
 
 function getClientUserId(job) {
-  return (
-    job?.clientUserId ||
-    job?.ClientUserId ||
-    job?.client?.userId ||
-    job?.client?.UserId ||
-    job?.client?.id ||
-    job?.client?.Id ||
-    job?.clientProfile?.userId ||
-    job?.ClientProfile?.UserId ||
-    job?.raw?.clientUserId ||
-    job?.raw?.ClientUserId
-  );
+  return getField(job, [
+    "clientUserId",
+    "ClientUserId",
+    "client.userId",
+    "client.UserId",
+    "client.id",
+    "client.Id",
+    "clientProfile.userId",
+    "ClientProfile.UserId",
+    "raw.clientUserId",
+    "raw.ClientUserId",
+  ]);
 }
 
 function getClientProfileId(job) {
-  return (
-    job?.clientProfileId ||
-    job?.ClientProfileId ||
-    job?.clientProfile?.clientProfileId ||
-    job?.ClientProfile?.ClientProfileId ||
-    job?.client?.clientProfileId ||
-    job?.Client?.ClientProfileId ||
-    job?.raw?.clientProfileId ||
-    job?.raw?.ClientProfileId
-  );
+  return getField(job, [
+    "clientProfileId",
+    "ClientProfileId",
+    "clientProfile.clientProfileId",
+    "ClientProfile.ClientProfileId",
+    "client.clientProfileId",
+    "Client.ClientProfileId",
+    "raw.clientProfileId",
+    "raw.ClientProfileId",
+  ]);
 }
 
 function getClientName(job) {
   return (
-    job?.clientName ||
-    job?.ClientName ||
-    job?.client?.fullName ||
-    job?.client?.FullName ||
-    job?.client?.name ||
-    job?.client?.Name ||
-    job?.clientProfile?.fullName ||
-    job?.ClientProfile?.FullName ||
-    "Client"
+    getField(job, [
+      "clientName",
+      "ClientName",
+      "client.fullName",
+      "client.FullName",
+      "client.name",
+      "client.Name",
+      "clientProfile.fullName",
+      "ClientProfile.FullName",
+      "businessName",
+      "BusinessName",
+    ]) || "Client"
   );
 }
 
@@ -713,8 +894,18 @@ function normalizeSkills(value) {
     return value
       .map((item) => {
         if (typeof item === "string") return item;
-        return item?.name || item?.Name || item?.skillName || item?.SkillName;
+
+        return (
+          item?.name ||
+          item?.Name ||
+          item?.skillName ||
+          item?.SkillName ||
+          item?.title ||
+          item?.Title
+        );
       })
+      .filter(Boolean)
+      .map((item) => String(item).trim())
       .filter(Boolean);
   }
 
@@ -724,23 +915,67 @@ function normalizeSkills(value) {
     .filter(Boolean);
 }
 
+function isOpenJob(status) {
+  return ["OPEN", "ACTIVE", "PUBLISHED", "AVAILABLE"].includes(
+    String(status || "").toUpperCase()
+  );
+}
+
+function formatStatus(value) {
+  if (!value) return "Open";
+
+  const status = String(value).toUpperCase();
+
+  const map = {
+    OPEN: "Open",
+    ACTIVE: "Open",
+    PUBLISHED: "Open",
+    AVAILABLE: "Open",
+    CLOSED: "Closed",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+    DRAFT: "Draft",
+  };
+
+  return map[status] || String(value).replaceAll("_", " ");
+}
+
 function formatBudget(min, max) {
   const minValue = Number(min || 0);
   const maxValue = Number(max || 0);
 
   if (!minValue && !maxValue) return "Negotiable";
-  if (minValue && !maxValue) return `From $${minValue}`;
-  if (!minValue && maxValue) return `Up to $${maxValue}`;
+  if (minValue && !maxValue) return `From ${formatMoney(minValue)}`;
+  if (!minValue && maxValue) return `Up to ${formatMoney(maxValue)}`;
 
-  return `$${minValue} - $${maxValue}`;
+  return `${formatMoney(minValue)} - ${formatMoney(maxValue)}`;
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function formatDuration(days) {
+  const number = Number(days || 0);
+
+  if (!number || number <= 0) return "Flexible";
+  if (number === 1) return "1 day";
+
+  return `${number} days`;
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
+  if (!value) return "Flexible";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "N/A";
+  if (Number.isNaN(date.getTime())) return "Flexible";
 
   return date.toLocaleDateString("en-US", {
     year: "numeric",
@@ -749,10 +984,22 @@ function formatDate(value) {
   });
 }
 
-function formatStatus(value) {
-  if (!value) return "OPEN";
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") return "N/A";
 
-  return String(value).replaceAll("_", " ");
+  if (typeof value === "object") {
+    return (
+      value.title ||
+      value.Title ||
+      value.name ||
+      value.Name ||
+      value.description ||
+      value.Description ||
+      "N/A"
+    );
+  }
+
+  return String(value);
 }
 
 function getFriendlyError(err, fallback) {
@@ -763,7 +1010,11 @@ function getFriendlyError(err, fallback) {
   }
 
   if (status === 403) {
-    return "You do not have permission to start this conversation.";
+    return "You do not have permission to do this action.";
+  }
+
+  if (status === 404) {
+    return "This job could not be found. It may have been removed or closed.";
   }
 
   const data = err?.response?.data;
