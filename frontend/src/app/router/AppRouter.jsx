@@ -43,6 +43,8 @@ import JobsPage from "../../modules/client/pages/JobsPage";
 import ProjectsListPage from "../../modules/client/pages/ProjectsListPage";
 import ClientProjectDetailPage from "../../modules/client/pages/ClientProjectDetailPage";
 import JobCreditPackagesPage from "../../modules/client/pages/JobCreditPackagesPage";
+import MilestoneDeliverablesPage from "../../modules/client/pages/MilestoneDeliverablesPage";
+import ClientDisputeDetailPage from "../../modules/client/pages/ClientDisputeDetailPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -146,6 +148,8 @@ export default function AppRouter() {
       <Route path="/client/projects-old" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
       <Route path="/client/projects/:id" element={<RequireAuth><ClientProjectDetailPage /></RequireAuth>} />
       <Route path="/client/projects/:id/review" element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
+      <Route path="/client/milestones/:milestoneId/deliverables" element={<RequireAuth><MilestoneDeliverablesPage /></RequireAuth>} />
+      <Route path="/client/disputes" element={<RequireAuth><ClientDisputeDetailPage /></RequireAuth>} />
 
       {/* Client proposals + notifications */}
       <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />

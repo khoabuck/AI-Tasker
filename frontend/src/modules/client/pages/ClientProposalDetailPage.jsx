@@ -3,7 +3,7 @@
 // POST /api/proposals/{proposalId}/decision  { decision: "ACCEPT" | "REJECT" }
 // POST /api/messages { recipientId, content }
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -226,6 +226,44 @@ export default function ClientProposalDetailPage() {
     fetchClientProfile();
   }, []);
 
+  useEffect(() => {
+  const fetchWalletBalance = async () => {
+    setWalletLoading(true);
+
+    try {
+      const res = await axiosInstance.get("/wallets/balance");
+
+      const data = res.data?.data ?? res.data;
+
+      setWalletBalance(
+        Number(
+          data?.balance ??
+          data?.availableBalance ??
+          data?.walletBalance ??
+          0
+        )
+      );
+    } catch (err) {
+      console.error(err);
+      setWalletBalance(0);
+    } finally {
+      setWalletLoading(false);
+    }
+  };
+
+  fetchWalletBalance();
+}, []);
+
+  useEffect(() => {
+    if (!showWaitingExpertModal) return;
+
+    const intervalId = setInterval(() => {
+      checkContractAndGoProject();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [showWaitingExpertModal, contractCreated]);
+
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
   setShowAcceptModal(false);
@@ -295,16 +333,27 @@ export default function ClientProposalDetailPage() {
       confirmedContract?.expertConfirmedAt ||
       confirmedContract?.expertSignedAt;
 
-    if (clientSigned && expertSigned) {
-      await axiosInstance.post(
-        `/projects/from-contract/${contractId}`
-      );
+    const contractStatus = (contract?.status || "").toUpperCase();
 
-      alert("Both parties signed successfully. Project has been created.");
+  const isBothSigned =
+    (clientSigned && expertSigned) ||
+    ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
 
-      navigate("/client/projects?status=ACTIVE");
-      return;
+  if (isBothSigned) {
+    try {
+      await axiosInstance.post(`/projects/from-contract/${contractId}`);
+    } catch (err) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || "";
+
+      if (status !== 409 && !message.toLowerCase().includes("already")) {
+        throw err;
+      }
     }
+
+    setShowWaitingExpertModal(false);
+    navigate("/client/projects?status=ACTIVE");
+  }
 
     setShowWaitingExpertModal(true);
   } catch (err) {
@@ -315,6 +364,36 @@ export default function ClientProposalDetailPage() {
     );
   } finally {
     setActionLoading(null);
+  }
+};
+
+const checkContractAndGoProject = async () => {
+  const contractId =
+    contractCreated?.contractId ??
+    contractCreated?.id ??
+    contractCreated?.projectContractId;
+
+  if (!contractId) return;
+
+  try {
+    const res = await axiosInstance.get(`/contracts/${contractId}`);
+    const contract = res.data?.data ?? res.data;
+
+    const clientSigned =
+      contract?.clientConfirmedAt ||
+      contract?.clientSignedAt;
+
+    const expertSigned =
+      contract?.expertConfirmedAt ||
+      contract?.expertSignedAt;
+
+    if (clientSigned && expertSigned) {
+      await axiosInstance.post(`/projects/from-contract/${contractId}`);
+
+      navigate("/client/projects?status=ACTIVE");
+    }
+  } catch (err) {
+    console.error("Check contract failed:", err);
   }
 };
 
@@ -378,8 +457,8 @@ export default function ClientProposalDetailPage() {
     proposedPrice * (1 + platformFeeRate / 100);
 
   const hasEnoughWallet =
-    walletBalance !== null &&
-    walletBalance >= requiredDeposit;
+    !walletLoading &&
+    Number(walletBalance ?? 0) >= requiredDeposit;
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -632,18 +711,50 @@ export default function ClientProposalDetailPage() {
             </div>
           )}
 
-          {/* Milestone Plan */}
-          {proposal.preliminaryMilestonePlan && (
+          {/* Milestone Drafts */}
+          {proposal.milestones?.length > 0 && (
             <div style={{ ...cardStyle, border: "1px solid rgba(192,193,255,0.15)", background: "rgba(192,193,255,0.02)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(192,193,255,0.1)" }}>
                 <span className="material-symbols-outlined" style={{ color: "#c0c1ff", fontSize: 18 }}>timeline</span>
                 <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#c0c1ff", margin: 0 }}>
-                  Preliminary Milestone Plan
+                  Milestone Drafts
                 </h3>
               </div>
-              <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.9, whiteSpace: "pre-line", margin: 0 }}>
-                {proposal.preliminaryMilestonePlan}
-              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {proposal.milestones.map((m, index) => (
+                  <div
+                    key={m.proposalMilestoneDraftId ?? index}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto auto",
+                      gap: 16,
+                      alignItems: "center",
+                      padding: 16,
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div>
+                      <p style={{ color: "#e1e2eb", fontWeight: 700, margin: "0 0 4px" }}>
+                        {index + 1}. {m.title}
+                      </p>
+                      <p style={{ color: "#8c90a0", fontSize: 13, margin: 0 }}>
+                        Duration: {m.durationDays} days
+                      </p>
+                    </div>
+
+                    <span style={{ color: "#00F0FF", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}>
+                      ${Number(m.amount || 0).toLocaleString()}
+                    </span>
+
+                    <span style={{ color: "#8c90a0", fontSize: 12 }}>
+                      Draft
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -776,10 +887,10 @@ export default function ClientProposalDetailPage() {
 
               <div className="flex justify-center">
                 <button
-                  onClick={() => setShowWaitingExpertModal(false)}
+                  onClick={checkContractAndGoProject}
                   className="rounded-lg bg-cyan-400 px-8 py-3 font-bold text-white transition hover:brightness-110"
                 >
-                  OK
+                  Check Project Status
                 </button>
               </div>
             </div>

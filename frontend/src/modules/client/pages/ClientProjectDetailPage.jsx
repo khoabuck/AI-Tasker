@@ -1,26 +1,31 @@
 // src/modules/client/pages/ClientProjectDetailPage.jsx
-// GET /api/projects/{projectId}
-// GET /api/projects/{projectId}/milestones
-// Trang cơ bản — sẽ mở rộng khi BE hoàn thiện milestones/deliverables
+//
+// GET  /api/projects/{projectId}                → thông tin project
+// GET  /api/projects/{projectId}/milestones      → danh sách milestone
+// POST /api/disputes                             → mở dispute mới
+//      { projectId, milestoneId, respondentUserId, disputedAmount, reason, evidenceText, evidenceFileUrl }
+//
+// Nút "Open Dispute" xuất hiện ở 2 nơi theo đúng ngữ cảnh:
+//  - Cạnh từng milestone, khi project đang ACTIVE — milestoneId gắn trực tiếp vào milestone đó.
+//  - Ở cấp toàn project, chỉ khi project đã COMPLETED — milestoneId để null (tranh chấp sau
+//    khi đã nhận toàn bộ sản phẩm, không gắn riêng 1 milestone).
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
 const STATUS_CONFIG = {
-  IN_PROGRESS: { label: "In Progress", color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
-  COMPLETED:   { label: "Completed",   color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
-  DISPUTED:    { label: "Disputed",    color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
-  ACTIVE:      { label: "Active",      color: "#00F0FF", bg: "rgba(0,240,255,0.08)",  border: "rgba(0,240,255,0.25)"  },
+  ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
+  COMPLETED: { label: "Completed", color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
+  DISPUTED:  { label: "Disputed",  color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
 };
 
 const MILESTONE_STATUS = {
-  PENDING:    { label: "Pending",    color: "#8c90a0" },
-  IN_PROGRESS:{ label: "In Progress",color: "#facc15" },
-  SUBMITTED:  { label: "Submitted",  color: "#c0c1ff" },
-  APPROVED:   { label: "Approved",   color: "#22c55e" },
-  REJECTED:   { label: "Rejected",   color: "#ef4444" },
+  PENDING:   { label: "Pending",   color: "#8c90a0" },
+  SUBMITTED: { label: "Submitted", color: "#facc15" },
+  APPROVED:  { label: "Approved",  color: "#22c55e" },
+  REJECTED:  { label: "Rejected",  color: "#f87171" },
 };
 
 const cardStyle = {
@@ -32,53 +37,140 @@ const cardStyle = {
   boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
-const labelStyle = {
-  display: "block",
-  fontFamily: "JetBrains Mono, monospace",
-  fontSize: 10,
-  textTransform: "uppercase",
-  letterSpacing: "0.1em",
-  color: "#8c90a0",
-  marginBottom: 6,
-};
+// ── Open Dispute Modal ──────────────────────────────────────────────
+function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
+  const [reason, setReason] = useState("");
+  const [disputedAmount, setDisputedAmount] = useState(milestone?.amount ?? project?.totalAmount ?? "");
+  const [evidenceText, setEvidenceText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const respondentUserId = project?.expertUserId ?? project?.expertId ?? project?.expert?.userId;
+
+  const handleSubmit = async () => {
+    if (!reason.trim()) { setError("Vui lòng nhập lý do khiếu nại."); return; }
+    if (!respondentUserId) { setError("Không xác định được Expert liên quan. Vui lòng tải lại trang."); return; }
+
+    setSubmitting(true);
+    setError("");
+    try {
+      await axiosInstance.post("/disputes", {
+        projectId: project.projectId,
+        milestoneId: milestone?.milestoneId ?? null,
+        respondentUserId,
+        disputedAmount: Number(disputedAmount) || 0,
+        reason: reason.trim(),
+        evidenceText: evidenceText.trim() || "",
+        evidenceFileUrl: "",
+      });
+      onSubmitted();
+      onClose();
+    } catch (err) {
+      setError(err?.response?.data?.message || "Mở khiếu nại thất bại. Vui lòng thử lại.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
+
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <div>
+            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 19, fontWeight: 700, color: "#f97316", margin: "0 0 4px" }}>Open Dispute</h3>
+            <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>
+              {milestone ? `Liên quan đến milestone: ${milestone.title || "Milestone"}` : "Khiếu nại cho toàn bộ project"}
+            </p>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
+          </button>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
+              Số tiền tranh chấp (USD)
+            </label>
+            <input type="number" value={disputedAmount} onChange={(e) => setDisputedAmount(e.target.value)}
+              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "JetBrains Mono, monospace", fontSize: 14, boxSizing: "border-box" }} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
+              Lý do khiếu nại <span style={{ color: "#f87171" }}>*</span>
+            </label>
+            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+              placeholder="Ví dụ: Sản phẩm bàn giao không đúng yêu cầu đã thỏa thuận..."
+              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
+              Bằng chứng (mô tả thêm)
+            </label>
+            <textarea value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} rows={3}
+              placeholder="Mô tả chi tiết bằng chứng, có thể đính kèm link tài liệu, ảnh chụp tin nhắn..."
+              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+          </div>
+
+          {error && (
+            <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>
+          )}
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
+              Hủy
+            </button>
+            <button onClick={handleSubmit} disabled={submitting}
+              style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {submitting
+                ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang gửi...</>
+                : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Gửi khiếu nại</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function ClientProjectDetailPage() {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [disputeModal, setDisputeModal] = useState(null); // { milestone } | { milestone: null } khi mở cho cả project
+  // bannerMsg dùng chung cho mọi thông báo thành công cần hiện khi quay lại trang
+  // này — ví dụ sau khi vừa approve 1 deliverable ở MilestoneDeliverablesPage và
+  // navigate về đây kèm state.successMsg, hoặc sau khi vừa mở dispute thành công.
+  const [bannerMsg, setBannerMsg] = useState(location.state?.successMsg || "");
 
   const fetchData = useCallback(async (signal) => {
     setLoading(true);
     setError("");
     try {
-      const [projectRes, milestonesRes] = await Promise.allSettled([
-        axiosInstance.get(`/projects/${projectId}`, { signal }),
-        axiosInstance.get(`/projects/${projectId}/milestones`, { signal }),
-      ]);
+      const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
+      const projectData = res.data?.data ?? res.data;
+      setProject(projectData);
 
-      if (projectRes.status === "fulfilled") {
-        setProject(projectRes.value.data);
-      } else {
-        throw projectRes.reason;
+      try {
+        const msRes = await axiosInstance.get(`/projects/${projectId}/milestones`, { signal });
+        const msRaw = msRes.data?.data ?? msRes.data;
+        setMilestones(Array.isArray(msRaw) ? msRaw : msRaw?.items ?? []);
+      } catch {
+        // Milestone lỗi không chặn việc hiện thông tin project chính
+        setMilestones([]);
       }
-
-      if (milestonesRes.status === "fulfilled") {
-        const raw = milestonesRes.value.data;
-        setMilestones(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
-      }
-      // Milestones API có thể chưa sẵn sàng ở BE — fail im lặng, không chặn trang
-
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(
-        err?.response?.status === 404 ? "Không tìm thấy project này." :
-        err?.response?.status === 403 ? "Bạn không có quyền xem project này." :
-        err?.response?.data?.message || "Đã có lỗi xảy ra."
-      );
+      setError(err?.response?.data?.message || "Không thể tải thông tin project.");
     } finally {
       setLoading(false);
     }
@@ -86,87 +178,85 @@ export default function ClientProjectDetailPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+
     fetchData(controller.signal);
-    return () => controller.abort();
+
+    const intervalId = setInterval(async () => {
+      if (project?.status === "ACTIVE") {
+        await fetchData();
+      }
+    }, 5000);
+
+    return () => {
+      controller.abort();
+      clearInterval(intervalId);
+    };
   }, [fetchData]);
 
-  if (loading) return (
-    <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-        Loading project...
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </ClientLayout>
-  );
+  if (loading) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
+          Loading project...
+          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        </div>
+      </ClientLayout>
+    );
+  }
 
-  if (error) return (
-    <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 24px" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-        <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
-        <button onClick={() => navigate("/client/projects")}
-          style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-          Back to Projects
-        </button>
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </ClientLayout>
-  );
+  if (error || !project) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 24px" }}>
+          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy project."}</p>
+          <button onClick={() => navigate("/client/projects")}
+            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
+            Quay lại danh sách
+          </button>
+        </div>
+      </ClientLayout>
+    );
+  }
 
-  if (!project) return null;
-
-  const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.IN_PROGRESS;
+  const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
   const startDate = project.startDate || project.createdAt
     ? new Date(project.startDate || project.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
-  // Milestone "đang làm" = milestone đầu tiên chưa APPROVED (đã submit chờ review,
-  // đang in progress, hoặc còn pending) — đây là điểm Expert đang dừng lại.
-  const currentMilestoneIndex = milestones.findIndex((m) => m.status !== "APPROVED");
+  // Milestone "đang làm" = milestone đầu tiên chưa APPROVED.
+  const currentMilestoneIndex = milestones.findIndex(
+    (m) => (m.status || "").toUpperCase() !== "APPROVED"
+  );
   const currentMilestone = currentMilestoneIndex >= 0 ? milestones[currentMilestoneIndex] : null;
 
   return (
     <ClientLayout>
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* Back */}
         <button onClick={() => navigate("/client/projects")}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
+          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 24, padding: 0 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to Projects
+          Back to My Projects
         </button>
 
         {/* Header card */}
-        <div style={{ ...cardStyle, marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ flex: 1 }}>
-              <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 26, fontWeight: 700, color: "#e1e2eb", marginBottom: 10 }}>
-                {project.title || project.jobTitle}
-              </h1>
-              <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: statusCfg.color, background: statusCfg.bg, border: `1px solid ${statusCfg.border}` }}>
-                  {statusCfg.label}
-                </span>
-                <span style={{ fontSize: 13, color: "#8c90a0" }}>Started {startDate}</span>
-              </div>
-            </div>
-
-            {project.totalAmount != null && (
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF" }}>
-                  ${project.totalAmount.toLocaleString()}
-                </div>
-                <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>Total Amount</div>
-              </div>
-            )}
+        <div style={{ ...cardStyle, marginBottom: 20 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginBottom: 8 }}>
+            <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 24, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
+              {project.title || project.jobTitle}
+            </h1>
+            <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: statusCfg.color, background: statusCfg.bg, border: `1px solid ${statusCfg.border}` }}>
+              {statusCfg.label}
+            </span>
           </div>
+          <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 20px" }}>Started {startDate}</p>
 
           {/* Expert info */}
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
             <img src={project.expertAvatar || `https://i.pravatar.cc/80?u=${project.expertId}`} alt={expertName}
               style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }} />
             <div style={{ flex: 1 }}>
@@ -174,7 +264,6 @@ export default function ClientProjectDetailPage() {
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
             </div>
 
-            {/* Nhắn tin — dẫn sang Messages, ưu tiên đúng conversation nếu có */}
             <button onClick={() => navigate(project.conversationId ? `/client/messages?conversationId=${project.conversationId}` : "/client/messages")}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
@@ -182,11 +271,20 @@ export default function ClientProjectDetailPage() {
             </button>
 
             {project.status === "COMPLETED" && (
-              <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
-                Leave Review
-              </button>
+              <>
+                <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
+                  Leave Review
+                </button>
+
+                {/* Open Dispute cho toàn project — chỉ khi đã COMPLETED, không gắn milestone cụ thể */}
+                <button onClick={() => setDisputeModal({ milestone: null })}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>
+                  Open Dispute
+                </button>
+              </>
             )}
 
             {project.status === "DISPUTED" && (
@@ -199,8 +297,15 @@ export default function ClientProjectDetailPage() {
           </div>
         </div>
 
-        {/* Banner milestone hiện tại — Expert đang làm tới đâu */}
-        {currentMilestone && (
+        {bannerMsg && (
+          <div style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 10, padding: "12px 16px", color: "#4ade80", fontSize: 14, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>
+            {bannerMsg}
+          </div>
+        )}
+
+        {/* Banner milestone hiện tại — chỉ có ý nghĩa khi project còn ACTIVE */}
+        {project.status === "ACTIVE" && currentMilestone && (
           <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(250,204,21,0.25)", background: "rgba(250,204,21,0.03)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -233,46 +338,30 @@ export default function ClientProjectDetailPage() {
           </div>
         )}
 
-        {/* Description */}
-        {project.description && (
-          <div style={{ ...cardStyle, marginBottom: 20 }}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              Description
-            </h3>
-            <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>
-              {project.description}
-            </p>
-          </div>
-        )}
-
-        {/* Milestones */}
+        {/* Milestone list */}
         <div style={cardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Milestones</h3>
-            {milestones.length > 0 && (
-              <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(0,240,255,0.1)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", fontFamily: "JetBrains Mono, monospace" }}>
-                {milestones.length} total
-              </span>
-            )}
-          </div>
+          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            Milestones
+          </h3>
 
           {milestones.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "40px 0" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#272a30", display: "block", marginBottom: 12 }}>flag</span>
-              <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>
-                Chưa có milestone nào, hoặc tính năng đang được phát triển.
-              </p>
-            </div>
+            <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>Chưa có milestone nào được tạo.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
-                const mCfg = MILESTONE_STATUS[m.status] || MILESTONE_STATUS.PENDING;
+                const normalizedStatus = (m.status || "").toUpperCase();
+
+                const mCfg =
+                  MILESTONE_STATUS[normalizedStatus] || MILESTONE_STATUS.PENDING;
+
                 const isCurrent = index === currentMilestoneIndex;
-                const hasSubmittedDeliverable = m.status === "SUBMITTED";
+
+                const hasSubmittedDeliverable = normalizedStatus === "SUBMITTED";
+
                 return (
                   <div key={m.milestoneId ?? index}
                     style={{ background: isCurrent ? "rgba(250,204,21,0.04)" : "rgba(255,255,255,0.02)", border: `1px solid ${isCurrent ? "rgba(250,204,21,0.3)" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: 18, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                    <div style={{ flex: 1 }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         {isCurrent && <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#facc15" }}>arrow_right</span>}
                         <p style={{ fontSize: 14, fontWeight: 600, color: "#e1e2eb", margin: "0 0 4px" }}>
@@ -283,7 +372,7 @@ export default function ClientProjectDetailPage() {
                         <p style={{ fontSize: 13, color: "#8c90a0", margin: 0 }}>{m.description}</p>
                       )}
                     </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {m.amount != null && (
                         <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#00F0FF", fontWeight: 700 }}>
                           ${m.amount.toLocaleString()}
@@ -299,6 +388,16 @@ export default function ClientProjectDetailPage() {
                           Review
                         </button>
                       )}
+
+                      {/* Open Dispute gắn theo milestone — chỉ khi project còn ACTIVE.
+                          Khi đã COMPLETED, dispute chỉ mở ở cấp project (nút header phía trên). */}
+                      {project.status === "ACTIVE" && (
+                        <button onClick={() => setDisputeModal({ milestone: m })}
+                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>gavel</span>
+                          Dispute
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -308,7 +407,15 @@ export default function ClientProjectDetailPage() {
         </div>
 
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+      {disputeModal && (
+        <OpenDisputeModal
+          project={project}
+          milestone={disputeModal.milestone}
+          onClose={() => setDisputeModal(null)}
+          onSubmitted={() => setBannerMsg("Khiếu nại đã được gửi. Admin sẽ xem xét và phản hồi sớm nhất.")}
+        />
+      )}
     </ClientLayout>
   );
 }

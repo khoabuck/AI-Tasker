@@ -363,13 +363,39 @@ export default function WalletPage() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [balRes, txRes, doRes] = await Promise.all([
+      const [balRes, txRes, doRes, projectsRes] = await Promise.all([
         axiosInstance.get("/wallets/balance"),
         axiosInstance.get("/transactions/me"),
         axiosInstance.get("/wallets/deposit-orders/me"),
+        axiosInstance.get("/projects/me"),
       ]);
 
       const balRaw = balRes.data?.data || balRes.data;
+
+      const projectsRaw = projectsRes.data?.data || projectsRes.data;
+      const projects = Array.isArray(projectsRaw)
+        ? projectsRaw
+        : projectsRaw?.items ?? projectsRaw?.data ?? [];
+
+      const escrowResults = await Promise.allSettled(
+        projects.map((p) =>
+          axiosInstance.get(`/escrows/projects/${p.projectId ?? p.id}`)
+        )
+      );
+
+      const escrowBalance = escrowResults.reduce((sum, result) => {
+        if (result.status !== "fulfilled") return sum;
+
+        const raw = result.value.data?.data || result.value.data;
+        const escrows = Array.isArray(raw) ? raw : raw?.items ?? raw?.data ?? [];
+
+        return (
+          sum +
+          escrows
+            .filter((e) => (e.status || "").toUpperCase() === "LOCKED")
+            .reduce((s, e) => s + Number(e.amount || 0), 0)
+        );
+      }, 0);
 
       setBalance({
         availableBalance:
@@ -380,7 +406,7 @@ export default function WalletPage() {
           balRaw?.amount ??
           (typeof balRaw === "number" ? balRaw : 0),
 
-        escrowBalance: balRaw?.escrowBalance ?? balRaw?.escrow ?? 0,
+        escrowBalance,
         totalDeposited: balRaw?.totalDeposited ?? balRaw?.deposited ?? 0,
         totalWithdrawn: balRaw?.totalWithdrawn ?? balRaw?.withdrawn ?? balRaw?.totalSpent ?? 0,
       });
