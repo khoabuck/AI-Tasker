@@ -157,30 +157,52 @@ export default function PostJobPage() {
   setDraftSaved(false);
 };
 
-  const toggleSkill = (skill) => {
-    const exists = form.skills.find((s) => s.id === skill.id);
+  const removeSkill = (skill) => {
+  setForm((prev) => ({
+    ...prev,
+    skills: prev.skills.filter(
+      (s) =>
+        Number(s.id) !== Number(skill.id) &&
+        s.name.toLowerCase() !== skill.name.toLowerCase()
+    ),
+  }));
 
-    const isAiSuggested = aiSuggestedSkills.some(
-      (s) => Number(s.id) === Number(skill.id)
+  setIrrelevantSkills((prev) =>
+    prev.filter(
+      (name) => name.toLowerCase() !== skill.name.toLowerCase()
+    )
+  );
+};
+
+const toggleSkill = (skill) => {
+  const exists = form.skills.some(
+    (s) =>
+      Number(s.id) === Number(skill.id) ||
+      s.name.toLowerCase() === skill.name.toLowerCase()
+  );
+
+  const isAiSuggested = aiSuggestedSkills.some(
+    (s) =>
+      Number(s.id) === Number(skill.id) ||
+      s.name.toLowerCase() === skill.name.toLowerCase()
+  );
+
+  if (exists) {
+    removeSkill(skill);
+    return;
+  }
+
+  setForm((prev) => ({
+    ...prev,
+    skills: [...prev.skills, skill],
+  }));
+
+  if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
+    setIrrelevantSkills((prev) =>
+      prev.includes(skill.name) ? prev : [...prev, skill.name]
     );
-
-    if (exists) {
-      setIrrelevantSkills((prev) =>
-        prev.filter((name) => name.toLowerCase() !== skill.name.toLowerCase())
-      );
-    } else if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
-      setIrrelevantSkills((prev) =>
-        prev.includes(skill.name) ? prev : [...prev, skill.name]
-      );
-    }
-
-    setForm((prev) => ({
-      ...prev,
-      skills: exists
-        ? prev.skills.filter((s) => s.id !== skill.id)
-        : [...prev.skills, skill],
-    }));
-  };
+  }
+};
 
   const switchMode = (newMode) => {
     setMode(newMode);
@@ -524,10 +546,33 @@ export default function PostJobPage() {
                     </div>
 
                   {form.skills.length > 0 && (
-                    <p style={{ fontSize: 12, color: "#00F0FF", marginTop: 10 }}>
-                      {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
-                    </p>
-                  )}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                        {form.skills.map((skill) => (
+                          <button
+                            key={`${skill.id}-${skill.name}`}
+                            type="button"
+                            onClick={() => removeSkill(skill)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "6px 10px",
+                              borderRadius: 999,
+                              background: "rgba(0,240,255,0.08)",
+                              border: "1px solid rgba(0,240,255,0.25)",
+                              color: "#00F0FF",
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {skill.name}
+                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                              close
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
 
                   {mode === "ai" && irrelevantSkills.length > 0 && (
                       <div
@@ -804,10 +849,39 @@ export default function PostJobPage() {
                       </div>
 
                       {form.skills.length > 0 && (
-                        <p style={{ fontSize: 12, color: "#00F0FF", marginTop: 10 }}>
-                          {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
-                        </p>
-                      )}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {form.skills.map((skill) => {
+                              const isIrrelevant = irrelevantSkills.some(
+                                (name) => name.toLowerCase() === skill.name.toLowerCase()
+                              );
+
+                              return (
+                                <button
+                                  key={`${skill.id}-${skill.name}`}
+                                  type="button"
+                                  onClick={() => removeSkill(skill)}
+                                  className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                                    isIrrelevant
+                                      ? "border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20"
+                                      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20"
+                                  }`}
+                                >
+                                  {isIrrelevant && (
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      warning
+                                    </span>
+                                  )}
+
+                                  <span>{skill.name}</span>
+
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    close
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
                       {irrelevantSkills.length > 0 && (
                         <div
