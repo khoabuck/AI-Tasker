@@ -259,6 +259,10 @@ builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 // =========================
 builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
 builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
+builder.Services.AddHttpClient<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 // =========================
 // BE2 - Proposal / Contract / Project / Milestone Flow

@@ -12,6 +12,17 @@ public class JobAssistantResponse
 
     public string SuggestedComplexity { get; set; } = "UNKNOWN";
 
+    public decimal? SuggestedBudgetMin { get; set; }
+
+    public decimal? SuggestedBudgetMax { get; set; }
+
+    // FORM | RAW_REQUIREMENT | AI_ESTIMATE | UNKNOWN
+    public string SuggestedBudgetSource { get; set; } = "UNKNOWN";
+
+    public bool IsBudgetEstimated { get; set; }
+
+    public string BudgetSuggestionNote { get; set; } = string.Empty;
+
     public string ExpectedDeliverables { get; set; } = string.Empty;
 
     public List<int> SuggestedSkillIds { get; set; } = new();
