@@ -24,18 +24,17 @@ namespace AITasker.Infrastructure.Contracts
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
 
+        private const int EscrowLockWindowHours = 24;
+
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
-        private readonly IWalletService _walletService;
 
         public ProjectContractService(
             AITaskerDbContext context,
-            INotificationService notificationService,
-            IWalletService walletService)
+            INotificationService notificationService)
         {
             _context = context;
             _notificationService = notificationService;
-            _walletService = walletService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -271,27 +270,17 @@ namespace AITasker.Infrastructure.Contracts
 
                 await _context.SaveChangesAsync();
 
-                var escrowResult = await _walletService.LockProjectEscrowAsync(
-                    clientProfile.UserId,
-                    project.ProjectId);
-
-                if (!escrowResult.Success)
-                {
-                    throw new InvalidOperationException(
-                        escrowResult.Message ?? "Failed to automatically lock project escrow.");
-                }
-
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
-                    "Contract fully confirmed and escrow locked",
-                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically and the project has started.",
-                    "CONTRACT_CONFIRMED_ESCROW_LOCKED");
+                    "Contract fully confirmed",
+                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {EscrowLockWindowHours} hours to start the project.",
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW");
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Project started",
-                    $"The contract for job '{job.Title}' is fully confirmed. Client escrow was locked automatically. You can start working on milestones.",
-                    "PROJECT_STARTED");
+                    "Contract fully confirmed",
+                    $"The contract for job '{job.Title}' is fully confirmed. Waiting for Client to lock escrow before work starts.",
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW");
 
                 return await MapToContractResponseAsync(contract);
             }
@@ -450,8 +439,16 @@ namespace AITasker.Infrastructure.Contracts
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
+            var now = DateTime.UtcNow;
+            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(EscrowLockWindowHours);
+
             if (existingProject != null)
             {
+                if (existingProject.EscrowLockDeadlineAt == null)
+                {
+                    existingProject.EscrowLockDeadlineAt = escrowDeadline;
+                }
+
                 return existingProject;
             }
 
@@ -464,7 +461,10 @@ namespace AITasker.Infrastructure.Contracts
                 Status = ProjectStatusPendingEscrow,
                 StartDate = null,
                 EndDate = null,
-                CreatedAt = DateTime.UtcNow
+                EscrowLockDeadlineAt = escrowDeadline,
+                EscrowLockedAt = null,
+                EscrowExpiredAt = null,
+                CreatedAt = now
             };
 
             _context.Projects.Add(project);
@@ -807,6 +807,9 @@ namespace AITasker.Infrastructure.Contracts
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,
+                ProjectEscrowLockDeadlineAt = project?.EscrowLockDeadlineAt,
+                ProjectEscrowLockedAt = project?.EscrowLockedAt,
+                ProjectEscrowExpiredAt = project?.EscrowExpiredAt,
 
                 CreatedAt = contract.CreatedAt,
                 ConfirmedAt = contract.ConfirmedAt
@@ -1016,23 +1019,38 @@ namespace AITasker.Infrastructure.Contracts
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            var baseDate = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            var previousDeadlineOffsetDays = 0;
+            var milestones = new List<Milestone>();
 
-            var milestones = drafts.Select(draft => new Milestone
+            foreach (var draft in drafts)
             {
-                ProjectId = project.ProjectId,
-                Title = draft.Title,
-                Description = draft.Description,
-                ExpectedDeliverable = draft.ExpectedDeliverable,
-                AcceptanceCriteria = draft.AcceptanceCriteria,
-                Amount = draft.Amount,
-                OrderIndex = draft.OrderIndex,
-                Deadline = baseDate.AddDays(draft.DeadlineOffsetDays),
-                RevisionUsed = 0,
-                PaymentStatus = "PENDING",
-                Status = "PENDING",
-                CreatedAt = DateTime.UtcNow
-            }).ToList();
+                var durationDays = draft.DeadlineOffsetDays - previousDeadlineOffsetDays;
+
+                if (durationDays <= 0)
+                {
+                    durationDays = Math.Max(1, draft.DeadlineOffsetDays);
+                }
+
+                milestones.Add(new Milestone
+                {
+                    ProjectId = project.ProjectId,
+                    Title = draft.Title,
+                    Description = draft.Description,
+                    ExpectedDeliverable = draft.ExpectedDeliverable,
+                    AcceptanceCriteria = draft.AcceptanceCriteria,
+                    Amount = draft.Amount,
+                    OrderIndex = draft.OrderIndex,
+                    DurationDays = durationDays,
+                    Deadline = now.AddDays(draft.DeadlineOffsetDays),
+                    RevisionUsed = 0,
+                    PaymentStatus = "PENDING",
+                    Status = "PENDING",
+                    CreatedAt = now
+                });
+
+                previousDeadlineOffsetDays = draft.DeadlineOffsetDays;
+            }
 
             _context.Milestones.AddRange(milestones);
         }

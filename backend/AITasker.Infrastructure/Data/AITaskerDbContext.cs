@@ -1196,6 +1196,12 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.EscrowLockDeadlineAt);
+
+            entity.Property(e => e.EscrowLockedAt);
+
+            entity.Property(e => e.EscrowExpiredAt);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -1231,6 +1237,10 @@ public class AITaskerDbContext : DbContext
                 "[OrderIndex] > 0");
 
                 t.HasCheckConstraint(
+                "CK_Milestones_DurationDays",
+                "[DurationDays] > 0");
+
+                t.HasCheckConstraint(
                 "CK_Milestones_Revision",
                 "[RevisionUsed] >= 0");
 
@@ -1260,6 +1270,9 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.DurationDays)
                 .IsRequired();
 
             entity.Property(e => e.Status)

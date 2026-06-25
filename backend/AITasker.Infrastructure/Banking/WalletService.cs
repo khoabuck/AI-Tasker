@@ -18,8 +18,12 @@ namespace AITasker.Infrastructure.Banking
     {
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusActive = "ACTIVE";
+        private const string ProjectStatusCancelled = "CANCELLED";
+
+        private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusActive = "ACTIVE";
+        private const string JobStatusOpen = "OPEN";
 
         private const string ProposalStatusAccepted = "ACCEPTED";
         private const string ProposalStatusRejected = "REJECTED";
@@ -597,6 +601,23 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
                 }
 
+                var now = DateTime.UtcNow;
+
+                if (project.EscrowLockDeadlineAt.HasValue &&
+                    project.EscrowLockDeadlineAt.Value < now)
+                {
+                    await ExpirePendingEscrowProjectAsync(
+                        project,
+                        contract,
+                        now);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    throw new InvalidOperationException(
+                        "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
+                }
+
                 var proposal = await GetProposalAsync(contract.ProposalId);
                 var job = await GetJobAsync(proposal.JobId);
 
@@ -659,11 +680,11 @@ namespace AITasker.Infrastructure.Banking
                         $"Client wallet balance is not enough to lock escrow. Required: {contract.TotalClientPayment:N0}, Available: {clientWallet.AvailableBalance:N0}.");
                 }
 
-                var now = DateTime.UtcNow;
-
                 clientWallet.AvailableBalance -= contract.TotalClientPayment;
                 clientWallet.LockedBalance += contract.FinalPrice;
                 clientWallet.UpdatedAt = now;
+
+                var cumulativeDurationDays = 0;
 
                 foreach (var milestone in milestones)
                 {
@@ -678,12 +699,21 @@ namespace AITasker.Infrastructure.Banking
                         UpdatedAt = now
                     });
 
+                    var durationDays = milestone.DurationDays > 0
+                        ? milestone.DurationDays
+                        : Math.Max(1, (int)Math.Ceiling((milestone.Deadline - milestone.CreatedAt).TotalDays));
+
+                    cumulativeDurationDays += durationDays;
+
+                    milestone.DurationDays = durationDays;
+                    milestone.Deadline = now.AddDays(cumulativeDurationDays);
                     milestone.Status = MilestoneStatusFunded;
                     milestone.PaymentStatus = PaymentStatusLocked;
                 }
 
                 project.Status = ProjectStatusActive;
-                project.StartDate ??= now;
+                project.StartDate = now;
+                project.EscrowLockedAt = now;
 
                 proposal.Status = ProposalStatusAccepted;
 
@@ -1258,6 +1288,41 @@ namespace AITasker.Infrastructure.Banking
             }
 
             throw new InvalidOperationException("Could not generate unique deposit order code.");
+        }
+
+        private async Task ExpirePendingEscrowProjectAsync(
+            Project project,
+            ProjectContract contract,
+            DateTime now)
+        {
+            var proposal = await GetProposalAsync(contract.ProposalId);
+            var job = await GetJobAsync(proposal.JobId);
+
+            contract.Status = ContractStatusCancelled;
+            contract.ClientConfirmed = false;
+            contract.ExpertConfirmed = false;
+            contract.ConfirmedAt = null;
+
+            project.Status = ProjectStatusCancelled;
+            project.EndDate = now;
+            project.EscrowExpiredAt = now;
+
+            proposal.Status = ProposalStatusRejected;
+
+            job.Status = JobStatusOpen;
+            job.UpdatedAt = now;
+
+            var milestones = await _context.Milestones
+                .Where(x => x.ProjectId == project.ProjectId)
+                .ToListAsync();
+
+            foreach (var milestone in milestones)
+            {
+                if (string.Equals(milestone.PaymentStatus, PaymentStatusPending, StringComparison.OrdinalIgnoreCase))
+                {
+                    milestone.Status = ProjectStatusCancelled;
+                }
+            }
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(

@@ -776,6 +776,9 @@ namespace AITasker.Infrastructure.Projects
                 ContractStatus = contract.Status,
                 StartDate = project.StartDate,
                 EndDate = project.EndDate,
+                EscrowLockDeadlineAt = project.EscrowLockDeadlineAt,
+                EscrowLockedAt = project.EscrowLockedAt,
+                EscrowExpiredAt = project.EscrowExpiredAt,
                 CreatedAt = project.CreatedAt,
                 Milestones = milestoneResponses
             };
@@ -796,6 +799,7 @@ namespace AITasker.Infrastructure.Projects
                 AcceptanceCriteria = milestone.AcceptanceCriteria,
                 Amount = milestone.Amount,
                 OrderIndex = milestone.OrderIndex,
+                DurationDays = milestone.DurationDays,
                 Deadline = milestone.Deadline,
                 RevisionUsed = milestone.RevisionUsed,
                 PaymentStatus = milestone.PaymentStatus,

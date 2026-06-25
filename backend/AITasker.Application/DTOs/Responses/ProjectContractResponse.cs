@@ -58,6 +58,12 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? ProjectStatus { get; set; }
 
+        public DateTime? ProjectEscrowLockDeadlineAt { get; set; }
+
+        public DateTime? ProjectEscrowLockedAt { get; set; }
+
+        public DateTime? ProjectEscrowExpiredAt { get; set; }
+
         public DateTime CreatedAt { get; set; }
 
         public DateTime? ConfirmedAt { get; set; }
