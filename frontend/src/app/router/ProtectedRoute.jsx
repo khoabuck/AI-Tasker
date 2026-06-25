@@ -19,21 +19,36 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
-  const role = String(user?.role || "").toUpperCase();
-  const status = String(user?.status || "").toUpperCase();
+  const role = String(user?.role || "").trim().toUpperCase();
+  const status = String(user?.status || "").trim().toUpperCase();
+  const pathname = location.pathname;
+
+  const isClientSetupPage = pathname === "/setup-profile";
+
+  const isExpertProfileReviewPage =
+    pathname === "/expert/setup-profile" ||
+    pathname === "/expert/profile/edit" ||
+    pathname === "/expert/profile-locked";
+
+  const isExpertLockedPage = pathname === "/expert/profile-locked";
 
   if (status === "PENDING_ROLE") {
     return <Navigate to="/select-role" replace />;
   }
 
+  // Quan trọng: vẫn cho /expert/profile/edit đi qua khi userStatus đang LOCKED.
+  // Lý do: khi lockUntil đã hết hạn, SetupExpertProfilePage sẽ gọi backend,
+  // backend reset lock khi resubmit, và user có thể gửi lại hồ sơ.
+  if (role === "EXPERT" && status === "EXPERT_PROFILE_LOCKED") {
+    if (!isExpertProfileReviewPage) {
+      return <Navigate to="/expert/profile-locked" replace />;
+    }
+
+    return children;
+  }
+
   if (status === "PENDING_PROFILE") {
-    const isClientSetupPage = location.pathname === "/setup-profile";
-
-    const isExpertSetupPage =
-      location.pathname === "/expert/setup-profile" ||
-      location.pathname === "/expert/profile/edit";
-
-    if (role === "EXPERT" && !isExpertSetupPage) {
+    if (role === "EXPERT" && !isExpertProfileReviewPage) {
       return <Navigate to="/expert/setup-profile" replace />;
     }
 

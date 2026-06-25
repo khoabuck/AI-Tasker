@@ -3,10 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
+import { useAuth } from "../../../context/AuthContext";
 
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
+
+const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 const emptyForm = {
   avatarUrl: "",
@@ -14,9 +17,6 @@ const emptyForm = {
   bio: "",
   skills: "",
   yearsOfExperience: "",
-  expectedProjectBudgetMin: "",
-  expectedProjectBudgetMax: "",
-  preferredProjectDurationDays: "",
   availableForWork: true,
   portfolioUrl: "",
   linkedInUrl: "",
@@ -34,12 +34,13 @@ const emptyForm = {
 export default function SetupExpertProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { handleLogout: logoutContext } = useAuth();
 
   const isEditPage = location.pathname === "/expert/profile/edit";
   const draftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
 
   const [formData, setFormData] = useState(emptyForm);
-  const [loading, setLoading] = useState(isEditPage);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -49,10 +50,26 @@ export default function SetupExpertProfilePage() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
 
+  const [reviewLimit, setReviewLimit] = useState({
+    submissionCount: 0,
+    lockedUntil: "",
+    reviewStatus: "",
+    userStatus: "",
+  });
+
   const formErrors = useMemo(() => validateForm(formData), [formData]);
+
+  const isReviewLocked = isExpertProfileReviewLocked(reviewLimit);
+  const isNoAttemptsLeft = hasNoExpertProfileAttemptsLeft(reviewLimit);
+  const remainingReviewAttempts =
+    getRemainingExpertProfileAttempts(reviewLimit);
+
+  const shouldDisableSubmit =
+    saving || uploadingAvatar || isReviewLocked || isNoAttemptsLeft;
 
   useEffect(() => {
     loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditPage]);
 
   useEffect(() => {
@@ -67,71 +84,103 @@ export default function SetupExpertProfilePage() {
       const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
       const normalDraft = readJson(draftKey);
 
+      let profile = null;
+
+      try {
+        profile = await expertProfileService.getMyExpertProfile();
+
+        const nextLimit = extractExpertProfileReviewLimit(profile);
+        setReviewLimit(nextLimit);
+
+        if (shouldRedirectToLockedPage(nextLimit)) {
+          updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+          navigate("/expert/profile-locked", { replace: true });
+          return;
+        }
+
+        const reviewStatus = getReviewStatus(profile);
+        const userStatus = getUserStatus(profile);
+
+        if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
+          updateLocalUserStatus("ACTIVE");
+          navigate("/expert/dashboard", { replace: true });
+          return;
+        }
+
+        if (!isEditPage) {
+          const hasExistingProfile =
+            reviewStatus === "NEEDS_CORRECTION" ||
+            reviewStatus === "REJECTED" ||
+            userStatus === "PENDING_PROFILE";
+
+          if (hasExistingProfile) {
+            navigate("/expert/profile/edit", { replace: true });
+            return;
+          }
+        }
+      } catch (profileErr) {
+        if (profileErr?.response?.status !== 404) {
+          throw profileErr;
+        }
+
+        profile = null;
+      }
+
       if (correctionDraft) {
+        const safeDraft = removeDeprecatedExpertFields(correctionDraft);
+
         setFormData({
           ...emptyForm,
-          ...correctionDraft,
+          ...safeDraft,
           certificates:
-            Array.isArray(correctionDraft.certificates) &&
-            correctionDraft.certificates.length > 0
-              ? correctionDraft.certificates
+            Array.isArray(safeDraft.certificates) &&
+            safeDraft.certificates.length > 0
+              ? safeDraft.certificates
               : emptyForm.certificates,
         });
+
         return;
       }
 
       if (normalDraft) {
+        const safeDraft = removeDeprecatedExpertFields(normalDraft);
+
         setFormData({
           ...emptyForm,
-          ...normalDraft,
+          ...safeDraft,
           certificates:
-            Array.isArray(normalDraft.certificates) &&
-            normalDraft.certificates.length > 0
-              ? normalDraft.certificates
+            Array.isArray(safeDraft.certificates) &&
+            safeDraft.certificates.length > 0
+              ? safeDraft.certificates
               : emptyForm.certificates,
         });
+
         return;
       }
 
-      if (isEditPage) {
-        const profile = await expertProfileService.getMyExpertProfile();
-
-        setFormData({
-          avatarUrl: profile?.avatarUrl || "",
-          professionalTitle: profile?.professionalTitle || "",
-          bio: profile?.bio || "",
-          skills: profile?.skills || "",
-          yearsOfExperience: profile?.yearsOfExperience ?? "",
-          expectedProjectBudgetMin: profile?.expectedProjectBudgetMin ?? "",
-          expectedProjectBudgetMax: profile?.expectedProjectBudgetMax ?? "",
-          preferredProjectDurationDays:
-            profile?.preferredProjectDurationDays ?? "",
-          availableForWork:
-            profile?.availableForWork === undefined
-              ? true
-              : Boolean(profile.availableForWork),
-          portfolioUrl: profile?.portfolioUrl || "",
-          linkedInUrl: profile?.linkedInUrl || "",
-          gitHubUrl: profile?.gitHubUrl || "",
-          certificates:
-            Array.isArray(profile?.certificates) &&
-            profile.certificates.length > 0
-              ? profile.certificates.map((item) => ({
-                  certificateName: item.certificateName || "",
-                  certificateIssuer: item.certificateIssuer || "",
-                  certificateUrl: item.certificateUrl || "",
-                  issuedAt: item.issuedAt
-                    ? String(item.issuedAt).slice(0, 10)
-                    : "",
-                }))
-              : emptyForm.certificates,
-        });
+      if (isEditPage && profile) {
+        setFormData(buildFormFromProfile(profile));
       }
     } catch (err) {
       console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshProfileLimitFromBackend = async () => {
+    try {
+      const profile = await expertProfileService.getMyExpertProfile();
+      const nextLimit = extractExpertProfileReviewLimit(profile);
+      setReviewLimit(nextLimit);
+      return nextLimit;
+    } catch (error) {
+      console.error(
+        "REFRESH PROFILE LIMIT ERROR:",
+        error?.response?.data || error
+      );
+      return null;
     }
   };
 
@@ -185,6 +234,8 @@ export default function SetupExpertProfilePage() {
   };
 
   const addCertificate = () => {
+    if (formData.certificates.length >= 10) return;
+
     setFormData((prev) => ({
       ...prev,
       certificates: [
@@ -226,6 +277,17 @@ export default function SetupExpertProfilePage() {
       const imageUrl = await uploadService.uploadImage(file, "avatar");
 
       updateField("avatarUrl", imageUrl);
+
+      if (typeof authService.updateMyAvatar === "function") {
+        try {
+          await authService.updateMyAvatar(imageUrl);
+        } catch (avatarErr) {
+          console.error(
+            "SYNC AUTH AVATAR ERROR:",
+            avatarErr?.response?.data || avatarErr
+          );
+        }
+      }
     } catch (err) {
       console.error("AVATAR UPLOAD ERROR:", err?.response?.data || err);
 
@@ -239,6 +301,7 @@ export default function SetupExpertProfilePage() {
       });
     } finally {
       setUploadingAvatar(false);
+      event.target.value = "";
     }
   };
 
@@ -248,6 +311,11 @@ export default function SetupExpertProfilePage() {
     setSubmitted(true);
     setError("");
     setModal(null);
+
+    if (isReviewLocked || isNoAttemptsLeft) {
+      navigate("/expert/profile-locked", { replace: true });
+      return;
+    }
 
     const errors = validateForm(formData);
 
@@ -264,12 +332,23 @@ export default function SetupExpertProfilePage() {
         ? await expertProfileService.resubmitExpertProfile(formData)
         : await expertProfileService.createExpertProfile(formData);
 
-      console.log("EXPERT PROFILE SUBMIT SUCCESS:", result);
+      const nextLimit = extractExpertProfileReviewLimit(result);
+      setReviewLimit(nextLimit);
 
       const reviewStatus = getReviewStatus(result);
       const userStatus = getUserStatus(result);
       const reviewNote = getReviewNote(result);
       const missingInformation = getMissingInformation(result);
+
+      const lockedByBackend = shouldRedirectToLockedPage(nextLimit);
+
+      if (lockedByBackend) {
+        saveCorrectionDraft(formData);
+        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+
+        navigate("/expert/profile-locked", { replace: true });
+        return;
+      }
 
       if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         clearExpertProfileDrafts();
@@ -295,16 +374,22 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(formData);
         updateLocalUserStatus("PENDING_PROFILE");
 
+        const remaining = getRemainingExpertProfileAttempts(nextLimit);
+
         setModal({
-          type: "warning",
-          title: "Profile needs correction",
+          type: remaining <= 0 ? "warning" : "warning",
+          title:
+            remaining <= 0
+              ? "Final review attempt used"
+              : "Profile needs correction",
           message:
             reviewNote ||
             "Your profile was submitted, but it needs some corrections before approval.",
-          detail:
+          detail: `${
             missingInformation ||
-            "Please review your bio, skills, public links, and certificates.",
-          showResubmit: true,
+            "Please review your bio, skills, public links, and certificates."
+          }\n\n${buildExpertProfileAttemptText(nextLimit)}`,
+          showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
 
@@ -315,16 +400,22 @@ export default function SetupExpertProfilePage() {
         saveCorrectionDraft(formData);
         updateLocalUserStatus("PENDING_PROFILE");
 
+        const remaining = getRemainingExpertProfileAttempts(nextLimit);
+
         setModal({
           type: "danger",
-          title: "Profile was rejected",
+          title:
+            remaining <= 0
+              ? "Final review attempt used"
+              : "Profile was rejected",
           message:
             reviewNote ||
             "Your expert profile was rejected. Please update your information and submit again.",
-          detail:
+          detail: `${
             missingInformation ||
-            "Please check your profile information, public links, and certificates.",
-          showResubmit: true,
+            "Please check your profile information, public links, and certificates."
+          }\n\n${buildExpertProfileAttemptText(nextLimit)}`,
+          showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
 
@@ -338,7 +429,7 @@ export default function SetupExpertProfilePage() {
         title: "Profile submitted",
         message:
           "Your expert profile has been submitted. Please check your profile status later.",
-        detail: "",
+        detail: buildExpertProfileAttemptText(nextLimit),
         showResubmit: false,
         showClose: true,
       });
@@ -347,10 +438,22 @@ export default function SetupExpertProfilePage() {
 
       saveCorrectionDraft(formData);
 
+      const friendlyError = getFriendlyError(err);
+      const refreshedLimit = await refreshProfileLimitFromBackend();
+
+      if (
+        friendlyError.toLowerCase().includes("locked") ||
+        shouldRedirectToLockedPage(refreshedLimit)
+      ) {
+        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+        navigate("/expert/profile-locked", { replace: true });
+        return;
+      }
+
       setModal({
         type: "danger",
         title: "Submit failed",
-        message: getFriendlyError(err),
+        message: friendlyError,
         detail:
           "Your form data has been saved. You can go to resubmit page and try again.",
         showResubmit: true,
@@ -377,8 +480,31 @@ export default function SetupExpertProfilePage() {
   };
 
   const handleLogout = async () => {
-    await authService.logout();
-    navigate("/login", { replace: true });
+    try {
+      if (typeof logoutContext === "function") {
+        logoutContext();
+      }
+    } catch (error) {
+      console.error("AUTH CONTEXT LOGOUT ERROR:", error);
+    }
+
+    try {
+      if (typeof authService.logout === "function") {
+        await authService.logout();
+      }
+    } catch (error) {
+      console.error("AUTH SERVICE LOGOUT ERROR:", error);
+    }
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+
+    sessionStorage.clear();
+
+    window.location.replace("/login");
   };
 
   if (loading) {
@@ -408,12 +534,28 @@ export default function SetupExpertProfilePage() {
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
               Complete your profile so clients can understand your skills,
-              experience, budget, and public work links.
+              experience, public work links, and certificates.
             </p>
           </div>
 
+          {(isEditPage ||
+            reviewLimit.submissionCount > 0 ||
+            reviewLimit.lockedUntil) && (
+            <ExpertProfileReviewLimitNotice
+              submissionCount={reviewLimit.submissionCount}
+              remainingAttempts={remainingReviewAttempts}
+              lockedUntil={reviewLimit.lockedUntil}
+              locked={isReviewLocked || isNoAttemptsLeft}
+              max={MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS}
+            />
+          )}
+
           {error && (
-            <Alert type="danger" title="Please check your form" message={error} />
+            <Alert
+              type="danger"
+              title="Please check your form"
+              message={error}
+            />
           )}
 
           <form
@@ -449,6 +591,7 @@ export default function SetupExpertProfilePage() {
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={uploadingAvatar || saving}
                       onChange={handleAvatarUpload}
                       className="hidden"
                     />
@@ -493,7 +636,7 @@ export default function SetupExpertProfilePage() {
 
             <section className="border-t border-white/10 pt-6">
               <h2 className="mb-4 text-lg font-bold text-white">
-                Work Preferences
+                Work Availability
               </h2>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -507,54 +650,27 @@ export default function SetupExpertProfilePage() {
                   placeholder="Example: 2"
                 />
 
-                <NumberInput
-                  label="Preferred Duration Days"
-                  required
-                  value={formData.preferredProjectDurationDays}
-                  onChange={(value) =>
-                    updateField("preferredProjectDurationDays", value)
-                  }
-                  onBlur={() => markTouched("preferredProjectDurationDays")}
-                  error={getFieldError("preferredProjectDurationDays")}
-                  placeholder="Example: 14"
-                />
+                <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <div>
+                    <p className="text-sm font-bold text-gray-300">
+                      Available for work
+                    </p>
 
-                <NumberInput
-                  label="Minimum Budget"
-                  required
-                  value={formData.expectedProjectBudgetMin}
-                  onChange={(value) =>
-                    updateField("expectedProjectBudgetMin", value)
-                  }
-                  onBlur={() => markTouched("expectedProjectBudgetMin")}
-                  error={getFieldError("expectedProjectBudgetMin")}
-                  placeholder="Example: 100"
-                />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Show clients that you are ready for new projects.
+                    </p>
+                  </div>
 
-                <NumberInput
-                  label="Maximum Budget"
-                  required
-                  value={formData.expectedProjectBudgetMax}
-                  onChange={(value) =>
-                    updateField("expectedProjectBudgetMax", value)
-                  }
-                  onBlur={() => markTouched("expectedProjectBudgetMax")}
-                  error={getFieldError("expectedProjectBudgetMax")}
-                  placeholder="Example: 1000"
-                />
+                  <input
+                    type="checkbox"
+                    checked={formData.availableForWork}
+                    onChange={(event) =>
+                      updateField("availableForWork", event.target.checked)
+                    }
+                    className="h-5 w-5 accent-cyan-400"
+                  />
+                </label>
               </div>
-
-              <label className="mt-4 flex items-center gap-3 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={formData.availableForWork}
-                  onChange={(event) =>
-                    updateField("availableForWork", event.target.checked)
-                  }
-                  className="h-4 w-4"
-                />
-                Available for work
-              </label>
             </section>
 
             <section className="border-t border-white/10 pt-6">
@@ -606,12 +722,25 @@ export default function SetupExpertProfilePage() {
 
             <section className="border-t border-white/10 pt-6">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-white">Certificates</h2>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    Certificates
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Maximum 10 certificates are allowed.
+                  </p>
+                </div>
 
                 <button
                   type="button"
                   onClick={addCertificate}
-                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  disabled={
+                    saving ||
+                    uploadingAvatar ||
+                    formData.certificates.length >= 10
+                  }
+                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Add Certificate
                 </button>
@@ -636,7 +765,12 @@ export default function SetupExpertProfilePage() {
                       <button
                         type="button"
                         onClick={() => removeCertificate(index)}
-                        className="text-sm font-bold text-red-300 hover:text-red-200"
+                        disabled={
+                          saving ||
+                          uploadingAvatar ||
+                          formData.certificates.length === 1
+                        }
+                        className="text-sm font-bold text-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
                       >
                         Remove
                       </button>
@@ -707,18 +841,23 @@ export default function SetupExpertProfilePage() {
               <button
                 type="button"
                 onClick={handleClearDraft}
-                className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                disabled={saving || uploadingAvatar}
+                className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Clear Draft
               </button>
 
               <button
                 type="submit"
-                disabled={saving || uploadingAvatar}
+                disabled={shouldDisableSubmit}
                 className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving
                   ? "Submitting..."
+                  : isReviewLocked
+                  ? "Profile Locked"
+                  : isNoAttemptsLeft
+                  ? "No Attempts Left"
                   : isEditPage
                   ? "Resubmit Profile"
                   : "Submit Profile"}
@@ -764,6 +903,60 @@ function SetupShell({ children, onLogout }) {
 
       <main>{children}</main>
     </div>
+  );
+}
+
+function ExpertProfileReviewLimitNotice({
+  submissionCount,
+  remainingAttempts,
+  lockedUntil,
+  locked,
+  max,
+}) {
+  const style = locked
+    ? "border-red-500/30 bg-red-500/10 text-red-300"
+    : remainingAttempts <= 1
+    ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+    : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200";
+
+  return (
+    <section className={`mb-6 rounded-2xl border p-5 ${style}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="font-bold">
+            {locked
+              ? "Profile review limit reached"
+              : "Profile review attempts"}
+          </p>
+
+          <p className="mt-2 text-sm leading-6">
+            {locked
+              ? "You have used all expert profile review submissions or your profile review is currently locked."
+              : "Each correction-required review uses one submission attempt."}
+          </p>
+
+          {lockedUntil && (
+            <p className="mt-2 text-sm font-bold">
+              Locked until: {formatDateTime(lockedUntil)}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 px-5 py-3 text-center">
+          <p className="text-xs uppercase tracking-wider opacity-80">
+            Attempts Remaining
+          </p>
+
+          <p className="mt-1 text-2xl font-black">
+            {remainingAttempts}/{max}
+          </p>
+
+          <p className="mt-1 text-xs opacity-70">
+            Used: {submissionCount}/{max}
+          </p>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -813,7 +1006,7 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
         </div>
 
         {modal.detail && (
-          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
+          <div className="mb-5 whitespace-pre-line rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
             {modal.detail}
           </div>
         )}
@@ -881,39 +1074,10 @@ function validateForm(data) {
     errors.yearsOfExperience = "Years of experience is required.";
   }
 
-  if (isEmpty(data.expectedProjectBudgetMin)) {
-    errors.expectedProjectBudgetMin = "Minimum budget is required.";
-  }
+  const years = Number(data.yearsOfExperience || 0);
 
-  if (isEmpty(data.expectedProjectBudgetMax)) {
-    errors.expectedProjectBudgetMax = "Maximum budget is required.";
-  }
-
-  if (isEmpty(data.preferredProjectDurationDays)) {
-    errors.preferredProjectDurationDays = "Preferred duration is required.";
-  }
-
-  const minBudget = Number(data.expectedProjectBudgetMin || 0);
-  const maxBudget = Number(data.expectedProjectBudgetMax || 0);
-
-  if (minBudget < 0) {
-    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
-  }
-
-  if (maxBudget < 0) {
-    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
-  }
-
-  if (minBudget && maxBudget && minBudget > maxBudget) {
-    errors.expectedProjectBudgetMax =
-      "Maximum budget must be greater than minimum budget.";
-  }
-
-  const duration = Number(data.preferredProjectDurationDays || 0);
-
-  if (duration <= 0) {
-    errors.preferredProjectDurationDays =
-      "Preferred duration must be greater than 0.";
+  if (!isEmpty(data.yearsOfExperience) && years < 0) {
+    errors.yearsOfExperience = "Years of experience must be 0 or higher.";
   }
 
   const publicLinks = [
@@ -935,6 +1099,10 @@ function validateForm(data) {
 
   const certificateUrls = [];
   const certificates = data.certificates || [];
+
+  if (certificates.length > 10) {
+    errors.certificates = "Maximum 10 certificates are allowed.";
+  }
 
   const validCertificates = certificates.filter(
     (item) =>
@@ -1006,7 +1174,9 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -1046,7 +1216,9 @@ function TextArea({
         onBlur={onBlur}
         placeholder={placeholder}
         rows={5}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -1058,6 +1230,153 @@ function FieldError({ message }) {
   if (!message) return null;
 
   return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
+}
+
+function buildFormFromProfile(profile) {
+  const certificates = profile?.certificates || profile?.Certificates || [];
+
+  return {
+    avatarUrl: profile?.avatarUrl || profile?.AvatarUrl || "",
+    professionalTitle:
+      profile?.professionalTitle || profile?.ProfessionalTitle || "",
+    bio: profile?.bio || profile?.Bio || "",
+    skills: profile?.skills || profile?.Skills || "",
+    yearsOfExperience:
+      profile?.yearsOfExperience ?? profile?.YearsOfExperience ?? "",
+    availableForWork:
+      profile?.availableForWork ?? profile?.AvailableForWork ?? true,
+    portfolioUrl: profile?.portfolioUrl || profile?.PortfolioUrl || "",
+    linkedInUrl: profile?.linkedInUrl || profile?.LinkedInUrl || "",
+    gitHubUrl: profile?.gitHubUrl || profile?.GitHubUrl || "",
+    certificates:
+      Array.isArray(certificates) && certificates.length > 0
+        ? certificates.map((item) => ({
+            certificateName: item.certificateName || item.CertificateName || "",
+            certificateIssuer:
+              item.certificateIssuer || item.CertificateIssuer || "",
+            certificateUrl: item.certificateUrl || item.CertificateUrl || "",
+            issuedAt:
+              item.issuedAt || item.IssuedAt
+                ? String(item.issuedAt || item.IssuedAt).slice(0, 10)
+                : "",
+          }))
+        : emptyForm.certificates,
+  };
+}
+
+function removeDeprecatedExpertFields(data) {
+  const next = { ...(data || {}) };
+
+  delete next.expectedProjectBudgetMin;
+  delete next.expectedProjectBudgetMax;
+  delete next.preferredProjectDurationDays;
+  delete next.ExpectedProjectBudgetMin;
+  delete next.ExpectedProjectBudgetMax;
+  delete next.PreferredProjectDurationDays;
+
+  return next;
+}
+
+function extractExpertProfileReviewLimit(data) {
+  return {
+    submissionCount: Number(
+      data?.profileReviewSubmissionCount ||
+        data?.ProfileReviewSubmissionCount ||
+        0
+    ),
+    lockedUntil:
+      data?.profileReviewLockedUntil ||
+      data?.ProfileReviewLockedUntil ||
+      "",
+    reviewStatus: String(
+      data?.profileReviewStatus ||
+        data?.ProfileReviewStatus ||
+        data?.reviewStatus ||
+        data?.ReviewStatus ||
+        ""
+    )
+      .trim()
+      .toUpperCase(),
+    userStatus: String(data?.userStatus || data?.UserStatus || "")
+      .trim()
+      .toUpperCase(),
+  };
+}
+
+function shouldRedirectToLockedPage(limit) {
+  if (!limit) return false;
+
+  return isFutureDate(limit.lockedUntil);
+}
+
+function isExpertProfileReviewLocked(limit) {
+  if (!limit) return false;
+
+  return isFutureDate(limit.lockedUntil);
+}
+
+function hasNoExpertProfileAttemptsLeft(limit) {
+  if (!limit) return false;
+
+  return isFutureDate(limit.lockedUntil);
+}
+
+function getRemainingExpertProfileAttempts(limit) {
+  return Math.max(
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS -
+      Number(limit?.submissionCount || 0),
+    0
+  );
+}
+
+function buildExpertProfileAttemptText(limit) {
+  const used = Math.min(
+    Number(limit?.submissionCount || 0),
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS
+  );
+
+  const remaining = Math.max(
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS - used,
+    0
+  );
+
+  return `Attempts used: ${used}/${MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS}. Attempts remaining: ${remaining}/${MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS}.`;
+}
+
+function isFutureDate(value) {
+  if (!value) return false;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return false;
+
+  return date.getTime() > Date.now();
+}
+
+function isLockExpired(value) {
+  if (!value) return false;
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return false;
+
+  return date.getTime() <= Date.now();
+}
+
+function formatDateTime(value) {
+  if (!value) return "N/A";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "N/A";
+
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function getReviewStatus(result) {
@@ -1160,12 +1479,21 @@ function getFriendlyError(err) {
     return "Backend blocked this request because the current token does not have EXPERT permission.";
   }
 
-  const rawMessage =
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    "";
+  const data = err?.response?.data;
 
-  return String(rawMessage || "Something went wrong. Please try again.");
+  if (typeof data === "string") return data;
+
+  if (data?.message) return data.message;
+
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || "Something went wrong. Please try again.";
 }

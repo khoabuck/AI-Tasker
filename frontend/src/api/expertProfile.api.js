@@ -12,6 +12,14 @@ const expertProfileApi = {
   resubmitExpertProfile(data) {
     return axiosInstance.put("/expert-profiles/resubmit", data);
   },
+
+  updateBasicExpertProfile(data) {
+    return axiosInstance.put("/expert-profiles/me/basic", data);
+  },
+
+  updateVerificationExpertProfile(data) {
+    return axiosInstance.put("/expert-profiles/me/verification", data);
+  },
 };
 
 export default expertProfileApi;

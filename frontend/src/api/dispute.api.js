@@ -1,12 +1,20 @@
 import axiosInstance from "./axiosInstance";
 
 const disputeApi = {
-  getDisputesByProject(projectId) {
-    return axiosInstance.get(`/projects/${projectId}/disputes`);
-  },
-
   createDispute(data) {
     return axiosInstance.post("/disputes", data);
+  },
+
+  getMyDisputes() {
+    return axiosInstance.get("/disputes/me");
+  },
+
+  getDisputeById(disputeId) {
+    return axiosInstance.get(`/disputes/${disputeId}`);
+  },
+
+  addDisputeEvidence(disputeId, data) {
+    return axiosInstance.post(`/disputes/${disputeId}/evidences`, data);
   },
 };
 

@@ -60,35 +60,22 @@ export default function AdminNavbar() {
           Disputes
         </NavLink>
 
-        <NavLink to="/admin/jobs" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">work</span>
-          Jobs
-        </NavLink>
-
-        <NavLink to="/admin/users" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">group</span>
-          Users
-        </NavLink>
-
-        <NavLink to="/admin/transactions" className={navLinkClass}>
+        <NavLink to="/admin/withdrawals" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">
-            payments
+            account_balance
           </span>
-          Transactions
+          Withdrawals
+        </NavLink>
+
+        <NavLink to="/admin/skills" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            psychology
+          </span>
+          Skills
         </NavLink>
       </nav>
 
       <div className="mt-6 border-t border-white/10 pt-4">
-        <button
-          type="button"
-          className="mb-2 flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-gray-400 transition hover:bg-white/[0.05] hover:text-cyan-300"
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            notifications
-          </span>
-          Notifications
-        </button>
-
         <button
           type="button"
           onClick={handleLogout}

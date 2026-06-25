@@ -1,0 +1,32 @@
+export const CONTRACT_STATUS = {
+  DRAFT: "DRAFT",
+  PENDING_CONFIRMATION: "PENDING_CONFIRMATION",
+  PENDING_CLIENT_CONFIRMATION: "PENDING_CLIENT_CONFIRMATION",
+  PENDING_EXPERT_CONFIRMATION: "PENDING_EXPERT_CONFIRMATION",
+  CONFIRMED: "CONFIRMED",
+  ACTIVE: "ACTIVE",
+  CANCELLED: "CANCELLED",
+  COMPLETED: "COMPLETED",
+};
+
+export const CONTRACT_STATUS_LABEL = {
+  DRAFT: "Draft",
+  PENDING_CONFIRMATION: "Pending Confirmation",
+  PENDING_CLIENT_CONFIRMATION: "Pending Client Confirmation",
+  PENDING_EXPERT_CONFIRMATION: "Pending Expert Confirmation",
+  CONFIRMED: "Confirmed",
+  ACTIVE: "Active",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Completed",
+};
+
+export const canConfirmContract = (status) => {
+  const normalized = String(status || "").toUpperCase();
+
+  return [
+    CONTRACT_STATUS.DRAFT,
+    CONTRACT_STATUS.PENDING_CONFIRMATION,
+    CONTRACT_STATUS.PENDING_CLIENT_CONFIRMATION,
+    CONTRACT_STATUS.PENDING_EXPERT_CONFIRMATION,
+  ].includes(normalized);
+};
