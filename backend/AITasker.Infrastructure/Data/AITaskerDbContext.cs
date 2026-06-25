@@ -643,7 +643,7 @@ public class AITaskerDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_Proposals_Status",
-                    "[Status] IN ('SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN','NOT_SELECTED')");
+                    "[Status] IN ('SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
 
                 t.HasCheckConstraint(
                     "CK_Proposals_Price_Timeline",

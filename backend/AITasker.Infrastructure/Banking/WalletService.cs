@@ -24,7 +24,6 @@ namespace AITasker.Infrastructure.Banking
         private const string ProposalStatusAccepted = "ACCEPTED";
         private const string ProposalStatusRejected = "REJECTED";
         private const string ProposalStatusWithdrawn = "WITHDRAWN";
-        private const string ProposalStatusNotSelected = "NOT_SELECTED";
 
         private const string ContractStatusConfirmed = "CONFIRMED";
 
@@ -696,13 +695,12 @@ namespace AITasker.Infrastructure.Banking
                         p.JobId == job.JobPostingId &&
                         p.ProposalId != proposal.ProposalId &&
                         p.Status != ProposalStatusRejected &&
-                        p.Status != ProposalStatusWithdrawn &&
-                        p.Status != ProposalStatusNotSelected)
+                        p.Status != ProposalStatusWithdrawn)
                     .ToListAsync();
 
                 foreach (var competingProposal in competingProposals)
                 {
-                    competingProposal.Status = ProposalStatusNotSelected;
+                    competingProposal.Status = ProposalStatusRejected;
                 }
 
                 _context.Transactions.Add(new Transaction

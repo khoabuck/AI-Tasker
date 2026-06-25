@@ -57,6 +57,8 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Only ACCEPTED proposals can create contract draft.");
             }
 
+            ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
+
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
 
@@ -70,6 +72,8 @@ namespace AITasker.Infrastructure.Contracts
 
             var finalPrice = proposal.ProposedPrice;
             var finalTimelineDays = proposal.ProposedTimelineDays;
+
+
 
             var contract = BuildContract(
                 proposal,
@@ -365,6 +369,15 @@ namespace AITasker.Infrastructure.Contracts
             }
 
             return await MapToContractResponseAsync(contract);
+        }
+
+        private static void ValidateProposalPriceWithinJobBudget(decimal proposedPrice, JobPosting job)
+        {
+            if (proposedPrice < job.BudgetMin || proposedPrice > job.BudgetMax)
+            {
+                throw new InvalidOperationException(
+                    $"Accepted proposal price must be between job budget range {job.BudgetMin:N0} and {job.BudgetMax:N0}.");
+            }
         }
 
         private ProjectContract BuildContract(

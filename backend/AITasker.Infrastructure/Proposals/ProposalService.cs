@@ -14,7 +14,6 @@ namespace AITasker.Infrastructure.Proposals
         private const string StatusAccepted = "ACCEPTED";
         private const string StatusRejected = "REJECTED";
         private const string StatusWithdrawn = "WITHDRAWN";
-        private const string StatusNotSelected = "NOT_SELECTED";
 
         private const string JobStatusActive = "ACTIVE";
 
@@ -73,6 +72,8 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Job posting is not open.");
             }
+
+            ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
 
             var alreadySubmitted = await _context.Proposals.AnyAsync(x =>
                 x.JobId == request.JobId &&
@@ -246,6 +247,18 @@ namespace AITasker.Infrastructure.Proposals
             job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
 
+            var competingProposals = await _context.Proposals
+                .Where(x =>
+                    x.JobId == job.JobPostingId &&
+                    x.ProposalId != proposal.ProposalId &&
+                    x.Status == StatusSubmitted)
+                .ToListAsync();
+
+            foreach (var competingProposal in competingProposals)
+            {
+                competingProposal.Status = StatusRejected;
+            }
+
             await _context.SaveChangesAsync();
 
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
@@ -358,11 +371,6 @@ namespace AITasker.Infrastructure.Proposals
             if (proposal.Status == StatusWithdrawn)
             {
                 throw new InvalidOperationException("Proposal already withdrawn.");
-            }
-
-            if (proposal.Status == StatusNotSelected)
-            {
-                throw new InvalidOperationException("Proposal was already marked as not selected.");
             }
         }
 
@@ -538,11 +546,6 @@ namespace AITasker.Infrastructure.Proposals
                 .Select(x => (int?)x.ContractId)
                 .FirstOrDefaultAsync();
 
-            const int resubmitLimit = 3;
-            const int resubmitWindowHours = 8;
-
-            var windowStart = DateTime.UtcNow.AddHours(-resubmitWindowHours);
-
             var versions = await _context.ProposalVersions
                 .AsNoTracking()
                 .Where(x => x.ProposalId == proposal.ProposalId)
@@ -566,17 +569,6 @@ namespace AITasker.Infrastructure.Proposals
                 .OrderByDescending(x => x.CreatedAt)
                 .Select(x => (DateTime?)x.CreatedAt)
                 .FirstOrDefault();
-
-            var resubmitCountInWindow = await _context.ProposalVersions
-                .AsNoTracking()
-                .CountAsync(x =>
-                    x.ProposalId == proposal.ProposalId &&
-                    x.VersionNumber > 1 &&
-                    x.CreatedAt >= windowStart);
-
-            var remainingResubmitsInWindow = Math.Max(
-                0,
-                resubmitLimit - resubmitCountInWindow);
 
             var milestoneDrafts = await _context.ProposalMilestoneDrafts
                 .AsNoTracking()
@@ -612,9 +604,9 @@ namespace AITasker.Infrastructure.Proposals
                 LatestVersionNumber = latestVersionNumber,
                 TotalVersions = totalVersions,
                 LastResubmittedAt = lastResubmittedAt,
-                ResubmitLimit = resubmitLimit,
-                ResubmitWindowHours = resubmitWindowHours,
-                RemainingResubmitsInWindow = remainingResubmitsInWindow,
+                ResubmitLimit = 0,
+                ResubmitWindowHours = 0,
+                RemainingResubmitsInWindow = int.MaxValue,
                 LatestVersion = latestVersion,
 
                 CreatedAt = proposal.CreatedAt
@@ -668,24 +660,19 @@ namespace AITasker.Infrastructure.Proposals
 
             await EnsureExpertOwnsProposalForVersionAsync(userId, proposal);
 
-            if (proposal.Status == "ACCEPTED")
+            if (proposal.Status == StatusAccepted)
             {
                 throw new InvalidOperationException("Accepted proposal cannot be resubmitted.");
             }
 
-            if (proposal.Status == "REJECTED")
+            if (proposal.Status == StatusRejected)
             {
                 throw new InvalidOperationException("Rejected proposal cannot be resubmitted.");
             }
 
-            if (proposal.Status == "WITHDRAWN")
+            if (proposal.Status == StatusWithdrawn)
             {
                 throw new InvalidOperationException("Withdrawn proposal cannot be resubmitted.");
-            }
-
-            if (proposal.Status == "NOT_SELECTED")
-            {
-                throw new InvalidOperationException("Not selected proposal cannot be resubmitted.");
             }
 
             var job = await _context.JobPostings
@@ -701,23 +688,9 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Cannot resubmit proposal because the job is no longer open.");
             }
 
+            ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
+
             await EnsureProposalBaseVersionExistsAsync(proposal);
-
-            const int resubmitLimit = 3;
-            const int resubmitWindowHours = 8;
-
-            var windowStart = DateTime.UtcNow.AddHours(-resubmitWindowHours);
-
-            var resubmitCountInWindow = await _context.ProposalVersions.CountAsync(x =>
-                x.ProposalId == proposal.ProposalId &&
-                x.VersionNumber > 1 &&
-                x.CreatedAt >= windowStart);
-
-            if (resubmitCountInWindow >= resubmitLimit)
-            {
-                throw new InvalidOperationException(
-                    $"You can only resubmit {resubmitLimit} times within {resubmitWindowHours} hours. Please wait before resubmitting again.");
-            }
 
             var latestVersionNumber = await _context.ProposalVersions
                 .Where(x => x.ProposalId == proposal.ProposalId)
@@ -732,7 +705,7 @@ namespace AITasker.Infrastructure.Proposals
                 ? null
                 : request.PreliminaryMilestonePlan.Trim();
 
-            proposal.Status = "SUBMITTED";
+            proposal.Status = StatusSubmitted;
 
             var newVersion = new ProposalVersion
             {
@@ -1045,9 +1018,9 @@ namespace AITasker.Infrastructure.Proposals
                 {
                     Proposal = proposal,
                     Title = milestone.Title.Trim(),
-                    Description = milestone.Title.Trim(),
-                    ExpectedDeliverable = proposal.ExpectedOutputs,
-                    AcceptanceCriteria = "Client confirms this milestone is completed according to the accepted proposal and contract deliverables.",
+                    Description = string.Empty,
+                    ExpectedDeliverable = string.Empty,
+                    AcceptanceCriteria = string.Empty,
                     Amount = milestone.Amount,
                     OrderIndex = orderIndex,
                     DeadlineOffsetDays = deadlineOffsetDays,
@@ -1174,6 +1147,15 @@ namespace AITasker.Infrastructure.Proposals
             _context.ContractMilestoneDrafts.AddRange(contractMilestones);
 
             await _context.SaveChangesAsync();
+        }
+
+        private static void ValidateProposalPriceWithinJobBudget(decimal proposedPrice, JobPosting job)
+        {
+            if (proposedPrice < job.BudgetMin || proposedPrice > job.BudgetMax)
+            {
+                throw new InvalidOperationException(
+                    $"Proposed price must be between job budget range {job.BudgetMin:N0} and {job.BudgetMax:N0}.");
+            }
         }
     }
 }
