@@ -18,14 +18,17 @@ public class RecommendationService : IRecommendationService
 
     private readonly AITaskerDbContext _dbContext;
     private readonly IJobAssistantProvider _jobAssistantProvider;
+    private readonly IJobPostingAiPolicyService _jobPostingAiPolicyService;
 
     public RecommendationService(
         AITaskerDbContext dbContext,
-        IJobAssistantProvider jobAssistantProvider
+        IJobAssistantProvider jobAssistantProvider,
+        IJobPostingAiPolicyService jobPostingAiPolicyService
     )
     {
         _dbContext = dbContext;
         _jobAssistantProvider = jobAssistantProvider;
+        _jobPostingAiPolicyService = jobPostingAiPolicyService;
     }
 
     public async Task<PromptExpertRecommendationResponse> GetRecommendedExpertsFromPromptAsync(
@@ -54,6 +57,12 @@ public class RecommendationService : IRecommendationService
         }
 
         var prompt = request.Prompt.Trim();
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
+        var maxSuggestedSkills = Math.Clamp(policy.MaxSuggestedSkills, 1, policy.MaxSkillsPerJob);
+        var maxRecommendationResults = Math.Clamp(policy.MaxRecommendationResults, 1, 100);
+        var minimumRecommendationMatchScore = NormalizeMinimumMatchScore(
+            policy.MinimumRecommendationMatchScore
+        );
 
         var activeSkills = await _dbContext.Skills
             .AsNoTracking()
@@ -96,6 +105,7 @@ public class RecommendationService : IRecommendationService
             .Where(x => normalizedAiSkillNames.Contains(
                 x.SkillName.Trim().ToLowerInvariant()
             ))
+            .Take(maxSuggestedSkills)
             .Select(x => new JobAssistantSkillResponse
             {
                 SkillId = x.SkillId,
@@ -181,10 +191,11 @@ public class RecommendationService : IRecommendationService
                 temporaryJob,
                 requiredSkillIds
             ))
-            .Where(x => x.MatchScore > 0)
+            .Where(x => x.MatchScore >= minimumRecommendationMatchScore)
             .OrderByDescending(x => x.MatchScore)
             .ThenByDescending(x => x.SkillMatchScore)
             .ThenByDescending(x => x.ProfileScore)
+            .Take(maxRecommendationResults)
             .ToList();
 
         return new PromptExpertRecommendationResponse
@@ -211,7 +222,11 @@ public class RecommendationService : IRecommendationService
     )
     {
         var role = NormalizeRole(currentUserRole);
-        var safeLimit = Math.Clamp(limit, 1, 50);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
+        var safeLimit = Math.Clamp(limit, 1, policy.MaxRecommendationResults);
+        var minimumRecommendationMatchScore = NormalizeMinimumMatchScore(
+            policy.MinimumRecommendationMatchScore
+        );
 
         if (role != "CLIENT" && role != "ADMIN")
         {
@@ -280,7 +295,7 @@ public class RecommendationService : IRecommendationService
 
         var recommendations = experts
             .Select(expert => BuildExpertRecommendation(expert, job, requiredSkillIds))
-            .Where(x => x.MatchScore > 0)
+            .Where(x => x.MatchScore >= minimumRecommendationMatchScore)
             .OrderByDescending(x => x.MatchScore)
             .ThenByDescending(x => x.SkillMatchScore)
             .ThenByDescending(x => x.ProfileScore)
@@ -295,7 +310,11 @@ public class RecommendationService : IRecommendationService
         int limit
     )
     {
-        var safeLimit = Math.Clamp(limit, 1, 50);
+        var policy = await _jobPostingAiPolicyService.GetOrCreateActivePolicyEntityAsync();
+        var safeLimit = Math.Clamp(limit, 1, policy.MaxRecommendationResults);
+        var minimumRecommendationMatchScore = NormalizeMinimumMatchScore(
+            policy.MinimumRecommendationMatchScore
+        );
 
         var expertProfile = await _dbContext.ExpertProfiles
             .AsNoTracking()
@@ -352,7 +371,7 @@ public class RecommendationService : IRecommendationService
 
         var recommendations = jobs
             .Select(job => BuildJobRecommendation(job, expertProfile, expertSkillIds))
-            .Where(x => x.MatchScore > 0)
+            .Where(x => x.MatchScore >= minimumRecommendationMatchScore)
             .OrderByDescending(x => x.MatchScore)
             .ThenByDescending(x => x.SkillMatchScore)
             .ThenBy(x => x.Deadline)
@@ -938,6 +957,11 @@ public class RecommendationService : IRecommendationService
         return string.IsNullOrWhiteSpace(value)
             ? fallback
             : value.Trim();
+    }
+
+    private static decimal NormalizeMinimumMatchScore(int score)
+    {
+        return Math.Clamp(score, 0, 100);
     }
 
     private static decimal Clamp(decimal value, decimal min, decimal max)
