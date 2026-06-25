@@ -28,6 +28,10 @@ public class JobResponse
 
     public bool IsAiAssisted { get; set; }
 
+    public string PostingChargeType { get; set; } = string.Empty;
+
+    public DateTime? PublishedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
