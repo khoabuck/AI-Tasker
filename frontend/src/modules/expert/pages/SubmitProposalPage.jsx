@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
-import proposalService from "../../../services/proposal.service";
+import proposalService, {
+  getFriendlyProposalError,
+} from "../../../services/proposal.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
 const createEmptyMilestone = () => ({
@@ -47,6 +49,14 @@ export default function SubmitProposalPage() {
     }, 0);
   }, [formData.milestones]);
 
+  const milestoneDuration = useMemo(() => {
+    return formData.milestones.reduce((total, milestone) => {
+      const durationDays = Number(milestone.durationDays || 0);
+
+      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
+    }, 0);
+  }, [formData.milestones]);
+
   const priceDifference = Number(formData.proposedPrice || 0) - milestoneTotal;
 
   useEffect(() => {
@@ -59,7 +69,9 @@ export default function SubmitProposalPage() {
       setLoading(true);
       setError("");
 
-      const data = await jobService.getJobById(jobId);
+      const response = await jobService.getJobById(jobId);
+      const data = unwrapData(response);
+
       setJob(data);
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
@@ -118,6 +130,17 @@ export default function SubmitProposalPage() {
     });
   };
 
+  const syncFromMilestones = () => {
+    setMessage("");
+    setError("");
+
+    setFormData((prev) => ({
+      ...prev,
+      proposedPrice: String(milestoneTotal || ""),
+      proposedTimelineDays: String(milestoneDuration || ""),
+    }));
+  };
+
   const markTouched = (name) => {
     setTouched((prev) => ({
       ...prev,
@@ -158,25 +181,44 @@ export default function SubmitProposalPage() {
       return;
     }
 
+    if (!jobId) {
+      setError("Job information is missing. Please go back and choose a job.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     try {
       setSubmitting(true);
 
-      await proposalService.submitProposal(jobId, formData);
+      const proposal = await proposalService.submitProposal(jobId, formData);
+      const proposalId = proposal?.proposalId || proposal?.id;
 
       setMessage("Proposal submitted successfully.");
 
       setTimeout(() => {
+        if (proposalId) {
+          navigate(`/expert/proposals/${proposalId}`, { replace: true });
+          return;
+        }
+
         navigate("/expert/proposals", { replace: true });
-      }, 900);
+      }, 700);
     } catch (err) {
       console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot submit proposal."));
+
+      setError(
+        getFriendlyProposalError
+          ? getFriendlyProposalError(err, "Cannot submit proposal.")
+          : getFriendlyError(err, "Cannot submit proposal.")
+      );
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const isJobOpen = String(job?.status || "").toUpperCase() === "OPEN";
+  const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
 
   if (loading) {
     return (
@@ -213,8 +255,7 @@ export default function SubmitProposalPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in price, timeline, outputs, working approach, and milestone
-              plan based on the backend proposal API.
+              Fill in your price, timeline, delivery plan, and milestones.
             </p>
           </div>
 
@@ -247,7 +288,7 @@ export default function SubmitProposalPage() {
                   <Alert
                     type="warning"
                     title="Job is not open"
-                    message="This job is not OPEN, so backend may reject proposal submission."
+                    message="This job is not open for proposals right now."
                   />
                 )}
 
@@ -290,6 +331,14 @@ export default function SubmitProposalPage() {
                       placeholder="14"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={syncFromMilestones}
+                    className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  >
+                    Sync price and timeline from milestones
+                  </button>
                 </Card>
 
                 <Card title="Delivery Plan" icon="task_alt">
@@ -338,12 +387,12 @@ export default function SubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Backend milestone schema
+                      Milestone requirement
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only requires title, amount and duration
-                      days.
+                      Each milestone only needs title, payment amount, and
+                      duration days.
                     </p>
                   </div>
 
@@ -424,38 +473,43 @@ export default function SubmitProposalPage() {
                   </p>
 
                   <h2 className="text-xl font-bold text-white">
-                    {job.title || "Untitled Job"}
+                    {getJobTitle(job)}
                   </h2>
 
                   <p className="mt-3 text-sm leading-6 text-gray-400">
-                    {job.description || "No description."}
+                    {getJobDescription(job)}
                   </p>
 
                   <div className="mt-5 space-y-3">
-                    <Info label="Client" value={job.clientName || "Client"} />
+                    <Info label="Client" value={getClientName(job)} />
 
                     <Info
                       label="Budget"
-                      value={formatBudget(job.budgetMin, job.budgetMax)}
+                      value={formatBudget(
+                        getValue(job?.budgetMin, job?.BudgetMin),
+                        getValue(job?.budgetMax, job?.BudgetMax)
+                      )}
                     />
 
                     <Info
                       label="Duration"
                       value={
-                        job.durationDays ? `${job.durationDays} days` : "N/A"
+                        getJobDuration(job)
+                          ? `${getJobDuration(job)} days`
+                          : "N/A"
                       }
                     />
 
-                    <Info label="Status" value={job.status || "OPEN"} />
+                    <Info label="Status" value={getJobStatus(job) || "OPEN"} />
                   </div>
                 </section>
 
                 <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
-                  <p className="font-bold">Backend rule</p>
+                  <p className="font-bold">Before submitting</p>
 
                   <p className="mt-2 text-sm leading-6">
-                    Expert profile must be approved and available for work.
-                    Proposal submission must include at least one milestone.
+                    Make sure your milestone total matches your proposed price
+                    and your timeline is realistic.
                   </p>
                 </section>
               </aside>
@@ -712,6 +766,56 @@ function formatMoney(value) {
     currency: "USD",
     maximumFractionDigits: 2,
   }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function unwrapData(response) {
+  if (!response) return response;
+  if (response.data?.data) return response.data.data;
+  if (response.data) return response.data;
+  return response;
+}
+
+function getValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
+}
+
+function getJobTitle(job) {
+  return getValue(job?.title, job?.Title, job?.projectTitle, "Untitled Job");
+}
+
+function getJobDescription(job) {
+  return getValue(
+    job?.description,
+    job?.Description,
+    job?.projectDescription,
+    "No description."
+  );
+}
+
+function getClientName(job) {
+  return getValue(
+    job?.clientName,
+    job?.ClientName,
+    job?.client?.fullName,
+    job?.Client?.FullName,
+    "Client"
+  );
+}
+
+function getJobStatus(job) {
+  return getValue(job?.status, job?.Status, "OPEN");
+}
+
+function getJobDuration(job) {
+  return getValue(
+    job?.durationDays,
+    job?.DurationDays,
+    job?.projectDurationDays,
+    job?.ProjectDurationDays,
+    ""
+  );
 }
 
 function getFriendlyError(err, fallback) {

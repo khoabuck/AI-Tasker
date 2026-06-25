@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import proposalService from "../../../services/proposal.service";
+import proposalService, {
+  getFriendlyProposalError,
+} from "../../../services/proposal.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
 const createEmptyMilestone = () => ({
@@ -17,8 +19,8 @@ const createEmptyForm = () => ({
   expectedOutputs: "",
   workingApproach: "",
   preliminaryMilestonePlan: "",
-  milestones: [createEmptyMilestone()],
   resubmitNote: "",
+  milestones: [createEmptyMilestone()],
 });
 
 export default function ResubmitProposalPage() {
@@ -38,15 +40,24 @@ export default function ResubmitProposalPage() {
   const [error, setError] = useState("");
 
   const formErrors = useMemo(
-    () => validateProposalForm(formData, { isResubmit: true }),
+    () =>
+      validateProposalForm(formData, {
+        isResubmit: true,
+      }),
     [formData]
   );
 
   const milestoneTotal = useMemo(() => {
     return formData.milestones.reduce((total, milestone) => {
       const amount = Number(milestone.amount || 0);
-
       return total + (Number.isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [formData.milestones]);
+
+  const milestoneDuration = useMemo(() => {
+    return formData.milestones.reduce((total, milestone) => {
+      const durationDays = Number(milestone.durationDays || 0);
+      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
     }, 0);
   }, [formData.milestones]);
 
@@ -61,20 +72,15 @@ export default function ResubmitProposalPage() {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
 
-      const data = await proposalService.getProposalById(proposalId);
+      const result = await proposalService.getProposalById(proposalId);
+      const data = unwrapMaybe(result);
 
       setProposal(data);
       setFormData(buildFormFromProposal(data));
-      setTouched({});
-      setSubmitted(false);
     } catch (err) {
-      console.error(
-        "LOAD PROPOSAL FOR RESUBMIT ERROR:",
-        err?.response?.data || err
-      );
-      setError(getFriendlyError(err, "Cannot load proposal for resubmit."));
+      console.error("LOAD PROPOSAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyProposalError(err, "Cannot load proposal."));
       setProposal(null);
     } finally {
       setLoading(false);
@@ -129,6 +135,17 @@ export default function ResubmitProposalPage() {
     });
   };
 
+  const syncFromMilestones = () => {
+    setMessage("");
+    setError("");
+
+    setFormData((prev) => ({
+      ...prev,
+      proposedPrice: String(milestoneTotal || ""),
+      proposedTimelineDays: String(milestoneDuration || ""),
+    }));
+  };
+
   const markTouched = (name) => {
     setTouched((prev) => ({
       ...prev,
@@ -142,7 +159,6 @@ export default function ResubmitProposalPage() {
 
   const getFieldError = (name) => {
     if (!submitted && !touched[name]) return "";
-
     return formErrors[name] || "";
   };
 
@@ -161,7 +177,15 @@ export default function ResubmitProposalPage() {
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData, {
+    const normalizedFormData = {
+      ...formData,
+      proposedPrice: String(formData.proposedPrice || milestoneTotal || ""),
+      proposedTimelineDays: String(
+        formData.proposedTimelineDays || milestoneDuration || ""
+      ),
+    };
+
+    const errors = validateProposalForm(normalizedFormData, {
       isResubmit: true,
     });
 
@@ -174,21 +198,23 @@ export default function ResubmitProposalPage() {
     try {
       setSubmitting(true);
 
-      const result = await proposalService.resubmitProposal(
+      const updatedProposal = await proposalService.resubmitProposal(
         proposalId,
-        formData
+        normalizedFormData
       );
+
+      const nextProposalId =
+        updatedProposal?.proposalId || updatedProposal?.id || proposalId;
 
       setMessage("Proposal resubmitted successfully.");
 
-      const nextProposalId = result?.proposalId || result?.id || proposalId;
-
       setTimeout(() => {
         navigate(`/expert/proposals/${nextProposalId}`, { replace: true });
-      }, 900);
+      }, 700);
     } catch (err) {
       console.error("RESUBMIT PROPOSAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot resubmit proposal."));
+      setError(getFriendlyProposalError(err, "Cannot resubmit proposal."));
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
@@ -199,30 +225,6 @@ export default function ResubmitProposalPage() {
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
           Loading proposal...
-        </div>
-      </ExpertLayout>
-    );
-  }
-
-  if (!proposal) {
-    return (
-      <ExpertLayout>
-        <div className="px-5 py-10 md:px-8">
-          <div className="mx-auto max-w-5xl">
-            <Alert
-              type="danger"
-              title="Cannot load proposal"
-              message={error || "Proposal not found."}
-            />
-
-            <button
-              type="button"
-              onClick={() => navigate("/expert/proposals")}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-            >
-              Back to Proposals
-            </button>
-          </div>
         </div>
       </ExpertLayout>
     );
@@ -249,295 +251,277 @@ export default function ResubmitProposalPage() {
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Update and resubmit proposal
+              Update and resubmit your proposal
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Edit your proposal content, pricing, timeline, milestone summary,
-              and simple milestone list.
+              Improve your proposal details and submit a new version for client
+              review.
             </p>
           </div>
 
           {error && (
-            <Alert type="danger" title="Resubmit error" message={error} />
+            <Alert type="danger" title="Proposal error" message={error} />
           )}
 
           {message && (
             <Alert type="success" title="Success" message={message} />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <Card title="Resubmit Note" icon="edit_note">
-                <TextArea
-                  label="Resubmit Note"
-                  required
-                  value={formData.resubmitNote}
-                  onChange={(value) => updateField("resubmitNote", value)}
-                  onBlur={() => markTouched("resubmitNote")}
-                  error={getFieldError("resubmitNote")}
-                  placeholder="Explain what you changed in this resubmission..."
-                  rows={4}
-                />
-              </Card>
+          {!proposal && (
+            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
+              <p className="text-gray-400">Proposal not found.</p>
 
-              <Card title="Proposal Content" icon="description">
-                <TextArea
-                  label="Cover Letter"
-                  required
-                  value={formData.coverLetter}
-                  onChange={(value) => updateField("coverLetter", value)}
-                  onBlur={() => markTouched("coverLetter")}
-                  error={getFieldError("coverLetter")}
-                  placeholder="Introduce yourself and explain why you are suitable for this job..."
-                  rows={6}
-                />
-              </Card>
+              <button
+                type="button"
+                onClick={() => navigate("/expert/proposals")}
+                className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                Back to Proposals
+              </button>
+            </div>
+          )}
 
-              <Card title="Price & Timeline" icon="payments">
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <NumberInput
-                    label="Proposed Price"
-                    required
-                    min="0"
-                    value={formData.proposedPrice}
-                    onChange={(value) => updateField("proposedPrice", value)}
-                    onBlur={() => markTouched("proposedPrice")}
-                    error={getFieldError("proposedPrice")}
-                    placeholder="500"
-                  />
-
-                  <NumberInput
-                    label="Proposed Timeline Days"
-                    required
-                    min="1"
-                    value={formData.proposedTimelineDays}
-                    onChange={(value) =>
-                      updateField("proposedTimelineDays", value)
-                    }
-                    onBlur={() => markTouched("proposedTimelineDays")}
-                    error={getFieldError("proposedTimelineDays")}
-                    placeholder="14"
-                  />
-                </div>
-              </Card>
-
-              <Card title="Delivery Plan" icon="task_alt">
-                <div className="space-y-5">
+          {proposal && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <Card title="Resubmit Note" icon="edit_note">
                   <TextArea
-                    label="Expected Outputs"
+                    label="What did you change?"
                     required
-                    value={formData.expectedOutputs}
-                    onChange={(value) => updateField("expectedOutputs", value)}
-                    onBlur={() => markTouched("expectedOutputs")}
-                    error={getFieldError("expectedOutputs")}
-                    placeholder="List the final outputs you will deliver to the client..."
-                    rows={5}
-                  />
-
-                  <TextArea
-                    label="Working Approach"
-                    required
-                    value={formData.workingApproach}
-                    onChange={(value) => updateField("workingApproach", value)}
-                    onBlur={() => markTouched("workingApproach")}
-                    error={getFieldError("workingApproach")}
-                    placeholder="Explain your working method, communication plan, and implementation steps..."
-                    rows={5}
-                  />
-
-                  <TextArea
-                    label="Preliminary Milestone Plan"
-                    required
-                    value={formData.preliminaryMilestonePlan}
-                    onChange={(value) =>
-                      updateField("preliminaryMilestonePlan", value)
-                    }
-                    onBlur={() => markTouched("preliminaryMilestonePlan")}
-                    error={getFieldError("preliminaryMilestonePlan")}
-                    placeholder="Example: Milestone 1: analysis, Milestone 2: implementation, Milestone 3: testing..."
+                    value={formData.resubmitNote}
+                    onChange={(value) => updateField("resubmitNote", value)}
+                    onBlur={() => markTouched("resubmitNote")}
+                    error={getFieldError("resubmitNote")}
+                    placeholder="Briefly explain what you improved in this version..."
                     rows={4}
                   />
-                </div>
-              </Card>
+                </Card>
 
-              <Card title="Milestones" icon="flag">
-                <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                  <p className="text-sm font-bold text-cyan-300">
-                    Backend milestone schema
-                  </p>
+                <Card title="Proposal Content" icon="description">
+                  <TextArea
+                    label="Cover Letter"
+                    required
+                    value={formData.coverLetter}
+                    onChange={(value) => updateField("coverLetter", value)}
+                    onBlur={() => markTouched("coverLetter")}
+                    error={getFieldError("coverLetter")}
+                    placeholder="Introduce yourself and explain why you are suitable for this job..."
+                    rows={6}
+                  />
+                </Card>
 
-                  <p className="mt-2 text-xs leading-5 text-gray-400">
-                    Each milestone only requires title, amount and duration
-                    days.
-                  </p>
-                </div>
-
-                <div className="space-y-5">
-                  {formData.milestones.map((milestone, index) => (
-                    <MilestoneEditor
-                      key={index}
-                      index={index}
-                      milestone={milestone}
-                      canRemove={formData.milestones.length > 1}
-                      onChange={updateMilestone}
-                      onBlur={markMilestoneTouched}
-                      onRemove={removeMilestone}
-                      getError={getMilestoneFieldError}
+                <Card title="Price & Timeline" icon="payments">
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    <NumberInput
+                      label="Proposed Price"
+                      required
+                      min="0"
+                      value={formData.proposedPrice}
+                      onChange={(value) => updateField("proposedPrice", value)}
+                      onBlur={() => markTouched("proposedPrice")}
+                      error={getFieldError("proposedPrice")}
+                      placeholder="500"
                     />
-                  ))}
+
+                    <NumberInput
+                      label="Proposed Timeline Days"
+                      required
+                      min="1"
+                      value={formData.proposedTimelineDays}
+                      onChange={(value) =>
+                        updateField("proposedTimelineDays", value)
+                      }
+                      onBlur={() => markTouched("proposedTimelineDays")}
+                      error={getFieldError("proposedTimelineDays")}
+                      placeholder="14"
+                    />
+                  </div>
 
                   <button
                     type="button"
-                    onClick={addMilestone}
-                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    onClick={syncFromMilestones}
+                    className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    <span className="material-symbols-outlined text-[18px]">
-                      add
-                    </span>
-                    Add Milestone
+                    Sync price and timeline from milestones
+                  </button>
+                </Card>
+
+                <Card title="Delivery Plan" icon="task_alt">
+                  <div className="space-y-5">
+                    <TextArea
+                      label="Expected Outputs"
+                      required
+                      value={formData.expectedOutputs}
+                      onChange={(value) =>
+                        updateField("expectedOutputs", value)
+                      }
+                      onBlur={() => markTouched("expectedOutputs")}
+                      error={getFieldError("expectedOutputs")}
+                      placeholder="List the final outputs you will deliver to the client..."
+                      rows={5}
+                    />
+
+                    <TextArea
+                      label="Working Approach"
+                      required
+                      value={formData.workingApproach}
+                      onChange={(value) =>
+                        updateField("workingApproach", value)
+                      }
+                      onBlur={() => markTouched("workingApproach")}
+                      error={getFieldError("workingApproach")}
+                      placeholder="Explain your working method, communication plan, and implementation steps..."
+                      rows={5}
+                    />
+
+                    <TextArea
+                      label="Preliminary Milestone Plan"
+                      required
+                      value={formData.preliminaryMilestonePlan}
+                      onChange={(value) =>
+                        updateField("preliminaryMilestonePlan", value)
+                      }
+                      onBlur={() => markTouched("preliminaryMilestonePlan")}
+                      error={getFieldError("preliminaryMilestonePlan")}
+                      placeholder="Example: Milestone 1: analysis, Milestone 2: implementation, Milestone 3: testing..."
+                      rows={4}
+                    />
+                  </div>
+                </Card>
+
+                <Card title="Milestones" icon="flag">
+                  <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <p className="text-sm font-bold text-cyan-300">
+                      Milestone requirement
+                    </p>
+
+                    <p className="mt-2 text-xs leading-5 text-gray-400">
+                      Each milestone only sends title, amount, and duration days
+                      to backend.
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    {formData.milestones.map((milestone, index) => (
+                      <MilestoneEditor
+                        key={index}
+                        index={index}
+                        milestone={milestone}
+                        canRemove={formData.milestones.length > 1}
+                        onChange={updateMilestone}
+                        onBlur={markMilestoneTouched}
+                        onRemove={removeMilestone}
+                        getError={getMilestoneFieldError}
+                      />
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={addMilestone}
+                      className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        add
+                      </span>
+                      Add Milestone
+                    </button>
+                  </div>
+
+                  <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Info
+                      label="Proposed Price"
+                      value={formatMoney(formData.proposedPrice)}
+                    />
+
+                    <Info
+                      label="Milestone Total"
+                      value={formatMoney(milestoneTotal)}
+                    />
+
+                    <Info
+                      label="Difference"
+                      value={formatMoney(priceDifference)}
+                      tone={
+                        Math.abs(priceDifference) < 0.01
+                          ? "green"
+                          : priceDifference > 0
+                          ? "warning"
+                          : "danger"
+                      }
+                    />
+                  </div>
+                </Card>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/expert/proposals/${proposalId}`)}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {submitting ? "Resubmitting..." : "Resubmit Proposal"}
                   </button>
                 </div>
+              </form>
 
-                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <Info
-                    label="Proposed Price"
-                    value={formatMoney(formData.proposedPrice)}
-                  />
+              <aside className="space-y-6">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
+                    Current Proposal
+                  </p>
 
-                  <Info
-                    label="Milestone Total"
-                    value={formatMoney(milestoneTotal)}
-                  />
+                  <h2 className="text-xl font-bold text-white">
+                    {formatDisplayValue(proposal.jobTitle || "Untitled Job")}
+                  </h2>
 
-                  <Info
-                    label="Difference"
-                    value={formatMoney(priceDifference)}
-                    tone={
-                      Math.abs(priceDifference) < 0.01
-                        ? "green"
-                        : priceDifference > 0
-                        ? "warning"
-                        : "danger"
-                    }
-                  />
-                </div>
-              </Card>
+                  <div className="mt-5 space-y-3">
+                    <Info label="Status" value={proposal.status || "N/A"} />
 
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate(`/expert/proposals/${proposalId}`)}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
-                >
-                  Cancel
-                </button>
+                    <Info
+                      label="Current Price"
+                      value={formatMoney(proposal.proposedPrice)}
+                    />
 
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="rounded-xl border border-yellow-400/60 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {submitting ? "Resubmitting..." : "Resubmit Proposal"}
-                </button>
-              </div>
-            </form>
+                    <Info
+                      label="Current Timeline"
+                      value={`${proposal.proposedTimelineDays || 0} days`}
+                    />
 
-            <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-                <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
-                  Current Proposal
-                </p>
+                    <Info
+                      label="Version"
+                      value={formatProposalVersion(proposal)}
+                    />
+                  </div>
+                </section>
 
-                <h2 className="text-xl font-bold text-white">
-                  {proposal.jobTitle || "Untitled Job"}
-                </h2>
+                {(proposal.rejectionReason || proposal.decisionNote) && (
+                  <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
+                    <p className="font-bold">Client feedback</p>
 
-                <div className="mt-5 space-y-3">
-                  <Info label="Client" value={proposal.clientName || "Client"} />
-
-                  <Info
-                    label="Current Price"
-                    value={formatMoney(proposal.proposedPrice)}
-                  />
-
-                  <Info
-                    label="Timeline"
-                    value={`${proposal.proposedTimelineDays || 0} days`}
-                  />
-
-                  <Info label="Status" value={proposal.status || "N/A"} />
-
-                  {proposal.version && (
-                    <Info label="Version" value={`${proposal.version}`} />
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
-                <p className="font-bold">Backend rule</p>
-
-                <p className="mt-2 text-sm leading-6">
-                  Resubmit uses proposalId in the URL. The request body does not
-                  include jobId, but it must include updated proposal fields,
-                  milestones, and resubmitNote.
-                </p>
-              </section>
-            </aside>
-          </div>
+                    <p className="mt-2 text-sm leading-6">
+                      {formatDisplayValue(
+                        proposal.rejectionReason ||
+                          proposal.decisionNote ||
+                          "Please improve your proposal and submit again."
+                      )}
+                    </p>
+                  </section>
+                )}
+              </aside>
+            </div>
+          )}
         </div>
       </div>
     </ExpertLayout>
   );
-}
-
-function buildFormFromProposal(proposal) {
-  const milestones = Array.isArray(proposal?.milestones)
-    ? proposal.milestones
-    : [];
-
-  return {
-    coverLetter: proposal?.coverLetter || "",
-
-    proposedPrice:
-      proposal?.proposedPrice !== undefined && proposal?.proposedPrice !== null
-        ? String(proposal.proposedPrice)
-        : "",
-
-    proposedTimelineDays:
-      proposal?.proposedTimelineDays !== undefined &&
-      proposal?.proposedTimelineDays !== null
-        ? String(proposal.proposedTimelineDays)
-        : "",
-
-    expectedOutputs: proposal?.expectedOutputs || "",
-
-    workingApproach: proposal?.workingApproach || "",
-
-    preliminaryMilestonePlan: proposal?.preliminaryMilestonePlan || "",
-
-    milestones:
-      milestones.length > 0
-        ? milestones.map((item) => ({
-            title: item.title || "",
-
-            amount:
-              item.amount !== undefined && item.amount !== null
-                ? String(item.amount)
-                : "",
-
-            durationDays:
-              item.durationDays !== undefined && item.durationDays !== null
-                ? String(item.durationDays)
-                : item.deadlineOffsetDays !== undefined &&
-                  item.deadlineOffsetDays !== null
-                ? String(item.deadlineOffsetDays)
-                : "",
-          }))
-        : [createEmptyMilestone()],
-
-    resubmitNote: "",
-  };
 }
 
 function Card({ title, icon, children }) {
@@ -745,7 +729,9 @@ function Info({ label, value, tone = "default" }) {
     <div className={`rounded-xl border p-4 ${toneClass}`}>
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
 
-      <p className="mt-1 break-words font-bold">{value || "N/A"}</p>
+      <p className="mt-1 break-words font-bold">
+        {formatDisplayValue(value)}
+      </p>
     </div>
   );
 }
@@ -754,6 +740,8 @@ function Alert({ type, title, message }) {
   const style =
     type === "success"
       ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : type === "warning"
+      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
       : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
@@ -762,6 +750,30 @@ function Alert({ type, title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+function buildFormFromProposal(proposal) {
+  const milestones = Array.isArray(proposal?.milestones)
+    ? proposal.milestones
+    : [];
+
+  return {
+    coverLetter: proposal?.coverLetter || "",
+    proposedPrice: String(proposal?.proposedPrice || ""),
+    proposedTimelineDays: String(proposal?.proposedTimelineDays || ""),
+    expectedOutputs: proposal?.expectedOutputs || "",
+    workingApproach: proposal?.workingApproach || "",
+    preliminaryMilestonePlan: proposal?.preliminaryMilestonePlan || "",
+    resubmitNote: "",
+    milestones:
+      milestones.length > 0
+        ? milestones.map((item) => ({
+            title: item?.title || "",
+            amount: String(item?.amount || ""),
+            durationDays: String(item?.durationDays || ""),
+          }))
+        : [createEmptyMilestone()],
+  };
 }
 
 function formatMoney(value) {
@@ -774,21 +786,58 @@ function formatMoney(value) {
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
-function getFriendlyError(err, fallback) {
-  const data = err?.response?.data;
+function formatProposalVersion(proposal) {
+  const version = proposal?.version || proposal?.latestVersion;
 
-  if (typeof data === "string") return data;
+  if (!version) return "N/A";
 
-  if (data?.message) return data.message;
-  if (data?.title) return data.title;
+  if (typeof version === "object") {
+    const versionNumber =
+      version.versionNumber ||
+      version.VersionNumber ||
+      version.version ||
+      version.Version ||
+      version.proposalVersionId ||
+      version.ProposalVersionId ||
+      "N/A";
 
-  if (data?.errors) {
-    const allErrors = Object.values(data.errors).flat();
-
-    if (allErrors.length > 0) {
-      return allErrors.join(" ");
-    }
+    return `Version ${versionNumber}`;
   }
 
-  return err?.message || fallback;
+  return `Version ${version}`;
+}
+
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") return "N/A";
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatDisplayValue).join(", ") : "N/A";
+  }
+
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.Name ||
+      value.title ||
+      value.Title ||
+      value.label ||
+      value.Label ||
+      value.status ||
+      value.Status ||
+      value.versionNumber ||
+      value.VersionNumber ||
+      value.message ||
+      value.Message ||
+      "N/A"
+    );
+  }
+
+  return String(value);
+}
+
+function unwrapMaybe(result) {
+  if (!result) return result;
+  if (result.data?.data) return result.data.data;
+  if (result.data) return result.data;
+  return result;
 }

@@ -82,29 +82,53 @@ export const normalizeProposalMilestone = (milestone, index = 0) => {
   );
 
   return {
+    proposalMilestoneId: getValue(
+      milestone.proposalMilestoneId,
+      milestone.ProposalMilestoneId,
+      milestone.proposalMilestoneDraftId,
+      milestone.ProposalMilestoneDraftId,
+      milestone.id,
+      milestone.Id,
+      index
+    ),
+
+    id: getValue(
+      milestone.proposalMilestoneId,
+      milestone.ProposalMilestoneId,
+      milestone.proposalMilestoneDraftId,
+      milestone.ProposalMilestoneDraftId,
+      milestone.id,
+      milestone.Id,
+      index
+    ),
+
     title: getValue(milestone.title, milestone.Title, `Milestone ${index + 1}`),
 
     amount: toNumber(getValue(milestone.amount, milestone.Amount, 0)),
 
     durationDays: toInteger(durationDays, 0),
 
-    // Giữ raw + field cũ để UI cũ nếu còn đọc thì không vỡ
     description: getValue(milestone.description, milestone.Description, ""),
+
     expectedDeliverable: getValue(
       milestone.expectedDeliverable,
       milestone.ExpectedDeliverable,
       ""
     ),
+
     acceptanceCriteria: getValue(
       milestone.acceptanceCriteria,
       milestone.AcceptanceCriteria,
       ""
     ),
+
     orderIndex: toInteger(
       getValue(milestone.orderIndex, milestone.OrderIndex, index + 1),
       index + 1
     ),
+
     deadlineOffsetDays: toInteger(durationDays, 0),
+
     revisionLimit: toInteger(
       getValue(milestone.revisionLimit, milestone.RevisionLimit, 0),
       0
@@ -122,6 +146,51 @@ const normalizeMilestones = (milestones = []) => {
     .filter(Boolean);
 };
 
+const parseMilestonePlanJson = (value) => {
+  if (!value) return [];
+
+  if (Array.isArray(value)) return normalizeMilestones(value);
+
+  if (typeof value === "object") {
+    return normalizeMilestones(extractMilestoneArray(value));
+  }
+
+  try {
+    const parsed = JSON.parse(String(value));
+
+    if (typeof parsed === "string") {
+      return parseMilestonePlanJson(parsed);
+    }
+
+    return normalizeMilestones(extractMilestoneArray(parsed));
+  } catch {
+    return [];
+  }
+};
+
+const extractMilestoneArray = (value) => {
+  if (Array.isArray(value)) return value;
+
+  if (!value || typeof value !== "object") return [];
+
+  if (Array.isArray(value.milestones)) return value.milestones;
+  if (Array.isArray(value.Milestones)) return value.Milestones;
+
+  if (Array.isArray(value.milestoneDrafts)) return value.milestoneDrafts;
+  if (Array.isArray(value.MilestoneDrafts)) return value.MilestoneDrafts;
+
+  if (Array.isArray(value.proposalMilestones)) return value.proposalMilestones;
+  if (Array.isArray(value.ProposalMilestones)) return value.ProposalMilestones;
+
+  if (Array.isArray(value.items)) return value.items;
+  if (Array.isArray(value.Items)) return value.Items;
+
+  if (Array.isArray(value.data)) return value.data;
+  if (Array.isArray(value.Data)) return value.Data;
+
+  return [];
+};
+
 export const normalizeProposal = (proposal) => {
   if (!proposal) return null;
 
@@ -132,21 +201,43 @@ export const normalizeProposal = (proposal) => {
     proposal.Id
   );
 
-  const jobId = getValue(proposal.jobId, proposal.JobId, proposal.job?.jobId);
+  const jobId = getValue(
+    proposal.jobId,
+    proposal.JobId,
+    proposal.job?.jobId,
+    proposal.Job?.JobId,
+    proposal.projectId,
+    proposal.ProjectId
+  );
 
   const status = String(getValue(proposal.status, proposal.Status, "PENDING"))
     .trim()
     .toUpperCase();
 
-  const milestones = normalizeMilestones(
-    getValue(
-      proposal.milestones,
-      proposal.Milestones,
-      proposal.proposalMilestones,
-      proposal.ProposalMilestones,
-      []
-    )
+  const milestonePlanJson = getValue(
+    proposal.milestonePlanJson,
+    proposal.MilestonePlanJson,
+    proposal.milestonesJson,
+    proposal.MilestonesJson,
+    proposal.milestoneDraftsJson,
+    proposal.MilestoneDraftsJson,
+    ""
   );
+
+  const directMilestones = getValue(
+    proposal.milestones,
+    proposal.Milestones,
+    proposal.proposalMilestones,
+    proposal.ProposalMilestones,
+    proposal.milestoneDrafts,
+    proposal.MilestoneDrafts,
+    []
+  );
+
+  const milestones =
+    Array.isArray(directMilestones) && directMilestones.length > 0
+      ? normalizeMilestones(directMilestones)
+      : parseMilestonePlanJson(milestonePlanJson);
 
   return {
     proposalId,
@@ -159,6 +250,8 @@ export const normalizeProposal = (proposal) => {
       proposal.JobTitle,
       proposal.job?.title,
       proposal.Job?.Title,
+      proposal.projectTitle,
+      proposal.ProjectTitle,
       "Untitled Job"
     ),
 
@@ -187,6 +280,8 @@ export const normalizeProposal = (proposal) => {
         proposal.ProposedPrice,
         proposal.proposedBudget,
         proposal.ProposedBudget,
+        proposal.bidAmount,
+        proposal.BidAmount,
         0
       )
     ),
@@ -223,6 +318,8 @@ export const normalizeProposal = (proposal) => {
       ""
     ),
 
+    milestonePlanJson,
+
     milestones,
 
     status,
@@ -243,11 +340,15 @@ export const normalizeProposal = (proposal) => {
       ""
     ),
 
-    resubmitNote: getValue(
-      proposal.resubmitNote,
-      proposal.ResubmitNote,
+    counterMessage: getValue(
+      proposal.counterMessage,
+      proposal.CounterMessage,
+      proposal.clientMessage,
+      proposal.ClientMessage,
       ""
     ),
+
+    resubmitNote: getValue(proposal.resubmitNote, proposal.ResubmitNote, ""),
 
     version: getValue(
       proposal.version,
@@ -262,6 +363,14 @@ export const normalizeProposal = (proposal) => {
       proposal.LatestVersion,
       null
     ),
+
+    latestVersionNumber: getValue(
+      proposal.latestVersionNumber,
+      proposal.LatestVersionNumber,
+      null
+    ),
+
+    totalVersions: getValue(proposal.totalVersions, proposal.TotalVersions, 0),
 
     contractId: getValue(
       proposal.contractId,
@@ -279,6 +388,26 @@ export const normalizeProposal = (proposal) => {
       null
     ),
 
+    lastResubmittedAt: getValue(
+      proposal.lastResubmittedAt,
+      proposal.LastResubmittedAt,
+      ""
+    ),
+
+    remainingResubmitsInWindow: getValue(
+      proposal.remainingResubmitsInWindow,
+      proposal.RemainingResubmitsInWindow,
+      null
+    ),
+
+    resubmitLimit: getValue(proposal.resubmitLimit, proposal.ResubmitLimit, null),
+
+    resubmitWindowHours: getValue(
+      proposal.resubmitWindowHours,
+      proposal.ResubmitWindowHours,
+      null
+    ),
+
     createdAt: getValue(proposal.createdAt, proposal.CreatedAt, ""),
     updatedAt: getValue(proposal.updatedAt, proposal.UpdatedAt, ""),
     submittedAt: getValue(proposal.submittedAt, proposal.SubmittedAt, ""),
@@ -289,13 +418,42 @@ export const normalizeProposal = (proposal) => {
 };
 
 export const normalizeProposalVersion = (version) => {
-  const normalized = normalizeProposal(version);
+  if (!version) return null;
 
-  if (!normalized) return null;
+  const milestonePlanJson = getValue(
+    version.milestonePlanJson,
+    version.MilestonePlanJson,
+    version.milestonesJson,
+    version.MilestonesJson,
+    version.milestoneDraftsJson,
+    version.MilestoneDraftsJson,
+    ""
+  );
+
+  const directMilestones = getValue(
+    version.milestones,
+    version.Milestones,
+    version.proposalMilestones,
+    version.ProposalMilestones,
+    version.milestoneDrafts,
+    version.MilestoneDrafts,
+    []
+  );
+
+  const milestones =
+    Array.isArray(directMilestones) && directMilestones.length > 0
+      ? normalizeMilestones(directMilestones)
+      : parseMilestonePlanJson(milestonePlanJson);
+
+  const versionNumber = getValue(
+    version.versionNumber,
+    version.VersionNumber,
+    version.version,
+    version.Version,
+    null
+  );
 
   return {
-    ...normalized,
-
     proposalVersionId: getValue(
       version.proposalVersionId,
       version.ProposalVersionId,
@@ -306,13 +464,66 @@ export const normalizeProposalVersion = (version) => {
       null
     ),
 
-    versionNumber: getValue(
-      version.versionNumber,
-      version.VersionNumber,
-      version.version,
-      version.Version,
-      normalized.version,
-      null
+    proposalId: getValue(version.proposalId, version.ProposalId, null),
+
+    versionNumber,
+
+    version: versionNumber,
+
+    coverLetter: getValue(version.coverLetter, version.CoverLetter, ""),
+
+    proposedPrice: toNumber(
+      getValue(
+        version.proposedPrice,
+        version.ProposedPrice,
+        version.proposedBudget,
+        version.ProposedBudget,
+        version.bidAmount,
+        version.BidAmount,
+        0
+      )
+    ),
+
+    proposedTimelineDays: toInteger(
+      getValue(
+        version.proposedTimelineDays,
+        version.ProposedTimelineDays,
+        version.estimatedDurationDays,
+        version.EstimatedDurationDays,
+        0
+      )
+    ),
+
+    expectedOutputs: getValue(
+      version.expectedOutputs,
+      version.ExpectedOutputs,
+      ""
+    ),
+
+    workingApproach: getValue(
+      version.workingApproach,
+      version.WorkingApproach,
+      ""
+    ),
+
+    preliminaryMilestonePlan: getValue(
+      version.preliminaryMilestonePlan,
+      version.PreliminaryMilestonePlan,
+      ""
+    ),
+
+    milestonePlanJson,
+
+    milestones,
+
+    resubmitNote: getValue(
+      version.resubmitNote,
+      version.ResubmitNote,
+      version.changeNote,
+      version.ChangeNote,
+      version.note,
+      version.Note,
+      ""
     ),
 
     changeNote: getValue(
@@ -324,15 +535,31 @@ export const normalizeProposalVersion = (version) => {
       version.Note,
       ""
     ),
+
+    createdByUserId: getValue(
+      version.createdByUserId,
+      version.CreatedByUserId,
+      null
+    ),
+
+    createdByName: getValue(
+      version.createdByName,
+      version.CreatedByName,
+      version.expertName,
+      version.ExpertName,
+      "Expert"
+    ),
+
+    createdAt: getValue(version.createdAt, version.CreatedAt, ""),
+
+    raw: version,
   };
 };
 
 const buildMilestonePayload = (milestone = {}) => {
   return {
     title: trim(milestone.title),
-
     amount: toNumber(milestone.amount, 0),
-
     durationDays: toInteger(
       getValue(milestone.durationDays, milestone.deadlineOffsetDays, 0),
       0
@@ -340,28 +567,21 @@ const buildMilestonePayload = (milestone = {}) => {
   };
 };
 
-const buildProposalPayload = (formData = {}, options = {}) => {
+export const buildProposalPayload = (formData = {}, options = {}) => {
   const milestones = Array.isArray(formData.milestones)
     ? formData.milestones
         .filter(hasAnyMilestoneValue)
-        .map(buildMilestonePayload)
+        .map((milestone) => buildMilestonePayload(milestone))
     : [];
 
   const payload = {
     jobId: toInteger(formData.jobId, 0),
-
     coverLetter: trim(formData.coverLetter),
-
     proposedPrice: toNumber(formData.proposedPrice, 0),
-
     proposedTimelineDays: toInteger(formData.proposedTimelineDays, 0),
-
     expectedOutputs: trim(formData.expectedOutputs),
-
     workingApproach: trim(formData.workingApproach),
-
     preliminaryMilestonePlan: trim(formData.preliminaryMilestonePlan),
-
     milestones,
   };
 
@@ -381,6 +601,61 @@ const buildProposalPayload = (formData = {}, options = {}) => {
   return payload;
 };
 
+export const getFriendlyProposalError = (
+  error,
+  fallback = "Something went wrong."
+) => {
+  const payload =
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error;
+
+  const message =
+    typeof payload === "string"
+      ? payload
+      : payload?.message ||
+        payload?.title ||
+        payload?.detail ||
+        payload?.error ||
+        error?.message ||
+        "";
+
+  if (message.includes("already submitted")) {
+    return "You have already submitted a proposal for this job.";
+  }
+
+  if (message.includes("not found")) {
+    return "This proposal or job could not be found.";
+  }
+
+  if (message.includes("Total milestone amount")) {
+    return "Total milestone amount must match the proposed price.";
+  }
+
+  if (message.includes("Total milestone duration")) {
+    return "Total milestone duration cannot exceed the proposed timeline.";
+  }
+
+  if (message.includes("Milestone") || message.includes("milestone")) {
+    return "Please check your milestone title, amount, and duration.";
+  }
+
+  if (message.includes("RevisionLimit")) {
+    return "Backend database still requires an old milestone field. Please ask BE to set a default RevisionLimit.";
+  }
+
+  if (message.includes("not open")) {
+    return "This job is not open for proposal submission.";
+  }
+
+  if (message.includes("withdraw") || message.includes("cancel")) {
+    return "This proposal cannot be cancelled right now.";
+  }
+
+  return message || fallback;
+};
+
 const proposalService = {
   async submitProposal(formDataOrJobId, maybeFormData) {
     const formData =
@@ -393,19 +668,13 @@ const proposalService = {
 
     const payload = buildProposalPayload(formData);
 
-    console.log("SUBMIT PROPOSAL PAYLOAD:", payload);
-
     const response = await proposalApi.submitProposal(payload);
-
-    console.log("SUBMIT PROPOSAL RESPONSE:", response?.data);
 
     return normalizeProposal(unwrapData(response));
   },
 
   async getMyProposals(params = {}) {
     const response = await proposalApi.getMyProposals(params);
-
-    console.log("MY PROPOSALS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeProposal).filter(Boolean);
   },
@@ -417,8 +686,6 @@ const proposalService = {
 
     const response = await proposalApi.getProposalById(proposalId);
 
-    console.log("PROPOSAL DETAIL RESPONSE:", response?.data);
-
     return normalizeProposal(unwrapData(response));
   },
 
@@ -428,8 +695,6 @@ const proposalService = {
     }
 
     const response = await proposalApi.getProposalVersions(proposalId);
-
-    console.log("PROPOSAL VERSIONS RESPONSE:", response?.data);
 
     return unwrapListData(response)
       .map(normalizeProposalVersion)
@@ -445,33 +710,41 @@ const proposalService = {
       isResubmit: true,
     });
 
-    console.log("RESUBMIT PROPOSAL PAYLOAD:", payload);
-
     const response = await proposalApi.resubmitProposal(proposalId, payload);
-
-    console.log("RESUBMIT PROPOSAL RESPONSE:", response?.data);
 
     return normalizeProposal(unwrapData(response));
   },
 
-  async withdrawProposal(proposalId, reasonOrData = {}) {
+  async withdrawProposal(proposalId) {
     if (isInvalidId(proposalId)) {
       throw new Error("Invalid proposal id.");
     }
 
-    const payload =
-      typeof reasonOrData === "string"
-        ? { reason: reasonOrData }
-        : reasonOrData || {};
-
-    const response = await proposalApi.withdrawProposal(proposalId, payload);
-
-    console.log("WITHDRAW PROPOSAL RESPONSE:", response?.data);
+    const response = await proposalApi.withdrawProposal(proposalId);
 
     return normalizeProposal(unwrapData(response));
   },
 
-  // Legacy aliases giữ tương thích với các page cũ nếu còn gọi
+  async decideProposal(proposalId, payload = {}) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
+    }
+
+    const response = await proposalApi.decideProposal(proposalId, payload);
+
+    return normalizeProposal(unwrapData(response));
+  },
+
+  async getJobProposals(jobId) {
+    if (isInvalidId(jobId)) {
+      throw new Error("Invalid job id.");
+    }
+
+    const response = await proposalApi.getJobProposals(jobId);
+
+    return unwrapListData(response).map(normalizeProposal).filter(Boolean);
+  },
+
   async getProposal(proposalId) {
     return this.getProposalById(proposalId);
   },
@@ -480,8 +753,8 @@ const proposalService = {
     return this.getMyProposals(params);
   },
 
-  async cancelProposal(proposalId, reasonOrData = {}) {
-    return this.withdrawProposal(proposalId, reasonOrData);
+  async cancelProposal(proposalId) {
+    return this.withdrawProposal(proposalId);
   },
 
   async submit(formData) {

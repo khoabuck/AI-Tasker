@@ -2,13 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import contractService from "../../../services/contract.service";
-import {
-  canAcceptContract,
-  canRejectContract,
-  getContractStatusLabel,
-  isContractAccepted,
-  isContractRejected,
-} from "../../../constants/contractStatus";
 
 export default function ContractDetailPage() {
   const { contractId, proposalId } = useParams();
@@ -27,7 +20,7 @@ export default function ContractDetailPage() {
   const [error, setError] = useState("");
 
   const realContractId = contract?.contractId || contractId;
-  const status = String(contract?.status || "").toUpperCase();
+  const status = normalizeStatus(contract?.status);
 
   const canRespond = useMemo(() => {
     return canAcceptContract(status) || canRejectContract(status);
@@ -76,7 +69,7 @@ export default function ContractDetailPage() {
   const loadMilestoneDrafts = async (id, contractData = contract) => {
     try {
       const data = await contractService.getContractMilestoneDrafts(id);
-      setMilestoneDrafts(data);
+      setMilestoneDrafts(Array.isArray(data) ? data : []);
     } catch (err) {
       console.warn("LOAD MILESTONE DRAFTS WARNING:", err?.response?.data || err);
       setMilestoneDrafts(contractData?.milestoneDrafts || []);
@@ -187,16 +180,17 @@ export default function ContractDetailPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-5 py-8 md:px-8">
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
             onClick={() => {
               if (contract.proposalId) {
                 navigate(`/expert/proposals/${contract.proposalId}`);
-              } else {
-                navigate("/expert/proposals");
+                return;
               }
+
+              navigate("/expert/proposals");
             }}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
@@ -206,72 +200,68 @@ export default function ContractDetailPage() {
             Back to proposal
           </button>
 
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Contract Detail
-              </p>
+          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+            <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                  Contract Detail
+                </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {contract.title || contract.jobTitle || "Contract"}
-              </h1>
+                <h1 className="text-2xl font-bold text-white md:text-3xl">
+                  {formatDisplayValue(contract.title || contract.jobTitle)}
+                </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Review contract terms, payment, timeline, and milestone drafts
-                before accepting or rejecting this contract.
-              </p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                  Review the contract terms and milestone drafts before making
+                  your decision.
+                </p>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <StatusBadge status={status} />
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={status} />
 
-                {contract.contractId && (
-                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300">
-                    Contract #{contract.contractId}
-                  </span>
+                  {contract.contractId && (
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-300">
+                      Contract #{contract.contractId}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {contract.proposalId && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/expert/proposals/${contract.proposalId}`)
+                    }
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white"
+                  >
+                    Proposal
+                  </button>
+                )}
+
+                {contract.projectId && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate(`/expert/projects/${contract.projectId}`)
+                    }
+                    className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                  >
+                    Project
+                  </button>
                 )}
               </div>
             </div>
-
-            <div className="flex flex-wrap gap-3">
-              {contract.proposalId && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(`/expert/proposals/${contract.proposalId}`)
-                  }
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
-                >
-                  View Proposal
-                </button>
-              )}
-
-              {contract.projectId && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/expert/projects/${contract.projectId}`)}
-                  className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                >
-                  View Project
-                </button>
-              )}
-
-              {!contract.projectId && isContractAccepted(status) && (
-                <button
-                  type="button"
-                  onClick={() => navigate("/expert/projects")}
-                  className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                >
-                  Go to Projects
-                </button>
-              )}
-            </div>
-          </div>
+          </section>
 
           {message && (
             <Alert type="success" title="Success" message={message} />
           )}
 
-          {error && <Alert type="danger" title="Contract error" message={error} />}
+          {error && (
+            <Alert type="danger" title="Contract error" message={error} />
+          )}
 
           {isContractRejected(status) && contract.cancelReason && (
             <Alert
@@ -281,43 +271,45 @@ export default function ContractDetailPage() {
             />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
             <main className="space-y-6">
               <Card title="Project Scope">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {contract.projectScope || "No project scope provided."}
-                </p>
+                <TextValue
+                  value={
+                    contract.projectScope ||
+                    contract.scopeOfWork ||
+                    contract.description ||
+                    "No project scope provided."
+                  }
+                />
               </Card>
 
               <Card title="Contract Terms">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {contract.terms ||
+                <TextValue
+                  value={
+                    contract.terms ||
+                    contract.contractTerms ||
                     contract.paymentTerms ||
-                    "No contract terms provided."}
-                </p>
+                    "No contract terms provided."
+                  }
+                />
               </Card>
 
               {contract.deliverables && (
                 <Card title="Deliverables">
-                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                    {contract.deliverables}
-                  </p>
+                  <TextValue value={contract.deliverables} />
                 </Card>
               )}
 
               {contract.acceptanceCriteria && (
                 <Card title="Acceptance Criteria">
-                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                    {contract.acceptanceCriteria}
-                  </p>
+                  <TextValue value={contract.acceptanceCriteria} />
                 </Card>
               )}
 
               {contract.chatSummary && (
-                <Card title="Client Message / Summary">
-                  <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                    {contract.chatSummary}
-                  </p>
+                <Card title="Client Message">
+                  <TextValue value={contract.chatSummary} />
                 </Card>
               )}
 
@@ -327,7 +319,7 @@ export default function ContractDetailPage() {
                     No milestone drafts returned from backend.
                   </p>
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {milestoneDrafts.map((milestone, index) => (
                       <MilestoneDraftCard
                         key={
@@ -345,11 +337,11 @@ export default function ContractDetailPage() {
               </Card>
 
               {canRespond && (
-                <Card title="Expert Decision">
+                <Card title="Your Decision">
                   <p className="mb-5 text-sm leading-6 text-gray-400">
-                    Accept this contract if you agree with the contract terms
-                    and milestone drafts. Reject it if the contract needs to be
-                    revised by the client.
+                    Accept this contract if the terms and milestone drafts are
+                    correct. Reject it if the client needs to revise the
+                    contract.
                   </p>
 
                   <div className="flex flex-wrap gap-3">
@@ -391,7 +383,7 @@ export default function ContractDetailPage() {
                           setError("");
                         }}
                         rows={4}
-                        placeholder="Explain why you reject this contract..."
+                        placeholder="Explain why you reject this contract."
                         className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300"
                       />
 
@@ -427,7 +419,6 @@ export default function ContractDetailPage() {
             <aside className="space-y-6">
               <Card title="Summary">
                 <Info label="Client" value={contract.clientName || "Client"} />
-
                 <Info label="Expert" value={contract.expertName || "Expert"} />
 
                 <Info
@@ -447,7 +438,12 @@ export default function ContractDetailPage() {
 
                 <Info
                   label="Timeline"
-                  value={`${contract.finalTimelineDays || contract.timelineDays || 0} days`}
+                  value={`${
+                    contract.finalTimelineDays ||
+                    contract.timelineDays ||
+                    contract.durationDays ||
+                    0
+                  } days`}
                 />
 
                 <Info label="Status" value={getContractStatusLabel(status)} />
@@ -492,11 +488,10 @@ export default function ContractDetailPage() {
               </Card>
 
               <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5 text-cyan-100">
-                <p className="font-bold">Flow note</p>
-
+                <p className="font-bold">Contract flow</p>
                 <p className="mt-2 text-sm leading-6">
-                  Expert only reviews the contract and accepts or rejects it.
-                  Contract creation and draft editing belong to the Client flow.
+                  Expert only reviews, accepts, or rejects the contract. Contract
+                  creation and draft editing belong to the client flow.
                 </p>
               </section>
             </aside>
@@ -509,8 +504,8 @@ export default function ContractDetailPage() {
 
 function Card({ title, children }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-      <h2 className="mb-4 text-xl font-extrabold text-white">{title}</h2>
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
+      <h2 className="mb-4 text-lg font-extrabold text-white">{title}</h2>
       {children}
     </section>
   );
@@ -518,30 +513,28 @@ function Card({ title, children }) {
 
 function MilestoneDraftCard({ milestone, index }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
             Milestone {milestone.orderIndex || index + 1}
           </p>
 
-          <h3 className="mt-2 text-lg font-bold text-white">
-            {milestone.title || "Untitled Milestone"}
+          <h3 className="mt-1 text-base font-bold text-white">
+            {formatDisplayValue(milestone.title || "Untitled Milestone")}
           </h3>
         </div>
 
         {milestone.status && (
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase text-gray-300">
+          <span className="w-fit rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase text-gray-300">
             {milestone.status}
           </span>
         )}
       </div>
 
-      <p className="whitespace-pre-line text-sm leading-7 text-gray-400">
-        {milestone.description || "No description."}
-      </p>
+      <TextValue value={milestone.description || "No description."} />
 
-      <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <Info
           label="Expected Deliverable"
           value={milestone.expectedDeliverable || "N/A"}
@@ -579,15 +572,25 @@ function MilestoneDraftCard({ milestone, index }) {
 
 function Info({ label, value }) {
   return (
-    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 break-words font-bold text-white">{value || "N/A"}</p>
+      <p className="mt-1 break-words text-sm font-bold text-white">
+        {formatDisplayValue(value)}
+      </p>
     </div>
   );
 }
 
+function TextValue({ value }) {
+  return (
+    <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+      {formatDisplayValue(value)}
+    </p>
+  );
+}
+
 function StatusBadge({ status }) {
-  const normalized = String(status || "").toUpperCase();
+  const normalized = normalizeStatus(status);
 
   const style = isContractAccepted(normalized)
     ? "border-green-400/30 bg-green-400/10 text-green-300"
@@ -597,7 +600,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
       {getContractStatusLabel(normalized)}
     </span>
@@ -615,35 +618,134 @@ function Alert({ type, title, message }) {
   return (
     <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
       <p className="font-bold">{title}</p>
-      <p className="mt-1">{message}</p>
+      <p className="mt-1">{formatDisplayValue(message)}</p>
     </div>
   );
+}
+
+function normalizeStatus(status) {
+  return String(status || "DRAFT").trim().toUpperCase();
+}
+
+function isContractAccepted(status) {
+  return ["ACCEPTED", "CONFIRMED", "ACTIVE", "SIGNED"].includes(
+    normalizeStatus(status)
+  );
+}
+
+function isContractRejected(status) {
+  return ["REJECTED", "CANCELLED", "CANCELED"].includes(normalizeStatus(status));
+}
+
+function canAcceptContract(status) {
+  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
+    normalizeStatus(status)
+  );
+}
+
+function canRejectContract(status) {
+  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
+    normalizeStatus(status)
+  );
+}
+
+function getContractStatusLabel(status) {
+  const value = normalizeStatus(status);
+
+  const map = {
+    DRAFT: "Draft",
+    PENDING: "Pending",
+    WAITING_EXPERT: "Waiting Expert",
+    CLIENT_CONFIRMED: "Waiting Expert",
+    ACCEPTED: "Accepted",
+    CONFIRMED: "Confirmed",
+    ACTIVE: "Active",
+    SIGNED: "Signed",
+    REJECTED: "Rejected",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+  };
+
+  return map[value] || value;
 }
 
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
   if (!value) return "N/A";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString();
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
 }
 
-function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") return "N/A";
+
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatDisplayValue).join(", ") : "N/A";
+  }
+
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.Name ||
+      value.title ||
+      value.Title ||
+      value.label ||
+      value.Label ||
+      value.status ||
+      value.Status ||
+      value.message ||
+      value.Message ||
+      "N/A"
+    );
+  }
+
+  return String(value);
+}
+
+function getFriendlyError(error, fallback = "Something went wrong.") {
+  const payload =
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error;
+
+  const message =
+    typeof payload === "string"
+      ? payload
+      : payload?.message ||
+        payload?.title ||
+        payload?.detail ||
+        payload?.error ||
+        error?.message ||
+        "";
+
+  if (message.toLowerCase().includes("not found")) {
+    return "Contract could not be found.";
+  }
+
+  if (message.toLowerCase().includes("confirm")) {
+    return "This contract cannot be accepted right now.";
+  }
+
+  if (message.toLowerCase().includes("cancel")) {
+    return "This contract cannot be rejected right now.";
+  }
+
+  return message || fallback;
 }

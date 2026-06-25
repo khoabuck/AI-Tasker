@@ -5,7 +5,7 @@ const toNumber = (value) => {
   return Number.isNaN(number) ? 0 : number;
 };
 
-const hasAnyMilestoneValue = (milestone) => {
+const hasAnyMilestoneValue = (milestone = {}) => {
   return (
     !isEmpty(milestone.title) ||
     !isEmpty(milestone.amount) ||
@@ -121,6 +121,21 @@ export const validateProposalForm = (formData, options = {}) => {
 
   if (hasMilestoneErrors(milestoneErrors)) {
     errors.milestones = milestoneErrors;
+  }
+
+  if (options.checkMilestoneTotal) {
+    const milestoneTotal = (formData.milestones || []).reduce(
+      (total, milestone) => {
+        const amount = Number(milestone.amount || 0);
+        return total + (Number.isNaN(amount) ? 0 : amount);
+      },
+      0
+    );
+
+    if (price > 0 && milestoneTotal > 0 && Math.abs(price - milestoneTotal) > 0.01) {
+      errors.proposedPrice =
+        "Proposed price should match the total milestone amount.";
+    }
   }
 
   if (options.isResubmit) {

@@ -1,12 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
-import proposalService from "../../../services/proposal.service";
-import {
-  canResubmitProposal,
-  canWithdrawProposal,
-  getProposalStatusLabel,
-} from "../../../constants/proposalStatus";
+import proposalService, {
+  getFriendlyProposalError,
+} from "../../../services/proposal.service";
 
 export default function ProposalDetailPage() {
   const { proposalId } = useParams();
@@ -18,6 +15,34 @@ export default function ProposalDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  const status = getProposalStatus(proposal);
+  const statusGroup = getProposalStatusGroup(status);
+
+  const milestones = useMemo(() => {
+    return Array.isArray(proposal?.milestones) ? proposal.milestones : [];
+  }, [proposal]);
+
+  const milestoneTotal = useMemo(() => {
+    return milestones.reduce((total, milestone) => {
+      const amount = Number(milestone?.amount || 0);
+      return total + (Number.isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [milestones]);
+
+  const milestoneDuration = useMemo(() => {
+    return milestones.reduce((total, milestone) => {
+      const durationDays = Number(
+        milestone?.durationDays ||
+          milestone?.DurationDays ||
+          milestone?.deadlineOffsetDays ||
+          milestone?.DeadlineOffsetDays ||
+          0
+      );
+
+      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
+    }, 0);
+  }, [milestones]);
 
   useEffect(() => {
     loadProposal();
@@ -34,7 +59,7 @@ export default function ProposalDetailPage() {
       setProposal(data);
     } catch (err) {
       console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load proposal detail."));
+      setError(getFriendlyProposalError(err, "Cannot load proposal detail."));
       setProposal(null);
     } finally {
       setLoading(false);
@@ -51,13 +76,13 @@ export default function ProposalDetailPage() {
       setError("");
       setMessage("");
 
-      const data = await proposalService.withdrawProposal(proposalId);
+      await proposalService.withdrawProposal(proposalId);
 
-      setProposal(data);
       setMessage("Proposal cancelled successfully.");
+      await loadProposal();
     } catch (err) {
       console.error("CANCEL PROPOSAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot cancel proposal."));
+      setError(getFriendlyProposalError(err, "Cannot cancel proposal."));
     } finally {
       setActionLoading(false);
     }
@@ -72,43 +97,6 @@ export default function ProposalDetailPage() {
       </ExpertLayout>
     );
   }
-
-  if (!proposal) {
-    return (
-      <ExpertLayout>
-        <div className="px-5 py-10 md:px-8">
-          <div className="mx-auto max-w-5xl">
-            <Alert
-              type="danger"
-              title="Proposal not found"
-              message={error || "Cannot load proposal detail."}
-            />
-
-            <button
-              type="button"
-              onClick={() => navigate("/expert/proposals")}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-            >
-              Back to Proposals
-            </button>
-          </div>
-        </div>
-      </ExpertLayout>
-    );
-  }
-
-  const status = String(proposal.status || "").toUpperCase();
-  const isAccepted = status === "ACCEPTED";
-  const currentProposalId = proposal.proposalId || proposal.id || proposalId;
-
-  const milestones = Array.isArray(proposal.milestones)
-    ? proposal.milestones
-    : [];
-
-  const milestoneTotal = milestones.reduce((total, milestone) => {
-    const amount = Number(milestone.amount || 0);
-    return total + (Number.isNaN(amount) ? 0 : amount);
-  }, 0);
 
   return (
     <ExpertLayout>
@@ -125,268 +113,346 @@ export default function ProposalDetailPage() {
             Back to proposals
           </button>
 
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Proposal Detail
-              </p>
-
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {proposal.jobTitle || "Untitled Job"}
-              </h1>
-
-              <p className="mt-2 text-sm text-gray-400">
-                Client: {proposal.clientName || "Client"}
-              </p>
-
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <StatusBadge status={status} />
-
-                {proposal.version && (
-                  <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-purple-300">
-                    Version {proposal.version}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() =>
-                  navigate(`/expert/proposals/${currentProposalId}/versions`)
-                }
-                className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
-              >
-                Versions
-              </button>
-
-              {proposal.jobId && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/expert/jobs/${proposal.jobId}`)}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
-                >
-                  View Job
-                </button>
-              )}
-
-              {canResubmitProposal(status) && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(`/expert/proposals/${currentProposalId}/resubmit`)
-                  }
-                  className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
-                >
-                  Resubmit
-                </button>
-              )}
-
-              {isAccepted && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (proposal.contractId) {
-                      navigate(`/expert/contracts/${proposal.contractId}`);
-                    } else {
-                      navigate(`/expert/proposals/${currentProposalId}/contract`);
-                    }
-                  }}
-                  className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                >
-                  View Contract
-                </button>
-              )}
-
-              {canWithdrawProposal(status) && (
-                <button
-                  type="button"
-                  disabled={actionLoading}
-                  onClick={handleCancelProposal}
-                  className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {actionLoading ? "Cancelling..." : "Cancel"}
-                </button>
-              )}
-            </div>
-          </div>
+          {error && (
+            <Alert type="danger" title="Proposal error" message={error} />
+          )}
 
           {message && (
             <Alert type="success" title="Success" message={message} />
           )}
 
-          {error && (
-            <Alert type="danger" title="Proposal error" message={error} />
+          {!proposal && (
+            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
+              <p className="text-gray-400">Proposal not found.</p>
+
+              <button
+                type="button"
+                onClick={() => navigate("/expert/proposals")}
+                className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                Back to Proposals
+              </button>
+            </div>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-            <main className="space-y-6">
-              <Card title="Cover Letter">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {proposal.coverLetter || "No cover letter."}
-                </p>
-              </Card>
+          {proposal && (
+            <>
+              <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="mb-4 flex flex-wrap items-center gap-2">
+                      <StatusBadge status={status} />
 
-              <Card title="Expected Outputs">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {proposal.expectedOutputs || "No expected outputs."}
-                </p>
-              </Card>
+                      {hasVersion(proposal) && (
+                        <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
+                          {formatProposalVersion(proposal)}
+                        </span>
+                      )}
 
-              <Card title="Working Approach">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {proposal.workingApproach || "No working approach."}
-                </p>
-              </Card>
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
+                        Submitted{" "}
+                        {formatDate(proposal?.submittedAt || proposal?.createdAt)}
+                      </span>
+                    </div>
 
-              <Card title="Preliminary Milestone Plan">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {proposal.preliminaryMilestonePlan ||
-                    "No preliminary milestone plan."}
-                </p>
-              </Card>
+                    <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                      Proposal Detail
+                    </p>
 
-              <Card title={`Milestones (${milestones.length})`}>
-                {milestones.length === 0 ? (
-                  <p className="text-sm text-gray-500">
-                    No milestones returned from backend.
-                  </p>
-                ) : (
-                  <div className="space-y-4">
-                    {milestones.map((milestone, index) => (
-                      <MilestoneCard
-                        key={milestone.milestoneId || index}
-                        milestone={milestone}
-                        index={index}
-                      />
-                    ))}
+                    <h1 className="text-3xl font-bold text-white md:text-4xl">
+                      {formatDisplayValue(
+                        proposal?.jobTitle ||
+                          proposal?.JobTitle ||
+                          proposal?.projectTitle ||
+                          proposal?.ProjectTitle ||
+                          "Untitled Job"
+                      )}
+                    </h1>
+
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                      Client:{" "}
+                      <span className="font-bold text-gray-300">
+                        {formatDisplayValue(
+                          proposal?.clientName ||
+                            proposal?.ClientName ||
+                            proposal?.client?.fullName ||
+                            proposal?.Client?.FullName ||
+                            "Client"
+                        )}
+                      </span>
+                    </p>
                   </div>
-                )}
-              </Card>
 
-              {(proposal.counterMessage || proposal.resubmitNote) && (
-                <Card title="Revision / Resubmit Information">
-                  {proposal.counterMessage && (
-                    <div className="mb-4 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-yellow-100">
-                      <p className="text-xs font-bold uppercase tracking-wider">
-                        Client Message
-                      </p>
+                  <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(`/expert/proposals/${proposalId}/versions`)
+                      }
+                      className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                    >
+                      View Versions
+                    </button>
 
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7">
-                        {proposal.counterMessage}
+                    {canResubmitProposal(statusGroup) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/expert/proposals/${proposalId}/resubmit`)
+                        }
+                        className="rounded-xl border border-yellow-400/50 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
+                      >
+                        Resubmit
+                      </button>
+                    )}
+
+                    {canCancelProposal(statusGroup) && (
+                      <button
+                        type="button"
+                        disabled={actionLoading}
+                        onClick={handleCancelProposal}
+                        className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {actionLoading ? "Cancelling..." : "Cancel"}
+                      </button>
+                    )}
+
+                    {getJobId(proposal) && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/expert/jobs/${getJobId(proposal)}`)
+                        }
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+                      >
+                        View Job
+                      </button>
+                    )}
+
+                    {proposal?.contractId && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/expert/contracts/${proposal.contractId}`)
+                        }
+                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                      >
+                        View Contract
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </section>
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+                <main className="space-y-6">
+                  <Card title="Cover Letter" icon="description">
+                    <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                      {formatDisplayValue(proposal?.coverLetter)}
+                    </p>
+                  </Card>
+
+                  <Card title="Delivery Plan" icon="task_alt">
+                    <DetailBlock
+                      label="Expected Outputs"
+                      value={proposal?.expectedOutputs}
+                    />
+
+                    <DetailBlock
+                      label="Working Approach"
+                      value={proposal?.workingApproach}
+                    />
+
+                    <DetailBlock
+                      label="Preliminary Milestone Plan"
+                      value={proposal?.preliminaryMilestonePlan}
+                    />
+                  </Card>
+
+                  <Card title="Milestones" icon="flag">
+                    {milestones.length === 0 ? (
+                      <EmptyState message="No milestones found." />
+                    ) : (
+                      <div className="space-y-4">
+                        {milestones.map((milestone, index) => (
+                          <MilestoneCard
+                            key={
+                              milestone?.proposalMilestoneId ||
+                              milestone?.id ||
+                              index
+                            }
+                            milestone={milestone}
+                            index={index}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </Card>
+
+                  {(proposal?.counterMessage ||
+                    proposal?.decisionNote ||
+                    proposal?.rejectionReason) && (
+                    <Card title="Client Message" icon="chat">
+                      <p className="whitespace-pre-line text-sm leading-7 text-yellow-100">
+                        {formatDisplayValue(
+                          proposal?.counterMessage ||
+                            proposal?.decisionNote ||
+                            proposal?.rejectionReason
+                        )}
                       </p>
-                    </div>
+                    </Card>
                   )}
+                </main>
 
-                  {proposal.resubmitNote && (
-                    <div className="rounded-xl border border-purple-400/30 bg-purple-400/10 p-4 text-purple-100">
-                      <p className="text-xs font-bold uppercase tracking-wider">
-                        Resubmit Note
-                      </p>
+                <aside className="space-y-6">
+                  <Card title="Summary" icon="monitoring">
+                    <div className="space-y-4">
+                      <Info
+                        label="Status"
+                        value={getProposalStatusLabel(statusGroup)}
+                      />
 
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7">
-                        {proposal.resubmitNote}
-                      </p>
+                      <Info
+                        label="Proposed Price"
+                        value={formatMoney(
+                          proposal?.proposedPrice ||
+                            proposal?.ProposedPrice ||
+                            proposal?.bidAmount ||
+                            proposal?.BidAmount
+                        )}
+                      />
+
+                      <Info
+                        label="Timeline"
+                        value={`${formatNumber(
+                          proposal?.proposedTimelineDays ||
+                            proposal?.ProposedTimelineDays ||
+                            proposal?.estimatedDurationDays ||
+                            proposal?.EstimatedDurationDays ||
+                            0
+                        )} days`}
+                      />
+
+                      <Info
+                        label="Milestone Total"
+                        value={formatMoney(milestoneTotal)}
+                      />
+
+                      <Info
+                        label="Milestone Days"
+                        value={`${milestoneDuration} days`}
+                      />
+
+                      <Info
+                        label="Version"
+                        value={formatProposalVersion(proposal)}
+                      />
+
+                      {proposal?.contractId && (
+                        <Info
+                          label="Contract ID"
+                          value={`#${proposal.contractId}`}
+                        />
+                      )}
                     </div>
-                  )}
-                </Card>
-              )}
-            </main>
+                  </Card>
 
-            <aside className="space-y-6">
-              <Card title="Proposal Summary">
-                <Info
-                  label="Proposed Price"
-                  value={formatMoney(proposal.proposedPrice)}
-                />
+                  <Card title="Dates" icon="event">
+                    <div className="space-y-4">
+                      <Info
+                        label="Submitted At"
+                        value={formatDate(
+                          proposal?.submittedAt || proposal?.createdAt
+                        )}
+                      />
 
-                <Info
-                  label="Timeline"
-                  value={`${proposal.proposedTimelineDays || 0} days`}
-                />
+                      <Info
+                        label="Updated At"
+                        value={formatDate(proposal?.updatedAt)}
+                      />
 
-                <Info label="Milestones" value={`${milestones.length}`} />
-
-                <Info
-                  label="Milestone Total"
-                  value={formatMoney(milestoneTotal)}
-                />
-
-                <Info label="Status" value={getProposalStatusLabel(status)} />
-
-                <Info
-                  label="Submitted At"
-                  value={formatDate(proposal.submittedAt || proposal.createdAt)}
-                />
-
-                {proposal.updatedAt && (
-                  <Info
-                    label="Updated At"
-                    value={formatDate(proposal.updatedAt)}
-                  />
-                )}
-              </Card>
-
-              {proposal.contractId && (
-                <Card title="Contract">
-                  <Info label="Contract ID" value={`#${proposal.contractId}`} />
-
-                  <p className="mt-4 text-sm leading-6 text-gray-400">
-                    This proposal has been accepted and linked with a contract.
-                  </p>
-                </Card>
-              )}
-            </aside>
-          </div>
+                      <Info
+                        label="Decided At"
+                        value={formatDate(proposal?.decidedAt)}
+                      />
+                    </div>
+                  </Card>
+                </aside>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </ExpertLayout>
   );
 }
 
-function Card({ title, children }) {
+function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-      <h2 className="mb-4 text-xl font-extrabold text-white">{title}</h2>
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+          <span className="material-symbols-outlined text-xl text-[#00F0FF]">
+            {icon}
+          </span>
+        </div>
+
+        <h2 className="text-lg font-bold text-white">{title}</h2>
+      </div>
+
       {children}
     </section>
   );
 }
 
-function MilestoneCard({ milestone, index }) {
-  const durationDays =
-    milestone.durationDays ??
-    milestone.DurationDays ??
-    milestone.deadlineOffsetDays ??
-    milestone.DeadlineOffsetDays;
+function DetailBlock({ label, value }) {
+  return (
+    <div className="mb-5 last:mb-0">
+      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
 
+      <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+        {formatDisplayValue(value)}
+      </p>
+    </div>
+  );
+}
+
+function MilestoneCard({ milestone, index }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-cyan-300">
-            Milestone {index + 1}
+          <p className="font-bold text-white">
+            {formatDisplayValue(milestone?.title || `Milestone ${index + 1}`)}
           </p>
 
-          <h3 className="mt-2 text-lg font-bold text-white">
-            {milestone.title || "Untitled Milestone"}
-          </h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Milestone {index + 1}
+          </p>
         </div>
 
-        {milestone.status && (
-          <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase text-gray-300">
-            {milestone.status}
-          </span>
-        )}
+        <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
+          {formatMoney(milestone?.amount)}
+        </span>
       </div>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info label="Amount" value={formatMoney(milestone.amount)} />
+        <Info
+          label="Amount"
+          value={formatMoney(milestone?.amount || milestone?.Amount)}
+        />
 
         <Info
           label="Duration"
-          value={durationDays ? `${durationDays} days` : "N/A"}
+          value={`${formatNumber(
+            milestone?.durationDays ||
+              milestone?.DurationDays ||
+              milestone?.deadlineOffsetDays ||
+              milestone?.DeadlineOffsetDays ||
+              0
+          )} days`}
         />
       </div>
     </div>
@@ -395,35 +461,33 @@ function MilestoneCard({ milestone, index }) {
 
 function Info({ label, value }) {
   return (
-    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+    <div>
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 break-words font-bold text-white">{value || "N/A"}</p>
+
+      <p className="mt-1 break-words font-bold text-white">
+        {formatDisplayValue(value)}
+      </p>
     </div>
   );
 }
 
 function StatusBadge({ status }) {
-  const normalized = String(status || "").toUpperCase();
+  const group = getProposalStatusGroup(status);
 
-  const style =
-    normalized === "ACCEPTED"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : normalized === "REJECTED" ||
-        normalized === "WITHDRAWN" ||
-        normalized === "CANCELLED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : normalized === "REVISION_REQUESTED" ||
-        normalized === "NEEDS_REVISION" ||
-        normalized === "RESUBMISSION_REQUESTED" ||
-        normalized === "COUNTER_OFFER"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+  const map = {
+    SUBMITTED: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+    ACCEPTED: "border-green-400/30 bg-green-400/10 text-green-300",
+    REJECTED: "border-red-400/30 bg-red-400/10 text-red-300",
+    CANCELLED: "border-white/10 bg-white/[0.04] text-gray-400",
+  };
 
   return (
     <span
-      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+        map[group] || "border-white/10 bg-white/[0.04] text-gray-300"
+      }`}
     >
-      {getProposalStatusLabel(normalized)}
+      {getProposalStatusLabel(group)}
     </span>
   );
 }
@@ -437,9 +501,116 @@ function Alert({ type, title, message }) {
   return (
     <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
       <p className="font-bold">{title}</p>
-      <p className="mt-1">{message}</p>
+      <p className="mt-1">{formatDisplayValue(message)}</p>
     </div>
   );
+}
+
+function EmptyState({ message }) {
+  return (
+    <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm text-gray-400">
+      {message}
+    </div>
+  );
+}
+
+function getJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.JobId ||
+    proposal?.projectId ||
+    proposal?.ProjectId ||
+    proposal?.job?.jobId ||
+    proposal?.Job?.JobId ||
+    ""
+  );
+}
+
+function getProposalStatus(proposal) {
+  return String(proposal?.status || proposal?.Status || "SUBMITTED")
+    .trim()
+    .toUpperCase();
+}
+
+function getProposalStatusGroup(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (
+    [
+      "SUBMITTED",
+      "PENDING",
+      "REVISION_REQUESTED",
+      "NEEDS_REVISION",
+      "RESUBMISSION_REQUESTED",
+    ].includes(value)
+  ) {
+    return "SUBMITTED";
+  }
+
+  if (["REJECTED", "NOT_SELECTED"].includes(value)) {
+    return "REJECTED";
+  }
+
+  if (value === "ACCEPTED") return "ACCEPTED";
+
+  if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
+    return "CANCELLED";
+  }
+
+  return "SUBMITTED";
+}
+
+function canResubmitProposal(statusGroup) {
+  return statusGroup === "SUBMITTED";
+}
+
+function canCancelProposal(statusGroup) {
+  return statusGroup === "SUBMITTED";
+}
+
+function getProposalStatusLabel(statusGroup) {
+  const map = {
+    SUBMITTED: "Submitted",
+    ACCEPTED: "Accepted",
+    REJECTED: "Rejected",
+    CANCELLED: "Cancel",
+  };
+
+  return map[statusGroup] || "Submitted";
+}
+
+function hasVersion(proposal) {
+  return Boolean(
+    proposal?.version ||
+      proposal?.Version ||
+      proposal?.latestVersion ||
+      proposal?.LatestVersion
+  );
+}
+
+function formatProposalVersion(proposal) {
+  const version =
+    proposal?.version ||
+    proposal?.Version ||
+    proposal?.latestVersion ||
+    proposal?.LatestVersion;
+
+  if (!version) return "Version N/A";
+
+  if (typeof version === "object") {
+    const versionNumber =
+      version.versionNumber ||
+      version.VersionNumber ||
+      version.version ||
+      version.Version ||
+      version.proposalVersionId ||
+      version.ProposalVersionId ||
+      "N/A";
+
+    return `Version ${versionNumber}`;
+  }
+
+  return `Version ${version}`;
 }
 
 function formatMoney(value) {
@@ -452,28 +623,51 @@ function formatMoney(value) {
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
+function formatNumber(value) {
+  const number = Number(value || 0);
+
+  if (Number.isNaN(number)) return 0;
+
+  return number;
+}
+
 function formatDate(value) {
   if (!value) return "N/A";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString();
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
+  }
 }
 
-function getFriendlyError(err, fallback) {
-  const data = err?.response?.data;
+function formatDisplayValue(value) {
+  if (value === undefined || value === null || value === "") return "N/A";
 
-  if (typeof data === "string") return data;
-  if (data?.message) return data.message;
-  if (data?.title) return data.title;
-
-  if (data?.errors) {
-    const allErrors = Object.values(data.errors).flat();
-
-    if (allErrors.length > 0) return allErrors.join(" ");
+  if (Array.isArray(value)) {
+    return value.length > 0 ? value.map(formatDisplayValue).join(", ") : "N/A";
   }
 
-  return err?.message || fallback;
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.Name ||
+      value.title ||
+      value.Title ||
+      value.label ||
+      value.Label ||
+      value.status ||
+      value.Status ||
+      value.versionNumber ||
+      value.VersionNumber ||
+      value.message ||
+      value.Message ||
+      "N/A"
+    );
+  }
+
+  return String(value);
 }
