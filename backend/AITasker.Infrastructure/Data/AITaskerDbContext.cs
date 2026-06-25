@@ -226,6 +226,11 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
 
+            entity.Property(x => x.ExpertFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(15.00m)
+                .IsRequired();
+
             entity.Property(x => x.IsActive)
                 .HasDefaultValue(true)
                 .IsRequired();

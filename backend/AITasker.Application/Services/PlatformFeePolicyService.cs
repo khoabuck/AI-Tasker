@@ -9,6 +9,7 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
 {
     private const decimal DefaultIndividualClientFeeRate = 5.00m;
     private const decimal DefaultBusinessClientFeeRate = 10.00m;
+    private const decimal DefaultExpertFeeRate = 15.00m;
     private const decimal MinimumFeeRate = 0.00m;
     private const decimal MaximumFeeRate = 100.00m;
 
@@ -45,6 +46,9 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
         policy.BusinessClientFeeRate = RoundFeeRate(
             request.BusinessClientFeeRate
         );
+        policy.ExpertFeeRate = RoundFeeRate(
+            request.ExpertFeeRate
+        );
         policy.UpdatedAt = DateTime.UtcNow;
         policy.UpdatedByAdminId = adminId;
 
@@ -78,6 +82,13 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
         };
     }
 
+    public async Task<decimal> GetExpertFeeRateAsync()
+    {
+        var policy = await GetOrCreateActivePolicyEntityAsync();
+
+        return policy.ExpertFeeRate;
+    }
+
     public async Task<PlatformFeePolicy> GetOrCreateActivePolicyEntityAsync()
     {
         var activePolicy = await _platformFeePolicyRepository.GetActiveAsync();
@@ -91,6 +102,7 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
         {
             IndividualClientFeeRate = DefaultIndividualClientFeeRate,
             BusinessClientFeeRate = DefaultBusinessClientFeeRate,
+            ExpertFeeRate = DefaultExpertFeeRate,
             IsActive = true,
             CreatedAt = DateTime.UtcNow
         };
@@ -112,6 +124,11 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
         ValidateFeeRate(
             request.BusinessClientFeeRate,
             "Business client fee rate"
+        );
+
+        ValidateFeeRate(
+            request.ExpertFeeRate,
+            "Expert fee rate"
         );
 
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -152,6 +169,7 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
             PlatformFeePolicyId = policy.PlatformFeePolicyId,
             IndividualClientFeeRate = policy.IndividualClientFeeRate,
             BusinessClientFeeRate = policy.BusinessClientFeeRate,
+            ExpertFeeRate = policy.ExpertFeeRate,
             IsActive = policy.IsActive,
             CreatedAt = policy.CreatedAt,
             UpdatedAt = policy.UpdatedAt,
@@ -168,6 +186,7 @@ public class PlatformFeePolicyService : IPlatformFeePolicyService
             $"PlatformFeePolicyId={policy.PlatformFeePolicyId}",
             $"IndividualClientFeeRate={policy.IndividualClientFeeRate}",
             $"BusinessClientFeeRate={policy.BusinessClientFeeRate}",
+            $"ExpertFeeRate={policy.ExpertFeeRate}",
             $"IsActive={policy.IsActive}",
             $"UpdatedByAdminId={policy.UpdatedByAdminId?.ToString() ?? "NULL"}",
             $"UpdatedAt={FormatDateTime(policy.UpdatedAt)}"
