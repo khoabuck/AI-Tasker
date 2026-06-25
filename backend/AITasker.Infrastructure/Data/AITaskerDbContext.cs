@@ -371,6 +371,14 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerifiedAt);
 
+            entity.Property(x => x.FreeProposalSubmitUsed)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalSubmitCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -643,7 +651,7 @@ public class AITaskerDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_Proposals_Status",
-                    "[Status] IN ('SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
+                    "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
 
                 t.HasCheckConstraint(
                     "CK_Proposals_Price_Timeline",

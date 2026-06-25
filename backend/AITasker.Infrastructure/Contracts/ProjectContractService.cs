@@ -64,6 +64,9 @@ namespace AITasker.Infrastructure.Contracts
 
             if (existingContract != null)
             {
+                await EnsureContractMilestoneDraftsCopiedFromProposalAsync(
+                    proposal.ProposalId,
+                    existingContract.ContractId);
                 return await MapToContractResponseAsync(existingContract);
             }
 
@@ -1120,6 +1123,23 @@ namespace AITasker.Infrastructure.Contracts
             _context.ContractMilestoneDrafts.AddRange(contractMilestones);
 
             await _context.SaveChangesAsync();
+        }
+
+        private async Task EnsureContractMilestoneDraftsCopiedFromProposalAsync(
+            int proposalId,
+            int contractId)
+        {
+            var hasContractMilestoneDrafts = await _context.ContractMilestoneDrafts
+                .AnyAsync(x => x.ContractId == contractId);
+
+            if (hasContractMilestoneDrafts)
+            {
+                return;
+            }
+
+            await CopyLatestProposalMilestonesToContractDraftAsync(
+                proposalId,
+                contractId);
         }
 
         private async Task EnsureExpertCanAcceptNewProjectAsync(int expertId)

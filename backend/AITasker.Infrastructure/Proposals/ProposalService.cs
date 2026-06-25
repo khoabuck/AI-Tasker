@@ -10,10 +10,14 @@ namespace AITasker.Infrastructure.Proposals
 {
     public class ProposalService : IProposalService
     {
+        private const string StatusDraft = "DRAFT";
+
         private const string StatusSubmitted = "SUBMITTED";
         private const string StatusAccepted = "ACCEPTED";
         private const string StatusRejected = "REJECTED";
         private const string StatusWithdrawn = "WITHDRAWN";
+
+        private const int MaxProposalDrafts = 10;
 
         private const string JobStatusActive = "ACTIVE";
 
@@ -73,6 +77,8 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Job posting is not open.");
             }
 
+            await EnsureJobStillAcceptsProposalsAsync(job.JobPostingId);
+
             ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
 
             var alreadySubmitted = await _context.Proposals.AnyAsync(x =>
@@ -82,8 +88,10 @@ namespace AITasker.Infrastructure.Proposals
 
             if (alreadySubmitted)
             {
-                throw new InvalidOperationException("You already submitted a proposal for this job.");
+                throw new InvalidOperationException("You already have a draft or submitted proposal for this job.");
             }
+
+            ConsumeProposalSubmitCredit(expert);
 
             var proposal = new Proposal
             {
@@ -135,7 +143,9 @@ namespace AITasker.Infrastructure.Proposals
 
             var proposals = await _context.Proposals
                 .AsNoTracking()
-                .Where(x => x.ExpertId == expert.ExpertProfileId)
+                .Where(x =>
+                    x.ExpertId == expert.ExpertProfileId &&
+                    x.Status != StatusDraft)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
 
@@ -149,6 +159,289 @@ namespace AITasker.Infrastructure.Proposals
             return responses;
         }
 
+        public async Task<ProposalCreditResponse> GetMyProposalCreditsAsync(int userId)
+        {
+            var expert = await _context.ExpertProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (expert == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            return BuildProposalCreditResponse(expert);
+        }
+
+        public async Task<IReadOnlyList<ProposalResponse>> GetMyProposalDraftsAsync(int userId)
+        {
+            var expert = await _context.ExpertProfiles
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (expert == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            var drafts = await _context.Proposals
+                .AsNoTracking()
+                .Where(x =>
+                    x.ExpertId == expert.ExpertProfileId &&
+                    x.Status == StatusDraft)
+                .OrderByDescending(x => x.CreatedAt)
+                .ToListAsync();
+
+            var responses = new List<ProposalResponse>();
+
+            foreach (var draft in drafts)
+            {
+                responses.Add(await MapToProposalResponseAsync(draft));
+            }
+
+            return responses;
+        }
+
+        public async Task<ProposalResponse> SaveProposalDraftAsync(
+            int userId,
+            SubmitProposalRequest request)
+        {
+            ValidateSubmitProposalRequest(request);
+
+            ValidateProposalMilestonesRequest(
+                request.Milestones,
+                request.ProposedPrice,
+                request.ProposedTimelineDays);
+
+            var expert = await _context.ExpertProfiles
+                .FirstOrDefaultAsync(x => x.UserId == userId);
+
+            if (expert == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            var currentDraftCount = await _context.Proposals.CountAsync(x =>
+                x.ExpertId == expert.ExpertProfileId &&
+                x.Status == StatusDraft);
+
+            if (currentDraftCount >= MaxProposalDrafts)
+            {
+                throw new InvalidOperationException($"You can only save up to {MaxProposalDrafts} proposal drafts.");
+            }
+
+            var job = await _context.JobPostings
+                .FirstOrDefaultAsync(x => x.JobPostingId == request.JobId);
+
+            if (job == null)
+            {
+                throw new InvalidOperationException("Job posting not found.");
+            }
+
+            if (!string.Equals(job.Status, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Cannot save proposal draft because the job is not open.");
+            }
+            
+            await EnsureJobStillAcceptsProposalsAsync(job.JobPostingId);
+
+            ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
+
+            var alreadyExists = await _context.Proposals.AnyAsync(x =>
+                x.JobId == request.JobId &&
+                x.ExpertId == expert.ExpertProfileId &&
+                x.Status != StatusWithdrawn);
+
+            if (alreadyExists)
+            {
+                throw new InvalidOperationException("You already have a draft or submitted proposal for this job.");
+            }
+
+            var proposal = new Proposal
+            {
+                JobId = request.JobId,
+                ExpertId = expert.ExpertProfileId,
+                CoverLetter = request.CoverLetter.Trim(),
+                ProposedPrice = request.ProposedPrice,
+                ProposedTimelineDays = request.ProposedTimelineDays,
+                ExpectedOutputs = request.ExpectedOutputs.Trim(),
+                WorkingApproach = request.WorkingApproach.Trim(),
+                PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
+                    ? null
+                    : request.PreliminaryMilestonePlan.Trim(),
+                Status = StatusDraft,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.Proposals.Add(proposal);
+
+            var milestoneDrafts = BuildProposalMilestoneDrafts(
+                proposal,
+                request.Milestones);
+
+            _context.ProposalMilestoneDrafts.AddRange(milestoneDrafts);
+
+            await _context.SaveChangesAsync();
+
+            return await MapToProposalResponseAsync(proposal);
+        }
+
+        public async Task<ProposalResponse> UpdateProposalDraftAsync(
+            int userId,
+            int proposalId,
+            SubmitProposalRequest request)
+        {
+            ValidateSubmitProposalRequest(request);
+
+            ValidateProposalMilestonesRequest(
+                request.Milestones,
+                request.ProposedPrice,
+                request.ProposedTimelineDays);
+
+            var proposal = await GetProposalByIdAsync(proposalId);
+
+            await EnsureExpertOwnsProposalAsync(userId, proposal);
+
+            if (proposal.Status != StatusDraft)
+            {
+                throw new InvalidOperationException("Only draft proposal can be updated.");
+            }
+
+            var job = await GetJobByIdAsync(proposal.JobId);
+
+            if (!string.Equals(job.Status, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Cannot update proposal draft because the job is no longer open.");
+            }
+
+            await EnsureJobStillAcceptsProposalsAsync(
+                job.JobPostingId,
+                proposal.ProposalId);
+
+            if (proposal.JobId != request.JobId)
+            {
+                throw new InvalidOperationException("Cannot change job of an existing proposal draft.");
+            }
+
+            ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
+
+            proposal.CoverLetter = request.CoverLetter.Trim();
+            proposal.ProposedPrice = request.ProposedPrice;
+            proposal.ProposedTimelineDays = request.ProposedTimelineDays;
+            proposal.ExpectedOutputs = request.ExpectedOutputs.Trim();
+            proposal.WorkingApproach = request.WorkingApproach.Trim();
+            proposal.PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
+                ? null
+                : request.PreliminaryMilestonePlan.Trim();
+
+            var oldMilestoneDrafts = await _context.ProposalMilestoneDrafts
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .ToListAsync();
+
+            _context.ProposalMilestoneDrafts.RemoveRange(oldMilestoneDrafts);
+
+            var newMilestoneDrafts = BuildProposalMilestoneDrafts(
+                proposal,
+                request.Milestones);
+
+            _context.ProposalMilestoneDrafts.AddRange(newMilestoneDrafts);
+
+            await _context.SaveChangesAsync();
+
+            return await MapToProposalResponseAsync(proposal);
+        }
+
+        public async Task<ProposalResponse> SubmitProposalDraftAsync(
+            int userId,
+            int proposalId)
+        {
+            var proposal = await GetProposalByIdAsync(proposalId);
+
+            await EnsureExpertOwnsProposalAsync(userId, proposal);
+
+            if (proposal.Status != StatusDraft)
+            {
+                throw new InvalidOperationException("Only draft proposal can be submitted.");
+            }
+
+            var expert = await _context.ExpertProfiles
+                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+            if (expert == null)
+            {
+                throw new InvalidOperationException("Expert profile not found.");
+            }
+
+            if (!string.Equals(expert.ProfileReviewStatus, "APPROVED", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Expert profile must be approved before submitting proposal.");
+            }
+
+            if (!expert.AvailableForWork)
+            {
+                throw new InvalidOperationException("Expert is not available for work.");
+            }
+
+            var job = await GetJobByIdAsync(proposal.JobId);
+
+            if (!string.Equals(job.Status, "OPEN", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Cannot submit proposal draft because the job is no longer open.");
+            }
+
+            await EnsureJobStillAcceptsProposalsAsync(
+                job.JobPostingId,
+                proposal.ProposalId);
+
+            ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
+
+            var milestoneDrafts = await _context.ProposalMilestoneDrafts
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .OrderBy(x => x.OrderIndex)
+                .ToListAsync();
+
+            ValidateSavedProposalDraftForSubmit(proposal, milestoneDrafts);
+
+            ConsumeProposalSubmitCredit(expert);
+
+            proposal.Status = StatusSubmitted;
+
+            await _context.SaveChangesAsync();
+
+            var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
+
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "New proposal received",
+                $"An expert submitted a proposal for your job: {job.Title}.",
+                "PROPOSAL_SUBMITTED");
+
+            return await MapToProposalResponseAsync(proposal);
+        }
+
+        public async Task DeleteProposalDraftAsync(
+            int userId,
+            int proposalId)
+        {
+            var proposal = await GetProposalByIdAsync(proposalId);
+
+            await EnsureExpertOwnsProposalAsync(userId, proposal);
+
+            if (proposal.Status != StatusDraft)
+            {
+                throw new InvalidOperationException("Only draft proposal can be deleted.");
+            }
+
+            var milestoneDrafts = await _context.ProposalMilestoneDrafts
+                .Where(x => x.ProposalId == proposal.ProposalId)
+                .ToListAsync();
+
+            _context.ProposalMilestoneDrafts.RemoveRange(milestoneDrafts);
+            _context.Proposals.Remove(proposal);
+
+            await _context.SaveChangesAsync();
+        }
+
         public async Task<IReadOnlyList<ProposalResponse>> GetJobProposalsAsync(
             int userId,
             int jobId)
@@ -159,7 +452,9 @@ namespace AITasker.Infrastructure.Proposals
 
             var proposals = await _context.Proposals
                 .AsNoTracking()
-                .Where(x => x.JobId == jobId)
+                .Where(x =>
+                    x.JobId == jobId &&
+                    x.Status != StatusDraft)
                 .OrderByDescending(x => x.CreatedAt)
                 .ToListAsync();
 
@@ -212,6 +507,11 @@ namespace AITasker.Infrastructure.Proposals
             await EnsureClientOwnsJobAsync(userId, job);
 
             EnsureProposalNotFinalized(proposal);
+
+            if (proposal.Status == StatusDraft)
+            {
+                throw new InvalidOperationException("Draft proposal cannot be processed by client.");
+            }
 
             var jobAlreadyHasAcceptedProposal = await _context.Proposals.AnyAsync(x =>
                 x.JobId == job.JobPostingId &&
@@ -302,6 +602,11 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Proposal already withdrawn.");
             }
 
+            if (proposal.Status == StatusDraft)
+            {
+                throw new InvalidOperationException("Draft proposal cannot be withdrawn. Delete the draft instead");
+            }
+
             var job = await GetJobByIdAsync(proposal.JobId);
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
@@ -372,6 +677,57 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Proposal already withdrawn.");
             }
+        }
+
+        private async Task EnsureJobStillAcceptsProposalsAsync(
+            int jobId,
+            int? currentProposalId = null)
+        {
+            var hasAcceptedProposal = await _context.Proposals.AnyAsync(x =>
+                x.JobId == jobId &&
+                x.Status == StatusAccepted &&
+                (!currentProposalId.HasValue || x.ProposalId != currentProposalId.Value));
+
+            if (hasAcceptedProposal)
+            {
+                throw new InvalidOperationException(
+                    "This job already has an accepted proposal and no longer accepts new proposals.");
+            }
+        }
+
+        private static void ConsumeProposalSubmitCredit(ExpertProfile expert)
+        {
+            if (!expert.FreeProposalSubmitUsed)
+            {
+                expert.FreeProposalSubmitUsed = true;
+                return;
+            }
+
+            if (expert.ProposalSubmitCredits <= 0)
+            {
+                throw new InvalidOperationException("You need ProposalSubmitCredit to submit a new proposal.");
+            }
+
+            expert.ProposalSubmitCredits -= 1;
+        }
+
+        private static ProposalCreditResponse BuildProposalCreditResponse(ExpertProfile expert)
+        {
+            var freeSubmitRemaining = expert.FreeProposalSubmitUsed ? 0 : 1;
+            var canSubmit = freeSubmitRemaining > 0 || expert.ProposalSubmitCredits > 0;
+
+            return new ProposalCreditResponse
+            {
+                FreeSubmitUsed = expert.FreeProposalSubmitUsed,
+                FreeSubmitRemaining = freeSubmitRemaining,
+                AvailableProposalSubmitCredits = expert.ProposalSubmitCredits,
+                CanSubmitNewProposal = canSubmit,
+                Reason = canSubmit
+                    ? freeSubmitRemaining > 0
+                        ? "Free proposal submit is still available."
+                        : "Proposal submit credit is available."
+                    : "You need ProposalSubmitCredit to submit a new proposal."
+            };
         }
 
         private static decimal ResolvePlatformFeeRate(ClientProfile clientProfile)
@@ -480,6 +836,13 @@ namespace AITasker.Infrastructure.Proposals
                 return true;
             }
 
+            var expertProfile = await GetExpertProfileByIdAsync(proposal.ExpertId);
+
+            if (proposal.Status == StatusDraft)
+            {
+                return expertProfile.UserId == userId;
+            }
+
             var job = await GetJobByIdAsync(proposal.JobId);
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
@@ -487,8 +850,6 @@ namespace AITasker.Infrastructure.Proposals
             {
                 return true;
             }
-
-            var expertProfile = await GetExpertProfileByIdAsync(proposal.ExpertId);
 
             return expertProfile.UserId == userId;
         }
@@ -687,6 +1048,9 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Cannot resubmit proposal because the job is no longer open.");
             }
+            await EnsureJobStillAcceptsProposalsAsync(
+                job.JobPostingId,
+                proposal.ProposalId);
 
             ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
 
@@ -999,6 +1363,60 @@ namespace AITasker.Infrastructure.Proposals
             if (totalDurationDays > proposedTimelineDays)
             {
                 throw new InvalidOperationException("Total milestone duration days cannot exceed proposed timeline days.");
+            }
+        }
+
+        private static void ValidateSavedProposalDraftForSubmit(
+            Proposal proposal,
+            IReadOnlyList<ProposalMilestoneDraft> milestones)
+        {
+            if (string.IsNullOrWhiteSpace(proposal.CoverLetter))
+            {
+                throw new InvalidOperationException("Cover letter is required.");
+            }
+
+            if (proposal.ProposedPrice <= 0)
+            {
+                throw new InvalidOperationException("Proposed price must be greater than 0.");
+            }
+
+            if (proposal.ProposedTimelineDays <= 0)
+            {
+                throw new InvalidOperationException("Proposed timeline must be greater than 0 days.");
+            }
+
+            if (string.IsNullOrWhiteSpace(proposal.ExpectedOutputs))
+            {
+                throw new InvalidOperationException("Expected outputs are required.");
+            }
+
+            if (string.IsNullOrWhiteSpace(proposal.WorkingApproach))
+            {
+                throw new InvalidOperationException("Working approach is required.");
+            }
+
+            if (milestones.Count == 0)
+            {
+                throw new InvalidOperationException("At least one proposal milestone is required.");
+            }
+
+            if (milestones.Count > 10)
+            {
+                throw new InvalidOperationException("A proposal cannot have more than 10 milestones.");
+            }
+
+            var totalAmount = milestones.Sum(x => x.Amount);
+
+            if (totalAmount != proposal.ProposedPrice)
+            {
+                throw new InvalidOperationException("Total milestone amount must equal proposed price.");
+            }
+
+            var totalDurationDays = milestones.Sum(x => x.DeadlineOffsetDays);
+
+            if (totalDurationDays > proposal.ProposedTimelineDays)
+            {
+                throw new InvalidOperationException("Total milestone duration cannot exceed proposed timeline.");
             }
         }
 
