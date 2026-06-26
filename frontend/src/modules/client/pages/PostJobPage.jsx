@@ -107,7 +107,15 @@ export default function PostJobPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const editId = new URLSearchParams(location.search).get("editId");
+  const searchParams = new URLSearchParams(location.search);
+  const editId = searchParams.get("editId");
+  const rawReturnStatus = searchParams.get("returnStatus");
+
+  const returnStatus = ["DRAFT", "OPEN", "CANCELLED"].includes(
+    String(rawReturnStatus || "").toUpperCase()
+  )
+    ? String(rawReturnStatus).toUpperCase()
+    : "DRAFT";
   const isEditMode = !!editId;
 
   const [mode, setMode] = useState("manual"); // "manual" | "ai"
@@ -283,9 +291,28 @@ const toggleSkill = (skill) => {
         budgetMax: toNullableNumber(form.budgetMax),
         deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         projectTypeHint: form.projectType || "",
+        complexityHint: "",
       });
-      const data = res.data;
-      const suggestedSkills = (data.suggestedSkills || [])
+      const data = res.data?.data ?? res.data;
+      console.log(data);
+
+      const normalizeComplexity = (value) => {
+        const v = String(value || "").trim().toUpperCase();
+
+        if (["SIMPLE", "EASY", "LOW"].includes(v)) return "SIMPLE";
+        if (["MEDIUM", "MODERATE", "MID"].includes(v)) return "MEDIUM";
+        if (["COMPLEX", "HARD", "HIGH"].includes(v)) return "COMPLEX";
+
+        return "";
+      };
+
+      const aiComplexity = normalizeComplexity(
+        data.suggestedComplexity ??
+        data.complexity ??
+        data.complexityLevel
+      );
+
+const suggestedSkills = (data.suggestedSkills || [])
       .map((s) => ({
         id: Number(s.skillId ?? s.SkillId ?? s.id),
         name: s.skillName ?? s.SkillName ?? s.name,
@@ -308,7 +335,7 @@ const toggleSkill = (skill) => {
         budgetMin: data.suggestedBudgetMin ?? prev.budgetMin,
         budgetMax: data.suggestedBudgetMax ?? prev.budgetMax,
         projectType: data.suggestedProjectType || prev.projectType,
-        complexity: data.suggestedComplexity || "",
+        complexity: aiComplexity || prev.complexity || "",
         expectedDeliverables: data.expectedDeliverables || "",
 
         deadline:
@@ -365,7 +392,7 @@ const toggleSkill = (skill) => {
     }
 
     setDraftSaved(true);
-    navigate("/client/jobs?status=DRAFT");
+    navigate(`/client/jobs?status=${returnStatus}`, { replace: true });
   } catch (err) {
     setError(
       err?.response?.data?.message ||
@@ -413,7 +440,12 @@ const toggleSkill = (skill) => {
     }
 
     setForm(DEFAULT_FORM);
-    navigate("/client/jobs?status=OPEN");
+
+      if (isEditMode) {
+        navigate(`/client/jobs?status=${returnStatus}`);
+      } else {
+        navigate("/client/jobs?status=OPEN");
+      }
   } catch (err) {
     setError(
       err?.response?.data?.message ||

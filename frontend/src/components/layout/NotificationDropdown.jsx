@@ -27,10 +27,35 @@ function formatNotificationTime(dateStr) {
   if (!dateStr) return "";
 
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleString("en-US", {
+  const now = new Date();
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    const diffMs = now.getTime() - date.getTime();
+    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+    if (diffMinutes < 1) {
+      return "Just now";
+    }
+
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+
+    return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  }
+
+  return date.toLocaleString("vi-VN", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",

@@ -110,9 +110,13 @@ export default function MilestoneDeliverablesPage() {
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
-  const fetchData = useCallback(async (signal) => {
-    setLoading(true);
+  const fetchData = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
     setError("");
+
     try {
       const msRes = await axiosInstance.get(`/milestones/${milestoneId}`, { signal });
       const msData = msRes.data?.data ?? msRes.data;
@@ -122,15 +126,20 @@ export default function MilestoneDeliverablesPage() {
       const delRaw = delRes.data?.data ?? delRes.data;
       const list = Array.isArray(delRaw) ? delRaw : delRaw?.items ?? [];
 
-      // Lấy bản deliverable mới nhất theo versionNumber, vì 1 milestone có thể có
-      // nhiều lần submit (sau khi client request revision, expert nộp lại bản mới).
-      const latest = [...list].sort((a, b) => (b.versionNumber ?? 0) - (a.versionNumber ?? 0))[0] ?? null;
+      const latest =
+        [...list].sort((a, b) => (b.versionNumber ?? 0) - (a.versionNumber ?? 0))[0] ?? null;
+
       setDeliverable(latest);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải deliverable.");
+
+      if (!silent) {
+        setError(err?.response?.data?.message || "Không thể tải deliverable.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [milestoneId]);
 
@@ -138,6 +147,14 @@ export default function MilestoneDeliverablesPage() {
     const controller = new AbortController();
     fetchData(controller.signal);
     return () => controller.abort();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchData(undefined, true);
+    }, 3000);
+
+    return () => clearInterval(intervalId);
   }, [fetchData]);
 
   const handleApprove = async () => {
@@ -207,8 +224,12 @@ export default function MilestoneDeliverablesPage() {
     );
   }
 
-  const dStatus = STATUS_CONFIG[deliverable?.status] || STATUS_CONFIG.SUBMITTED;
-  const canReview = deliverable?.status === "SUBMITTED";
+  const normalizedStatus = (deliverable?.status || "").toUpperCase();
+
+  const dStatus =
+    STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.SUBMITTED;
+
+  const canReview = normalizedStatus === "SUBMITTED";
   const submittedAt = deliverable?.submittedAt
     ? new Date(deliverable.submittedAt).toLocaleString("vi-VN")
     : "—";
@@ -220,10 +241,10 @@ export default function MilestoneDeliverablesPage() {
     <ClientLayout>
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>
 
-        <button onClick={() => navigate(`/client/projects/${milestone.projectId}`)}
+        <button onClick={() => navigate(-1)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 24, padding: 0 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to Project
+          Back 
         </button>
 
         {successMsg && (

@@ -11,8 +11,9 @@
 // chưa thấy yêu cầu đổi — nếu BE đã đổi endpoint này, báo lại để sửa)
 
 import { useState, useEffect } from "react";
-import ClientLayout from "../../../components/layout/ClientLayout";
-import axiosInstance from "../../../api/axiosInstance";
+import { useNavigate } from "react-router-dom";
+import ClientLayout from "../../components/layout/ClientLayout";
+import { walletService } from "../../services/wallet.service";
 
 // ── Deposit Modal (PayOS flow — production: poll status thật, không tự nạp tiền) ──
 function DepositModal({ onClose, onSuccess, existingOrder }) {
@@ -34,7 +35,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
 
     const checkStatus = async () => {
       try {
-        const res = await axiosInstance.get(`/wallets/deposit-orders/${order.depositOrderId}`);
+        const res = await walletService.getDepositOrderById(order.depositOrderId);
         const latest = res.data?.data || res.data;
 
         if (latest?.status === "PAID") {
@@ -88,7 +89,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
     if (!amount || Number(amount) <= 0) { setError("The amount must be greater than 0."); return; }
     setLoading(true); setError("");
     try {
-      const res = await axiosInstance.post("/wallets/deposit-orders", { amount: Number(amount) });
+      const res = await walletService.createDepositOrder(amount);
       const orderData = res.data?.data || res.data;
       setOrder(orderData);
       setStep("qr");
@@ -194,7 +195,10 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#facc15", animation: "spin 1.5s linear infinite" }}>autorenew</span>
               <div style={{ flex: 1 }}>
                 <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Đang chờ thanh toán...</p>
-                <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>Hệ thống sẽ tự xác nhận khi nhận được thanh toán. Đơn hết hạn sau {formatTime(secondsLeft)}</p>
+                <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
+                  Hệ thống sẽ tự xác nhận khi nhận được thanh toán.
+                  {secondsLeft > 0 && ` Đơn hết hạn sau ${formatTime(secondsLeft)}`}
+                </p>
               </div>
             </div>
 
@@ -249,12 +253,7 @@ function WithdrawModal({ onClose, onSuccess }) {
     if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
     setLoading(true); setError("");
     try {
-      await axiosInstance.post("/withdrawals", {
-        amount: Number(form.amount),
-        bankName: form.bankName,
-        bankAccountNumber: form.bankAccountNumber,
-        bankAccountHolder: form.bankAccountHolder,
-      });
+      await walletService.createWithdrawal(form);
       onSuccess();
       onClose();
     } catch (err) {
@@ -330,6 +329,27 @@ function WithdrawModal({ onClose, onSuccess }) {
   );
 }
 
+const getTxType = (tx) =>
+  (tx.type ?? tx.transactionType ?? "").toUpperCase();
+
+const isExpenseTx = (tx) => {
+  return [
+    "ESCROW_LOCK",
+    "ESCROW_RELEASE",
+    "PLATFORM_FEE",
+    "WITHDRAWAL",
+    "WITHDRAW",
+  ].includes(getTxType(tx));
+};
+
+const getTxAmountText = (tx) => {
+  const amount = Number(tx.amount ?? 0);
+
+  if (amount === 0) return "0₫";
+
+  return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
+};
+
 function StatusBadge({ status }) {
   const map = {
     COMPLETED: { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
@@ -351,6 +371,7 @@ function StatusBadge({ status }) {
 }
 
 export default function WalletPage() {
+  const navigate = useNavigate();
   const [balance, setBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [depositOrders, setDepositOrders] = useState([]);
@@ -363,59 +384,11 @@ export default function WalletPage() {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [balRes, txRes, doRes, projectsRes] = await Promise.all([
-        axiosInstance.get("/wallets/balance"),
-        axiosInstance.get("/transactions/me"),
-        axiosInstance.get("/wallets/deposit-orders/me"),
-        axiosInstance.get("/projects/me"),
-      ]);
+      const data = await walletService.getWalletPageData();
 
-      const balRaw = balRes.data?.data || balRes.data;
-
-      const projectsRaw = projectsRes.data?.data || projectsRes.data;
-      const projects = Array.isArray(projectsRaw)
-        ? projectsRaw
-        : projectsRaw?.items ?? projectsRaw?.data ?? [];
-
-      const escrowResults = await Promise.allSettled(
-        projects.map((p) =>
-          axiosInstance.get(`/escrows/projects/${p.projectId ?? p.id}`)
-        )
-      );
-
-      const escrowBalance = escrowResults.reduce((sum, result) => {
-        if (result.status !== "fulfilled") return sum;
-
-        const raw = result.value.data?.data || result.value.data;
-        const escrows = Array.isArray(raw) ? raw : raw?.items ?? raw?.data ?? [];
-
-        return (
-          sum +
-          escrows
-            .filter((e) => (e.status || "").toUpperCase() === "LOCKED")
-            .reduce((s, e) => s + Number(e.amount || 0), 0)
-        );
-      }, 0);
-
-      setBalance({
-        availableBalance:
-          balRaw?.availableBalance ??
-          balRaw?.available ??
-          balRaw?.balance ??
-          balRaw?.walletBalance ??
-          balRaw?.amount ??
-          (typeof balRaw === "number" ? balRaw : 0),
-
-        escrowBalance,
-        totalDeposited: balRaw?.totalDeposited ?? balRaw?.deposited ?? 0,
-        totalWithdrawn: balRaw?.totalWithdrawn ?? balRaw?.withdrawn ?? balRaw?.totalSpent ?? 0,
-      });
-
-      const txRaw = txRes.data?.data || txRes.data;
-      setTransactions(Array.isArray(txRaw) ? txRaw : txRaw?.items ?? txRaw?.data ?? []);
-
-      const doRaw = doRes.data?.data || doRes.data;
-      setDepositOrders(Array.isArray(doRaw) ? doRaw : doRaw?.items ?? doRaw?.data ?? []);
+      setBalance(data.balance);
+      setTransactions(data.transactions);
+      setDepositOrders(data.depositOrders);
     } catch (err) {
       console.error("Wallet fetch error:", err);
     } finally {
@@ -451,32 +424,45 @@ export default function WalletPage() {
         )}
 
         {/* Header */}
+        <div style={{ marginBottom: 32 }}>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="mb-5 flex w-fit items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-400"
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back
+        </button>
+        
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
           <div>
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Wallet</h2>
-            <p style={{ color: "#8c90a0", fontSize: 15 }}>Quản lý số dư và lịch sử giao dịch.</p>
+            <p style={{ color: "#8c90a0", fontSize: 15 }}>Manage your balance and transaction history.</p>
           </div>
           <div style={{ display: "flex", gap: 12 }}>
             <button onClick={() => setShowDeposit(true)}
               style={{ padding: "14px 28px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", fontWeight: 700, borderRadius: 12, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontFamily: "Hanken Grotesk, sans-serif", boxShadow: "0 0 20px rgba(0,240,255,0.2)" }}>
               <span className="material-symbols-outlined">add_card</span>
-              Nạp tiền
+              Deposit
             </button>
             <button onClick={() => setShowWithdraw(true)}
               style={{ padding: "14px 28px", background: "transparent", color: "#00F0FF", fontWeight: 700, borderRadius: 12, border: "2px solid rgba(0,240,255,0.5)", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, fontSize: 15, fontFamily: "Hanken Grotesk, sans-serif", transition: "background 0.2s" }}
               onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,240,255,0.08)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
               <span className="material-symbols-outlined">outbox</span>
-              Rút tiền
+              Withdraw
             </button>
           </div>
+        </div>
         </div>
 
         {/* Loading */}
         {loading && (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-            Đang tải dữ liệu...
+            Loading data...
           </div>
         )}
 
@@ -500,38 +486,43 @@ export default function WalletPage() {
 
               {/* Transactions */}
               <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
-                <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                  <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Lịch sử giao dịch</h4>
+                <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Transaction History</h4>
+                  <button onClick={() => navigate("/client/transactions")}
+                    style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: "#00F0FF", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    View All
+                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chevron_right</span>
+                  </button>
                 </div>
                 {transactions.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "48px 0", color: "#8c90a0" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>receipt_long</span>
-                    Chưa có giao dịch nào.
+                    No transactions have been made yet.
                   </div>
                 ) : (
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                        {["Loại", "Mô tả", "Ngày", "Số tiền", "Status"].map((h) => (
+                        {["Type", "Description", "Date", "Amount", "Status"].map((h) => (
                           <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", fontWeight: 500 }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {transactions.slice(0, 10).map((tx, i) => {
-                        const amount = tx.amount ?? tx.proposedPrice ?? 0;
-                        const isCredit = amount > 0;
-                        const date = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("vi-VN") : "—";
+                        const date = tx.createdAt
+                          ? new Date(tx.createdAt).toLocaleDateString("vi-VN")
+                          : "—";
                         return (
-                          <tr key={tx.transactionId ?? tx.id ?? i}
-                            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", transition: "background 0.2s" }}
+                          <tr key={tx.transactionId ?? i}
+                            style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", transition: "background 0.2s", cursor: "pointer" }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>{tx.type ?? tx.transactionType ?? "—"}</td>
-                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#e1e2eb", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description ?? tx.note ?? "—"}</td>
+                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>{tx.type ?? "—"}</td>
+                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#e1e2eb", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description ?? "—"}</td>
                             <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
-                            <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: isCredit ? "#00F0FF" : "#e1e2eb" }}>
-                              {isCredit ? "+" : ""}{Math.abs(amount).toLocaleString()}₫
+                            <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: isExpenseTx(tx) ? "#ffb4ab" : "#00F0FF" }}>
+                              {getTxAmountText(tx)}
                             </td>
                             <td style={{ padding: "14px 20px" }}><StatusBadge status={tx.status} /></td>
                           </tr>
@@ -545,12 +536,12 @@ export default function WalletPage() {
               {/* Deposit Order History */}
               <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
                 <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-                  <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Lịch sử nạp tiền</h4>
+                  <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Deposit History</h4>
                 </div>
                 {depositOrders.filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED").length === 0 ? (
                   <div style={{ textAlign: "center", padding: "48px 24px", color: "#8c90a0" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>add_card</span>
-                    Chưa có đơn nạp tiền nào.
+                    No deposit orders yet.
                   </div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column" }}>

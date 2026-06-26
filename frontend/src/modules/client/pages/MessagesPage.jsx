@@ -614,7 +614,38 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
 
             {/* Chat header */}
             <div style={{ flexShrink: 0, height: 64, padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+
+                <button
+                  onClick={() => navigate(-1)}
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    background: "rgba(255,255,255,0.03)",
+                    color: "#8c90a0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    transition: "all .2s",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(0,240,255,.35)";
+                    e.currentTarget.style.color = "#00F0FF";
+                    e.currentTarget.style.background = "rgba(0,240,255,.08)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = "rgba(255,255,255,.1)";
+                    e.currentTarget.style.color = "#8c90a0";
+                    e.currentTarget.style.background = "rgba(255,255,255,.03)";
+                  }}
+                >
+                  <span className="material-symbols-outlined">
+                    arrow_back
+                  </span>
+                </button>
                 <div style={{ position: "relative" }}>
                   <img src={activeChat.avatar} alt={activeChat.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(173,198,255,0.3)" }} />
                   {activeChat.online && <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, background: "#00F0FF", borderRadius: "50%", border: "2px solid #101319" }} />}

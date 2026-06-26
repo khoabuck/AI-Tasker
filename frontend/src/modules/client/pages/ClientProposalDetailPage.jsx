@@ -333,27 +333,28 @@ export default function ClientProposalDetailPage() {
       confirmedContract?.expertConfirmedAt ||
       confirmedContract?.expertSignedAt;
 
-    const contractStatus = (contract?.status || "").toUpperCase();
+    const contractStatus = (confirmedContract?.status || "").toUpperCase();
 
-  const isBothSigned =
-    (clientSigned && expertSigned) ||
-    ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+    const isBothSigned =
+      (clientSigned && expertSigned) ||
+      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
 
-  if (isBothSigned) {
-    try {
-      await axiosInstance.post(`/projects/from-contract/${contractId}`);
-    } catch (err) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message || "";
+    if (isBothSigned) {
+      try {
+        await axiosInstance.post(`/projects/from-contract/${contractId}`);
+      } catch (err) {
+        const status = err?.response?.status;
+        const message = err?.response?.data?.message || "";
 
-      if (status !== 409 && !message.toLowerCase().includes("already")) {
-        throw err;
+        if (status !== 409 && !message.toLowerCase().includes("already")) {
+          throw err;
+        }
       }
-    }
 
-    setShowWaitingExpertModal(false);
-    navigate("/client/projects?status=ACTIVE");
-  }
+      setShowWaitingExpertModal(false);
+      navigate("/client/projects?status=ACTIVE");
+      return;
+    }
 
     setShowWaitingExpertModal(true);
   } catch (err) {
@@ -387,11 +388,27 @@ const checkContractAndGoProject = async () => {
       contract?.expertConfirmedAt ||
       contract?.expertSignedAt;
 
-    if (clientSigned && expertSigned) {
-      await axiosInstance.post(`/projects/from-contract/${contractId}`);
+    const contractStatus = (contract?.status || "").toUpperCase();
 
-      navigate("/client/projects?status=ACTIVE");
+    const isBothSigned =
+      (clientSigned && expertSigned) ||
+      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+
+    if (!isBothSigned) return;
+
+    try {
+      await axiosInstance.post(`/projects/from-contract/${contractId}`);
+    } catch (err) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || "";
+
+      if (status !== 409 && !message.toLowerCase().includes("already")) {
+        throw err;
+      }
     }
+
+    setShowWaitingExpertModal(false);
+    navigate("/client/projects?status=ACTIVE");
   } catch (err) {
     console.error("Check contract failed:", err);
   }

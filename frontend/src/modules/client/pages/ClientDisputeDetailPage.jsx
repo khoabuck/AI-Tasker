@@ -53,6 +53,9 @@ export default function ClientDisputeDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
+  const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [uploadImageError, setUploadImageError] = useState("");
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
   const [evidenceSent, setEvidenceSent] = useState(false);
@@ -95,18 +98,21 @@ export default function ClientDisputeDetailPage() {
     return () => controller.abort();
   }, [fetchDispute]);
 
+  
+
   const handleAddEvidence = async () => {
-    if (!evidenceText.trim() || !dispute?.disputeId) return;
+    if ((!evidenceText.trim() && !evidenceFileUrl) || !dispute?.disputeId) return;
 
     setSubmittingEvidence(true);
     setEvidenceError("");
     try {
       await axiosInstance.post(`/disputes/${dispute.disputeId}/evidences`, {
         evidenceText: evidenceText.trim(),
-        fileUrl: "",
+        evidenceFileUrl: evidenceFileUrl.trim(),
       });
       setEvidenceSent(true);
       setEvidenceText("");
+      setEvidenceFileUrl("");
       await fetchDispute();
       setTimeout(() => setEvidenceSent(false), 3000);
     } catch (err) {
@@ -264,12 +270,52 @@ export default function ClientDisputeDetailPage() {
               placeholder="Bổ sung thêm thông tin, link tài liệu, mô tả chi tiết hơn..."
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
+            {/* Upload ảnh bổ sung — chỉ hỗ trợ ảnh vì BE chỉ có /uploads/images */}
+            <div style={{ marginBottom: 12 }}>
+              <label
+                style={{
+                  display: "block",
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.1em",
+                  color: "#8c90a0",
+                  marginBottom: 8,
+                }}
+              >
+                Link bằng chứng
+              </label>
+
+              <input
+                type="url"
+                value={evidenceFileUrl}
+                onChange={(e) => setEvidenceFileUrl(e.target.value)}
+                placeholder="https://drive.google.com/... hoặc https://example.com/evidence.pdf"
+                style={{
+                  width: "100%",
+                  background: "#1d2026",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  color: "#e1e2eb",
+                  outline: "none",
+                  fontFamily: "Inter, sans-serif",
+                  fontSize: 14,
+                  boxSizing: "border-box",
+                }}
+              />
+
+              <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
+                Dán link Google Drive, Dropbox, OneDrive, PDF hoặc hình ảnh công khai.
+              </p>
+            </div>
+
             {evidenceError && (
               <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13, marginBottom: 12 }}>{evidenceError}</div>
             )}
 
-            <button onClick={handleAddEvidence} disabled={submittingEvidence || !evidenceText.trim() || evidenceSent}
-              style={{ padding: "11px 22px", background: evidenceSent ? "#22c55e" : !evidenceText.trim() ? "rgba(0,240,255,0.08)" : "#00F0FF", color: evidenceSent ? "#002022" : !evidenceText.trim() ? "#8c90a0" : "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: !evidenceText.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+            <button onClick={handleAddEvidence} disabled={submittingEvidence || (!evidenceText.trim() && !evidenceFileUrl.trim()) || evidenceSent}
+              style={{ padding: "11px 22px", background: evidenceSent ? "#22c55e" : (!evidenceText.trim() && !evidenceFileUrl) ? "rgba(0,240,255,0.08)" : "#00F0FF", color: evidenceSent ? "#002022" : (!evidenceText.trim() && !evidenceFileUrl) ? "#8c90a0" : "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: (!evidenceText.trim() && !evidenceFileUrl) ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8 }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                 {evidenceSent ? "check_circle" : submittingEvidence ? "hourglass_empty" : "upload_file"}
               </span>

@@ -31,8 +31,8 @@ import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
 import AIMatchingPage from "../../modules/client/pages/AIMatchingPage";
 import MessagesPage from "../../modules/client/pages/MessagesPage";
-import WalletPage from "../../modules/client/pages/WalletPage";
-import TransactionsPage from "../../modules/client/pages/TransactionsPage";
+import WalletPage from "../../modules/wallet/WalletPage";
+import TransactionsPage from "../../modules/transaction/pages/TransactionsPage";
 import ClientJobDetailPage from "../../modules/client/pages/ClientJobDetailPage";
 import ClientJobRecommendationPage from "../../modules/client/pages/ClientJobRecommendationPage";
 import EditJobPage from "../../modules/client/pages/EditJobPage";
@@ -45,6 +45,7 @@ import ClientProjectDetailPage from "../../modules/client/pages/ClientProjectDet
 import JobCreditPackagesPage from "../../modules/client/pages/JobCreditPackagesPage";
 import MilestoneDeliverablesPage from "../../modules/client/pages/MilestoneDeliverablesPage";
 import ClientDisputeDetailPage from "../../modules/client/pages/ClientDisputeDetailPage";
+import TransactionDetailPage from "../../modules/transaction/pages/TransactionDetailPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -136,6 +137,7 @@ export default function AppRouter() {
       <Route path="/client/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
       <Route path="/client/job-credit-packages" element={<RequireAuth><JobCreditPackagesPage /></RequireAuth>} />
+      <Route path="/client/transactions/:id" element={<RequireAuth><TransactionDetailPage /></RequireAuth>} />
 
       {/* Client jobs */}
       <Route path="/client/jobs" element={<RequireAuth><JobsPage /></RequireAuth>} />
