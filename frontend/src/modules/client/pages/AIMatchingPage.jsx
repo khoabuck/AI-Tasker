@@ -3,62 +3,60 @@
 // Response là array trực tiếp, đã sort theo matchScore giảm dần — không còn dùng GET /experts?keyword=
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
-import axiosInstance from "../../../api/axiosInstance";
+import { aiMatchingService } from "../../../services/aiMatching.service";
 
 const LEVEL_CONFIG = {
-  JUNIOR:  { label: "Junior",  color: "#94a3b8" },
-  MID:     { label: "Mid",     color: "#facc15" },
-  SENIOR:  { label: "Senior",  color: "#00F0FF" },
-  EXPERT:  { label: "Expert",  color: "#c0c1ff" },
+  JUNIOR:  { label: "Junior",  badge: "bg-slate-400/20 text-slate-400 border-slate-400/40" },
+  MID:     { label: "Mid",     badge: "bg-yellow-400/20 text-yellow-400 border-yellow-400/40" },
+  SENIOR:  { label: "Senior",  badge: "bg-cyan-400/20 text-cyan-400 border-cyan-400/40" },
+  EXPERT:  { label: "Expert",  badge: "bg-indigo-300/20 text-indigo-300 border-indigo-300/40" },
 };
 
-function ExpertCard({ expert }) {
-  const level = LEVEL_CONFIG[expert.level] || { label: expert.level, color: "#8c90a0" };
+function ExpertCard({ expert, onConnect, onViewProfile }) {
+  const navigate = useNavigate();
+  const level = LEVEL_CONFIG[expert.level] || { label: expert.level, badge: "bg-gray-500/20 text-gray-400 border-gray-500/40" };
   const matchScore = expert.matchScore ? Math.round(expert.matchScore) : null;
+  const skillsToShow = expert.matchedSkills?.length > 0 ? expert.matchedSkills : expert.expertSkills || [];
+  const isMatchedSkills = expert.matchedSkills?.length > 0;
 
   return (
-    <div style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 24, display: "flex", flexDirection: "column", gap: 16, transition: "all 0.2s", position: "relative", overflow: "hidden" }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(0,240,255,0.4)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.transform = "translateY(0)"; }}>
+    <div className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#101319]/85 p-6 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
 
       {/* Match score badge */}
       {matchScore !== null && (
-        <div style={{ position: "absolute", top: 0, right: 0, padding: "4px 12px", background: "rgba(0,240,255,0.1)", borderLeft: "1px solid rgba(0,240,255,0.3)", borderBottom: "1px solid rgba(0,240,255,0.3)", borderRadius: "0 16px 0 12px" }}>
-          <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, color: "#00F0FF", fontWeight: 700 }}>{matchScore}% MATCH</span>
+        <div className="absolute right-0 top-0 rounded-bl-xl rounded-tr-2xl border-b border-l border-cyan-400/30 bg-cyan-400/10 px-3 py-1">
+          <span className="font-mono text-[11px] font-bold text-cyan-400">{matchScore}% MATCH</span>
         </div>
       )}
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+      <div className="flex items-start gap-3.5">
         <img src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId}`}
           alt={expert.fullName}
-          style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.2)", flexShrink: 0 }} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 16, color: "#e1e2eb", margin: 0 }}>
-              {expert.fullName}
-            </h3>
-            <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>
+          className="h-13 w-13 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover" style={{ width: 52, height: 52 }} />
+        <div className="min-w-0 flex-1">
+          <div className="mb-0.5 flex items-center gap-2">
+            <h3 className="font-display text-base font-bold text-gray-100">{expert.fullName}</h3>
+            <span className={`rounded-full border px-2 py-0.5 font-mono text-[9px] font-bold ${level.badge}`}>
               {level.label}
             </span>
           </div>
-          <p style={{ fontSize: 12, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", margin: 0 }}>
-            {expert.professionalTitle}
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 4, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, color: "#8c90a0" }}>
+          <p className="font-mono text-xs text-cyan-400">{expert.professionalTitle}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-3">
+            <span className="text-[11px] text-gray-400">
               {expert.yearsOfExperience} yr{expert.yearsOfExperience !== 1 ? "s" : ""} exp
             </span>
             {expert.availableForWork && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: "#22c55e" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+              <span className="flex items-center gap-1 text-[11px] text-green-400">
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
                 Available
               </span>
             )}
             {expert.profileScore != null && (
-              <span style={{ fontSize: 11, color: "#8c90a0" }}>
-                Score: <span style={{ color: "#facc15" }}>{expert.profileScore}</span>/100
+              <span className="text-[11px] text-gray-400">
+                Score: <span className="text-yellow-400">{expert.profileScore}</span>/100
               </span>
             )}
           </div>
@@ -67,33 +65,38 @@ function ExpertCard({ expert }) {
 
       {/* Bio */}
       {expert.bio && (
-        <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.6, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+        <p className="line-clamp-2 text-[13px] leading-relaxed text-gray-300">
           {expert.bio}
         </p>
       )}
 
       {/* Matched skill count */}
       {expert.requiredSkillCount > 0 && (
-        <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>
-          Matched <span style={{ color: "#00F0FF", fontWeight: 700 }}>{expert.matchedSkillCount}</span>/{expert.requiredSkillCount} required skills
+        <p className="text-xs text-gray-400">
+          Matched <span className="font-bold text-cyan-400">{expert.matchedSkillCount}</span>/{expert.requiredSkillCount} required skills
         </p>
       )}
 
       {/* Match reason */}
       {expert.matchReason && (
-        <div style={{ background: "rgba(0,240,255,0.04)", border: "1px solid rgba(0,240,255,0.12)", borderRadius: 8, padding: "10px 12px" }}>
-          <p style={{ fontSize: 12, color: "#c2c6d6", margin: 0, lineHeight: 1.5 }}>
-            <span style={{ color: "#00F0FF", fontWeight: 600 }}>AI: </span>
+        <div className="rounded-lg border border-cyan-400/10 bg-cyan-400/[0.04] px-3 py-2.5">
+          <p className="text-xs leading-snug text-gray-300">
+            <span className="font-semibold text-cyan-400">AI: </span>
             {expert.matchReason}
           </p>
         </div>
       )}
 
       {/* Skills */}
-      {(expert.matchedSkills?.length > 0 || expert.expertSkills?.length > 0) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {(expert.matchedSkills?.length > 0 ? expert.matchedSkills : expert.expertSkills || []).slice(0, 6).map((s) => (
-            <span key={s.skillId} style={{ padding: "3px 10px", background: expert.matchedSkills?.length > 0 ? "rgba(0,240,255,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${expert.matchedSkills?.length > 0 ? "rgba(0,240,255,0.2)" : "rgba(255,255,255,0.1)"}`, borderRadius: 999, fontSize: 11, color: expert.matchedSkills?.length > 0 ? "#00F0FF" : "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
+      {skillsToShow.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {skillsToShow.slice(0, 6).map((s) => (
+            <span key={s.skillId}
+              className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
+                isMatchedSkills
+                  ? "border-cyan-400/20 bg-cyan-400/[0.08] text-cyan-400"
+                  : "border-white/10 bg-white/[0.04] text-gray-400"
+              }`}>
               {s.skillName}
             </span>
           ))}
@@ -102,35 +105,33 @@ function ExpertCard({ expert }) {
 
       {/* Budget */}
       {(expert.expectedProjectBudgetMin || expert.expectedProjectBudgetMax) && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#c2c6d6" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 15, color: "#00F0FF" }}>payments</span>
-          <span style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 600 }}>
+        <div className="flex items-center gap-1.5 text-[13px] text-gray-300">
+          <span className="material-symbols-outlined text-cyan-400" style={{ fontSize: 15 }}>payments</span>
+          <span className="font-mono font-semibold">
             ${expert.expectedProjectBudgetMin?.toLocaleString()} — ${expert.expectedProjectBudgetMax?.toLocaleString()}
-            <span style={{ fontWeight: 400, color: "#8c90a0", fontSize: 11 }}> USD/mo</span>
+            <span className="ml-1 text-[11px] font-normal text-gray-400">USD/mo</span>
           </span>
         </div>
       )}
 
       {/* Risk note */}
       {expert.riskNote && (
-        <p style={{ fontSize: 11, color: "#facc15", margin: 0, display: "flex", alignItems: "center", gap: 4 }}>
+        <p className="flex items-center gap-1 text-[11px] text-yellow-400">
           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>warning</span>
           {expert.riskNote}
         </p>
       )}
 
       {/* Actions */}
-      <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
+      <div className="flex gap-2.5 pt-1">
         <button
-          style={{ flex: 1, padding: "9px", background: "#1d2026", color: "#e1e2eb", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = "#272a30"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.background = "#1d2026"; }}>
+          onClick={() => { onViewProfile(); navigate(`/client/experts/${expert.expertProfileId}`); }}
+          className="flex-1 rounded-lg border border-white/10 bg-[#1d2026] py-2.5 text-[13px] font-medium text-gray-100 transition-colors hover:bg-[#272a30]">
           View Profile
         </button>
         <button
-          style={{ flex: 1, padding: "9px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "Hanken Grotesk, sans-serif", boxShadow: "0 0 12px rgba(0,240,255,0.25)", transition: "all 0.2s" }}
-          onMouseEnter={(e) => { e.currentTarget.style.boxShadow = "0 0 20px rgba(0,240,255,0.45)"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.boxShadow = "0 0 12px rgba(0,240,255,0.25)"; }}>
+          onClick={() => onConnect(expert)}
+          className="flex-1 rounded-lg bg-cyan-400 py-2.5 font-display text-[13px] font-bold text-[#002022] shadow-[0_0_12px_rgba(0,240,255,0.25)] transition-shadow hover:shadow-[0_0_20px_rgba(0,240,255,0.45)]">
           Connect
         </button>
       </div>
@@ -139,13 +140,80 @@ function ExpertCard({ expert }) {
 }
 
 export default function AIMatchingPage() {
-  const [query, setQuery] = useState("");
+  const navigate = useNavigate();
+
+  // Khôi phục lại query + kết quả search trước đó CHỈ khi quay lại bằng nút
+  // "View Profile" → "Back" (cờ được đặt thủ công lúc bấm View Profile, xem
+  // handleViewProfile bên dưới). Mọi cách khác để vào trang này (click menu,
+  // gõ URL, từ trang khác) không đi qua cờ đó nên luôn bắt đầu sạch.
+  // Đọc xong xóa luôn, để lần remount kế tiếp không qua View Profile sẽ không
+  // còn "ăn" lại data cũ.
+  const SESSION_KEY = "aiMatchingSearchState";
+
+  // recentPrompts ("Try:" gợi ý) là dữ liệu khác hẳn về vòng đời — đây là lịch
+  // sử lâu dài của người dùng, không phải kết quả tạm thời của 1 lượt xem, nên
+  // dùng localStorage riêng và LUÔN đọc/giữ lại bất kể vào trang theo cách nào
+  // (khác hẳn query/experts/hasSearched ở trên chỉ phục hồi khi back từ Profile).
+  const RECENT_PROMPTS_KEY = "aiMatchingRecentPrompts";
+
+  const restoreState = () => {
+    try {
+      const saved = sessionStorage.getItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const restoreRecentPrompts = () => {
+    try {
+      const saved = localStorage.getItem(RECENT_PROMPTS_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const initial = restoreState();
+
+  const [query, setQuery] = useState(initial?.query ?? "");
   const [searching, setSearching] = useState(false);
-  const [experts, setExperts] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [experts, setExperts] = useState(initial?.experts ?? []);
+  const [total, setTotal] = useState(initial?.total ?? 0);
+  const [hasSearched, setHasSearched] = useState(initial?.hasSearched ?? false);
   const [error, setError] = useState("");
-  const [recentPrompts, setRecentPrompts] = useState([]);
+  const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts());
+
+  // Lưu lại state NGAY LÚC bấm "View Profile" — điểm duy nhất đặt cờ cho phép
+  // phục hồi kết quả search khi quay lại bằng nút Back. recentPrompts KHÔNG nằm
+  // trong cờ này vì nó đã tự sống bền trong localStorage riêng (xem handleSearch).
+  const handleViewProfile = () => {
+    try {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        query,
+        experts,
+        total,
+        hasSearched,
+      }));
+    } catch {
+      // Bỏ qua nếu sessionStorage đầy hoặc bị chặn — không ảnh hưởng chức năng chính
+    }
+  };
+
+  // Đồng bộ đúng logic Connect của ExpertSearchPage — tạo conversation trực tiếp
+  // (type: "DIRECT") rồi điều hướng sang Messages, không cần qua bước review proposal.
+  const handleConnect = async (expert) => {
+    try {
+      const conversationId =
+        await aiMatchingService.createConversationWithExpert(expert);
+
+      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
+    } catch (err) {
+      console.error("Create conversation failed:", err);
+      alert("Không thể tạo cuộc trò chuyện với Expert.");
+    }
+  };
 
   const handleSearch = async (searchText) => {
     const prompt = (searchText ?? query).trim();
@@ -154,25 +222,27 @@ export default function AIMatchingPage() {
 
     setQuery(prompt);
 
-    setRecentPrompts((prev) => {
-      const updated = [prompt, ...prev.filter((item) => item !== prompt)];
+    const updatedRecentPrompts = (() => {
+      const updated = [prompt, ...recentPrompts.filter((item) => item !== prompt)];
       return updated.slice(0, 4);
-    });
+    })();
+    setRecentPrompts(updatedRecentPrompts);
+    try {
+      localStorage.setItem(RECENT_PROMPTS_KEY, JSON.stringify(updatedRecentPrompts));
+    } catch {
+      // Bỏ qua nếu localStorage đầy hoặc bị chặn — không ảnh hưởng chức năng chính
+    }
 
     setSearching(true);
     setError("");
     setHasSearched(false);
 
     try {
-      const res = await axiosInstance.post("/recommendations/experts/from-prompt", {
-        prompt,
-      });
-
-      const data = res.data;
-      const items = Array.isArray(data) ? data : data?.items || data?.data || [];
+      const { items, total } =
+        await aiMatchingService.findExpertsFromPrompt(prompt);
 
       setExperts(items);
-      setTotal(data?.totalItems || items.length);
+      setTotal(total);
       setHasSearched(true);
     } catch (err) {
       setError(
@@ -186,40 +256,42 @@ export default function AIMatchingPage() {
 
   return (
     <ClientLayout>
-      <div style={{ paddingTop: 48, paddingBottom: 64, paddingLeft: 24, paddingRight: 24 }}>
+      <div className="px-6 pb-16 pt-12">
 
         {/* Header */}
-        <div style={{ maxWidth: 860, margin: "0 auto 40px", textAlign: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 12 }}>
-            <span className="material-symbols-outlined" style={{ color: "#00F0FF", fontSize: 32, fontVariationSettings: "'FILL' 1" }}>psychology</span>
-            <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 36, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
-              AI Expert <span style={{ color: "#00F0FF" }}>Matching</span>
+        <div className="mx-auto mb-10 max-w-[860px] text-center">
+          <div className="mb-3 flex items-center justify-center gap-2.5">
+            <span className="material-symbols-outlined text-cyan-400" style={{ fontSize: 32, fontVariationSettings: "'FILL' 1" }}>psychology</span>
+            <h1 className="font-display text-4xl font-bold text-gray-100">
+              AI Expert <span className="text-cyan-400">Matching</span>
             </h1>
           </div>
-          <p style={{ color: "#8c90a0", fontSize: 15, margin: 0 }}>
+          <p className="text-[15px] text-gray-400">
             Describe your project — AI will find the most suitable experts for you
           </p>
         </div>
 
         {/* Search bar */}
-        <div style={{ maxWidth: 860, margin: "0 auto 48px" }}>
-          <div style={{ position: "relative" }}>
-            <div style={{ position: "absolute", inset: -3, background: "linear-gradient(90deg, #00F0FF, #1772eb, #6265f0)", borderRadius: 20, filter: "blur(10px)", opacity: 0.2, zIndex: 0 }} />
-            <div style={{ position: "relative", background: "rgba(16,19,25,0.9)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 20, display: "flex", gap: 14, alignItems: "center", zIndex: 1 }}>
-              <div style={{ flex: 1, position: "relative" }}>
-                <span className="material-symbols-outlined" style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontSize: 20 }}>search</span>
+        <div className="mx-auto mb-12 max-w-[860px]">
+          <div className="relative">
+            <div className="absolute -inset-[3px] z-0 rounded-[20px] bg-gradient-to-r from-cyan-400 via-blue-600 to-indigo-500 opacity-20 blur-[10px]" />
+            <div className="relative z-10 flex items-center gap-3.5 rounded-2xl border border-cyan-400/20 bg-[#101319]/90 p-5 backdrop-blur-xl">
+              <div className="relative flex-1">
+                <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-cyan-400" style={{ fontSize: 20 }}>search</span>
                 <input
                   type="text" value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSearch()}
                   placeholder="e.g. I need an NLP expert for chatbot development..."
-                  style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "14px 14px 14px 46px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 15, boxSizing: "border-box", transition: "border-color 0.2s" }}
-                  onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.1)")} />
+                  className="w-full rounded-lg border border-white/10 bg-[#1d2026] py-3.5 pl-12 pr-3.5 text-[15px] text-gray-100 outline-none transition-colors focus:border-cyan-400" />
               </div>
               <button onClick={() => handleSearch()} disabled={searching || !query.trim()}
-                style={{ padding: "14px 28px", background: searching || !query.trim() ? "#1d2026" : "#00F0FF", color: searching || !query.trim() ? "#8c90a0" : "#002022", fontWeight: 700, borderRadius: 10, border: "none", cursor: searching || !query.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 8, boxShadow: searching || !query.trim() ? "none" : "0 0 16px rgba(0,240,255,0.3)", fontSize: 14, fontFamily: "Hanken Grotesk, sans-serif", whiteSpace: "nowrap", transition: "all 0.2s" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 20, animation: searching ? "spin 1s linear infinite" : "none" }}>
+                className={`flex items-center gap-2 whitespace-nowrap rounded-lg px-7 py-3.5 font-display text-sm font-bold transition-all ${
+                  searching || !query.trim()
+                    ? "cursor-not-allowed bg-[#1d2026] text-gray-400"
+                    : "bg-cyan-400 text-[#002022] shadow-[0_0_16px_rgba(0,240,255,0.3)]"
+                }`}>
+                <span className={`material-symbols-outlined ${searching ? "animate-spin" : ""}`} style={{ fontSize: 20 }}>
                   {searching ? "autorenew" : "bolt"}
                 </span>
                 {searching ? "Searching..." : "Find Experts"}
@@ -229,8 +301,8 @@ export default function AIMatchingPage() {
 
           {/* Example prompts */}
           {recentPrompts.length > 0 && (
-            <div style={{ marginTop: 14, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ color: "#8c90a0", fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em" }}>Try:</span>
+            <div className="mt-3.5 flex flex-wrap items-center gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-wide text-gray-400">Try:</span>
               {recentPrompts.map((p) => {
                 const shortPrompt = p.length > 32 ? `${p.slice(0, 32)}...` : p;
                 return (
@@ -238,7 +310,7 @@ export default function AIMatchingPage() {
                     key={p}
                     onClick={() => handleSearch(p)}
                     title={p}
-                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                    className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-gray-300 transition hover:border-cyan-400/30 hover:text-cyan-400"
                   >
                     {shortPrompt}
                   </button>
@@ -250,66 +322,65 @@ export default function AIMatchingPage() {
 
         {/* Empty state */}
         {!hasSearched && !searching && !error && (
-          <div style={{ textAlign: "center", padding: "60px 0", color: "#8c90a0" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 80, display: "block", marginBottom: 16, color: "#1d2026" }}>group_search</span>
-            <p style={{ fontSize: 16, marginBottom: 8, color: "#414754" }}>Describe your project above</p>
-            <p style={{ fontSize: 14, color: "#2d3038" }}>AI will analyze and find the most suitable experts</p>
+          <div className="py-16 text-center text-gray-400">
+            <span className="material-symbols-outlined mb-4 block text-[#1d2026]" style={{ fontSize: 80 }}>group_search</span>
+            <p className="mb-2 text-base text-[#414754]">Describe your project above</p>
+            <p className="text-sm text-[#2d3038]">AI will analyze and find the most suitable experts</p>
           </div>
         )}
 
         {/* Loading */}
         {searching && (
-          <div style={{ textAlign: "center", padding: "60px 0" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 56, display: "block", marginBottom: 16, color: "#00F0FF", animation: "spin 1s linear infinite" }}>autorenew</span>
-            <p style={{ color: "#00F0FF", fontSize: 15, fontFamily: "JetBrains Mono, monospace" }}>Analyzing and finding experts...</p>
+          <div className="py-16 text-center">
+            <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 56 }}>autorenew</span>
+            <p className="font-mono text-[15px] text-cyan-400">Analyzing and finding experts...</p>
           </div>
         )}
 
         {/* Error */}
         {error && (
-          <div style={{ maxWidth: 860, margin: "0 auto", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "14px 18px", color: "#f87171", fontSize: 14 }}>
+          <div className="mx-auto max-w-[860px] rounded-lg border border-red-400/25 bg-red-400/[0.08] px-4.5 py-3.5 text-sm text-red-400">
             {error}
           </div>
         )}
 
         {/* Results */}
         {hasSearched && !searching && (
-          <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+          <div className="mx-auto max-w-[1200px]">
+            <div className="mb-6 flex items-center justify-between">
               <div>
-                <p style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>
+                <p className="mb-1 font-display text-lg font-bold text-gray-100">
                   {experts.length > 0 ? "Matching Experts Found" : "No Experts Found"}
                 </p>
-                <p style={{ fontSize: 13, color: "#8c90a0" }}>
+                <p className="text-[13px] text-gray-400">
                   {experts.length > 0
                     ? `Showing ${experts.length} of ${total} experts matching "${query}"`
                     : `No experts found for "${query}". Try a different prompt.`}
                 </p>
               </div>
               {experts.length > 0 && (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#8c90a0" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#00F0FF" }}>auto_awesome</span>
+                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                  <span className="material-symbols-outlined text-cyan-400" style={{ fontSize: 16 }}>auto_awesome</span>
                   AI-ranked by relevance
                 </div>
               )}
             </div>
 
             {experts.length > 0 ? (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 20 }}>
+              <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
                 {experts.map((expert) => (
-                  <ExpertCard key={expert.expertProfileId} expert={expert} />
+                  <ExpertCard key={expert.expertProfileId} expert={expert} onConnect={handleConnect} onViewProfile={handleViewProfile} />
                 ))}
               </div>
             ) : (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 56, color: "#272a30", display: "block", marginBottom: 16 }}>person_search</span>
-                <p style={{ color: "#8c90a0", fontSize: 15 }}>Try describing your needs differently, e.g. "I need a chatbot AI"...</p>
+              <div className="py-10 text-center">
+                <span className="material-symbols-outlined mb-4 block text-[#272a30]" style={{ fontSize: 56 }}>person_search</span>
+                <p className="text-[15px] text-gray-400">Try describing your needs differently, e.g. "I need a chatbot AI"...</p>
               </div>
             )}
           </div>
         )}
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
   );
 }

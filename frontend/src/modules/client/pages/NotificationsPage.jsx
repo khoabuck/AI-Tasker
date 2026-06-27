@@ -151,6 +151,15 @@ export default function NotificationsPage() {
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "48px 24px" }}>
 
         {/* Header */}
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 flex w-fit items-center gap-2 rounded-lg border border-cyan-400/30 px-4 py-2 text-cyan-400 transition hover:bg-cyan-400/10"
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back
+        </button>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
           <div>
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>

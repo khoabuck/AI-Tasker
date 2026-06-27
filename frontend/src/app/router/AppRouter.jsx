@@ -17,6 +17,11 @@ import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
 // Guest pages
 import LandingPage from "../../modules/guest/pages/LandingPage";
 
+// Legal
+import PrivacyPolicyPage from "../../modules/legal/pages/PrivacyPolicyPage";
+import TermsOfServicePage from "../../modules/legal/pages/TermsOfServicePage";
+import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
+
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
@@ -26,8 +31,8 @@ import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
 import AIMatchingPage from "../../modules/client/pages/AIMatchingPage";
 import MessagesPage from "../../modules/client/pages/MessagesPage";
-import WalletPage from "../../modules/client/pages/WalletPage";
-import TransactionsPage from "../../modules/client/pages/TransactionsPage";
+import WalletPage from "../../modules/wallet/WalletPage";
+import TransactionsPage from "../../modules/transaction/pages/TransactionsPage";
 import ClientJobDetailPage from "../../modules/client/pages/ClientJobDetailPage";
 import ClientJobRecommendationPage from "../../modules/client/pages/ClientJobRecommendationPage";
 import EditJobPage from "../../modules/client/pages/EditJobPage";
@@ -37,6 +42,11 @@ import ClientReviewPage from "../../modules/client/pages/ClientReviewPage";
 import JobsPage from "../../modules/client/pages/JobsPage";
 import ProjectsListPage from "../../modules/client/pages/ProjectsListPage";
 import ClientProjectDetailPage from "../../modules/client/pages/ClientProjectDetailPage";
+import JobCreditPackagesPage from "../../modules/client/pages/JobCreditPackagesPage";
+import MilestoneDeliverablesPage from "../../modules/client/pages/MilestoneDeliverablesPage";
+import ClientDisputeDetailPage from "../../modules/client/pages/ClientDisputeDetailPage";
+import TransactionDetailPage from "../../modules/transaction/pages/TransactionDetailPage";
+import ExpertProfileViewPage from "../../modules/client/pages/ExpertProfileViewPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -81,8 +91,11 @@ import AdminAuditLogsPage from "../../modules/admin/pages/AdminAuditLogsPage";
 import AdminAuditLogDetailPage from "../../modules/admin/pages/AdminAuditLogDetailPage";
 import AdminExpertScoringPolicyPage from "../../modules/admin/pages/AdminExpertScoringPolicyPage";
 import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformFeePolicyPage";
+<<<<<<< HEAD
 import AdminJobPostingAiPolicyPage from "../../modules/admin/pages/AdminJobPostingAiPolicyPage";
 import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCreditPackagesPage";
+=======
+>>>>>>> origin/fe/minh
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -114,6 +127,11 @@ export default function AppRouter() {
       <Route path="/select-role" element={<RequireAuth><SelectRolePage /></RequireAuth>} />
       <Route path="/setup-profile" element={<RequireAuth><SetupProfilePage /></RequireAuth>} />
 
+      {/* Legal */}
+      <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+      <Route path="/terms-of-service" element={<TermsOfServicePage />} />
+      <Route path="/dispute-policy" element={<DisputePolicyPage />} />
+
       {/* Client */}
       <Route path="/client/dashboard" element={<RequireAuth><ClientDashboard /></RequireAuth>} />
       <Route path="/client/post-job" element={<RequireAuth><PostJobPage /></RequireAuth>} />
@@ -124,6 +142,9 @@ export default function AppRouter() {
       <Route path="/client/messages" element={<RequireAuth><MessagesPage /></RequireAuth>} />
       <Route path="/client/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
+      <Route path="/client/job-credit-packages" element={<RequireAuth><JobCreditPackagesPage /></RequireAuth>} />
+      <Route path="/client/transactions/:id" element={<RequireAuth><TransactionDetailPage /></RequireAuth>} />
+      <Route path="/client/experts/:expertProfileId" element={<RequireAuth><ExpertProfileViewPage /></RequireAuth>} />
 
       {/* Client jobs */}
       <Route path="/client/jobs" element={<RequireAuth><JobsPage /></RequireAuth>} />
@@ -136,6 +157,8 @@ export default function AppRouter() {
       <Route path="/client/projects-old" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
       <Route path="/client/projects/:id" element={<RequireAuth><ClientProjectDetailPage /></RequireAuth>} />
       <Route path="/client/projects/:id/review" element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
+      <Route path="/client/milestones/:milestoneId/deliverables" element={<RequireAuth><MilestoneDeliverablesPage /></RequireAuth>} />
+      <Route path="/client/disputes" element={<RequireAuth><ClientDisputeDetailPage /></RequireAuth>} />
 
       {/* Client proposals + notifications */}
       <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />
@@ -202,12 +225,17 @@ export default function AppRouter() {
       <Route path="/admin/audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogsPage /></ProtectedRoute>} />
       <Route path="/admin/audit-logs/:auditLogId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogDetailPage /></ProtectedRoute>} />
       <Route path="/admin/expert-profile-scoring-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminExpertScoringPolicyPage /></ProtectedRoute>} />
+<<<<<<< HEAD
       <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />  
       <Route path="/admin/job-posting-ai-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobPostingAiPolicyPage /></ProtectedRoute>} />
       <Route path="/admin/job-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobCreditPackagesPage /></ProtectedRoute>} /> 
 
 
 
+=======
+      <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />
+
+>>>>>>> origin/fe/minh
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>

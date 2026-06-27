@@ -8,6 +8,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import authService from "../../../services/auth.service";
 
 const getInputStyle = (fieldName, fieldErrors) => ({
   background: "#232A35",
@@ -40,21 +41,23 @@ function FieldError({ name, errors }) {
 
 export default function EditProfilePage() {
   const navigate = useNavigate();
+  const user = authService.getCurrentUser();
   const [clientType, setClientType] = useState("individual");
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
   const [globalError, setGlobalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [initialSnapshot, setInitialSnapshot] = useState(null);
 
   // companyName chỉ để HIỂN THỊ readonly, không gửi lên BE
   const [companyNameDisplay, setCompanyNameDisplay] = useState("");
 
   const [individual, setIndividual] = useState({
-    phoneNumber: "", address: "",
+    fullName: "", phoneNumber: "", address: "",
   });
 
   const [business, setBusiness] = useState({
-    phoneNumber: "", address: "",
+    fullName: "", phoneNumber: "", address: "",
     taxCode: "", industry: "", businessEmail: "", businessPhone: "",
   });
 
@@ -70,20 +73,28 @@ export default function EditProfilePage() {
         if (isBusiness) {
           setClientType("business");
           setCompanyNameDisplay(businessProfile.companyName || "");
-          setBusiness({
-            phoneNumber:   data.phoneNumber || "",
-            address:       data.address || "",
-            taxCode:       businessProfile.taxCode || "",
-            industry:      businessProfile.industry || "",
+          const businessData = {
+            fullName: data.fullName || user?.fullName || "",
+            phoneNumber: data.phoneNumber || "",
+            address: data.address || "",
+            taxCode: businessProfile.taxCode || "",
+            industry: businessProfile.industry || "",
             businessEmail: businessProfile.businessEmail || "",
             businessPhone: businessProfile.businessPhone || "",
-          });
+          };
+
+          setBusiness(businessData);
+          setInitialSnapshot(JSON.stringify(businessData));
         } else {
           setClientType("individual");
-          setIndividual({
-            phoneNumber: data.phoneNumber || "",
-            address:     data.address || "",
-          });
+          const individualData = {
+          fullName: data.fullName || user?.fullName || "",
+          phoneNumber: data.phoneNumber || "",
+          address: data.address || "",
+        };
+
+        setIndividual(individualData);
+        setInitialSnapshot(JSON.stringify(individualData));
         }
       } catch (err) {
         setGlobalError("Không thể tải thông tin profile.");
@@ -112,6 +123,10 @@ export default function EditProfilePage() {
   const validateForm = () => {
     const errors = {};
     const f = clientType === "individual" ? individual : business;
+
+    if (!f.fullName?.trim()) {
+      errors.fullName = "Full name is required.";
+    }
 
     const phoneClean = f.phoneNumber.replace(/[\s\-\.]/g, "");
     if (!f.phoneNumber.trim()) {
@@ -167,25 +182,36 @@ export default function EditProfilePage() {
     setGlobalError("");
     setFieldErrors({});
 
-    const feErrors = validateForm();
-    if (Object.keys(feErrors).length > 0) {
-      setFieldErrors(feErrors);
-      setGlobalError("Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
+    const currentSnapshot = JSON.stringify(
+    clientType === "individual" ? individual : business
+  );
 
-    setLoading(true);
+  if (initialSnapshot && currentSnapshot === initialSnapshot) {
+    navigate("/client/profile");
+    return;
+  }
+
+  const feErrors = validateForm();
+  if (Object.keys(feErrors).length > 0) {
+    setFieldErrors(feErrors);
+    setGlobalError("Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    return;
+  }
+
+  setLoading(true);
 
     try {
       let res;
       if (clientType === "individual") {
         res = await axiosInstance.put("/client-profiles/individual/me", {
+          fullName: individual.fullName,
           phoneNumber: individual.phoneNumber,
           address: individual.address,
         });
       } else {
         res = await axiosInstance.put("/client-profiles/business/me", {
+          fullName: business.fullName,
           phoneNumber: business.phoneNumber,
           address: business.address,
           taxCode: business.taxCode,
@@ -214,7 +240,7 @@ export default function EditProfilePage() {
         setCompanyNameDisplay(res.data.businessProfile.companyName);
       }
 
-      navigate("/client/profile");
+      navigate("/client/profile", { replace: true, state: { refresh: Date.now() } });
     } catch (err) {
       const resData = err?.response?.data;
       const message = resData?.message || resData?.title || "Đã có lỗi xảy ra hoặc xác minh thất bại.";
@@ -310,6 +336,20 @@ export default function EditProfilePage() {
           <form onSubmit={handleSubmit}>
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
+              {/* Full Name — readonly */}
+              <div>
+                <label style={labelStyle}>Full Name</label>
+                <input
+                  type="text"
+                  name="fullName"
+                  value={form.fullName || ""}
+                  onChange={handleChange}
+                  style={getInputStyle("fullName", fieldErrors)}
+                  onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
+                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                />
+                <FieldError name="fullName" errors={fieldErrors} />
+              </div>
               {/* Phone + Address */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
@@ -352,13 +392,43 @@ export default function EditProfilePage() {
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                     <div>
-                      <label style={{ ...labelStyle, color: fieldErrors.taxCode ? "#f87171" : "#8c90a0" }}>Tax Code</label>
-                      <input type="text" name="taxCode" value={business.taxCode} onChange={handleBusinessChange}
-                        style={getInputStyle("taxCode", fieldErrors)}
-                        onFocus={(e) => (e.target.style.borderColor = fieldErrors.taxCode ? "#ef4444" : "#00F0FF")}
-                        onBlur={(e) => (e.target.style.borderColor = fieldErrors.taxCode ? "#ef4444" : "rgba(255,255,255,0.12)")} />
+                      <label
+                        style={{
+                          ...labelStyle,
+                          color: fieldErrors.taxCode ? "#f87171" : "#8c90a0",
+                        }}
+                      >
+                        Tax Code
+                      </label>
+
+                      <input
+                        type="text"
+                        name="taxCode"
+                        value={business.taxCode}
+                        onChange={handleBusinessChange}
+                        disabled={!!companyNameDisplay}
+                        style={{
+                          ...getInputStyle("taxCode", fieldErrors),
+                          opacity: companyNameDisplay ? 0.6 : 1,
+                          cursor: companyNameDisplay ? "not-allowed" : "text",
+                        }}
+                        onFocus={(e) =>
+                          (e.target.style.borderColor =
+                            fieldErrors.taxCode ? "#ef4444" : "#00F0FF")
+                        }
+                        onBlur={(e) =>
+                          (e.target.style.borderColor =
+                            fieldErrors.taxCode
+                              ? "#ef4444"
+                              : "rgba(255,255,255,0.12)")
+                        }
+                      />
+
                       <FieldError name="taxCode" errors={fieldErrors} />
-                      <p style={{ fontSize: 11, color: "#8c90a0", marginTop: 4 }}>Đổi mã số thuế sẽ kích hoạt verify lại company name.</p>
+
+                      <p style={{ fontSize: 11, color: "#8c90a0", marginTop: 4 }}>
+                        Tax code cannot be changed after successful verification.
+                      </p>
                     </div>
                     <div>
                       <label style={{ ...labelStyle, color: fieldErrors.industry ? "#f87171" : "#8c90a0" }}>Industry</label>

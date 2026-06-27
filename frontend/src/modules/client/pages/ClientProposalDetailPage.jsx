@@ -3,7 +3,7 @@
 // POST /api/proposals/{proposalId}/decision  { decision: "ACCEPT" | "REJECT" }
 // POST /api/messages { recipientId, content }
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -83,7 +83,7 @@ function MessageModal({ proposal, onClose, navigate }) {
           initialMessage: message,
         });
         const conv = res.data?.data ?? res.data;
-        conversationId = conv?.conversationId;
+        conversationId = conv?.conversationId ?? conv?.id ?? conv?.conversationID;
       }
 
       setSent(true);
@@ -163,6 +163,12 @@ export default function ClientProposalDetailPage() {
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(null); // "accept" | "decline"
   const [showMessage, setShowMessage] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [clientProfile, setClientProfile] = useState(null);
+  const [contractCreated, setContractCreated] = useState(null);
+  const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showWaitingExpertModal, setShowWaitingExpertModal] = useState(false);
 
   const fetchProposal = useCallback(async (signal) => {
     setLoading(true);
@@ -202,19 +208,213 @@ export default function ClientProposalDetailPage() {
     return () => controller.abort();
   }, [fetchProposal]);
 
-  // ── Accept ────────────────────────────────────────────────────────
-  const handleAccept = async () => {
-    if (!confirm("Chấp nhận proposal này?")) return;
-    setActionLoading("accept");
+  useEffect(() => {
+    const fetchClientProfile = async () => {
+      try {
+        const res = await axiosInstance.get("/client-profiles/me");
+
+        const profile =
+          res.data?.data ??
+          res.data;
+
+        setClientProfile(profile);
+      } catch {
+        setClientProfile(null);
+      }
+    };
+
+    fetchClientProfile();
+  }, []);
+
+  useEffect(() => {
+  const fetchWalletBalance = async () => {
+    setWalletLoading(true);
+
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
-      setProposal((prev) => ({ ...prev, status: "ACCEPTED" }));
+      const res = await axiosInstance.get("/wallets/balance");
+
+      const data = res.data?.data ?? res.data;
+
+      setWalletBalance(
+        Number(
+          data?.balance ??
+          data?.availableBalance ??
+          data?.walletBalance ??
+          0
+        )
+      );
     } catch (err) {
-      alert(err?.response?.data?.message || "Accept thất bại.");
+      console.error(err);
+      setWalletBalance(0);
     } finally {
-      setActionLoading(null);
+      setWalletLoading(false);
     }
   };
+
+  fetchWalletBalance();
+}, []);
+
+  useEffect(() => {
+    if (!showWaitingExpertModal) return;
+
+    const intervalId = setInterval(() => {
+      checkContractAndGoProject();
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [showWaitingExpertModal, contractCreated]);
+
+  // ── Accept ────────────────────────────────────────────────────────
+  const handleAccept = async () => {
+  setShowAcceptModal(false);
+
+  setActionLoading("accept");
+
+  try {
+    await axiosInstance.post(
+      `/proposals/${proposalId}/decision?decision=ACCEPT`
+    );
+
+    const contractRes = await axiosInstance.post(
+      `/contracts/from-proposal/${proposalId}`
+    );
+
+    const contract = contractRes.data?.data ?? contractRes.data;
+
+    setProposal((prev) => ({
+      ...prev,
+      status: "ACCEPTED",
+    }));
+
+    setContractCreated(contract);
+
+  } catch (err) {
+    alert(
+      err?.response?.data?.message ||
+      err?.message ||
+      "Accept proposal failed."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
+  const handleSignContract = async () => {
+  const contractId =
+    contractCreated?.contractId ??
+    contractCreated?.id ??
+    contractCreated?.projectContractId;
+
+  if (!contractId) {
+    alert("Contract not found.");
+    return;
+  }
+
+  if (!hasEnoughWallet) {
+    navigate("/client/wallet");
+    return;
+  }
+
+  setActionLoading("sign");
+
+  try {
+    const confirmRes = await axiosInstance.post(
+      `/contracts/${contractId}/confirm`
+    );
+
+    const confirmedContract = confirmRes.data?.data ?? confirmRes.data;
+    setContractCreated(confirmedContract);
+
+    const clientSigned =
+      confirmedContract?.clientConfirmedAt ||
+      confirmedContract?.clientSignedAt;
+
+    const expertSigned =
+      confirmedContract?.expertConfirmedAt ||
+      confirmedContract?.expertSignedAt;
+
+    const contractStatus = (confirmedContract?.status || "").toUpperCase();
+
+    const isBothSigned =
+      (clientSigned && expertSigned) ||
+      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+
+    if (isBothSigned) {
+      try {
+        await axiosInstance.post(`/projects/from-contract/${contractId}`);
+      } catch (err) {
+        const status = err?.response?.status;
+        const message = err?.response?.data?.message || "";
+
+        if (status !== 409 && !message.toLowerCase().includes("already")) {
+          throw err;
+        }
+      }
+
+      setShowWaitingExpertModal(false);
+      navigate("/client/projects?status=ACTIVE");
+      return;
+    }
+
+    setShowWaitingExpertModal(true);
+  } catch (err) {
+    alert(
+      err?.response?.data?.message ||
+      err?.message ||
+      "Sign contract failed."
+    );
+  } finally {
+    setActionLoading(null);
+  }
+};
+
+const checkContractAndGoProject = async () => {
+  const contractId =
+    contractCreated?.contractId ??
+    contractCreated?.id ??
+    contractCreated?.projectContractId;
+
+  if (!contractId) return;
+
+  try {
+    const res = await axiosInstance.get(`/contracts/${contractId}`);
+    const contract = res.data?.data ?? res.data;
+
+    const clientSigned =
+      contract?.clientConfirmedAt ||
+      contract?.clientSignedAt;
+
+    const expertSigned =
+      contract?.expertConfirmedAt ||
+      contract?.expertSignedAt;
+
+    const contractStatus = (contract?.status || "").toUpperCase();
+
+    const isBothSigned =
+      (clientSigned && expertSigned) ||
+      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+
+    if (!isBothSigned) return;
+
+    try {
+      await axiosInstance.post(`/projects/from-contract/${contractId}`);
+    } catch (err) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || "";
+
+      if (status !== 409 && !message.toLowerCase().includes("already")) {
+        throw err;
+      }
+    }
+
+    setShowWaitingExpertModal(false);
+    navigate("/client/projects?status=ACTIVE");
+  } catch (err) {
+    console.error("Check contract failed:", err);
+  }
+};
+
+
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
@@ -261,8 +461,21 @@ export default function ClientProposalDetailPage() {
   const isPending = proposal.status === "SUBMITTED" || proposal.status === "PENDING";
   const isAccepting = actionLoading === "accept";
   const isDeclining = actionLoading === "decline";
+  const isSigning = actionLoading === "sign";
   const isProcessing = isAccepting || isDeclining;
   const expertName = proposal.expertName || proposal.fullName || "Expert";
+  const proposedPrice = Number(
+    proposal.proposedPrice || proposal.bidAmount || 0
+  );
+
+  const platformFeeRate = Number(clientProfile?.platformFeeRate ?? 5);
+
+  const requiredDeposit =
+    proposedPrice * (1 + platformFeeRate / 100);
+
+  const hasEnoughWallet =
+    !walletLoading &&
+    Number(walletBalance ?? 0) >= requiredDeposit;
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -319,6 +532,14 @@ export default function ClientProposalDetailPage() {
               </div>
             </div>
 
+            <div style={{ marginTop: 14, fontSize: 12, color: hasEnoughWallet ? "#22c55e" : "#facc15",}}>
+                Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+                {" — "}
+                Required deposit: ${requiredDeposit.toFixed(2)}
+                {" "}
+                ({platformFeeRate}% platform fee)
+            </div>
+
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
               {/* Message */}
@@ -340,13 +561,31 @@ export default function ClientProposalDetailPage() {
                     {isDeclining ? "Declining..." : "Decline"}
                   </button>
 
-                  <button onClick={handleAccept} disabled={isProcessing}
-                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 20px", background: isProcessing ? "rgba(34,197,94,0.08)" : "#22c55e", color: isProcessing ? "#22c55e" : "#002022", border: "1px solid rgba(34,197,94,0.5)", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: isProcessing ? "not-allowed" : "pointer", opacity: isProcessing ? 0.6 : 1, boxShadow: isProcessing ? "none" : "0 0 16px rgba(34,197,94,0.3)", transition: "all 0.2s" }}
-                    onMouseEnter={(e) => { if (!isProcessing) e.currentTarget.style.boxShadow = "0 0 24px rgba(34,197,94,0.5)"; }}
-                    onMouseLeave={(e) => { if (!isProcessing) e.currentTarget.style.boxShadow = "0 0 16px rgba(34,197,94,0.3)"; }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{isAccepting ? "hourglass_empty" : "check_circle"}</span>
-                    {isAccepting ? "Accepting..." : "Accept Proposal"}
-                  </button>
+                  <button
+                    onClick={() => setShowAcceptModal(true)}
+                    disabled={isProcessing}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "10px 20px",
+                      background: isProcessing ? "rgba(34,197,94,0.08)" : "#22c55e",
+                      color: isProcessing ? "#22c55e" : "#002022",
+                      border: "1px solid rgba(34,197,94,0.5)",
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      cursor: isProcessing ? "not-allowed" : "pointer",
+                      opacity: isProcessing ? 0.6 : 1,
+                      boxShadow: isProcessing ? "none" : "0 0 16px rgba(34,197,94,0.3)",
+                      transition: "all 0.2s",
+                    }}
+                  >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                  {isAccepting ? "hourglass_empty" : "check_circle"}
+                </span>
+                {isAccepting ? "Accepting..." : "Accept Proposal"}
+              </button>
                 </>
               )}
 
@@ -361,6 +600,98 @@ export default function ClientProposalDetailPage() {
           </div>
         </div>
 
+        {contractCreated && (
+  <div style={{ ...cardStyle, marginBottom: 24, border: "1px solid rgba(0,240,255,0.25)" }}>
+    <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#00F0FF", marginBottom: 16 }}>
+      Contract Preview
+    </h3>
+
+    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Expert:</strong> {expertName}
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Proposal Price:</strong> ${proposedPrice.toLocaleString()}
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Timeline:</strong> {proposal.proposedTimelineDays || proposal.estimatedDays} days
+      </p>
+
+      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+        <strong>Status:</strong> {contractCreated.status || "DRAFT"}
+      </p>
+    </div>
+
+    <div
+      style={{
+        marginBottom: 16,
+        padding: "10px 12px",
+        borderRadius: 8,
+        background: hasEnoughWallet ? "rgba(34,197,94,0.08)" : "rgba(250,204,21,0.08)",
+        border: `1px solid ${hasEnoughWallet ? "rgba(34,197,94,0.25)" : "rgba(250,204,21,0.25)"}`,
+        color: hasEnoughWallet ? "#22c55e" : "#facc15",
+        fontSize: 13,
+      }}
+    >
+      Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+      {" — "}
+      Required: ${requiredDeposit.toFixed(2)}
+      {" "}
+      ({platformFeeRate}% platform fee)
+    </div>
+
+    {hasEnoughWallet ? (
+      <button
+        type="button"
+        onClick={handleSignContract}
+        disabled={isSigning}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "11px 20px",
+          background: isSigning ? "rgba(0,240,255,0.08)" : "#00F0FF",
+          color: isSigning ? "#00F0FF" : "#002022",
+          border: "1px solid rgba(0,240,255,0.5)",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: isSigning ? "not-allowed" : "pointer",
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+          {isSigning ? "hourglass_empty" : "draw"}
+        </span>
+        {isSigning ? "Signing..." : "Sign Contract"}
+      </button>
+    ) : (
+      <button
+        type="button"
+        onClick={() => navigate("/client/wallet")}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
+          padding: "11px 20px",
+          background: "rgba(250,204,21,0.12)",
+          color: "#facc15",
+          border: "1px solid rgba(250,204,21,0.35)",
+          borderRadius: 8,
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+          account_balance_wallet
+        </span>
+        Deposit Wallet
+      </button>
+    )}
+  </div>
+)}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
           {/* Cover Letter */}
@@ -397,18 +728,50 @@ export default function ClientProposalDetailPage() {
             </div>
           )}
 
-          {/* Milestone Plan */}
-          {proposal.preliminaryMilestonePlan && (
+          {/* Milestone Drafts */}
+          {proposal.milestones?.length > 0 && (
             <div style={{ ...cardStyle, border: "1px solid rgba(192,193,255,0.15)", background: "rgba(192,193,255,0.02)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(192,193,255,0.1)" }}>
                 <span className="material-symbols-outlined" style={{ color: "#c0c1ff", fontSize: 18 }}>timeline</span>
                 <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#c0c1ff", margin: 0 }}>
-                  Preliminary Milestone Plan
+                  Milestone Drafts
                 </h3>
               </div>
-              <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.9, whiteSpace: "pre-line", margin: 0 }}>
-                {proposal.preliminaryMilestonePlan}
-              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {proposal.milestones.map((m, index) => (
+                  <div
+                    key={m.proposalMilestoneDraftId ?? index}
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr auto auto",
+                      gap: 16,
+                      alignItems: "center",
+                      padding: 16,
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}
+                  >
+                    <div>
+                      <p style={{ color: "#e1e2eb", fontWeight: 700, margin: "0 0 4px" }}>
+                        {index + 1}. {m.title}
+                      </p>
+                      <p style={{ color: "#8c90a0", fontSize: 13, margin: 0 }}>
+                        Duration: {m.durationDays} days
+                      </p>
+                    </div>
+
+                    <span style={{ color: "#00F0FF", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}>
+                      ${Number(m.amount || 0).toLocaleString()}
+                    </span>
+
+                    <span style={{ color: "#8c90a0", fontSize: 12 }}>
+                      Draft
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -451,10 +814,112 @@ export default function ClientProposalDetailPage() {
       </div>
 
       {showMessage && (
-        <MessageModal proposal={proposal} onClose={() => setShowMessage(false)} navigate={navigate} />
-      )}
+          <MessageModal
+            proposal={proposal}
+            onClose={() => setShowMessage(false)}
+            navigate={navigate}
+          />
+        )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        {showAcceptModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-[520px] rounded-2xl border border-cyan-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
+              <h2 className="mb-3 text-2xl font-bold text-cyan-400">
+                Create Contract
+              </h2>
+
+              <p className="mb-5 leading-relaxed text-slate-300">
+                Do you want to accept this proposal and create a contract with{" "}
+                <span className="font-bold text-white">{expertName}</span>?
+              </p>
+
+              <div className="mb-5 rounded-xl bg-white/5 p-4">
+                <div className="mb-2 text-white">
+                  Price: ${proposedPrice.toLocaleString()}
+                </div>
+
+                <div className="mb-3 text-white">
+                  Timeline: {proposal.proposedTimelineDays || proposal.estimatedDays} days
+                </div>
+
+                <div
+                  className={`font-semibold ${
+                    hasEnoughWallet ? "text-green-400" : "text-yellow-400"
+                  }`}
+                >
+                  Required Deposit: ${requiredDeposit.toFixed(2)}
+                  {" "}
+                  ({platformFeeRate}% platform fee)
+                </div>
+
+              </div>
+
+              {!hasEnoughWallet && (
+                <div className="mb-5 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">
+                  Your wallet balance is insufficient. Please deposit funds before signing the contract.
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowAcceptModal(false)}
+                  className="rounded-lg border border-white/15 px-5 py-2.5 text-slate-300 transition hover:bg-white/5"
+                >
+                  Cancel
+                </button>
+
+                {hasEnoughWallet ? (
+                  <button
+                    onClick={handleAccept}
+                    disabled={isAccepting}
+                    className="rounded-lg bg-green-500 px-5 py-2.5 font-bold text-white transition hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isAccepting ? "Creating..." : "Create Contract"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate("/client/wallet")}
+                    className="rounded-lg bg-yellow-400 px-5 py-2.5 font-bold text-[#1d1500] transition hover:bg-yellow-300"
+                  >
+                    Deposit Wallet
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showWaitingExpertModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-md rounded-2xl border border-cyan-400/20 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
+              <h2 className="mb-3 text-center text-2xl font-bold text-white">
+                Contract Signed Successfully
+              </h2>
+
+              <p className="mb-6 text-center leading-7 text-slate-300">
+                You have signed the contract successfully.
+                <br />
+                Please wait for the AI Expert to sign it.
+              </p>
+
+              <div className="flex justify-center">
+                <button
+                  onClick={checkContractAndGoProject}
+                  className="rounded-lg bg-cyan-400 px-8 py-3 font-bold text-white transition hover:brightness-110"
+                >
+                  Check Project Status
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        `}</style>
     </ClientLayout>
   );
 }

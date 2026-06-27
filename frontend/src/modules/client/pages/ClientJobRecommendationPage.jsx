@@ -27,31 +27,52 @@ function MatchScoreBar({ score }) {
 }
 
 // ── Message Modal ─────────────────────────────────────────────────────
-function MessageModal({ expert, onClose }) {
+function MessageModal({ expert, jobId, navigate, onClose }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
   const [sendError, setSendError] = useState("");
 
   const handleSend = async () => {
-    if (!message.trim()) return;
-    setSending(true);
-    setSendError("");
-    try {
-      await axiosInstance.post("/messages", {
-        recipientId: expert.expertProfileId,
-        content: message,
-      });
-      setSent(true);
-      setTimeout(() => { setSent(false); setMessage(""); onClose(); }, 1500);
-    } catch (err) {
-      setSendError(
-        err?.response?.data?.message || "Gửi tin nhắn thất bại. Vui lòng thử lại."
-      );
-    } finally {
-      setSending(false);
-    }
-  };
+  if (!message.trim()) return;
+
+  setSending(true);
+  setSendError("");
+
+  try {
+    const res = await axiosInstance.post("/conversations", {
+      conversationType: "JOB_INQUIRY",
+      expertProfileId: expert.expertProfileId,
+      relatedJobId: Number(jobId),
+      initialMessage: message,
+    });
+
+    const conversation = res.data?.data ?? res.data;
+    const conversationId =
+      conversation?.conversationId ?? conversation?.id;
+
+    setSent(true);
+
+    setTimeout(() => {
+      setSent(false);
+      setMessage("");
+      onClose();
+
+      if (conversationId) {
+        navigate(`/client/messages?conversationId=${conversationId}`);
+      } else {
+        navigate("/client/messages");
+      }
+    }, 800);
+  } catch (err) {
+    setSendError(
+      err?.response?.data?.message ||
+      "Gửi tin nhắn thất bại. Vui lòng thử lại."
+    );
+  } finally {
+    setSending(false);
+  }
+};
 
   return (
     <div
@@ -148,6 +169,11 @@ export default function ClientJobRecommendationPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [messagingExpert, setMessagingExpert] = useState(null);
+  const [invitePopup, setInvitePopup] = useState({
+    open: false,
+    type: "success",
+    message: "",
+  });
 
   useEffect(() => {
     if (!id) return;
@@ -344,7 +370,7 @@ export default function ClientJobRecommendationPage() {
                         <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
                           {/* View Profile — cyan */}
                           <button
-                            onClick={() => navigate(`/expert/${expert.expertProfileId}`)}
+                            onClick={() => navigate(`/client/experts/${expert.expertProfileId}`)}
                             style={{ flex: 1, padding: "9px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(0,240,255,0.2)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}
@@ -386,9 +412,56 @@ export default function ClientJobRecommendationPage() {
 
       {/* Message Modal */}
       {messagingExpert && (
-        <MessageModal expert={messagingExpert} onClose={() => setMessagingExpert(null)} />
+        <MessageModal
+          expert={messagingExpert}
+          jobId={id}
+          navigate={navigate}
+          onClose={() => setMessagingExpert(null)}
+        />
       )}
+      {invitePopup.open && (
+        <div
+          className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/65 p-6 backdrop-blur-sm"
+          onClick={() => setInvitePopup((prev) => ({ ...prev, open: false }))}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className={`w-full max-w-[420px] rounded-2xl border bg-[#101319] p-7 text-center shadow-2xl ${
+              invitePopup.type === "success"
+                ? "border-emerald-400/40"
+                : "border-red-400/40"
+            }`}
+          >
+            <div
+              className={`mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full border ${
+                invitePopup.type === "success"
+                  ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
+                  : "border-red-400/40 bg-red-400/10 text-red-400"
+              }`}
+            >
+              <span className="material-symbols-outlined text-3xl">
+                {invitePopup.type === "success" ? "check_circle" : "error"}
+              </span>
+            </div>
 
+            <h3 className="mb-2 text-xl font-extrabold text-[#e1e2eb]">
+              {invitePopup.type === "success" ? "Invite Sent" : "Invite Failed"}
+            </h3>
+
+            <p className="mb-6 text-sm leading-6 text-[#c2c6d6]">
+              {invitePopup.message}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setInvitePopup((prev) => ({ ...prev, open: false }))}
+              className="w-full rounded-xl border border-[#c0c1ff]/30 bg-[#c0c1ff]/10 px-4 py-3 text-sm font-bold text-[#c0c1ff] transition hover:bg-[#c0c1ff]/20"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
   );
@@ -396,11 +469,43 @@ export default function ClientJobRecommendationPage() {
   // ── Invite handler ─────────────────────────────────────────────────
   async function handleInvite(expertProfileId) {
     try {
-      await axiosInstance.post(`/jobs/${id}/invite`, { expertProfileId });
-      alert("Đã gửi lời mời thành công!");
-      // TODO: thay alert bằng toast notification nếu có
+      const jobName = jobTitle || "Job opportunity";
+
+      const res = await axiosInstance.post("/conversations", {
+        conversationType: "JOB_INQUIRY",
+        expertProfileId,
+        relatedJobId: Number(id),
+        initialMessage: `Invitation to Apply
+
+  Job: ${jobName}
+
+  You have been invited because your profile matches this job.
+
+  Please review the job details and submit a proposal if you are interested.`,
+      });
+
+      const conversation = res.data?.data ?? res.data;
+      const conversationId = conversation?.conversationId ?? conversation?.id;
+
+      setInvitePopup({
+        open: true,
+        type: "success",
+        message: "Invitation sent successfully!",
+      });
+
+      if (conversationId) {
+        setTimeout(() => {
+          navigate(`/client/messages?conversationId=${conversationId}`);
+        }, 1000);
+      }
     } catch (err) {
-      alert(err?.response?.data?.message || "Gửi lời mời thất bại.");
+      setInvitePopup({
+        open: true,
+        type: "error",
+        message:
+          err?.response?.data?.message ||
+          "Failed to send invitation.",
+      });
     }
   }
 }

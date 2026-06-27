@@ -17,13 +17,7 @@ const NAV_ITEMS = [
   { label: "MY JOBS", to: "/client/jobs", dropdown: null },
   { label: "MY PROJECTS", to: "/client/projects", dropdown: null },
   { label: "MESSAGES", to: "/client/messages", dropdown: null },
-  {
-    label: "FINANCE",
-    dropdown: [
-      { icon: "account_balance_wallet", label: "Wallet", to: "/client/wallet" },
-      { icon: "receipt_long", label: "Transactions", to: "/client/transactions" },
-    ],
-  },
+  { label: "FINANCE", icon: "account_balance_wallet", to: "/client/wallet", dropdown: null },
 ];
 
 function NavItem({ label, to, dropdown, active }) {
@@ -195,6 +189,17 @@ export default function ClientNavbar() {
                   person
                 </span>
                 Profile
+              </Link>
+
+              <Link
+                to="/client/job-credit-packages"
+                onClick={() => setAvatarOpen(false)}
+                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-gray-300 transition-all hover:bg-cyan-400/10 hover:text-cyan-400"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  local_activity
+                </span>
+                Job Credit Packages
               </Link>
 
               <button

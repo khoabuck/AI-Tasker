@@ -13,7 +13,16 @@ const LINK_GROUPS = [
   },
 ];
 
-const LEGAL_LINKS = ['Privacy Policy', 'Terms of Service', 'Cookie Policy'];
+const LEGAL_LINKS = [{
+      label: 'Privacy Policy',
+      path: '/privacy-policy',
+    }, {
+      label: 'Terms of Service',
+      path: '/terms-of-service',
+    }, {
+      label: 'Dispute Policy',
+      path: '/dispute-policy',
+    }];
 
 export default function Footer() {
   return (
@@ -56,10 +65,16 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-glass-border pt-8 flex flex-col md:flex-row justify-between items-center gap-4 text-xs text-on-surface-variant">
-          <p>© 2024 AI Tasker Inc. All rights reserved.</p>
+          <p>© 2026 AI Tasker Inc. All rights reserved.</p>
           <div className="flex gap-8">
             {LEGAL_LINKS.map((link) => (
-              <a key={link} href="#" className="hover:text-neon-cyan transition-colors">{link}</a>
+              <a
+                key={link.label}
+                href={link.path}
+                className="hover:text-neon-cyan transition-colors"
+              >
+                {link.label}
+              </a>
             ))}
           </div>
         </div>

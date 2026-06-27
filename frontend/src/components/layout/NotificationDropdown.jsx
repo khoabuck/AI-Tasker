@@ -6,9 +6,11 @@ import { useNotifications } from "../../hooks/useNotifications";
 // ── Icon theo type ────────────────────────────────────────────────────
 const TYPE_CONFIG = {
   PROPOSAL_SUBMITTED: { icon: "description",        color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
+  PROPOSAL_RESUBMITTED: { icon: "edit_document", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
   PROPOSAL_ACCEPTED:  { icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
   PROPOSAL_REJECTED:  { icon: "cancel",              color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
-  MESSAGE_RECEIVED:   { icon: "chat",                color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  MESSAGE_RECEIVED:      { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  CHAT_MESSAGE_RECEIVED: { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
   DEPOSIT:            { icon: "add_card",            color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
   WITHDRAWAL:         { icon: "outbox",              color: "#facc15", bg: "rgba(250,204,21,0.1)"  },
   WITHDRAWAL_APPROVED:{ icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"  },
@@ -21,17 +23,43 @@ function getTypeConfig(type) {
   return TYPE_CONFIG[type] || TYPE_CONFIG.SYSTEM;
 }
 
-function timeAgo(dateStr) {
+function formatNotificationTime(dateStr) {
   if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const now = new Date();
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    const diffMs = now.getTime() - date.getTime();
+    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+    if (diffMinutes < 1) {
+      return "Just now";
+    }
+
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+
+    return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  }
+
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function NotificationDropdown() {
@@ -64,14 +92,74 @@ export default function NotificationDropdown() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  const getNotificationTargetUrl = (notification) => {
+  const type = notification.type;
+
+  if (notification.actionUrl || notification.link) {
+    return notification.actionUrl || notification.link;
+  }
+
+  let metadata = {};
+
+  try {
+    metadata =
+      typeof notification.metadata === "string"
+        ? JSON.parse(notification.metadata)
+        : notification.metadata || {};
+  } catch {
+    metadata = {};
+  }
+
+  const proposalId =
+    notification.proposalId ||
+    notification.relatedProposalId ||
+    notification.entityId ||
+    notification.referenceId ||
+    notification.targetId ||
+    metadata.proposalId ||
+    metadata.relatedProposalId ||
+    metadata.entityId ||
+    metadata.referenceId ||
+    metadata.targetId;
+
+  switch (type) {
+    case "CHAT_MESSAGE_RECEIVED":
+    case "MESSAGE_RECEIVED":
+      return "/client/messages";
+
+    case "PROPOSAL_SUBMITTED":
+    case "PROPOSAL_RESUBMITTED":
+    case "PROPOSAL_ACCEPTED":
+    case "PROPOSAL_REJECTED":
+      return proposalId
+        ? `/client/proposals/${proposalId}`
+        : "/client/notifications";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
+
+    case "DEPOSIT":
+    case "WITHDRAWAL":
+    case "WITHDRAWAL_APPROVED":
+    case "WITHDRAWAL_REJECTED":
+      return "/client/wallet";
+
+    default:
+      return "/client/notifications";
+  }
+};
+
   const handleNotificationClick = (notification) => {
-    // Mark read
+    const targetUrl = getNotificationTargetUrl(notification);
+
+    console.log("Notification:", notification);
+    console.log("Target URL:", targetUrl);
+
     if (!notification.isRead) {
       markRead(notification.notificationId);
     }
-    // Navigate theo type
-    const link = notification.actionUrl || notification.link;
-    if (link) navigate(link);
+
+    navigate(targetUrl);
     setOpen(false);
   };
 
@@ -122,7 +210,20 @@ export default function NotificationDropdown() {
           </div>
 
           {/* List */}
-          <div style={{ maxHeight: 420, overflowY: "auto" }}>
+          <div  className="
+                        max-h-[220px]
+                        overflow-y-auto
+                        pr-1
+
+                        [&::-webkit-scrollbar]:w-1
+                        [&::-webkit-scrollbar-track]:bg-transparent
+                        [&::-webkit-scrollbar-thumb]:rounded-full
+                        [&::-webkit-scrollbar-thumb]:bg-white/10
+                        hover:[&::-webkit-scrollbar-thumb]:bg-cyan-400/50
+
+                        [scrollbar-width:thin]
+                        [scrollbar-color:rgba(255,255,255,0.12)_transparent]
+                      ">
             {loading && (
               <div style={{ textAlign: "center", padding: "40px 0", color: "#8c90a0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 32, display: "block", marginBottom: 8, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
@@ -198,7 +299,7 @@ export default function NotificationDropdown() {
                       </p>
                     )}
                     <span style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                      {timeAgo(n.createdAt)}
+                      {formatNotificationTime(n.createdAt)}
                     </span>
                   </div>
                 </div>

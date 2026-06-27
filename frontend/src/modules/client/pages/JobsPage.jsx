@@ -80,8 +80,13 @@ function JobCard({ job, onStatusChange }) {
         <div style={{ display: "flex", gap: 8 }}>
           {job.status === "DRAFT" && (
             <>
-              <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}/edit`); }}
-                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/client/post-job?editId=${job.jobPostingId}&returnStatus=${job.status}`);
+                }}
+                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
                 Edit
               </button>
               <button onClick={handleSubmit} disabled={actionLoading}
@@ -107,8 +112,13 @@ function JobCard({ job, onStatusChange }) {
                   </span>
                 )}
               </button>
-              <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}/edit`); }}
-                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/client/post-job?editId=${job.jobPostingId}&returnStatus=${job.status}`);
+                }}
+                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+              >
                 Edit
               </button>
               <button onClick={handleCancel} disabled={actionLoading}

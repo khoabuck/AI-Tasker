@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
@@ -16,6 +16,21 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusField, setFocusField] = useState("");
+  const [rememberedLogins, setRememberedLogins] = useState([]);
+  const [showSavedAccounts, setShowSavedAccounts] = useState(false);
+
+    useEffect(() => {
+      const savedLogins = localStorage.getItem("rememberLogins");
+
+      if (savedLogins) {
+        try {
+          const parsed = JSON.parse(savedLogins);
+          setRememberedLogins(Array.isArray(parsed) ? parsed : []);
+        } catch {
+          localStorage.removeItem("rememberLogins");
+        }
+      }
+    }, []);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -26,6 +41,45 @@ export default function LoginPage() {
     }));
 
     setError("");
+  };
+
+  const selectSavedAccount = (account) => {
+    setForm((prev) => ({
+      ...prev,
+      email: account.email || "",
+      password: account.password || "",
+      remember: true,
+    }));
+
+    setShowSavedAccounts(false);
+    setError("");
+  };
+
+  const saveRememberedLogin = () => {
+    const email = form.email.trim();
+    const password = form.password;
+
+    if (!form.remember || !email || !password) {
+      return;
+    }
+
+    const existingRaw = localStorage.getItem("rememberLogins");
+    let existing = [];
+
+    try {
+      existing = existingRaw ? JSON.parse(existingRaw) : [];
+      if (!Array.isArray(existing)) existing = [];
+    } catch {
+      existing = [];
+    }
+
+    const next = [
+      { email, password },
+      ...existing.filter((item) => item.email !== email),
+    ];
+
+    localStorage.setItem("rememberLogins", JSON.stringify(next));
+    setRememberedLogins(next);
   };
 
   const goNextByRoleAndStatus = ({ role, status, email, password }) => {
@@ -116,6 +170,10 @@ export default function LoginPage() {
       if (!result.success) {
         setError(result.message || "Login failed.");
         return;
+      }
+
+      if (form.remember) {
+        saveRememberedLogin();
       }
 
       const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
@@ -240,6 +298,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   name="email"
+                  autoComplete="off"
                   value={form.email}
                   onChange={handleChange}
                   required
@@ -247,17 +306,53 @@ export default function LoginPage() {
                   className="w-full rounded-xl py-3 pl-12 pr-4 outline-none transition-all"
                   style={{
                     background: "#191c22",
-                    border: `1px solid ${focusField === "email"
+                    border: `1px solid ${
+                      focusField === "email"
                         ? "rgba(0,240,255,0.5)"
                         : "rgba(255,255,255,0.12)"
-                      }`,
+                    }`,
                     color: "#e1e2eb",
                     WebkitBoxShadow: "0 0 0 1000px #191c22 inset",
                     WebkitTextFillColor: "#e1e2eb",
                   }}
-                  onFocus={() => setFocusField("email")}
-                  onBlur={() => setFocusField("")}
+                  onFocus={() => {
+                    setFocusField("email");
+                    setShowSavedAccounts(true);
+                  }}
+                  onBlur={() => {
+                    setFocusField("");
+                    setTimeout(() => setShowSavedAccounts(false), 150);
+                  }}
                 />
+
+                {showSavedAccounts && rememberedLogins.length > 0 && (
+                  <div className="absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-xl border border-white/10 bg-[#191c22] shadow-2xl">
+                    {rememberedLogins.map((account) => (
+                      <button
+                        key={account.email}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectSavedAccount(account);
+                        }}
+                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.06]"
+                      >
+                        <span className="material-symbols-outlined text-lg text-cyan-300">
+                          account_circle
+                        </span>
+
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-white">
+                            {account.email}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Saved password
+                          </p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -304,7 +399,10 @@ export default function LoginPage() {
                       }`,
                     color: "#e1e2eb",
                   }}
-                  onFocus={() => setFocusField("password")}
+                  onFocus={() => {
+                    setFocusField("password");
+                    fillRememberedLogin();
+                  }}
                   onBlur={() => setFocusField("")}
                 />
               </div>

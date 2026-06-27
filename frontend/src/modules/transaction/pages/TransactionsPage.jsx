@@ -1,47 +1,119 @@
 // src/modules/client/pages/TransactionsPage.jsx
 // Trang Transactions — Finance > Transactions
 
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
-// TODO (BE): import axiosInstance from "../../../api/axiosInstance";
-
-// ── MOCK DATA — xóa khi BE xong ──────────────────────────────────────
-const MOCK_TRANSACTIONS = [
-  { id: 1, date: "24/10/23", type: "Escrow", icon: "lock_clock", iconBg: "rgba(23,114,235,0.1)", iconColor: "#adc6ff", project: "Neural Interface V2", amount: -12400, status: "Pending" },
-  { id: 2, date: "23/10/23", type: "Deposit", icon: "account_balance_wallet", iconBg: "rgba(52,211,153,0.1)", iconColor: "#34d399", project: "System Vault Transfer", amount: 50000, status: "Completed" },
-  { id: 3, date: "22/10/23", type: "Payment", icon: "send", iconBg: "rgba(173,198,255,0.1)", iconColor: "#adc6ff", project: "Contractor Milestone #3", amount: -8500, status: "Completed" },
-  { id: 4, date: "21/10/23", type: "Refund", icon: "undo", iconBg: "rgba(248,113,113,0.1)", iconColor: "#f87171", project: "Failed API Request", amount: 1200, status: "Failed" },
-  { id: 5, date: "20/10/23", type: "Payment", icon: "send", iconBg: "rgba(173,198,255,0.1)", iconColor: "#adc6ff", project: "Cyber-Sec Audit", amount: -3200, status: "Completed" },
-  { id: 6, date: "19/10/23", type: "Escrow", icon: "lock_clock", iconBg: "rgba(23,114,235,0.1)", iconColor: "#adc6ff", project: "Quantum Processing Unit", amount: -5000, status: "Pending" },
-  { id: 7, date: "18/10/23", type: "Deposit", icon: "account_balance_wallet", iconBg: "rgba(52,211,153,0.1)", iconColor: "#34d399", project: "Monthly Retainer", amount: 15000, status: "Completed" },
-];
-// ─────────────────────────────────────────────────────────────────────
+import { transactionService } from "../../../services/transaction.service";
 
 const STATUS_CONFIG = {
-  Completed: { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
-  Pending:   { bg: "rgba(250,204,21,0.1)", color: "#facc15", border: "rgba(250,204,21,0.2)" },
-  Failed:    { bg: "rgba(248,113,113,0.1)", color: "#f87171", border: "rgba(248,113,113,0.2)" },
+  SUCCESS:   { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
+  COMPLETED: { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
+  PAID:      { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
+  PENDING:   { bg: "rgba(250,204,21,0.1)", color: "#facc15", border: "rgba(250,204,21,0.2)" },
+  FAILED:    { bg: "rgba(248,113,113,0.1)", color: "#f87171", border: "rgba(248,113,113,0.2)" },
 };
 
 export default function TransactionsPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const selectedProjectId = searchParams.get("projectId");
+  const selectedMilestoneId = searchParams.get("milestoneId");
+  const selectedTransactionId = searchParams.get("transactionId");
+
+  const [transactions, setTransactions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
   const [filterType, setFilterType] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
   const [page, setPage] = useState(1);
 
-  // ── TODO (BE): Load transactions ─────────────────────────────────
-  // useEffect(() => {
-  //   axiosInstance.get("/wallet/transactions", {
-  //     params: { type: filterType, status: filterStatus, page }
-  //   }).then(res => setTransactions(res.data));
-  // }, [filterType, filterStatus, page]);
-  // ─────────────────────────────────────────────────────────────────
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      setLoading(true);
+      setError("");
 
-  const filtered = MOCK_TRANSACTIONS.filter((tx) =>
-    (filterType === "All" || tx.type === filterType) &&
-    (filterStatus === "All" || tx.status === filterStatus)
-  );
+      try {
+        const data = await transactionService.getMyTransactions();
+        setTransactions(data);
+      } catch (err) {
+        setError(err?.response?.data?.message || "Không thể tải lịch sử giao dịch.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
+
+  const getTxType = (tx) => (tx.type ?? tx.transactionType ?? "").toUpperCase();
+
+  const isExpenseTx = (tx) => {
+    return [
+      "ESCROW_LOCK",
+      "ESCROW_RELEASE",
+      "PLATFORM_FEE",
+      "WITHDRAWAL",
+      "WITHDRAW",
+    ].includes(getTxType(tx));
+  };
+
+  const getTxAmountText = (tx) => {
+    const amount = Number(tx.amount ?? 0);
+
+    if (amount === 0) return "0₫";
+
+    return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
+  };
+
+  const getTxProjectText = (tx) => {
+    if (tx.projectId && tx.milestoneId) {
+      return `Project #${tx.projectId} • Milestone #${tx.milestoneId}`;
+    }
+
+    if (tx.projectId) {
+      return `Project #${tx.projectId}`;
+    }
+
+    if (getTxType(tx) === "DEPOSIT") {
+      return "Nạp tiền vào ví";
+    }
+
+    return tx.description ?? "—";
+  };
+
+  const filtered = useMemo(() => {
+    return transactions.filter((tx) => {
+      const type = getTxType(tx);
+      const status = (tx.status ?? "").toUpperCase();
+
+      const matchType =
+        filterType === "All" || type === filterType.toUpperCase();
+
+      const matchStatus =
+        filterStatus === "All" || status === filterStatus.toUpperCase();
+
+      const matchProject =
+        !selectedProjectId || String(tx.projectId) === String(selectedProjectId);
+
+      const matchMilestone =
+        !selectedMilestoneId || String(tx.milestoneId) === String(selectedMilestoneId);
+
+      const matchTransaction =
+        !selectedTransactionId || String(tx.transactionId) === String(selectedTransactionId);
+
+      return matchType && matchStatus && matchProject && matchMilestone && matchTransaction;
+    });
+  }, [
+    transactions,
+    filterType,
+    filterStatus,
+    selectedProjectId,
+    selectedMilestoneId,
+    selectedTransactionId,
+  ]);
 
   const handleExport = () => {
     // TODO (BE): GET /wallet/transactions/export → download file
@@ -50,7 +122,17 @@ export default function TransactionsPage() {
 
   return (
     <ClientLayout>
-      <div style={{ padding: "40px 48px", maxWidth: 1440, margin: "0 auto" }}>
+      <div className="mx-auto max-w-[1440px] px-12 py-10">
+
+        <button
+          onClick={() => navigate(-1)}
+          className="mb-6 flex w-fit items-center gap-2 rounded-lg border border-cyan-400/30 px-4 py-2 text-cyan-400 transition hover:bg-cyan-400/10"
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back 
+        </button>
 
         {/* Header */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32 }}>
@@ -80,7 +162,9 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 13, color: "#8c90a0", fontWeight: 500 }}>Type:</span>
             <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
               style={{ background: "rgba(29,32,38,0.5)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#e1e2eb", fontSize: 13, outline: "none", cursor: "pointer" }}>
-              {["All", "Escrow", "Deposit", "Payment", "Refund"].map((t) => <option key={t}>{t}</option>)}
+              {["All", "DEPOSIT", "ESCROW_LOCK", "ESCROW_RELEASE", "PLATFORM_FEE", "WITHDRAWAL"].map((t) => (
+                <option key={t}>{t}</option>
+              ))}
             </select>
           </div>
 
@@ -89,7 +173,9 @@ export default function TransactionsPage() {
             <span style={{ fontSize: 13, color: "#8c90a0", fontWeight: 500 }}>Status:</span>
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
               style={{ background: "rgba(29,32,38,0.5)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#e1e2eb", fontSize: 13, outline: "none", cursor: "pointer" }}>
-              {["All", "Completed", "Pending", "Failed"].map((s) => <option key={s}>{s}</option>)}
+              {["All", "SUCCESS", "PENDING", "FAILED", "PAID"].map((s) => (
+                <option key={s}>{s}</option>
+              ))}
             </select>
           </div>
 
@@ -113,50 +199,68 @@ export default function TransactionsPage() {
 
           {/* Table Body */}
           <div style={{ overflowY: "auto", maxHeight: "55vh" }}>
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div style={{ textAlign: "center", padding: "60px 0", color: "#8c90a0" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, animation: "spin 1s linear infinite", color: "#00F0FF" }}>
+                  autorenew
+                </span>
+                Loading transactions...
+              </div>
+            ) : error ? (
+              <div style={{ textAlign: "center", padding: "60px 0", color: "#f87171" }}>
+                {error}
+              </div>
+            ) : filtered.length === 0 ? (
               <div style={{ textAlign: "center", padding: "60px 0", color: "#8c90a0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12 }}>receipt_long</span>
                 No transactions found
               </div>
             ) : filtered.map((tx) => {
-              const statusCfg = STATUS_CONFIG[tx.status] || STATUS_CONFIG.Pending;
+              const statusKey = (tx.status ?? "").toUpperCase();
+              const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.PENDING;
+
               return (
-                <div key={tx.id}
+                <div key={tx.transactionId ?? tx.id}
                   style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 3fr 1.5fr 1.5fr 1fr", padding: "18px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.2s" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
 
                   {/* Date */}
-                  <div style={{ fontSize: 13, color: "#8c90a0" }}>{tx.date}</div>
+                  <div style={{ fontSize: 13, color: "#8c90a0" }}>
+                    {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("vi-VN") : "—"}
+                  </div>
 
                   {/* Type */}
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: 6, background: tx.iconBg, color: tx.iconColor, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{tx.icon}</span>
+                    <div style={{ width: 32, height: 32, borderRadius: 6, background: isExpenseTx(tx) ? "rgba(248,113,113,0.1)" : "rgba(52,211,153,0.1)", color: isExpenseTx(tx) ? "#f87171" : "#34d399", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                        {isExpenseTx(tx) ? "output" : "input"}
+                      </span>
                     </div>
-                    <span style={{ fontSize: 13, color: "#e1e2eb" }}>{tx.type}</span>
+                    <span style={{ fontSize: 13, color: "#e1e2eb" }}>
+                      {getTxType(tx)}
+                    </span>
                   </div>
 
                   {/* Project */}
-                  <div style={{ fontSize: 13, color: "#e1e2eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.project}</div>
+                  <div style={{ fontSize: 13, color: "#e1e2eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={tx.description ?? ""}>{getTxProjectText(tx)}</div>
 
                   {/* Amount */}
-                  <div style={{ fontSize: 13, fontFamily: "JetBrains Mono, monospace", color: tx.amount > 0 ? "#34d399" : "#e1e2eb", textAlign: "right" }}>
-                    {tx.amount > 0 ? "+" : ""}{tx.amount.toLocaleString("en-US", { style: "currency", currency: "USD" })}
+                  <div style={{ fontSize: 13, fontFamily: "JetBrains Mono, monospace", color: isExpenseTx(tx) ? "#ffb4ab" : "#34d399", textAlign: "right", fontWeight: 700 }}>
+                    {getTxAmountText(tx)}
                   </div>
 
                   {/* Status */}
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}>
-                      {tx.status}
+                      {statusKey || "—"}
                     </span>
                   </div>
 
-                  {/* Action — TODO (BE): navigate đến trang detail transaction */}
-                  {/* Khi BE xong: navigate(`/client/transactions/${tx.id}`) */}
+                  {/* Action — dẫn vào trang form chi tiết riêng cho từng transaction */}
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <button
-                      onClick={() => navigate(`/client/transactions/${tx.id}`)}
+                      onClick={() => navigate(`/client/transactions/${tx.transactionId}`)}
                       style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", color: "#00F0FF", background: "none", border: "none", cursor: "pointer", transition: "filter 0.2s" }}
                       onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.3)")}
                       onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}>
