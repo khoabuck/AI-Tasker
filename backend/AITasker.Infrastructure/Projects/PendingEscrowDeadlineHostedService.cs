@@ -144,13 +144,25 @@ namespace AITasker.Infrastructure.Projects
                 clientProfile.UserId,
                 "Escrow lock expired",
                 $"You did not lock escrow for project '{project.Title}' before the deadline. The contract was cancelled before escrow.",
-                "ESCROW_LOCK_EXPIRED");
+                "ESCROW_LOCK_EXPIRED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
 
             await notificationService.CreateNotificationAsync(
                 expertProfile.UserId,
                 "Project cancelled before escrow",
                 $"Client did not lock escrow for project '{project.Title}' before the deadline. You do not need to start work.",
-                "ESCROW_LOCK_EXPIRED");
+                "ESCROW_LOCK_EXPIRED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
         }
     }
 }

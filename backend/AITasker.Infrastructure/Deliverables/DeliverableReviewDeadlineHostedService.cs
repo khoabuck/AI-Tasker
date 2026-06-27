@@ -174,13 +174,23 @@ namespace AITasker.Infrastructure.Deliverables
                     clientProfile.UserId,
                     "Deliverable review overdue",
                     $"You missed the review deadline for milestone '{milestone.Title}'. Please approve, request revision, or open dispute within 6 hours before auto approval.",
-                    "CLIENT_REVIEW_OVERDUE");
+                    "CLIENT_REVIEW_OVERDUE",
+                    relatedEntityType: "DELIVERABLE",
+                    relatedEntityId: deliverable.DeliverableId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId,
+                    relatedDeliverableId: deliverable.DeliverableId);
 
                 await notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Client review overdue",
                     $"Client missed the review deadline for milestone '{milestone.Title}'. The system will auto approve after 6 hours if there is no response.",
-                    "CLIENT_REVIEW_OVERDUE");
+                    "CLIENT_REVIEW_OVERDUE",
+                    relatedEntityType: "DELIVERABLE",
+                    relatedEntityId: deliverable.DeliverableId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId,
+                    relatedDeliverableId: deliverable.DeliverableId);
 
                 return;
             }
@@ -222,13 +232,23 @@ namespace AITasker.Infrastructure.Deliverables
                 clientProfile.UserId,
                 "Deliverable auto approved",
                 $"Deliverable for milestone '{milestone.Title}' was automatically approved because the review deadline and grace period expired.",
-                "DELIVERABLE_AUTO_APPROVED");
+                "DELIVERABLE_AUTO_APPROVED",
+                relatedEntityType: "DELIVERABLE",
+                relatedEntityId: deliverable.DeliverableId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId,
+                relatedDeliverableId: deliverable.DeliverableId);
 
             await notificationService.CreateNotificationAsync(
                 expertProfile.UserId,
                 "Deliverable auto approved",
                 $"Your deliverable for milestone '{milestone.Title}' was automatically approved and escrow was released.",
-                "DELIVERABLE_AUTO_APPROVED");
+                "DELIVERABLE_AUTO_APPROVED",
+                relatedEntityType: "DELIVERABLE",
+                relatedEntityId: deliverable.DeliverableId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId,
+                relatedDeliverableId: deliverable.DeliverableId);
         }
 
         private static async Task TryCompleteProjectAfterAutoApprovalAsync(
@@ -297,7 +317,11 @@ namespace AITasker.Infrastructure.Deliverables
                     clientProfile.UserId,
                     "Project completed",
                     $"Project '{project.Title}' has been completed. You can now review the expert.",
-                    "PROJECT_COMPLETED");
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
             }
 
             if (expertProfile != null)
@@ -306,7 +330,11 @@ namespace AITasker.Infrastructure.Deliverables
                     expertProfile.UserId,
                     "Project completed",
                     $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED");
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
             }
         }
 
