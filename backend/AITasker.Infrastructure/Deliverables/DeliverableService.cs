@@ -67,19 +67,12 @@ namespace AITasker.Infrastructure.Deliverables
                 throw new UnauthorizedAccessException("Only the assigned expert can submit deliverables for this milestone.");
             }
 
-            if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Deliverable can only be submitted when project is ACTIVE.");
-            }
+            EnsureProjectEscrowLockedForDeliverableAction(project, milestone);
 
             if (!CanSubmitForMilestone(milestone))
             {
-                throw new InvalidOperationException("Deliverable can only be submitted for FUNDED, IN_PROGRESS, OVERDUE, or REVISION_REQUESTED milestones.");
-            }
-
-            if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Milestone escrow must be locked before submitting deliverable.");
+                throw new InvalidOperationException(
+                    "Deliverable can only be submitted for FUNDED, IN_PROGRESS, OVERDUE, or REVISION_REQUESTED milestones.");
             }
 
             var hasPendingSubmittedDeliverable = await _context.Deliverables.AnyAsync(d =>
@@ -133,7 +126,12 @@ namespace AITasker.Infrastructure.Deliverables
                 clientProfile.UserId,
                 "Deliverable submitted",
                 $"Expert submitted deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'. Please review before {deliverable.ReviewDeadlineAt:yyyy-MM-dd HH:mm:ss} UTC.",
-                "DELIVERABLE_SUBMITTED");
+                "DELIVERABLE_SUBMITTED",
+                relatedEntityType: "DELIVERABLE",
+                relatedEntityId: deliverable.DeliverableId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId,
+                relatedDeliverableId: deliverable.DeliverableId);
 
             return await MapToDeliverableResponseAsync(deliverable);
         }
@@ -210,19 +208,12 @@ namespace AITasker.Infrastructure.Deliverables
                 throw new UnauthorizedAccessException("Only the project Client can approve this deliverable.");
             }
 
-            if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Deliverable can only be approved when project is ACTIVE.");
-            }
+            EnsureProjectEscrowLockedForDeliverableAction(project, milestone);
 
             if (!string.Equals(milestone.Status, MilestoneStatusSubmitted, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Milestone must be SUBMITTED before approving deliverable.");
-            }
-
-            if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("Milestone escrow must be LOCKED before approval.");
+                throw new InvalidOperationException(
+                    "Milestone must be SUBMITTED before approving deliverable.");
             }
 
             deliverable.ReviewedAt = DateTime.UtcNow;
@@ -243,13 +234,23 @@ namespace AITasker.Infrastructure.Deliverables
                 expertProfile.UserId,
                 "Deliverable approved",
                 $"Your deliverable for milestone '{milestone.Title}' was approved and escrow was released.",
-                "DELIVERABLE_APPROVED");
+                "DELIVERABLE_APPROVED",
+                relatedEntityType: "DELIVERABLE",
+                relatedEntityId: deliverable.DeliverableId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId,
+                relatedDeliverableId: deliverable.DeliverableId);
 
             await _notificationService.CreateNotificationAsync(
                 clientProfile.UserId,
                 "Deliverable approved",
                 $"You approved deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'.",
-                "DELIVERABLE_APPROVED");
+                "DELIVERABLE_APPROVED",
+                relatedEntityType: "DELIVERABLE",
+                relatedEntityId: deliverable.DeliverableId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId,
+                relatedDeliverableId: deliverable.DeliverableId);
 
             return await MapToDeliverableResponseAsync(deliverable);
         }
@@ -283,12 +284,16 @@ namespace AITasker.Infrastructure.Deliverables
                     throw new UnauthorizedAccessException("Only the project Client can request revision.");
                 }
 
-                if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
+                EnsureProjectEscrowLockedForDeliverableAction(project, milestone);
+
+                if (!string.Equals(milestone.Status, MilestoneStatusSubmitted, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("Revision can only be requested when project is ACTIVE.");
+                    throw new InvalidOperationException(
+                        "Milestone must be SUBMITTED before requesting revision.");
                 }
 
                 deliverable.Status = DeliverableStatusRevisionRequested;
+
                 deliverable.ClientFeedback = request.Feedback.Trim();
                 deliverable.ReviewedAt = DateTime.UtcNow;
                 milestone.Status = MilestoneStatusRevisionRequested;
@@ -301,7 +306,12 @@ namespace AITasker.Infrastructure.Deliverables
                     expertProfile.UserId,
                     "Revision requested",
                     $"Client requested revision for milestone '{milestone.Title}'. Feedback: {request.Feedback.Trim()}",
-                    "REVISION_REQUESTED");
+                    "REVISION_REQUESTED",
+                    relatedEntityType: "DELIVERABLE",
+                    relatedEntityId: deliverable.DeliverableId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId,
+                    relatedDeliverableId: deliverable.DeliverableId);
 
                 return await MapToDeliverableResponseAsync(deliverable);
             }
@@ -346,6 +356,28 @@ namespace AITasker.Infrastructure.Deliverables
             if (string.IsNullOrWhiteSpace(request.Feedback))
             {
                 throw new InvalidOperationException("Revision feedback is required.");
+            }
+        }
+
+        private static void EnsureProjectEscrowLockedForDeliverableAction(
+            Project project,
+            Milestone milestone)
+        {
+            if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Project is not active. Deliverable actions are only allowed after escrow is locked.");
+            }
+
+            if (project.EscrowLockedAt == null)
+            {
+                throw new InvalidOperationException(
+                    "Project escrow is not locked yet.");
+            }
+
+            if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Milestone escrow is not locked yet.");
             }
         }
 
@@ -410,13 +442,19 @@ namespace AITasker.Infrastructure.Deliverables
                 clientProfile.UserId,
                 "Project completed",
                 $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED");
+                "PROJECT_COMPLETED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedProjectId: project.ProjectId);
 
             await _notificationService.CreateNotificationAsync(
                 expertProfile.UserId,
                 "Project completed",
                 $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED");
+                "PROJECT_COMPLETED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedProjectId: project.ProjectId);
         }
 
         private async Task EnsureUserCanAccessDeliverableContextAsync(

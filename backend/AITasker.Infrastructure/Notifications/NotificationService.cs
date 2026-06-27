@@ -64,7 +64,17 @@ namespace AITasker.Infrastructure.Notifications
             int userId,
             string title,
             string content,
-            string type)
+            string type,
+            string? relatedEntityType = null,
+            int? relatedEntityId = null,
+            int? relatedJobId = null,
+            int? relatedProposalId = null,
+            int? relatedContractId = null,
+            int? relatedProjectId = null,
+            int? relatedMilestoneId = null,
+            int? relatedDeliverableId = null,
+            int? relatedDisputeId = null,
+            int? relatedConversationId = null)
         {
             ValidateCreateNotificationInput(
                 userId,
@@ -80,6 +90,20 @@ namespace AITasker.Infrastructure.Notifications
                 Title = title.Trim(),
                 Content = content.Trim(),
                 Type = type.Trim().ToUpperInvariant(),
+
+                RelatedEntityType = string.IsNullOrWhiteSpace(relatedEntityType)
+                    ? null
+                    : relatedEntityType.Trim().ToUpperInvariant(),
+                RelatedEntityId = relatedEntityId,
+                RelatedJobId = relatedJobId,
+                RelatedProposalId = relatedProposalId,
+                RelatedContractId = relatedContractId,
+                RelatedProjectId = relatedProjectId,
+                RelatedMilestoneId = relatedMilestoneId,
+                RelatedDeliverableId = relatedDeliverableId,
+                RelatedDisputeId = relatedDisputeId,
+                RelatedConversationId = relatedConversationId,
+
                 IsRead = false,
                 CreatedAt = DateTime.UtcNow
             };
@@ -97,7 +121,17 @@ namespace AITasker.Infrastructure.Notifications
                     notification.Title,
                     notification.Content,
                     notification.Type,
-                    notification.CreatedAt);
+                    notification.CreatedAt,
+                    notification.RelatedEntityType,
+                    notification.RelatedEntityId,
+                    notification.RelatedJobId,
+                    notification.RelatedProposalId,
+                    notification.RelatedContractId,
+                    notification.RelatedProjectId,
+                    notification.RelatedMilestoneId,
+                    notification.RelatedDeliverableId,
+                    notification.RelatedDisputeId,
+                    notification.RelatedConversationId);
             }
             catch (Exception ex)
             {
@@ -255,7 +289,20 @@ namespace AITasker.Infrastructure.Notifications
                 UserId = notification.UserId,
                 Title = notification.Title,
                 Content = notification.Content,
+                
                 Type = notification.Type,
+
+                RelatedEntityType = notification.RelatedEntityType,
+                RelatedEntityId = notification.RelatedEntityId,
+                RelatedJobId = notification.RelatedJobId,
+                RelatedProposalId = notification.RelatedProposalId,
+                RelatedContractId = notification.RelatedContractId,
+                RelatedProjectId = notification.RelatedProjectId,
+                RelatedMilestoneId = notification.RelatedMilestoneId,
+                RelatedDeliverableId = notification.RelatedDeliverableId,
+                RelatedDisputeId = notification.RelatedDisputeId,
+                RelatedConversationId = notification.RelatedConversationId,
+
                 IsRead = notification.IsRead,
                 CreatedAt = createdAtVietnam,
                 CreatedAtUtc = createdAtUtc,

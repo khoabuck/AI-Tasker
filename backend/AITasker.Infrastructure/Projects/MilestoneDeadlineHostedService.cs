@@ -146,13 +146,23 @@ namespace AITasker.Infrastructure.Projects
                 expertProfile.UserId,
                 "Milestone overdue",
                 $"Milestone '{milestone.Title}' is overdue. Please submit the deliverable as soon as possible.",
-                "MILESTONE_OVERDUE");
+                "MILESTONE_OVERDUE",
+                relatedEntityType: "MILESTONE",
+                relatedEntityId: milestone.MilestoneId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId);
 
             await notificationService.CreateNotificationAsync(
                 clientProfile.UserId,
                 "Milestone overdue",
                 $"Expert missed the deadline for milestone '{milestone.Title}'.",
-                "MILESTONE_OVERDUE");
+                "MILESTONE_OVERDUE",
+                relatedEntityType: "MILESTONE",
+                relatedEntityId: milestone.MilestoneId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId);
         }
     }
 }

@@ -55,6 +55,10 @@ public class ExpertProfile
 
     public DateTime? VerifiedAt { get; set; }
 
+    public bool FreeProposalSubmitUsed { get; set; }
+
+    public int ProposalSubmitCredits { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

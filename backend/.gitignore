@@ -12,3 +12,5 @@ obj/
 .vs/
 *.user
 *.suo
+
+testsprite_tests\tmp\config.json

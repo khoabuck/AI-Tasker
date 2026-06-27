@@ -10,9 +10,14 @@ namespace AITasker.Infrastructure.Disputes
 {
     public class DisputeService : IDisputeService
     {
+        private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
+
         private const string ProjectStatusActive = "ACTIVE";
         private const string ProjectStatusDisputed = "DISPUTED";
         private const string ProjectStatusCompleted = "COMPLETED";
+        private const string ProjectStatusCancelled = "CANCELLED";
+
+        private const string ContractStatusConfirmed = "CONFIRMED";
 
         private const string JobStatusActive = "ACTIVE";
         private const string JobStatusDisputed = "DISPUTED";
@@ -89,10 +94,19 @@ namespace AITasker.Infrastructure.Disputes
                     throw new UnauthorizedAccessException("Only the project Client or Expert can open a dispute.");
                 }
 
-                if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
+                EnsureProjectReadyForDispute(
+                    project,
+                    contract);
+
+                var existingOpenDisputeForProject = await _context.Disputes.AnyAsync(d =>
+                    d.ProjectId == project.ProjectId &&
+                    d.Status == DisputeStatusOpen);
+
+                if (existingOpenDisputeForProject)
                 {
-                    throw new InvalidOperationException("Dispute can only be opened when project is ACTIVE.");
-                }
+                    throw new InvalidOperationException(
+                        "An open dispute already exists for this project.");
+                }    
 
                 var respondentUserId = currentUserIsClient
                     ? expertProfile.UserId
@@ -117,10 +131,8 @@ namespace AITasker.Infrastructure.Disputes
                         throw new InvalidOperationException("Milestone does not belong to this project.");
                     }
 
-                    if (IsMilestoneFinal(milestone))
-                    {
-                        throw new InvalidOperationException("Cannot open dispute for a finished milestone.");
-                    }
+                    EnsureMilestoneReadyForDispute(
+                        milestone);
 
                     if (request.DisputedAmount > milestone.Amount)
                     {
@@ -139,8 +151,7 @@ namespace AITasker.Infrastructure.Disputes
                     escrow = await _context.Escrows
                         .FirstOrDefaultAsync(e =>
                             e.MilestoneId == milestone.MilestoneId &&
-                            (e.Status == EscrowStatusLocked ||
-                             e.Status == EscrowStatusFrozen));
+                            e.Status == EscrowStatusLocked);
 
                     if (escrow == null)
                     {
@@ -174,21 +185,10 @@ namespace AITasker.Infrastructure.Disputes
                 }
                 else
                 {
-                    var existingProjectDispute = await _context.Disputes.AnyAsync(d =>
-                        d.ProjectId == project.ProjectId &&
-                        d.MilestoneId == null &&
-                        d.Status == DisputeStatusOpen);
-
-                    if (existingProjectDispute)
-                    {
-                        throw new InvalidOperationException("An open project-level dispute already exists for this project.");
-                    }
-
                     var lockedEscrows = await _context.Escrows
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
-                            (e.Status == EscrowStatusLocked ||
-                             e.Status == EscrowStatusFrozen))
+                            e.Status == EscrowStatusLocked)
                         .ToListAsync();
 
                     if (!lockedEscrows.Any())
@@ -283,7 +283,12 @@ namespace AITasker.Infrastructure.Disputes
                     respondentUserId,
                     "Dispute opened",
                     $"{openerName} opened a dispute in project '{project.Title}'.",
-                    "DISPUTE_OPENED");
+                    "DISPUTE_OPENED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await NotifyAdminsAsync(
                     "New dispute opened",
@@ -368,7 +373,12 @@ namespace AITasker.Infrastructure.Disputes
                 otherUserId,
                 "New dispute evidence",
                 $"New evidence was submitted for dispute #{dispute.DisputeId}.",
-                "DISPUTE_EVIDENCE_SUBMITTED");
+                "DISPUTE_EVIDENCE_SUBMITTED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: dispute.DisputeId,
+                relatedProjectId: dispute.ProjectId,
+                relatedMilestoneId: dispute.MilestoneId,
+                relatedDisputeId: dispute.DisputeId);
 
             await NotifyAdminsAsync(
                 "New dispute evidence",
@@ -426,6 +436,16 @@ namespace AITasker.Infrastructure.Disputes
                 var clientProfile = await GetClientProfileAsync(contract.ClientId);
                 var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
 
+                if (project.EscrowLockedAt == null)
+                {
+                    throw new InvalidOperationException("Cannot resolve dispute because project escrow was never locked.");
+                }
+
+                if (!string.Equals(project.Status, ProjectStatusDisputed, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Only DISPUTED projects can have disputes resolved.");
+                }
+
                 var normalizedResolutionType = request.ResolutionType.Trim().ToUpperInvariant();
 
                 decimal expertAmount;
@@ -460,8 +480,7 @@ namespace AITasker.Infrastructure.Disputes
                     escrow = await _context.Escrows
                         .FirstOrDefaultAsync(e =>
                             e.MilestoneId == milestone.MilestoneId &&
-                            (e.Status == EscrowStatusFrozen ||
-                            e.Status == EscrowStatusLocked));
+                            e.Status == EscrowStatusFrozen);
 
                     if (escrow == null)
                     {
@@ -478,8 +497,7 @@ namespace AITasker.Infrastructure.Disputes
                     projectEscrows = await _context.Escrows
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
-                            (e.Status == EscrowStatusFrozen ||
-                            e.Status == EscrowStatusLocked))
+                            e.Status == EscrowStatusFrozen)
                         .ToListAsync();
 
                     if (!projectEscrows.Any())
@@ -616,13 +634,23 @@ namespace AITasker.Infrastructure.Disputes
                     clientProfile.UserId,
                     "Dispute resolved",
                     $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED");
+                    "DISPUTE_RESOLVED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Dispute resolved",
                     $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED");
+                    "DISPUTE_RESOLVED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await dbTransaction.CommitAsync();
 
@@ -733,6 +761,62 @@ namespace AITasker.Infrastructure.Disputes
                    status == MilestoneStatusRefunded;
         }
 
+        private static void EnsureProjectReadyForDispute(
+            Project project,
+            ProjectContract contract)
+        {
+            if (!string.Equals(contract.Status, ContractStatusConfirmed, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dispute can only be opened after contract is CONFIRMED.");
+            }
+
+            if (string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dispute cannot be opened before escrow is locked.");
+            }
+
+            if (string.Equals(project.Status, ProjectStatusCancelled, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dispute cannot be opened for a project cancelled before escrow.");
+            }
+
+            if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Dispute can only be opened when project is ACTIVE.");
+            }
+
+            if (project.EscrowLockedAt == null)
+            {
+                throw new InvalidOperationException(
+                    "Dispute cannot be opened before project escrow is locked.");
+            }
+
+            if (project.EscrowExpiredAt != null)
+            {
+                throw new InvalidOperationException(
+                    "Dispute cannot be opened because escrow lock deadline already expired.");
+            }
+        }
+
+        private static void EnsureMilestoneReadyForDispute(Milestone milestone)
+        {
+            if (IsMilestoneFinal(milestone))
+            {
+                throw new InvalidOperationException(
+                    "Cannot open dispute for a finished milestone.");
+            }
+
+            if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Milestone dispute can only be opened when milestone escrow is LOCKED.");
+            }
+        }
+
         private static bool IsMilestoneFinished(Milestone milestone)
         {
             var status = milestone.Status?.Trim().ToUpperInvariant();
@@ -762,7 +846,7 @@ namespace AITasker.Infrastructure.Disputes
 
                 await UpdateJobStatusByProjectAsync(
                     project,
-                    JobStatusCompleted);
+                    JobStatusDisputed);
 
                 return;
             }

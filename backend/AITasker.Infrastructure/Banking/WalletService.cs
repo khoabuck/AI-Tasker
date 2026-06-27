@@ -18,13 +18,16 @@ namespace AITasker.Infrastructure.Banking
     {
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusActive = "ACTIVE";
+        private const string ProjectStatusCancelled = "CANCELLED";
+
+        private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusActive = "ACTIVE";
+        private const string JobStatusOpen = "OPEN";
 
         private const string ProposalStatusAccepted = "ACCEPTED";
         private const string ProposalStatusRejected = "REJECTED";
         private const string ProposalStatusWithdrawn = "WITHDRAWN";
-        private const string ProposalStatusNotSelected = "NOT_SELECTED";
 
         private const string ContractStatusConfirmed = "CONFIRMED";
 
@@ -598,6 +601,35 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
                 }
 
+                var now = DateTime.UtcNow;
+
+                if (project.EscrowExpiredAt != null)
+                {
+                    throw new InvalidOperationException(
+                        "Escrow cannot be locked because escrow lock deadline already expired.");
+                }
+
+                if (project.EscrowLockedAt != null)
+                {
+                    throw new InvalidOperationException(
+                        "Project escrow is already locked.");
+                }
+
+                if (project.EscrowLockDeadlineAt.HasValue &&
+                    project.EscrowLockDeadlineAt.Value < now)
+                {
+                    await ExpirePendingEscrowProjectAsync(
+                        project,
+                        contract,
+                        now);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+
+                    throw new InvalidOperationException(
+                        "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
+                }
+
                 var proposal = await GetProposalAsync(contract.ProposalId);
                 var job = await GetJobAsync(proposal.JobId);
 
@@ -610,6 +642,28 @@ namespace AITasker.Infrastructure.Banking
                 if (milestones.Count == 0)
                 {
                     throw new InvalidOperationException("Project must have at least one milestone before locking escrow.");
+                }
+
+                var duplicatedOrderIndexes = milestones
+                    .GroupBy(x => x.OrderIndex)
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                if (duplicatedOrderIndexes.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Milestone order index must be unique before locking escrow.");
+                }
+
+                var invalidDurationMilestones = milestones
+                    .Where(x => x.DurationDays <= 0)
+                    .ToList();
+
+                if (invalidDurationMilestones.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "All milestones must have duration greater than 0 before locking escrow.");
                 }
 
                 var milestoneTotal = milestones.Sum(m => m.Amount);
@@ -660,11 +714,11 @@ namespace AITasker.Infrastructure.Banking
                         $"Client wallet balance is not enough to lock escrow. Required: {contract.TotalClientPayment:N0}, Available: {clientWallet.AvailableBalance:N0}.");
                 }
 
-                var now = DateTime.UtcNow;
-
                 clientWallet.AvailableBalance -= contract.TotalClientPayment;
                 clientWallet.LockedBalance += contract.FinalPrice;
                 clientWallet.UpdatedAt = now;
+
+                var cumulativeDurationDays = 0;
 
                 foreach (var milestone in milestones)
                 {
@@ -679,12 +733,18 @@ namespace AITasker.Infrastructure.Banking
                         UpdatedAt = now
                     });
 
+                    var durationDays = milestone.DurationDays;
+
+                    cumulativeDurationDays += durationDays;
+
+                    milestone.Deadline = now.AddDays(cumulativeDurationDays);
                     milestone.Status = MilestoneStatusFunded;
                     milestone.PaymentStatus = PaymentStatusLocked;
                 }
 
                 project.Status = ProjectStatusActive;
-                project.StartDate ??= now;
+                project.StartDate = now;
+                project.EscrowLockedAt = now;
 
                 proposal.Status = ProposalStatusAccepted;
 
@@ -696,13 +756,12 @@ namespace AITasker.Infrastructure.Banking
                         p.JobId == job.JobPostingId &&
                         p.ProposalId != proposal.ProposalId &&
                         p.Status != ProposalStatusRejected &&
-                        p.Status != ProposalStatusWithdrawn &&
-                        p.Status != ProposalStatusNotSelected)
+                        p.Status != ProposalStatusWithdrawn)
                     .ToListAsync();
 
                 foreach (var competingProposal in competingProposals)
                 {
-                    competingProposal.Status = ProposalStatusNotSelected;
+                    competingProposal.Status = ProposalStatusRejected;
                 }
 
                 _context.Transactions.Add(new Transaction
@@ -743,13 +802,19 @@ namespace AITasker.Infrastructure.Banking
                     clientProfile.UserId,
                     "Escrow locked",
                     $"Escrow has been locked for project: {project.Title}.",
-                    "ESCROW_LOCKED");
+                    "ESCROW_LOCKED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Project started",
                     $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
-                    "PROJECT_STARTED");
+                    "PROJECT_STARTED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
 
                 return await BuildProjectEscrowResponseAsync(
                     project,
@@ -784,12 +849,26 @@ namespace AITasker.Infrastructure.Banking
 
                 if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("Escrow can only be released when project is ACTIVE.");
+                    throw new InvalidOperationException(
+                        "Escrow can only be released when project is ACTIVE.");
+                }
+
+                if (project.EscrowLockedAt == null)
+                {
+                    throw new InvalidOperationException(
+                        "Project escrow is not locked yet.");
+                }
+
+                if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Milestone escrow must be LOCKED before escrow release.");
                 }
 
                 if (!string.Equals(milestone.Status, MilestoneStatusSubmitted, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("Milestone must have a submitted deliverable before escrow release.");
+                    throw new InvalidOperationException(
+                        "Milestone must have a submitted deliverable before escrow release.");
                 }
 
                 if (await HasOpenDisputeForMilestoneAsync(project.ProjectId, milestoneId))
@@ -870,13 +949,21 @@ namespace AITasker.Infrastructure.Banking
                     expertProfile.UserId,
                     "Escrow released",
                     $"Escrow for milestone '{milestone.Title}' has been released to your wallet.",
-                    "ESCROW_RELEASED");
+                    "ESCROW_RELEASED",
+                    relatedEntityType: "MILESTONE",
+                    relatedEntityId: milestone.MilestoneId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId);
 
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
                     "Escrow released",
                     $"Escrow for milestone '{milestone.Title}' has been released.",
-                    "ESCROW_RELEASED");
+                    "ESCROW_RELEASED",
+                    relatedEntityType: "MILESTONE",
+                    relatedEntityId: milestone.MilestoneId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId);
 
                 return await BuildProjectEscrowResponseAsync(
                     project,
@@ -1260,6 +1347,29 @@ namespace AITasker.Infrastructure.Banking
             }
 
             throw new InvalidOperationException("Could not generate unique deposit order code.");
+        }
+
+        private async Task ExpirePendingEscrowProjectAsync(
+            Project project,
+            ProjectContract contract,
+            DateTime now)
+        {
+            var proposal = await GetProposalAsync(contract.ProposalId);
+            var job = await GetJobAsync(proposal.JobId);
+
+            contract.Status = ContractStatusCancelled;
+            contract.ClientConfirmed = false;
+            contract.ExpertConfirmed = false;
+            contract.ConfirmedAt = null;
+
+            project.Status = ProjectStatusCancelled;
+            project.EndDate = now;
+            project.EscrowExpiredAt = now;
+
+            proposal.Status = ProposalStatusRejected;
+
+            job.Status = JobStatusOpen;
+            job.UpdatedAt = now;
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(
