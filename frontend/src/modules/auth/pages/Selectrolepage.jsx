@@ -1,4 +1,5 @@
-import { useState } from "react";
+// src/modules/auth/pages/SelectRolePage.jsx
+import { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
@@ -46,6 +47,92 @@ export default function SelectRolePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return;
+
+    const user = JSON.parse(storedUser);
+    const role = String(user?.role || "").toUpperCase();
+    const status = String(user?.status || "").toUpperCase();
+
+    if (status === "PENDING_ROLE" || !role) return;
+
+    if (status === "PENDING_PROFILE") {
+      if (role === "EXPERT") {
+        navigate("/expert/setup-profile", { replace: true });
+        return;
+      }
+
+      if (role === "CLIENT") {
+        navigate("/setup-profile", { replace: true });
+        return;
+      }
+
+      return;
+    }
+
+    if (status === "ACTIVE") {
+      if (role === "CLIENT") navigate("/client/dashboard", { replace: true });
+      else if (role === "EXPERT") navigate("/expert/dashboard", { replace: true });
+      else if (role === "ADMIN") navigate("/admin/dashboard", { replace: true });
+      else navigate("/", { replace: true });
+    }
+  }, [navigate]);
+
+  const redirectAfterRoleSelected = (role) => {
+    const normalizedRole = String(role || "").toUpperCase();
+
+    if (normalizedRole === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
+      return;
+    }
+
+    if (normalizedRole === "CLIENT") {
+      navigate("/setup-profile", { replace: true });
+      return;
+    }
+
+    navigate("/setup-profile", { replace: true });
+  };
+
+  const redirectExistingUser = () => {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const role = String(user?.role || "").toUpperCase();
+    const status = String(user?.status || "").toUpperCase();
+
+    if (status === "ACTIVE") {
+      if (role === "CLIENT") {
+        navigate("/client/dashboard", { replace: true });
+        return;
+      }
+
+      if (role === "EXPERT") {
+        navigate("/expert/dashboard", { replace: true });
+        return;
+      }
+
+      if (role === "ADMIN") {
+        navigate("/admin/dashboard", { replace: true });
+        return;
+      }
+
+      navigate("/", { replace: true });
+      return;
+    }
+
+    if (status === "PENDING_PROFILE") {
+      if (role === "EXPERT") {
+        navigate("/expert/setup-profile", { replace: true });
+        return;
+      }
+
+      navigate("/setup-profile", { replace: true });
+      return;
+    }
+
+    navigate("/setup-profile", { replace: true });
+  };
+
   const handleConfirm = async () => {
     if (!selected) return;
 
@@ -69,6 +156,8 @@ export default function SelectRolePage() {
         responseData.data?.token ||
         responseData.data?.Token;
 
+      const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
+
       const userFromResponse =
         responseData.user ||
         responseData.User ||
@@ -77,12 +166,23 @@ export default function SelectRolePage() {
         responseData.data ||
         responseData;
 
-      const selectedUser = normalizeUser(userFromResponse, selected);
+      const selectedUser = normalizeUser(
+        {
+          ...oldUser,
+          ...userFromResponse,
+          role: selected,
+          status: "PENDING_PROFILE",
+        },
+        selected
+      );
 
       if (newToken) {
         localStorage.setItem("accessToken", newToken);
-        localStorage.setItem("user", JSON.stringify(selectedUser));
+      }
 
+      localStorage.setItem("user", JSON.stringify(selectedUser));
+
+      if (newToken && handleLoginSuccess) {
         handleLoginSuccess({
           accessToken: newToken,
           user: selectedUser,
@@ -104,30 +204,29 @@ export default function SelectRolePage() {
           accessToken: loginResult.accessToken,
           user: loginResult.user,
         });
-      } else {
-        localStorage.setItem("user", JSON.stringify(selectedUser));
-
+      } else if (refreshUser) {
         try {
           await refreshUser();
         } catch {
-          // Không chặn flow.
+          // Không chặn flow nếu refresh user lỗi.
         }
       }
 
-      if (selected === "EXPERT") {
-        navigate("/expert/setup-profile", { replace: true });
-        return;
-      }
-
-      navigate("/setup-profile", { replace: true });
+      redirectAfterRoleSelected(selected);
     } catch (err) {
       console.error("SELECT ROLE ERROR:", err?.response?.data || err);
 
-      setError(
+      const message =
         err?.response?.data?.message ||
-          err?.response?.data?.title ||
-          "Đã có lỗi xảy ra khi chọn vai trò."
-      );
+        err?.response?.data?.title ||
+        "Đã có lỗi xảy ra khi chọn vai trò.";
+
+      if (message === "User is not in pending role status.") {
+        redirectExistingUser();
+        return;
+      }
+
+      setError(message);
     } finally {
       setLoading(false);
     }

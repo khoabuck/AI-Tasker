@@ -1,8 +1,12 @@
 import axiosInstance from "./axiosInstance";
 
 const milestoneApi = {
-  getMilestonesByProject(projectId) {
-    return axiosInstance.get(`/projects/${projectId}/milestones`);
+  getMilestoneById(milestoneId) {
+    return axiosInstance.get(`/milestones/${milestoneId}`);
+  },
+
+  updateMilestone(milestoneId, data) {
+    return axiosInstance.patch(`/milestones/${milestoneId}`, data);
   },
 };
 

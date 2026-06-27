@@ -5,8 +5,12 @@ const adminDisputeApi = {
     return axiosInstance.get("/admin/disputes");
   },
 
+  getDisputeById(disputeId) {
+    return axiosInstance.get(`/admin/disputes/${disputeId}`);
+  },
+
   resolveDispute(disputeId, data) {
-    return axiosInstance.patch(`/admin/disputes/${disputeId}/resolve`, data);
+    return axiosInstance.post(`/admin/disputes/${disputeId}/resolve`, data);
   },
 };
 
