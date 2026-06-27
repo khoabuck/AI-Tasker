@@ -603,6 +603,18 @@ namespace AITasker.Infrastructure.Banking
 
                 var now = DateTime.UtcNow;
 
+                if (project.EscrowExpiredAt != null)
+                {
+                    throw new InvalidOperationException(
+                        "Escrow cannot be locked because escrow lock deadline already expired.");
+                }
+
+                if (project.EscrowLockedAt != null)
+                {
+                    throw new InvalidOperationException(
+                        "Project escrow is already locked.");
+                }
+
                 if (project.EscrowLockDeadlineAt.HasValue &&
                     project.EscrowLockDeadlineAt.Value < now)
                 {
@@ -630,6 +642,28 @@ namespace AITasker.Infrastructure.Banking
                 if (milestones.Count == 0)
                 {
                     throw new InvalidOperationException("Project must have at least one milestone before locking escrow.");
+                }
+
+                var duplicatedOrderIndexes = milestones
+                    .GroupBy(x => x.OrderIndex)
+                    .Where(x => x.Count() > 1)
+                    .Select(x => x.Key)
+                    .ToList();
+
+                if (duplicatedOrderIndexes.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "Milestone order index must be unique before locking escrow.");
+                }
+
+                var invalidDurationMilestones = milestones
+                    .Where(x => x.DurationDays <= 0)
+                    .ToList();
+
+                if (invalidDurationMilestones.Count > 0)
+                {
+                    throw new InvalidOperationException(
+                        "All milestones must have duration greater than 0 before locking escrow.");
                 }
 
                 var milestoneTotal = milestones.Sum(m => m.Amount);
@@ -699,13 +733,10 @@ namespace AITasker.Infrastructure.Banking
                         UpdatedAt = now
                     });
 
-                    var durationDays = milestone.DurationDays > 0
-                        ? milestone.DurationDays
-                        : Math.Max(1, (int)Math.Ceiling((milestone.Deadline - milestone.CreatedAt).TotalDays));
+                    var durationDays = milestone.DurationDays;
 
                     cumulativeDurationDays += durationDays;
 
-                    milestone.DurationDays = durationDays;
                     milestone.Deadline = now.AddDays(cumulativeDurationDays);
                     milestone.Status = MilestoneStatusFunded;
                     milestone.PaymentStatus = PaymentStatusLocked;
@@ -1325,18 +1356,6 @@ namespace AITasker.Infrastructure.Banking
 
             job.Status = JobStatusOpen;
             job.UpdatedAt = now;
-
-            var milestones = await _context.Milestones
-                .Where(x => x.ProjectId == project.ProjectId)
-                .ToListAsync();
-
-            foreach (var milestone in milestones)
-            {
-                if (string.Equals(milestone.PaymentStatus, PaymentStatusPending, StringComparison.OrdinalIgnoreCase))
-                {
-                    milestone.Status = ProjectStatusCancelled;
-                }
-            }
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(

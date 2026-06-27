@@ -16,6 +16,8 @@ namespace AITasker.Infrastructure.Projects
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusActive = "ACTIVE";
         private const string ProjectStatusCompleted = "COMPLETED";
+        private const string ProjectStatusCancelled = "CANCELLED";
+        private const string ProjectStatusDisputed = "DISPUTED";
 
         private const string MilestoneStatusPending = "PENDING";
         private const string MilestoneStatusApproved = "APPROVED";
@@ -24,7 +26,13 @@ namespace AITasker.Infrastructure.Projects
         private const string MilestoneStatusReleased = "RELEASED";
         private const string MilestoneStatusRefunded = "REFUNDED";
 
+        private const string DisputeStatusOpen = "OPEN";
+        private const string EscrowStatusLocked = "LOCKED";
+        private const string EscrowStatusFrozen = "FROZEN";
+        
         private const string PaymentStatusPending = "PENDING";
+
+        private const int EscrowLockWindowHours = 24;
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -64,6 +72,7 @@ namespace AITasker.Infrastructure.Projects
             {
                 return await MapToProjectResponseAsync(existingProject);
             }
+            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
 
             var project = new Project
             {
@@ -74,6 +83,9 @@ namespace AITasker.Infrastructure.Projects
                 Status = ProjectStatusPendingEscrow,
                 StartDate = null,
                 EndDate = null,
+                EscrowLockDeadlineAt = escrowDeadline,
+                EscrowLockedAt = null,
+                EscrowExpiredAt = null,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -140,6 +152,8 @@ namespace AITasker.Infrastructure.Projects
 
                 if (project == null)
                 {
+                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
+
                     project = new Project
                     {
                         ContractId = contract.ContractId,
@@ -149,6 +163,9 @@ namespace AITasker.Infrastructure.Projects
                         Status = ProjectStatusPendingEscrow,
                         StartDate = null,
                         EndDate = null,
+                        EscrowLockDeadlineAt = escrowDeadline,
+                        EscrowLockedAt = null,
+                        EscrowExpiredAt = null,
                         CreatedAt = DateTime.UtcNow
                     };
 
@@ -390,6 +407,7 @@ namespace AITasker.Infrastructure.Projects
             milestone.AcceptanceCriteria = request.AcceptanceCriteria.Trim();
             milestone.Amount = request.Amount;
             milestone.OrderIndex = request.OrderIndex;
+            milestone.DurationDays = CalculateDurationDaysFromDeadline(request.Deadline);
             milestone.Deadline = request.Deadline;
 
             await _context.SaveChangesAsync();
@@ -411,9 +429,29 @@ namespace AITasker.Infrastructure.Projects
 
             var canAccess = await CanAccessProjectAsync(currentUserId, project);
 
-            if (!canAccess)
+            EnsureProjectReadyForCompleteCheck(project);
+
+            var hasOpenDispute = await _context.Disputes.AnyAsync(x =>
+                x.ProjectId == project.ProjectId &&
+                x.Status == DisputeStatusOpen);
+
+            if (hasOpenDispute)
             {
-                throw new UnauthorizedAccessException("You do not have permission to complete-check this project.");
+                throw new InvalidOperationException(
+                    "Project cannot be completed while an open dispute exists.");
+            }
+
+            var hasLockedOrFrozenEscrow = await _context.Escrows.AnyAsync(x =>
+                x.ProjectId == project.ProjectId &&
+                (
+                    x.Status == EscrowStatusLocked ||
+                    x.Status == EscrowStatusFrozen
+                ));
+
+            if (hasLockedOrFrozenEscrow)
+            {
+                throw new InvalidOperationException(
+                    "Project cannot be completed while escrow is still locked or frozen.");
             }
 
             var contract = await GetContractByIdAsync(project.ContractId);
@@ -476,11 +514,19 @@ namespace AITasker.Infrastructure.Projects
                 AcceptanceCriteria = request.AcceptanceCriteria.Trim(),
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
+                DurationDays = CalculateDurationDaysFromDeadline(request.Deadline),
                 Deadline = request.Deadline,
                 PaymentStatus = PaymentStatusPending,
                 Status = MilestoneStatusPending,
                 CreatedAt = DateTime.UtcNow
             };
+        }
+
+        private static int CalculateDurationDaysFromDeadline(DateTime deadline)
+        {
+            var durationDays = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalDays);
+
+            return Math.Max(1, durationDays);
         }
 
         private static void ValidateMilestoneRequests(
@@ -567,9 +613,68 @@ namespace AITasker.Infrastructure.Projects
 
         private static void EnsureProjectCanEditMilestones(Project project)
         {
+            if (project.EscrowExpiredAt != null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot edit milestones because escrow lock deadline already expired.");
+            }
+
+            if (project.EscrowLockedAt != null)
+            {
+                throw new InvalidOperationException(
+                    "Cannot edit milestones after escrow is locked.");
+            }
+
+            if (string.Equals(project.Status, ProjectStatusCancelled, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Cannot edit milestones for a cancelled project.");
+            }
+
             if (!string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Milestones can only be created or updated before escrow is locked.");
+                throw new InvalidOperationException(
+                    "Milestones can only be created or updated while project is PENDING_ESCROW.");
+            }
+        }
+
+        private static void EnsureProjectReadyForCompleteCheck(Project project)
+        {
+            if (string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Project cannot be completed before escrow is locked.");
+            }
+
+            if (string.Equals(project.Status, ProjectStatusCancelled, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Cancelled project cannot be completed.");
+            }
+
+            if (string.Equals(project.Status, ProjectStatusDisputed, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Disputed project cannot be completed until dispute is resolved.");
+            }
+
+            if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "Project can only be completed when it is ACTIVE.");
+            }
+
+            if (project.EscrowLockedAt == null)
+            {
+                throw new InvalidOperationException(
+                    "Project cannot be completed because escrow was not locked.");
+            }
+
+            if (project.EscrowExpiredAt != null)
+            {
+                throw new InvalidOperationException(
+                    "Project cannot be completed because escrow lock deadline expired before project start.");
             }
         }
 
