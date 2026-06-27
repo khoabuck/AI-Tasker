@@ -812,12 +812,26 @@ namespace AITasker.Infrastructure.Banking
 
                 if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("Escrow can only be released when project is ACTIVE.");
+                    throw new InvalidOperationException(
+                        "Escrow can only be released when project is ACTIVE.");
+                }
+
+                if (project.EscrowLockedAt == null)
+                {
+                    throw new InvalidOperationException(
+                        "Project escrow is not locked yet.");
+                }
+
+                if (!string.Equals(milestone.PaymentStatus, PaymentStatusLocked, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        "Milestone escrow must be LOCKED before escrow release.");
                 }
 
                 if (!string.Equals(milestone.Status, MilestoneStatusSubmitted, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidOperationException("Milestone must have a submitted deliverable before escrow release.");
+                    throw new InvalidOperationException(
+                        "Milestone must have a submitted deliverable before escrow release.");
                 }
 
                 if (await HasOpenDisputeForMilestoneAsync(project.ProjectId, milestoneId))
