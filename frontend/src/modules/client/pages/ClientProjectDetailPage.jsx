@@ -80,7 +80,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
       setEvidenceFileUrl(String(url || ""));
     } catch (err) {
-      setUploadError(err?.response?.data?.message || "Tải ảnh lên thất bại. Vui lòng thử lại.");
+      setUploadError(err?.response?.data?.message || "Image upload failed. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -88,22 +88,22 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
   const handleSubmit = async () => {
     if (!reason.trim()) {
-      setError("Vui lòng nhập lý do khiếu nại.");
+      setError("Please enter the reason for your complaint.");
       return;
     }
 
     if (!Number(project?.projectId ?? project?.id)) {
-      setError("Không xác định được project. Vui lòng tải lại trang.");
+      setError("Project not identified. Please reload the page.");
       return;
     }
 
     if (!Number(respondentUserId)) {
-      setError("Không xác định được Expert liên quan. Vui lòng tải lại trang.");
+      setError("Expert not identified. Please reload the page.");
       return;
     }
 
     if (!Number(disputedAmount) || Number(disputedAmount) <= 0) {
-      setError("Số tiền tranh chấp phải lớn hơn 0.");
+      setError("The amount in dispute must be greater than 0.");
       return;
     }
 
@@ -133,7 +133,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
         setError(
           err?.response?.data?.message ||
           err?.response?.data?.title ||
-          "Mở khiếu nại thất bại. Vui lòng thử lại."
+          "Complaint filed failed. Please try again."
         );
       }finally {
       setSubmitting(false);
@@ -149,7 +149,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
           <div>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 19, fontWeight: 700, color: "#f97316", margin: "0 0 4px" }}>Open Dispute</h3>
             <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>
-              {milestone ? `Liên quan đến milestone: ${milestone.title || "Milestone"}` : "Khiếu nại cho toàn bộ project"}
+              {milestone ? `Related to milestones: ${milestone.title || "Milestone"}` : "Complaint for the entire project"}
             </p>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
@@ -160,7 +160,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-              Số tiền tranh chấp (USD)
+              Amount in dispute (VND)
             </label>
             <input type="number" value={disputedAmount} onChange={(e) => setDisputedAmount(e.target.value)}
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "JetBrains Mono, monospace", fontSize: 14, boxSizing: "border-box" }} />
@@ -168,19 +168,19 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-              Lý do khiếu nại <span style={{ color: "#f87171" }}>*</span>
+              Reason for complaint <span style={{ color: "#f87171" }}>*</span>
             </label>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-              placeholder="Ví dụ: Sản phẩm bàn giao không đúng yêu cầu đã thỏa thuận..."
+              placeholder="Example: The delivered product does not meet the agreed-upon requirements..."
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
           </div>
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-              Bằng chứng (mô tả thêm)
+              Evidence (further description)
             </label>
             <textarea value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} rows={3}
-              placeholder="Mô tả chi tiết bằng chứng, có thể đính kèm link tài liệu, ảnh chụp tin nhắn..."
+              placeholder="Provide detailed evidence, including links to documents, screenshots of messages, etc."
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
           </div>
 
@@ -197,7 +197,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                 marginBottom: 8,
               }}
             >
-              Link bằng chứng (tùy chọn)
+              Proof link (optional)
             </label>
 
             <input
@@ -226,14 +226,14 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                 lineHeight: 1.5,
               }}
             >
-              Dán link Google Drive, Dropbox, OneDrive
+              Paste the Google Drive, Dropbox, OneDrive link
             </p>
 
             {uploadError && (
               <p style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{uploadError}</p>
             )}
             <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
-              Chỉ hỗ trợ ảnh. Để đính kèm tài liệu khác (PDF, video...), dán link vào ô "Bằng chứng" phía trên.
+              Only images are supported. To attach other documents (PDF, video, etc.), paste the link into the "Proof" box above.
             </p>
           </div>
 
@@ -243,13 +243,13 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-              Hủy
+              Cancel
             </button>
             <button onClick={handleSubmit} disabled={submitting || uploading}
               style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting || uploading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {submitting
-                ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang gửi...</>
-                : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Gửi khiếu nại</>}
+                ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
+                : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Submit a complaint</>}
             </button>
           </div>
         </div>
@@ -296,7 +296,7 @@ export default function ClientProjectDetailPage() {
       if (err?.code === "ERR_CANCELED") return;
 
       if (!silent) {
-        setError(err?.response?.data?.message || "Không thể tải thông tin project.");
+        setError(err?.response?.data?.message || "Unable to load project information.");
       }
     } finally {
       if (!silent) {
@@ -341,7 +341,7 @@ export default function ClientProjectDetailPage() {
           <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy project."}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Quay lại danh sách
+            Back to list
           </button>
         </div>
       </ClientLayout>
@@ -393,7 +393,7 @@ export default function ClientProjectDetailPage() {
             <button onClick={() => navigate(project.conversationId ? `/client/messages?conversationId=${project.conversationId}` : "/client/messages")}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
-              Nhắn tin
+              Message
             </button>
 
             {project.status === "COMPLETED" && (
@@ -438,7 +438,7 @@ export default function ClientProjectDetailPage() {
                 <span className="material-symbols-outlined" style={{ fontSize: 28, color: "#facc15" }}>flag</span>
                 <div>
                   <p style={{ fontSize: 11, color: "#8c90a0", textTransform: "uppercase", letterSpacing: "0.08em", margin: "0 0 2px", fontFamily: "JetBrains Mono, monospace" }}>
-                    Expert đang làm tới
+                    Expert is working on it.
                   </p>
                   <p style={{ fontSize: 16, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
                     {currentMilestone.title || `Milestone ${currentMilestoneIndex + 1}`}
@@ -471,7 +471,7 @@ export default function ClientProjectDetailPage() {
           </h3>
 
           {milestones.length === 0 ? (
-            <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>Chưa có milestone nào được tạo.</p>
+            <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>No milestones have been created yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
@@ -535,7 +535,7 @@ export default function ClientProjectDetailPage() {
           project={project}
           milestone={disputeModal.milestone}
           onClose={() => setDisputeModal(null)}
-          onSubmitted={() => setBannerMsg("Khiếu nại đã được gửi. Admin sẽ xem xét và phản hồi sớm nhất.")}
+          onSubmitted={() => setBannerMsg("The complaint has been submitted. The administrator will review it and respond as soon as possible.")}
         />
       )}
     </ClientLayout>

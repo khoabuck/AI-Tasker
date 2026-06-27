@@ -147,7 +147,7 @@ export default function ProjectsListPage() {
       setAllProjects(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải danh sách projects.");
+      setError(err?.response?.data?.message || "Unable to load the list of projects.");
     } finally {
       setLoading(false);
     }
@@ -214,7 +214,7 @@ export default function ProjectsListPage() {
         {!loading && !error && filteredProjects.length === 0 && (
           <div style={{ textAlign: "center", padding: "80px 0" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#272a30" }}>folder_off</span>
-            <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>Không có project nào ở trạng thái {STATUS_CONFIG[activeStatus]?.label}</p>
+            <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>No projects are in this state. {STATUS_CONFIG[activeStatus]?.label}</p>
           </div>
         )}
 

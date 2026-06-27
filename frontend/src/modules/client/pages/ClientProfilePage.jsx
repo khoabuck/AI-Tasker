@@ -23,7 +23,7 @@ export default function ClientProfilePage() {
         const res = await axiosInstance.get("/client-profiles/me");
         setProfile(res.data);
       } catch (err) {
-        setError(err?.response?.data?.message || "Không thể tải thông tin profile.");
+        setError(err?.response?.data?.message || "Unable to load profile information.");
       } finally {
         setLoading(false);
       }
@@ -53,7 +53,7 @@ export default function ClientProfilePage() {
           <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 8 }}>
             My Profile
           </h1>
-          <p style={{ color: "#c2c6d6" }}>Thông tin tài khoản và hồ sơ của bạn</p>
+          <p style={{ color: "#c2c6d6" }}>Your account and profile information</p>
         </div>
 
         {/* User card */}
@@ -81,7 +81,7 @@ export default function ClientProfilePage() {
         {loading && (
           <div style={{ textAlign: "center", padding: 48, color: "#8c90a0" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 40, display: "block", marginBottom: 12 }}>hourglass_empty</span>
-            Đang tải thông tin...
+            Loading information...
           </div>
         )}
 
@@ -97,19 +97,19 @@ export default function ClientProfilePage() {
 
             {/* Section: Thông tin cơ bản */}
             <h3 style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", color: "#00F0FF", marginBottom: 8 }}>
-              Thông tin cơ bản
+              Basic information
             </h3>
 
             {infoItem("person", "Full Name", profile.fullName || user?.fullName)}
-            {infoItem("phone", "Số điện thoại", profile.phoneNumber)}
-            {infoItem("location_on", "Địa chỉ", profile.address)}
+            {infoItem("phone", "Phone number", profile.phoneNumber)}
+            {infoItem("location_on", "Address", profile.address)}
             
 
             {/* Section: Doanh nghiệp (nếu có) */}
             {profile.businessProfile && (
                 <>
                   <h3 style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.15em", color: "#00F0FF", marginTop: 32, marginBottom: 8 }}>
-                    Thông tin doanh nghiệp
+                    Business information
                   </h3>
                   {infoItem("tag", "Tax Code", profile.businessProfile.taxCode)}
                   {infoItem("corporate_fare", "Company Name", profile.businessProfile.companyName)}
@@ -129,7 +129,7 @@ export default function ClientProfilePage() {
                 onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(0,240,255,0.05)")}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit</span>
-                Chỉnh sửa hồ sơ
+                Edit profile
               </button>
             </div>
           </div>

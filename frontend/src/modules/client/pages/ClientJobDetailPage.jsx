@@ -86,7 +86,7 @@ function MessageModal({ proposal, onClose, navigate }) {
         if (conversationId) navigate(`/client/messages?conversationId=${conversationId}`);
       }, 1200);
     } catch (err) {
-      setSendError(err?.response?.data?.message || "Gửi tin nhắn thất bại.");
+      setSendError(err?.response?.data?.message || "Message sent failed.");
     } finally { setSending(false); }
   };
 
@@ -163,7 +163,7 @@ export default function ClientJobDetailPage() {
       setProposals(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.status === 404 ? "Không tìm thấy job này." : err?.response?.status === 403 ? "Bạn không có quyền xem." : err?.response?.data?.message || "Đã có lỗi xảy ra.");
+      setError(err?.response?.status === 404 ? "No job found for this position." : err?.response?.status === 403 ? "You are not allowed to view it." : err?.response?.data?.message || "An error has occurred.");
     } finally { setLoading(false); }
   }, [id]);
 
@@ -174,22 +174,22 @@ export default function ClientJobDetailPage() {
   }, [fetchData]);
 
   const handleAccept = async (proposalId) => {
-    if (!confirm("Chấp nhận proposal này? Các proposal khác sẽ bị từ chối.")) return;
+    if (!confirm("Accept this proposal? The other proposals will be rejected.")) return;
     setActionLoading(proposalId + "_accept");
     try {
       await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
       setProposals((prev) => prev.map((p) => ({ ...p, status: p.proposalId === proposalId ? "ACCEPTED" : (p.status === "PENDING" || p.status === "SUBMITTED") ? "REJECTED" : p.status })));
-    } catch (err) { alert(err?.response?.data?.message || "Accept thất bại."); }
+    } catch (err) { alert(err?.response?.data?.message || "Accept failed."); }
     finally { setActionLoading(null); }
   };
 
   const handleDecline = async (proposalId) => {
-    if (!confirm("Từ chối proposal này?")) return;
+    if (!confirm("Reject this proposal?")) return;
     setActionLoading(proposalId + "_decline");
     try {
       await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
       setProposals((prev) => prev.map((p) => p.proposalId === proposalId ? { ...p, status: "REJECTED" } : p));
-    } catch (err) { alert(err?.response?.data?.message || "Decline thất bại."); }
+    } catch (err) { alert(err?.response?.data?.message || "Decline failed."); }
     finally { setActionLoading(null); }
   };
 
