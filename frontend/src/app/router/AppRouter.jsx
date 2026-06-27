@@ -46,6 +46,7 @@ import JobCreditPackagesPage from "../../modules/client/pages/JobCreditPackagesP
 import MilestoneDeliverablesPage from "../../modules/client/pages/MilestoneDeliverablesPage";
 import ClientDisputeDetailPage from "../../modules/client/pages/ClientDisputeDetailPage";
 import TransactionDetailPage from "../../modules/transaction/pages/TransactionDetailPage";
+import ExpertProfileViewPage from "../../modules/client/pages/ExpertProfileViewPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -138,6 +139,7 @@ export default function AppRouter() {
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
       <Route path="/client/job-credit-packages" element={<RequireAuth><JobCreditPackagesPage /></RequireAuth>} />
       <Route path="/client/transactions/:id" element={<RequireAuth><TransactionDetailPage /></RequireAuth>} />
+      <Route path="/client/experts/:expertProfileId" element={<RequireAuth><ExpertProfileViewPage /></RequireAuth>} />
 
       {/* Client jobs */}
       <Route path="/client/jobs" element={<RequireAuth><JobsPage /></RequireAuth>} />
