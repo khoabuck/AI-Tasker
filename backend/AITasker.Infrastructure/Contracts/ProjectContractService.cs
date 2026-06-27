@@ -233,7 +233,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract signed by Client",
                     $"The client signed the contract for job: {job.Title}. Please review and sign to create the project.",
-                    "CONTRACT_SIGNED_BY_CLIENT");
+                    "CONTRACT_SIGNED_BY_CLIENT",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
 
                 await _context.SaveChangesAsync();
 
@@ -274,13 +279,25 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract fully confirmed",
                     $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {EscrowLockWindowHours} hours to start the project.",
-                    "CONTRACT_CONFIRMED_PENDING_ESCROW");
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Contract fully confirmed",
                     $"The contract for job '{job.Title}' is fully confirmed. Waiting for Client to lock escrow before work starts.",
-                    "CONTRACT_CONFIRMED_PENDING_ESCROW");
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
                 return await MapToContractResponseAsync(contract);
             }
@@ -356,7 +373,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract cancelled by Client",
                     $"The client cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    NotificationTypes.ContractCancelled);
+                    NotificationTypes.ContractCancelled,
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
             else
             {
@@ -364,7 +386,12 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract cancelled by Expert",
                     $"The expert cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    NotificationTypes.ContractCancelled);
+                    NotificationTypes.ContractCancelled,
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
 
             return await MapToContractResponseAsync(contract);
@@ -632,7 +659,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract draft created",
                     $"A contract draft was created for job: {job.Title}. Please review it.",
-                    "CONTRACT_DRAFT_CREATED");
+                    "CONTRACT_DRAFT_CREATED",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
 
                 return;
             }
@@ -643,7 +675,12 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract draft created",
                     $"A contract draft was created for job: {job.Title}. Please review it.",
-                    "CONTRACT_DRAFT_CREATED");
+                    "CONTRACT_DRAFT_CREATED",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
         }
 

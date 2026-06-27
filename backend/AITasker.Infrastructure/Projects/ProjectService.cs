@@ -96,13 +96,25 @@ namespace AITasker.Infrastructure.Projects
                 clientProfile.UserId,
                 "Project created",
                 $"Project '{project.Title}' was created and is waiting for escrow confirmation.",
-                "PROJECT_CREATED");
+                "PROJECT_CREATED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
 
             await _notificationService.CreateNotificationAsync(
                 expertProfile.UserId,
                 "Project created",
                 $"Project '{project.Title}' was created and is waiting for Client escrow confirmation.",
-                "PROJECT_CREATED");
+                "PROJECT_CREATED",
+                relatedEntityType: "PROJECT",
+                relatedEntityId: project.ProjectId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
 
             return await MapToProjectResponseAsync(project);
         }
@@ -197,7 +209,13 @@ namespace AITasker.Infrastructure.Projects
                     expertProfile.UserId,
                     "Project milestones initialized",
                     $"Milestones for project '{project.Title}' were initialized by the Client.",
-                    "PROJECT_MILESTONES_INITIALIZED");
+                    "PROJECT_MILESTONES_INITIALIZED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
                 return await MapToProjectResponseAsync(project);
             }
@@ -354,7 +372,12 @@ namespace AITasker.Infrastructure.Projects
                 expertProfile.UserId,
                 "New milestone created",
                 $"A new milestone '{milestone.Title}' was added to project '{project.Title}'.",
-                "MILESTONE_CREATED");
+                "MILESTONE_CREATED",
+                relatedEntityType: "MILESTONE",
+                relatedEntityId: milestone.MilestoneId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId);
 
             return MapToMilestoneResponse(milestone, project);
         }
@@ -416,7 +439,12 @@ namespace AITasker.Infrastructure.Projects
                 expertProfile.UserId,
                 "Milestone updated",
                 $"Milestone '{milestone.Title}' was updated in project '{project.Title}'.",
-                "MILESTONE_UPDATED");
+                "MILESTONE_UPDATED",
+                relatedEntityType: "MILESTONE",
+                relatedEntityId: milestone.MilestoneId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId,
+                relatedMilestoneId: milestone.MilestoneId);
 
             return MapToMilestoneResponse(milestone, project);
         }
@@ -489,13 +517,19 @@ namespace AITasker.Infrastructure.Projects
                     clientProfile.UserId,
                     "Project completed",
                     $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED");
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Project completed",
                     $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED");
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
             }
 
             return await MapToProjectResponseAsync(project);

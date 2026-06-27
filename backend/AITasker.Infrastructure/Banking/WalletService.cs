@@ -802,13 +802,19 @@ namespace AITasker.Infrastructure.Banking
                     clientProfile.UserId,
                     "Escrow locked",
                     $"Escrow has been locked for project: {project.Title}.",
-                    "ESCROW_LOCKED");
+                    "ESCROW_LOCKED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Project started",
                     $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
-                    "PROJECT_STARTED");
+                    "PROJECT_STARTED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId);
 
                 return await BuildProjectEscrowResponseAsync(
                     project,
@@ -943,13 +949,21 @@ namespace AITasker.Infrastructure.Banking
                     expertProfile.UserId,
                     "Escrow released",
                     $"Escrow for milestone '{milestone.Title}' has been released to your wallet.",
-                    "ESCROW_RELEASED");
+                    "ESCROW_RELEASED",
+                    relatedEntityType: "MILESTONE",
+                    relatedEntityId: milestone.MilestoneId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId);
 
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
                     "Escrow released",
                     $"Escrow for milestone '{milestone.Title}' has been released.",
-                    "ESCROW_RELEASED");
+                    "ESCROW_RELEASED",
+                    relatedEntityType: "MILESTONE",
+                    relatedEntityId: milestone.MilestoneId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId);
 
                 return await BuildProjectEscrowResponseAsync(
                     project,

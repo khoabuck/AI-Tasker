@@ -283,7 +283,12 @@ namespace AITasker.Infrastructure.Disputes
                     respondentUserId,
                     "Dispute opened",
                     $"{openerName} opened a dispute in project '{project.Title}'.",
-                    "DISPUTE_OPENED");
+                    "DISPUTE_OPENED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await NotifyAdminsAsync(
                     "New dispute opened",
@@ -368,7 +373,12 @@ namespace AITasker.Infrastructure.Disputes
                 otherUserId,
                 "New dispute evidence",
                 $"New evidence was submitted for dispute #{dispute.DisputeId}.",
-                "DISPUTE_EVIDENCE_SUBMITTED");
+                "DISPUTE_EVIDENCE_SUBMITTED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: dispute.DisputeId,
+                relatedProjectId: dispute.ProjectId,
+                relatedMilestoneId: dispute.MilestoneId,
+                relatedDisputeId: dispute.DisputeId);
 
             await NotifyAdminsAsync(
                 "New dispute evidence",
@@ -624,13 +634,23 @@ namespace AITasker.Infrastructure.Disputes
                     clientProfile.UserId,
                     "Dispute resolved",
                     $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED");
+                    "DISPUTE_RESOLVED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Dispute resolved",
                     $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED");
+                    "DISPUTE_RESOLVED",
+                    relatedEntityType: "DISPUTE",
+                    relatedEntityId: dispute.DisputeId,
+                    relatedProjectId: dispute.ProjectId,
+                    relatedMilestoneId: dispute.MilestoneId,
+                    relatedDisputeId: dispute.DisputeId);
 
                 await dbTransaction.CommitAsync();
 

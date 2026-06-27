@@ -14,7 +14,17 @@ namespace AITasker.Application.Interfaces
             int userId,
             string title,
             string content,
-            string type);
+            string type,
+            string? relatedEntityType = null,
+            int? relatedEntityId = null,
+            int? relatedJobId = null,
+            int? relatedProposalId = null,
+            int? relatedContractId = null,
+            int? relatedProjectId = null,
+            int? relatedMilestoneId = null,
+            int? relatedDeliverableId = null,
+            int? relatedDisputeId = null,
+            int? relatedConversationId = null);
 
         Task<NotificationResponse> MarkAsReadAsync(
             int notificationId,

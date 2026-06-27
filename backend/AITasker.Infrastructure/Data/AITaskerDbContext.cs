@@ -1840,6 +1840,40 @@ public class AITaskerDbContext : DbContext
             entity.Property(n => n.Type)
                 .HasMaxLength(50);
 
+            entity.Property(n => n.RelatedEntityType)
+                .HasMaxLength(50);
+
+            entity.Property(n => n.RelatedEntityId);
+
+            entity.Property(n => n.RelatedJobId);
+
+            entity.Property(n => n.RelatedProposalId);
+
+            entity.Property(n => n.RelatedContractId);
+
+            entity.Property(n => n.RelatedProjectId);
+
+            entity.Property(n => n.RelatedMilestoneId);
+
+            entity.Property(n => n.RelatedDeliverableId);
+
+            entity.Property(n => n.RelatedDisputeId);
+
+            entity.Property(n => n.RelatedConversationId);
+
+            entity.HasIndex(n => new
+            {
+                n.RelatedEntityType,
+                n.RelatedEntityId
+            });
+
+            entity.HasIndex(n => n.RelatedConversationId);
+            entity.HasIndex(n => n.RelatedProposalId);
+            entity.HasIndex(n => n.RelatedProjectId);
+            entity.HasIndex(n => n.RelatedMilestoneId);
+            entity.HasIndex(n => n.RelatedDeliverableId);
+            entity.HasIndex(n => n.RelatedDisputeId);
+
             entity.HasOne(n => n.User)
                 .WithMany()
                 .HasForeignKey(n => n.UserId)

@@ -17,6 +17,8 @@ namespace AITasker.Infrastructure.Proposals
         private const string StatusRejected = "REJECTED";
         private const string StatusWithdrawn = "WITHDRAWN";
 
+        public const string ProposalResubmitted = "PROPOSAL_RESUBMITTED";
+
         private const int MaxProposalDrafts = 10;
 
         private const string JobStatusActive = "ACTIVE";
@@ -125,7 +127,11 @@ namespace AITasker.Infrastructure.Proposals
                 clientProfile.UserId,
                 "New proposal received",
                 $"An expert submitted a proposal for your job: {job.Title}.",
-                "PROPOSAL_SUBMITTED");
+                "PROPOSAL_SUBMITTED",
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -414,7 +420,11 @@ namespace AITasker.Infrastructure.Proposals
                 clientProfile.UserId,
                 "New proposal received",
                 $"An expert submitted a proposal for your job: {job.Title}.",
-                "PROPOSAL_SUBMITTED");
+                "PROPOSAL_SUBMITTED",
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -535,7 +545,11 @@ namespace AITasker.Infrastructure.Proposals
                     rejectedExpert.UserId,
                     "Proposal rejected",
                     $"Your proposal for job '{job.Title}' was rejected by the client.",
-                    "PROPOSAL_REJECTED");
+                    "PROPOSAL_REJECTED",
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: proposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId);
 
                 return await MapToProposalResponseAsync(proposal);
             }
@@ -551,7 +565,10 @@ namespace AITasker.Infrastructure.Proposals
                 .Where(x =>
                     x.JobId == job.JobPostingId &&
                     x.ProposalId != proposal.ProposalId &&
-                    x.Status == StatusSubmitted)
+                    (
+                        x.Status == StatusDraft ||
+                        x.Status == StatusSubmitted
+                    ))
                 .ToListAsync();
 
             foreach (var competingProposal in competingProposals)
@@ -568,13 +585,21 @@ namespace AITasker.Infrastructure.Proposals
                 clientProfile.UserId,
                 "Proposal accepted",
                 $"You accepted proposal version {sourceProposalVersionNumber} for job '{job.Title}'. You can now create the contract draft from this accepted proposal.",
-                "PROPOSAL_ACCEPTED");
+                "PROPOSAL_ACCEPTED",
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
 
             await _notificationService.CreateNotificationAsync(
                 expert.UserId,
                 "Proposal accepted",
                 $"Your latest proposal version {sourceProposalVersionNumber} for job '{job.Title}' was accepted. Please wait for the client to create the contract draft.",
-                "PROPOSAL_ACCEPTED");
+                "PROPOSAL_ACCEPTED",
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -618,7 +643,11 @@ namespace AITasker.Infrastructure.Proposals
                 clientProfile.UserId,
                 "Proposal withdrawn",
                 $"An expert withdrew their proposal for your job: {job.Title}.",
-                "PROPOSAL_WITHDRAWN");
+                "PROPOSAL_WITHDRAWN",
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -1114,7 +1143,11 @@ namespace AITasker.Infrastructure.Proposals
                     clientProfile.UserId,
                     "Proposal resubmitted",
                     $"The expert resubmitted proposal version {newVersion.VersionNumber} for job: {job.Title}.",
-                    "PROPOSAL_RESUBMITTED");
+                    "PROPOSAL_RESUBMITTED",
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: proposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId);
             }
 
             return await MapToProposalResponseAsync(proposal);
