@@ -6,6 +6,7 @@ import { useNotifications } from "../../hooks/useNotifications";
 // ── Icon theo type ────────────────────────────────────────────────────
 const TYPE_CONFIG = {
   PROPOSAL_SUBMITTED: { icon: "description",        color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
+  PROPOSAL_RESUBMITTED: { icon: "edit_document", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
   PROPOSAL_ACCEPTED:  { icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
   PROPOSAL_REJECTED:  { icon: "cancel",              color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
   MESSAGE_RECEIVED:      { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
@@ -26,10 +27,35 @@ function formatNotificationTime(dateStr) {
   if (!dateStr) return "";
 
   const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleString("en-US", {
+  const now = new Date();
+
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate();
+
+  if (isToday) {
+    const diffMs = now.getTime() - date.getTime();
+    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
+
+    if (diffMinutes < 1) {
+      return "Just now";
+    }
+
+    if (diffMinutes < 60) {
+      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
+    }
+
+    const diffHours = Math.floor(diffMinutes / 60);
+
+    return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
+  }
+
+  return date.toLocaleString("vi-VN", {
     day: "2-digit",
-    month: "short",
+    month: "2-digit",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
@@ -69,10 +95,32 @@ export default function NotificationDropdown() {
   const getNotificationTargetUrl = (notification) => {
   const type = notification.type;
 
-  // Ưu tiên link từ backend nếu có
   if (notification.actionUrl || notification.link) {
     return notification.actionUrl || notification.link;
   }
+
+  let metadata = {};
+
+  try {
+    metadata =
+      typeof notification.metadata === "string"
+        ? JSON.parse(notification.metadata)
+        : notification.metadata || {};
+  } catch {
+    metadata = {};
+  }
+
+  const proposalId =
+    notification.proposalId ||
+    notification.relatedProposalId ||
+    notification.entityId ||
+    notification.referenceId ||
+    notification.targetId ||
+    metadata.proposalId ||
+    metadata.relatedProposalId ||
+    metadata.entityId ||
+    metadata.referenceId ||
+    metadata.targetId;
 
   switch (type) {
     case "CHAT_MESSAGE_RECEIVED":
@@ -80,11 +128,12 @@ export default function NotificationDropdown() {
       return "/client/messages";
 
     case "PROPOSAL_SUBMITTED":
-      return "/client/projects";
-
+    case "PROPOSAL_RESUBMITTED":
     case "PROPOSAL_ACCEPTED":
     case "PROPOSAL_REJECTED":
-      return "/client/projects";
+      return proposalId
+        ? `/client/proposals/${proposalId}`
+        : "/client/notifications";
 
     case "JOB_INVITED":
       return "/expert/messages";
@@ -95,23 +144,22 @@ export default function NotificationDropdown() {
     case "WITHDRAWAL_REJECTED":
       return "/client/wallet";
 
-    case "SYSTEM":
-      return "/client/notifications";
-
     default:
       return "/client/notifications";
   }
 };
 
   const handleNotificationClick = (notification) => {
-    console.log(notification);
+    const targetUrl = getNotificationTargetUrl(notification);
+
+    console.log("Notification:", notification);
+    console.log("Target URL:", targetUrl);
+
     if (!notification.isRead) {
       markRead(notification.notificationId);
     }
 
-    const targetUrl = getNotificationTargetUrl(notification);
     navigate(targetUrl);
-
     setOpen(false);
   };
 

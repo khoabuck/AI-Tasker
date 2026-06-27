@@ -5,14 +5,22 @@ import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
 import authService from "../../../services/auth.service";
 
+const CERTIFICATE_TYPE_OPTIONS = [
+  { label: "Course Certificate", value: "COURSE_CERTIFICATE" },
+  { label: "Professional Certificate", value: "PROFESSIONAL_CERTIFICATE" },
+  { label: "Bootcamp Certificate", value: "BOOTCAMP_CERTIFICATE" },
+  { label: "Degree Certificate", value: "DEGREE_CERTIFICATE" },
+  { label: "Award Certificate", value: "AWARD_CERTIFICATE" },
+  { label: "Other", value: "OTHER" },
+];
+
+const CERTIFICATE_TYPES = CERTIFICATE_TYPE_OPTIONS.map((item) => item.value);
+
 const emptyBasicForm = {
   fullName: "",
   avatarUrl: "",
   professionalTitle: "",
   bio: "",
-  expectedProjectBudgetMin: "",
-  expectedProjectBudgetMax: "",
-  preferredProjectDurationDays: "",
   availableForWork: true,
 };
 
@@ -22,20 +30,14 @@ const emptyVerificationForm = {
   portfolioUrl: "",
   linkedInUrl: "",
   gitHubUrl: "",
-  certificates: [
-    {
-      certificateName: "",
-      certificateIssuer: "",
-      certificateUrl: "",
-      issuedAt: "",
-    },
-  ],
+  certificates: [],
 };
 
 export default function UpdateExpertProfilePage() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("basic");
+  const [profileSnapshot, setProfileSnapshot] = useState(null);
 
   const [basicForm, setBasicForm] = useState(emptyBasicForm);
   const [verificationForm, setVerificationForm] = useState(
@@ -64,6 +66,7 @@ export default function UpdateExpertProfilePage() {
 
   useEffect(() => {
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProfile = async () => {
@@ -73,47 +76,18 @@ export default function UpdateExpertProfilePage() {
       setMessage("");
       setModal(null);
 
-      const profile = await expertProfileService.getMyExpertProfile();
+      const result = await expertProfileService.getMyExpertProfile();
+      const profile = unwrapData(result);
 
-      setBasicForm({
-        fullName: profile?.fullName || profile?.FullName || "",
-        avatarUrl: profile?.avatarUrl || profile?.AvatarUrl || "",
-        professionalTitle:
-          profile?.professionalTitle || profile?.ProfessionalTitle || "",
-        bio: profile?.bio || profile?.Bio || "",
-        expectedProjectBudgetMin:
-          profile?.expectedProjectBudgetMin ??
-          profile?.ExpectedProjectBudgetMin ??
-          "",
-        expectedProjectBudgetMax:
-          profile?.expectedProjectBudgetMax ??
-          profile?.ExpectedProjectBudgetMax ??
-          "",
-        preferredProjectDurationDays:
-          profile?.preferredProjectDurationDays ??
-          profile?.PreferredProjectDurationDays ??
-          "",
-        availableForWork:
-          profile?.availableForWork ??
-          profile?.AvailableForWork ??
-          true,
-      });
-
-      setVerificationForm({
-        skills: toSkillText(profile?.skills || profile?.Skills),
-        yearsOfExperience:
-          profile?.yearsOfExperience ?? profile?.YearsOfExperience ?? "",
-        portfolioUrl: profile?.portfolioUrl || profile?.PortfolioUrl || "",
-        linkedInUrl: profile?.linkedInUrl || profile?.LinkedInUrl || "",
-        gitHubUrl: profile?.gitHubUrl || profile?.GitHubUrl || "",
-        certificates: normalizeCertificatesForForm(
-          profile?.certificates || profile?.Certificates
-        ),
-      });
+      setProfileSnapshot(profile);
+      setBasicForm(buildBasicFormFromProfile(profile));
+      setVerificationForm(buildVerificationFormFromProfile(profile));
     } catch (err) {
-      console.error("LOAD UPDATE PROFILE ERROR:", err?.response?.data || err);
+      console.error("LOAD UPDATE PROFILE ERROR:", getRawPayload(err));
 
-      if (err?.response?.status === 404) {
+      const status = err?.response?.status || err?.status;
+
+      if (status === 404) {
         navigate("/expert/setup-profile", { replace: true });
         return;
       }
@@ -152,7 +126,7 @@ export default function UpdateExpertProfilePage() {
     setModal(null);
 
     setVerificationForm((prev) => {
-      const certificates = [...prev.certificates];
+      const certificates = [...(prev.certificates || [])];
 
       certificates[index] = {
         ...certificates[index],
@@ -167,32 +141,25 @@ export default function UpdateExpertProfilePage() {
   };
 
   const addCertificate = () => {
+    if ((verificationForm.certificates || []).length >= 10) return;
+
     setVerificationForm((prev) => ({
       ...prev,
       certificates: [
-        ...prev.certificates,
+        ...(prev.certificates || []),
         {
-          certificateName: "",
-          certificateIssuer: "",
           certificateUrl: "",
-          issuedAt: "",
+          certificateType: "COURSE_CERTIFICATE",
         },
       ],
     }));
   };
 
   const removeCertificate = (index) => {
-    setVerificationForm((prev) => {
-      const certificates = prev.certificates.filter((_, i) => i !== index);
-
-      return {
-        ...prev,
-        certificates:
-          certificates.length > 0
-            ? certificates
-            : emptyVerificationForm.certificates,
-      };
-    });
+    setVerificationForm((prev) => ({
+      ...prev,
+      certificates: (prev.certificates || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleAvatarUpload = async (event) => {
@@ -207,34 +174,30 @@ export default function UpdateExpertProfilePage() {
       setMessage("");
       setModal(null);
 
-      const imageUrl = await uploadService.uploadImage(file, "avatar");
+      const uploadResult = await uploadService.uploadImage(file, "avatar");
+      const imageUrl = extractUploadUrl(uploadResult);
+
+      if (!imageUrl) {
+        throw new Error("Upload succeeded but image URL was not found.");
+      }
 
       updateBasicField("avatarUrl", imageUrl);
 
-      try {
-        setSyncingAvatar(true);
+      if (typeof authService.updateMyAvatar === "function") {
+        try {
+          setSyncingAvatar(true);
+          await authService.updateMyAvatar(imageUrl);
+          setMessage("Avatar uploaded successfully.");
+        } catch (avatarErr) {
+          console.error("SYNC AUTH AVATAR ERROR:", getRawPayload(avatarErr));
 
-        await authService.updateMyAvatar(imageUrl);
-
-        setMessage(
-          "Avatar uploaded successfully. Your account avatar was updated."
-        );
-      } catch (avatarErr) {
-        console.error(
-          "SYNC AUTH AVATAR ERROR:",
-          avatarErr?.response?.data || avatarErr
-        );
-
-        setError(
-          getFriendlyError(
-            avatarErr,
-            "Avatar was uploaded, but account avatar could not be updated. Please click Save Basic Information to keep it in your expert profile."
-          )
-        );
+          setError(
+            "Avatar was uploaded, but account avatar could not be synced. Please click Save Basic Information to keep it in your expert profile."
+          );
+        }
       }
     } catch (err) {
-      console.error("UPLOAD AVATAR ERROR:", err?.response?.data || err);
-
+      console.error("UPLOAD AVATAR ERROR:", getRawPayload(err));
       setError(getFriendlyError(err, "Cannot upload avatar."));
     } finally {
       setUploadingAvatar(false);
@@ -265,17 +228,24 @@ export default function UpdateExpertProfilePage() {
 
       const payload = buildBasicPayload(basicForm);
 
-      await expertProfileService.updateBasicExpertProfile(payload);
+      if (typeof expertProfileService.updateBasicExpertProfile === "function") {
+        await expertProfileService.updateBasicExpertProfile(payload);
+      } else {
+        await expertProfileService.updateExpertProfile(
+          buildCombinedPayload({
+            profileSnapshot,
+            basicForm,
+            verificationForm,
+          })
+        );
+      }
 
-      if (payload.avatarUrl) {
+      if (payload.avatarUrl && typeof authService.updateMyAvatar === "function") {
         try {
           setSyncingAvatar(true);
           await authService.updateMyAvatar(payload.avatarUrl);
         } catch (avatarErr) {
-          console.error(
-            "SYNC AUTH AVATAR ON SAVE ERROR:",
-            avatarErr?.response?.data || avatarErr
-          );
+          console.error("SYNC AUTH AVATAR ON SAVE ERROR:", getRawPayload(avatarErr));
         } finally {
           setSyncingAvatar(false);
         }
@@ -286,14 +256,13 @@ export default function UpdateExpertProfilePage() {
       setModal({
         type: "success",
         title: "Basic profile updated",
-        message:
-          "Your basic profile was updated directly. AI review was not required.",
+        message: "Your basic profile information has been updated.",
+        detail: "",
         showBackProfile: true,
         showEditAgain: false,
       });
     } catch (err) {
-      console.error("UPDATE BASIC PROFILE ERROR:", err?.response?.data || err);
-
+      console.error("UPDATE BASIC PROFILE ERROR:", getRawPayload(err));
       setError(getFriendlyError(err, "Cannot update basic profile."));
     } finally {
       setSavingBasic(false);
@@ -323,25 +292,44 @@ export default function UpdateExpertProfilePage() {
 
       const payload = buildVerificationPayload(verificationForm);
 
-      const result =
-        await expertProfileService.updateVerificationExpertProfile(payload);
+      let result;
 
-      console.log("UPDATE VERIFICATION RESULT:", result);
+      if (
+        typeof expertProfileService.updateVerificationExpertProfile ===
+        "function"
+      ) {
+        result =
+          await expertProfileService.updateVerificationExpertProfile(payload);
+      } else {
+        result = await expertProfileService.updateExpertProfile(
+          buildCombinedPayload({
+            profileSnapshot,
+            basicForm,
+            verificationForm,
+          })
+        );
+      }
+
+      const data = unwrapData(result);
+      const applied = Boolean(data?.applied || data?.Applied);
+      const reviewStatus = getReviewStatus(data);
+      const resultMessage = getResultMessage(data);
+      const missingInformation = getMissingInformation(data);
 
       updateLocalUserStatus("ACTIVE");
 
-      const applied = Boolean(result?.applied || result?.Applied);
-      const reviewStatus = getReviewStatus(result);
-      const resultMessage = getResultMessage(result);
-      const missingInformation = getMissingInformation(result);
-
-      if (applied) {
+      if (
+        applied ||
+        reviewStatus === "APPROVED" ||
+        reviewStatus === "ACTIVE" ||
+        !reviewStatus
+      ) {
         setModal({
           type: "success",
-          title: "Verification update approved",
+          title: "Verification information updated",
           message:
             resultMessage ||
-            "AI approved your verification update. The new data has been applied.",
+            "Your verification information has been updated. Your profile score will refresh automatically.",
           detail: "",
           showBackProfile: true,
           showEditAgain: false,
@@ -352,10 +340,10 @@ export default function UpdateExpertProfilePage() {
 
       setModal({
         type: "warning",
-        title: `Verification update ${reviewStatus || "needs correction"}`,
+        title: "Verification needs improvement",
         message:
           resultMessage ||
-          "AI did not approve this update. Your current verified profile was kept.",
+          "Your verification update needs more evidence before it can be applied.",
         detail:
           missingInformation ||
           "Please improve your skills, public proof links, or certificates and try again.",
@@ -363,16 +351,16 @@ export default function UpdateExpertProfilePage() {
         showEditAgain: true,
       });
     } catch (err) {
-      console.error("UPDATE VERIFICATION ERROR:", err?.response?.data || err);
+      console.error("UPDATE VERIFICATION ERROR:", getRawPayload(err));
 
       setModal({
         type: "danger",
         title: "Verification update failed",
         message: getFriendlyError(
           err,
-          "Cannot update verification profile. Your current verified profile was not changed."
+          "Cannot update verification information. Your current profile was not changed."
         ),
-        detail: "Your current profile was not changed.",
+        detail: "",
         showBackProfile: true,
         showEditAgain: true,
       });
@@ -416,8 +404,8 @@ export default function UpdateExpertProfilePage() {
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-              Basic information is saved directly. Verification information is
-              sent to AI review and only approved updates are applied.
+              Basic information is saved directly. Verification information can
+              refresh your profile score after review.
             </p>
 
             <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -432,7 +420,7 @@ export default function UpdateExpertProfilePage() {
               >
                 <p className="font-bold">Basic Information</p>
                 <p className="mt-1 text-xs">
-                  Name, avatar, title, bio, budget and availability.
+                  Name, avatar, title, bio and availability.
                 </p>
               </button>
 
@@ -447,7 +435,7 @@ export default function UpdateExpertProfilePage() {
               >
                 <p className="font-bold">Verification Information</p>
                 <p className="mt-1 text-xs">
-                  Skills, experience, portfolio, social proof and certificates.
+                  Skills, experience, portfolio, GitHub and certificates.
                 </p>
               </button>
             </div>
@@ -524,7 +512,7 @@ function BasicProfileForm({
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-gray-400">
-          This section updates your public profile directly without AI review.
+          This section updates your public profile directly.
         </p>
       </div>
 
@@ -549,7 +537,7 @@ function BasicProfileForm({
           <p className="font-bold text-white">Profile Avatar</p>
 
           <p className="mt-1 text-sm text-gray-400">
-            Upload image or paste image URL.
+            Upload an image or paste an image URL.
           </p>
 
           <div className="mt-4 flex flex-col gap-3 md:flex-row">
@@ -598,40 +586,11 @@ function BasicProfileForm({
           value={formData.professionalTitle}
           error={errors.professionalTitle}
           onChange={(value) => onChange("professionalTitle", value)}
-          placeholder="Junior AI Chatbot Developer"
+          placeholder="AI Automation Engineer"
           required
         />
 
-        <NumberInput
-          label="Expected Budget Min"
-          value={formData.expectedProjectBudgetMin}
-          error={errors.expectedProjectBudgetMin}
-          onChange={(value) => onChange("expectedProjectBudgetMin", value)}
-          placeholder="100"
-          required
-        />
-
-        <NumberInput
-          label="Expected Budget Max"
-          value={formData.expectedProjectBudgetMax}
-          error={errors.expectedProjectBudgetMax}
-          onChange={(value) => onChange("expectedProjectBudgetMax", value)}
-          placeholder="1000"
-          required
-        />
-
-        <NumberInput
-          label="Preferred Project Duration Days"
-          value={formData.preferredProjectDurationDays}
-          error={errors.preferredProjectDurationDays}
-          onChange={(value) =>
-            onChange("preferredProjectDurationDays", value)
-          }
-          placeholder="14"
-          required
-        />
-
-        <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4">
+        <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 md:col-span-2">
           <div>
             <p className="text-sm font-bold text-white">Available For Work</p>
             <p className="mt-1 text-xs text-gray-500">
@@ -707,8 +666,7 @@ function VerificationProfileForm({
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-gray-400">
-          This section is reviewed by AI before being applied to your verified
-          profile.
+          Add strong public evidence so clients can trust your expertise.
         </p>
       </div>
 
@@ -723,7 +681,7 @@ function VerificationProfileForm({
             value={formData.skills}
             error={errors.skills}
             onChange={(value) => onChange("skills", value)}
-            placeholder="React, JavaScript, C#, SQL"
+            placeholder="AI Automation, RAG, Chatbot, Python"
             required
           />
 
@@ -744,7 +702,7 @@ function VerificationProfileForm({
         </h3>
 
         <p className="mb-4 text-sm text-gray-500">
-          Add at least 2 links: Portfolio, LinkedIn, or GitHub.
+          Portfolio and GitHub are required. LinkedIn is optional.
         </p>
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -754,6 +712,7 @@ function VerificationProfileForm({
             error={errors.portfolioUrl}
             onChange={(value) => onChange("portfolioUrl", value)}
             placeholder="https://portfolio.com"
+            required
           />
 
           <TextInput
@@ -770,6 +729,7 @@ function VerificationProfileForm({
             error={errors.gitHubUrl}
             onChange={(value) => onChange("gitHubUrl", value)}
             placeholder="https://github.com/..."
+            required
           />
         </div>
 
@@ -781,13 +741,14 @@ function VerificationProfileForm({
           <div>
             <h3 className="text-lg font-bold text-white">Certificates</h3>
             <p className="mt-1 text-sm text-gray-500">
-              Add at least one certificate or public certificate proof.
+              Optional. If you add one, only certificate URL and type are
+              required.
             </p>
           </div>
 
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || (formData.certificates || []).length >= 10}
             onClick={onAddCertificate}
             className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-4 py-2 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:opacity-50"
           >
@@ -798,67 +759,59 @@ function VerificationProfileForm({
         <FieldError message={errors.certificates} />
         <FieldError message={errors.duplicateCertificates} />
 
-        <div className="space-y-4">
-          {formData.certificates.map((certificate, index) => (
-            <div
-              key={index}
-              className="rounded-2xl border border-white/10 bg-black/20 p-4"
-            >
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="font-bold text-white">Certificate {index + 1}</p>
+        {(formData.certificates || []).length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-6 text-gray-400">
+            <p className="font-bold text-gray-300">No certificates added.</p>
+            <p className="mt-1">
+              You can save without certificates. Adding certificates can
+              strengthen your profile.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {formData.certificates.map((certificate, index) => (
+              <div
+                key={index}
+                className="rounded-2xl border border-white/10 bg-black/20 p-4"
+              >
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="font-bold text-white">Certificate {index + 1}</p>
 
-                <button
-                  type="button"
-                  disabled={saving || formData.certificates.length === 1}
-                  onClick={() => onRemoveCertificate(index)}
-                  className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Remove
-                </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() => onRemoveCertificate(index)}
+                    className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <TextInput
+                    label="Certificate URL"
+                    value={certificate.certificateUrl}
+                    error={errors[`certificateUrl_${index}`]}
+                    onChange={(value) =>
+                      onCertificateChange(index, "certificateUrl", value)
+                    }
+                    placeholder="https://..."
+                  />
+
+                  <SelectInput
+                    label="Certificate Type"
+                    value={certificate.certificateType}
+                    error={errors[`certificateType_${index}`]}
+                    onChange={(value) =>
+                      onCertificateChange(index, "certificateType", value)
+                    }
+                    options={CERTIFICATE_TYPE_OPTIONS}
+                  />
+                </div>
               </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <TextInput
-                  label="Certificate Name"
-                  value={certificate.certificateName}
-                  error={errors[`certificateName_${index}`]}
-                  onChange={(value) =>
-                    onCertificateChange(index, "certificateName", value)
-                  }
-                  placeholder="AWS Cloud Practitioner"
-                />
-
-                <TextInput
-                  label="Certificate Issuer"
-                  value={certificate.certificateIssuer}
-                  error={errors[`certificateIssuer_${index}`]}
-                  onChange={(value) =>
-                    onCertificateChange(index, "certificateIssuer", value)
-                  }
-                  placeholder="Amazon"
-                />
-
-                <TextInput
-                  label="Certificate URL"
-                  value={certificate.certificateUrl}
-                  error={errors[`certificateUrl_${index}`]}
-                  onChange={(value) =>
-                    onCertificateChange(index, "certificateUrl", value)
-                  }
-                  placeholder="https://..."
-                />
-
-                <DateInput
-                  label="Issued At"
-                  value={certificate.issuedAt}
-                  onChange={(value) =>
-                    onCertificateChange(index, "issuedAt", value)
-                  }
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
@@ -876,7 +829,7 @@ function VerificationProfileForm({
           disabled={saving}
           className="rounded-xl border border-purple-400/60 bg-purple-400/10 px-6 py-3 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? "Submitting to AI..." : "Submit AI Verification"}
+          {saving ? "Saving..." : "Save Verification Information"}
         </button>
       </div>
     </form>
@@ -899,7 +852,7 @@ function TextInput({
 
       <input
         type="text"
-        value={value}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
@@ -929,7 +882,7 @@ function NumberInput({
       <input
         type="number"
         min="0"
-        value={value}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
@@ -942,19 +895,32 @@ function NumberInput({
   );
 }
 
-function DateInput({ label, value, onChange }) {
+function SelectInput({ label, value, onChange, error, options }) {
   return (
     <label className="block">
       <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
         {label}
       </span>
 
-      <input
-        type="date"
-        value={value}
+      <select
+        value={value || "COURSE_CERTIFICATE"}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
-      />
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            className="bg-[#151a22] text-white"
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <FieldError message={error} />
     </label>
   );
 }
@@ -976,7 +942,7 @@ function TextareaInput({
 
       <textarea
         rows={rows}
-        value={value}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
@@ -1094,40 +1060,6 @@ function validateBasicForm(formData) {
     errors.bio = "Bio must be at least 50 characters.";
   }
 
-  if (isEmpty(formData.expectedProjectBudgetMin)) {
-    errors.expectedProjectBudgetMin = "Minimum budget is required.";
-  }
-
-  if (isEmpty(formData.expectedProjectBudgetMax)) {
-    errors.expectedProjectBudgetMax = "Maximum budget is required.";
-  }
-
-  if (isEmpty(formData.preferredProjectDurationDays)) {
-    errors.preferredProjectDurationDays = "Preferred duration is required.";
-  }
-
-  const minBudget = Number(formData.expectedProjectBudgetMin || 0);
-  const maxBudget = Number(formData.expectedProjectBudgetMax || 0);
-  const duration = Number(formData.preferredProjectDurationDays || 0);
-
-  if (minBudget < 0) {
-    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
-  }
-
-  if (maxBudget < 0) {
-    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
-  }
-
-  if (minBudget && maxBudget && minBudget > maxBudget) {
-    errors.expectedProjectBudgetMax =
-      "Maximum budget must be greater than minimum budget.";
-  }
-
-  if (duration <= 0) {
-    errors.preferredProjectDurationDays =
-      "Preferred duration must be greater than 0.";
-  }
-
   if (!isEmpty(formData.avatarUrl) && !isValidUrl(formData.avatarUrl)) {
     errors.avatarUrl = "Avatar URL must start with http:// or https://";
   }
@@ -1154,58 +1086,55 @@ function validateVerificationForm(formData) {
     errors.yearsOfExperience = "Years of experience must be 0 or higher.";
   }
 
-  const publicLinks = [
-    formData.portfolioUrl,
-    formData.linkedInUrl,
-    formData.gitHubUrl,
-  ].filter((item) => !isEmpty(item));
-
-  if (publicLinks.length < 2) {
-    errors.publicLinks =
-      "Please add at least 2 links: Portfolio, LinkedIn, or GitHub.";
+  if (isEmpty(formData.portfolioUrl)) {
+    errors.portfolioUrl = "Portfolio URL is required.";
+  } else if (!isValidUrl(formData.portfolioUrl)) {
+    errors.portfolioUrl = "Portfolio URL must start with http:// or https://";
   }
 
-  ["portfolioUrl", "linkedInUrl", "gitHubUrl"].forEach((field) => {
-    if (!isEmpty(formData[field]) && !isValidUrl(formData[field])) {
-      errors[field] = "URL must start with http:// or https://";
-    }
-  });
+  if (isEmpty(formData.gitHubUrl)) {
+    errors.gitHubUrl = "GitHub URL is required.";
+  } else if (!isValidUrl(formData.gitHubUrl)) {
+    errors.gitHubUrl = "GitHub URL must start with http:// or https://";
+  } else if (!isGitHubUrl(formData.gitHubUrl)) {
+    errors.gitHubUrl = "Please enter a valid GitHub profile URL.";
+  }
+
+  if (!isEmpty(formData.linkedInUrl) && !isValidUrl(formData.linkedInUrl)) {
+    errors.linkedInUrl =
+      "LinkedIn URL must start with http:// or https://. You can leave it empty.";
+  }
+
+  if (errors.portfolioUrl || errors.gitHubUrl) {
+    errors.publicLinks =
+      "Portfolio and GitHub are required. LinkedIn is optional.";
+  }
 
   const certificates = formData.certificates || [];
-
-  const validCertificates = certificates.filter(hasAnyCertificateValue);
-
-  if (validCertificates.length === 0) {
-    errors.certificates = "At least one certificate is required.";
-  }
-
   const certificateUrls = [];
 
+  if (certificates.length > 10) {
+    errors.certificates = "Maximum 10 certificates are allowed.";
+  }
+
   certificates.forEach((item, index) => {
-    const hasAnyValue = hasAnyCertificateValue(item);
+    const certificateUrl = String(item?.certificateUrl || "").trim();
+    const certificateType = String(item?.certificateType || "").trim();
 
-    if (!hasAnyValue) return;
+    if (!certificateUrl) return;
 
-    if (isEmpty(item.certificateName)) {
-      errors[`certificateName_${index}`] = "Certificate name is required.";
-    }
-
-    if (isEmpty(item.certificateIssuer)) {
-      errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
-    }
-
-    if (isEmpty(item.certificateUrl)) {
-      errors[`certificateUrl_${index}`] = "Certificate URL is required.";
-    }
-
-    if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
+    if (!isValidUrl(certificateUrl)) {
       errors[`certificateUrl_${index}`] =
         "Certificate URL must start with http:// or https://";
     }
 
-    if (!isEmpty(item.certificateUrl)) {
-      certificateUrls.push(String(item.certificateUrl).trim().toLowerCase());
+    if (!certificateType) {
+      errors[`certificateType_${index}`] = "Certificate type is required.";
+    } else if (!CERTIFICATE_TYPES.includes(certificateType)) {
+      errors[`certificateType_${index}`] = "Certificate type is invalid.";
     }
+
+    certificateUrls.push(certificateUrl.toLowerCase());
   });
 
   if (certificateUrls.length !== new Set(certificateUrls).size) {
@@ -1221,11 +1150,6 @@ function buildBasicPayload(formData) {
     avatarUrl: String(formData.avatarUrl || "").trim() || null,
     professionalTitle: String(formData.professionalTitle || "").trim(),
     bio: String(formData.bio || "").trim(),
-    expectedProjectBudgetMin: Number(formData.expectedProjectBudgetMin || 0),
-    expectedProjectBudgetMax: Number(formData.expectedProjectBudgetMax || 0),
-    preferredProjectDurationDays: Number(
-      formData.preferredProjectDurationDays || 0
-    ),
     availableForWork: Boolean(formData.availableForWork),
   };
 }
@@ -1234,101 +1158,175 @@ function buildVerificationPayload(formData) {
   return {
     skills: String(formData.skills || "").trim(),
     yearsOfExperience: Number(formData.yearsOfExperience || 0),
-    portfolioUrl: String(formData.portfolioUrl || "").trim() || null,
-    linkedInUrl: String(formData.linkedInUrl || "").trim() || null,
-    gitHubUrl: String(formData.gitHubUrl || "").trim() || null,
-    certificates: (formData.certificates || [])
-      .filter(hasAnyCertificateValue)
-      .map((item) => ({
-        certificateName: String(item.certificateName || "").trim(),
-        certificateIssuer: String(item.certificateIssuer || "").trim(),
-        certificateUrl: String(item.certificateUrl || "").trim(),
-        issuedAt: item.issuedAt || null,
-      })),
+    portfolioUrl: String(formData.portfolioUrl || "").trim(),
+    linkedInUrl: String(formData.linkedInUrl || "").trim(),
+    gitHubUrl: String(formData.gitHubUrl || "").trim(),
+    certificates: normalizeCertificatesForPayload(formData.certificates),
+  };
+}
+
+function buildCombinedPayload({ profileSnapshot, basicForm, verificationForm }) {
+  return {
+    avatarUrl: String(basicForm.avatarUrl || "").trim(),
+    fullName: String(basicForm.fullName || "").trim(),
+    professionalTitle: String(basicForm.professionalTitle || "").trim(),
+    bio: String(basicForm.bio || "").trim(),
+    availableForWork: Boolean(basicForm.availableForWork),
+
+    skills: String(verificationForm.skills || "").trim(),
+    yearsOfExperience: Number(verificationForm.yearsOfExperience || 0),
+    portfolioUrl: String(verificationForm.portfolioUrl || "").trim(),
+    linkedInUrl: String(verificationForm.linkedInUrl || "").trim(),
+    gitHubUrl: String(verificationForm.gitHubUrl || "").trim(),
+    certificates: normalizeCertificatesForPayload(
+      verificationForm.certificates
+    ),
+
+    expertProfileId:
+      profileSnapshot?.expertProfileId || profileSnapshot?.ExpertProfileId,
+  };
+}
+
+function buildBasicFormFromProfile(profile) {
+  return {
+    fullName: profile?.fullName || profile?.FullName || "",
+    avatarUrl: profile?.avatarUrl || profile?.AvatarUrl || "",
+    professionalTitle:
+      profile?.professionalTitle || profile?.ProfessionalTitle || "",
+    bio: profile?.bio || profile?.Bio || "",
+    availableForWork:
+      profile?.availableForWork ?? profile?.AvailableForWork ?? true,
+  };
+}
+
+function buildVerificationFormFromProfile(profile) {
+  const certificates = profile?.certificates || profile?.Certificates || [];
+
+  return {
+    skills: toSkillText(profile?.skills || profile?.Skills),
+    yearsOfExperience:
+      profile?.yearsOfExperience ?? profile?.YearsOfExperience ?? "",
+    portfolioUrl: profile?.portfolioUrl || profile?.PortfolioUrl || "",
+    linkedInUrl:
+      profile?.linkedInUrl ||
+      profile?.LinkedInUrl ||
+      profile?.linkedinUrl ||
+      "",
+    gitHubUrl:
+      profile?.gitHubUrl || profile?.GitHubUrl || profile?.githubUrl || "",
+    certificates: normalizeCertificatesForForm(certificates),
   };
 }
 
 function normalizeCertificatesForForm(certificates) {
-  if (!Array.isArray(certificates) || certificates.length === 0) {
-    return emptyVerificationForm.certificates;
+  if (!Array.isArray(certificates)) return [];
+
+  return certificates
+    .map((item) => ({
+      certificateUrl:
+        item?.certificateUrl || item?.CertificateUrl || item?.url || "",
+      certificateType:
+        item?.certificateType || item?.CertificateType || "OTHER",
+    }))
+    .filter((item) => item.certificateUrl)
+    .map((item) => ({
+      certificateUrl: String(item.certificateUrl || "").trim(),
+      certificateType: CERTIFICATE_TYPES.includes(item.certificateType)
+        ? item.certificateType
+        : "OTHER",
+    }));
+}
+
+function normalizeCertificatesForPayload(certificates) {
+  if (!Array.isArray(certificates)) return [];
+
+  return certificates
+    .map((item) => ({
+      certificateUrl: String(item?.certificateUrl || "").trim(),
+      certificateType: CERTIFICATE_TYPES.includes(item?.certificateType)
+        ? item.certificateType
+        : "OTHER",
+    }))
+    .filter((item) => item.certificateUrl);
+}
+
+function getFriendlyError(error, fallback = "Something went wrong.") {
+  const payload = getRawPayload(error);
+
+  const message =
+    typeof payload === "string"
+      ? payload
+      : payload?.message ||
+        payload?.title ||
+        payload?.detail ||
+        payload?.error ||
+        error?.message ||
+        "";
+
+  if (message.includes("Certificate URL is invalid")) {
+    return "One of your certificate links is invalid.";
   }
 
-  return certificates.map((item) => ({
-    certificateName: item.certificateName || item.CertificateName || "",
-    certificateIssuer: item.certificateIssuer || item.CertificateIssuer || "",
-    certificateUrl: item.certificateUrl || item.CertificateUrl || "",
-    issuedAt: toDateInputValue(item.issuedAt || item.IssuedAt),
-  }));
+  if (message.includes("Certificate type is invalid")) {
+    return "One of your certificate types is invalid.";
+  }
+
+  if (message.includes("Duplicate certificate URL")) {
+    return "Certificate links must not be duplicated.";
+  }
+
+  if (message.includes("already used by another expert")) {
+    return "One of your certificate links is already used by another expert.";
+  }
+
+  if (message.includes("Business email already exists")) {
+    return "This business email is already used by another account.";
+  }
+
+  if (message.includes("Phone number already exists")) {
+    return "This phone number is already used by another account.";
+  }
+
+  return message || fallback;
 }
 
-function hasAnyCertificateValue(item) {
+function getResultMessage(data) {
   return (
-    !isEmpty(item?.certificateName) ||
-    !isEmpty(item?.certificateIssuer) ||
-    !isEmpty(item?.certificateUrl) ||
-    !isEmpty(item?.issuedAt)
-  );
-}
-
-function toSkillText(value) {
-  if (!value) return "";
-  if (Array.isArray(value)) return value.join(", ");
-  return String(value);
-}
-
-function toDateInputValue(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toISOString().slice(0, 10);
-}
-
-function getReviewStatus(result) {
-  return String(
-    result?.profileReviewStatus ||
-      result?.ProfileReviewStatus ||
-      result?.reviewStatus ||
-      result?.ReviewStatus ||
-      result?.status ||
-      result?.Status ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-}
-
-function getResultMessage(result) {
-  return (
-    result?.message ||
-    result?.Message ||
-    result?.profileReviewNote ||
-    result?.ProfileReviewNote ||
-    result?.reviewNote ||
-    result?.ReviewNote ||
+    data?.message ||
+    data?.Message ||
+    data?.reviewNote ||
+    data?.ReviewNote ||
+    data?.profileReviewNote ||
+    data?.ProfileReviewNote ||
     ""
   );
 }
 
-function getMissingInformation(result) {
+function getMissingInformation(data) {
   const value =
-    result?.missingInformation ||
-    result?.MissingInformation ||
-    result?.missingInfo ||
-    result?.MissingInfo ||
-    result?.errors ||
-    result?.Errors ||
+    data?.missingInformation ||
+    data?.MissingInformation ||
+    data?.missingFields ||
+    data?.MissingFields ||
     "";
 
   if (Array.isArray(value)) return value.join(", ");
 
-  if (typeof value === "object" && value !== null) {
-    return Object.values(value).flat().join(", ");
-  }
-
   return String(value || "");
+}
+
+function getReviewStatus(data) {
+  return String(
+    data?.profileReviewStatus ||
+      data?.ProfileReviewStatus ||
+      data?.reviewStatus ||
+      data?.ReviewStatus ||
+      data?.status ||
+      data?.Status ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
 }
 
 function updateLocalUserStatus(status) {
@@ -1350,37 +1348,74 @@ function updateLocalUserStatus(status) {
   }
 }
 
+function unwrapData(result) {
+  if (!result) return result;
+
+  if (result.data?.data) return result.data.data;
+  if (result.data) return result.data;
+
+  return result;
+}
+
+function getRawPayload(error) {
+  return (
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error
+  );
+}
+
+function extractUploadUrl(result) {
+  if (!result) return "";
+
+  if (typeof result === "string") return result;
+
+  return (
+    result.url ||
+    result.imageUrl ||
+    result.fileUrl ||
+    result.avatarUrl ||
+    result.data?.url ||
+    result.data?.imageUrl ||
+    result.data?.fileUrl ||
+    result.data?.avatarUrl ||
+    ""
+  );
+}
+
+function toSkillText(value) {
+  if (!value) return "";
+
+  if (Array.isArray(value)) {
+    return value.join(", ");
+  }
+
+  return String(value || "");
+}
+
 function isEmpty(value) {
-  return String(value || "").trim() === "";
+  return String(value ?? "").trim().length === 0;
 }
 
 function isValidUrl(value) {
-  if (isEmpty(value)) return false;
-
   try {
-    const url = new URL(value);
+    const url = new URL(String(value || "").trim());
+
     return url.protocol === "http:" || url.protocol === "https:";
   } catch {
     return false;
   }
 }
 
-function getFriendlyError(err, fallback) {
-  const data = err?.response?.data;
+function isGitHubUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const parts = url.pathname.split("/").filter(Boolean);
 
-  if (typeof data === "string") return data;
-
-  if (data?.message) return data.message;
-
-  if (data?.title) return data.title;
-
-  if (data?.errors) {
-    const allErrors = Object.values(data.errors).flat();
-
-    if (allErrors.length > 0) {
-      return allErrors.join(" ");
-    }
+    return host === "github.com" && parts.length >= 1;
+  } catch {
+    return false;
   }
-
-  return err?.message || fallback || "Something went wrong. Please try again.";
 }

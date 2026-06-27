@@ -8,6 +8,16 @@ const getValue = (...values) => {
 
 const trim = (value) => String(value || "").trim();
 
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -42,12 +52,14 @@ const unwrapListData = (response) => {
   return [];
 };
 
-const normalizeDeliverable = (deliverable) => {
+export const normalizeDeliverable = (deliverable) => {
   if (!deliverable) return null;
 
   const deliverableId = getValue(
     deliverable.deliverableId,
     deliverable.DeliverableId,
+    deliverable.deliverableID,
+    deliverable.DeliverableID,
     deliverable.id,
     deliverable.Id
   );
@@ -55,6 +67,10 @@ const normalizeDeliverable = (deliverable) => {
   const milestoneId = getValue(
     deliverable.milestoneId,
     deliverable.MilestoneId,
+    deliverable.milestoneID,
+    deliverable.MilestoneID,
+    deliverable.projectMilestoneId,
+    deliverable.ProjectMilestoneId,
     deliverable.milestone?.milestoneId,
     deliverable.Milestone?.MilestoneId,
     null
@@ -63,13 +79,21 @@ const normalizeDeliverable = (deliverable) => {
   const projectId = getValue(
     deliverable.projectId,
     deliverable.ProjectId,
+    deliverable.projectID,
+    deliverable.ProjectID,
     deliverable.project?.projectId,
     deliverable.Project?.ProjectId,
     null
   );
 
   const status = String(
-    getValue(deliverable.status, deliverable.Status, "SUBMITTED")
+    getValue(
+      deliverable.status,
+      deliverable.Status,
+      deliverable.deliverableStatus,
+      deliverable.DeliverableStatus,
+      "SUBMITTED"
+    )
   )
     .trim()
     .toUpperCase();
@@ -104,7 +128,6 @@ const normalizeDeliverable = (deliverable) => {
     ),
 
     fileUrl: getValue(deliverable.fileUrl, deliverable.FileUrl, ""),
-
     demoUrl: getValue(deliverable.demoUrl, deliverable.DemoUrl, ""),
 
     testResultUrl: getValue(
@@ -175,7 +198,7 @@ const buildRevisionPayload = (formData) => ({
 
 const deliverableService = {
   async getDeliverablesByMilestone(milestoneId) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
@@ -183,78 +206,54 @@ const deliverableService = {
       milestoneId
     );
 
-    console.log("GET DELIVERABLES BY MILESTONE RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeDeliverable).filter(Boolean);
   },
 
   async submitDeliverable(milestoneId, formData) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const payload = buildSubmitPayload(formData);
-
-    console.log("SUBMIT DELIVERABLE PAYLOAD:", payload);
 
     const response = await deliverableApi.submitDeliverableToMilestone(
       milestoneId,
       payload
     );
 
-    console.log("SUBMIT DELIVERABLE RESPONSE:", response?.data);
-
     return normalizeDeliverable(unwrapData(response));
   },
 
   async submitDeliverableGeneric(milestoneId, formData) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const payload = buildGenericSubmitPayload(milestoneId, formData);
 
-    console.log("SUBMIT GENERIC DELIVERABLE PAYLOAD:", payload);
-
     const response = await deliverableApi.submitDeliverable(payload);
-
-    console.log("SUBMIT GENERIC DELIVERABLE RESPONSE:", response?.data);
 
     return normalizeDeliverable(unwrapData(response));
   },
 
   async getDeliverableById(deliverableId) {
-    if (
-      !deliverableId ||
-      deliverableId === "undefined" ||
-      deliverableId === "null"
-    ) {
+    if (isInvalidId(deliverableId)) {
       throw new Error("Invalid deliverable id.");
     }
 
     const response = await deliverableApi.getDeliverableById(deliverableId);
 
-    console.log("GET DELIVERABLE DETAIL RESPONSE:", response?.data);
-
     return normalizeDeliverable(unwrapData(response));
   },
 
   async submitRevision(deliverableId, formData) {
-    if (
-      !deliverableId ||
-      deliverableId === "undefined" ||
-      deliverableId === "null"
-    ) {
+    if (isInvalidId(deliverableId)) {
       throw new Error("Invalid deliverable id.");
     }
 
     const payload = buildRevisionPayload(formData);
 
-    console.log("SUBMIT DELIVERABLE REVISION PAYLOAD:", payload);
-
     const response = await deliverableApi.submitRevision(deliverableId, payload);
-
-    console.log("SUBMIT DELIVERABLE REVISION RESPONSE:", response?.data);
 
     return normalizeDeliverable(unwrapData(response));
   },

@@ -7,15 +7,21 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
 const STATUS_TABS = [
-  { key: "ACTIVE", label: "Active", icon: "pending_actions", color: "#facc15" },
-  { key: "COMPLETED",   label: "Completed",   icon: "verified",        color: "#22c55e" },
-  { key: "DISPUTED",    label: "Disputed",     icon: "gavel",           color: "#f97316" },
+  { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
+  { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
+  { key: "DISPUTED", label: "Disputed", icon: "gavel", color: "#ef4444" },
 ];
 
+const STATUS_CLASS = {
+  ACTIVE: "border-cyan-400/30 bg-cyan-400/10 text-cyan-400",
+  COMPLETED: "border-green-500/30 bg-green-500/10 text-green-400",
+  DISPUTED: "border-red-500/30 bg-red-500/10 text-red-400",
+};
+
 const STATUS_CONFIG = {
-  ACTIVE: { label: "Active", color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
+  ACTIVE: { label: "Active", color: "#00F0FF", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
   COMPLETED:   { label: "Completed",   color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
-  DISPUTED:    { label: "Disputed",    color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
+  DISPUTED:    { label: "Disputed",    color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.25)" },
 };
 
 function ProjectCard({ project }) {
@@ -41,7 +47,11 @@ function ProjectCard({ project }) {
             <span style={{ fontSize: 13, color: "#8c90a0" }}>{expertName}</span>
           </div>
         </div>
-        <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.border}`, whiteSpace: "nowrap" }}>
+        <span
+          className={`whitespace-nowrap rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase ${
+            STATUS_CLASS[project.status] || STATUS_CLASS.ACTIVE
+          }`}
+        >
           {cfg.label}
         </span>
       </div>
@@ -65,38 +75,59 @@ function ProjectCard({ project }) {
           )}
         </div>
 
-        <div style={{ display: "flex", gap: 8 }}>
-          {/* View Detail — xuất hiện ở cả 3 trạng thái, dẫn vào trang chi tiết để xem
-              milestone, deliverable, và (nếu cần) mở dispute mới ngay tại đó. */}
-          <button
-            onClick={(e) => { e.stopPropagation(); navigate(`/client/projects/${project.projectId}`); }}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
-            View Detail
-          </button>
+        <div className="flex flex-wrap gap-2">
+          {project.status === "ACTIVE" && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/client/projects/${project.projectId}`);
+                }}
+                className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-400 transition hover:bg-cyan-400/20"
+              >
+                View Detail
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/client/disputes/create?projectId=${project.projectId}`);
+                }}
+                className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20"
+              >
+                Dispute
+              </button>
+            </>
+          )}
 
           {project.status === "COMPLETED" && (
             <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/client/projects/${project.projectId}/review`); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>star</span>
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/client/projects/${project.projectId}/review`);
+              }}
+              className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-bold text-green-400 transition hover:bg-green-500/20"
+            >
               Leave Review
             </button>
           )}
 
           {project.status === "DISPUTED" && (
             <button
-              onClick={(e) => { e.stopPropagation(); navigate(`/client/disputes?projectId=${project.projectId}`); }}
-              style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>gavel</span>
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/client/disputes?projectId=${project.projectId}`);
+              }}
+              className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20"
+            >
               View Dispute
             </button>
           )}
         </div>
-      </div>
-    </div>
-  );
-}
+              </div>
+            </div>
+          );
+        }
 
 export default function ProjectsListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -137,7 +168,7 @@ export default function ProjectsListPage() {
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Projects</h1>
-          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Monitor the progress of ongoing collaborative projects.</p>
+          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Theo dõi tiến độ các project đang hợp tác.</p>
         </div>
 
         {/* Tabs */}

@@ -6,127 +6,195 @@ const getValue = (...values) => {
   );
 };
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
+const isInvalidId = (value) => {
+  return !value || value === "undefined" || value === "null";
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
   if (!data) return null;
 
-  if (data?.data !== undefined) return data.data;
-  if (data?.result !== undefined) return data.result;
-  if (data?.item !== undefined) return data.item;
+  if (data?.data?.withdrawal) return data.data.withdrawal;
+  if (data?.data?.item) return data.data.item;
+  if (data?.data?.result) return data.data.result;
+  if (data?.data) return data.data;
+
+  if (data?.withdrawal) return data.withdrawal;
+  if (data?.item) return data.item;
+  if (data?.result) return data.result;
 
   return data;
 };
 
-const normalizeArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.items)) return value.items;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.result)) return value.result;
+const unwrapListData = (response) => {
+  const data = response?.data;
+
+  if (Array.isArray(data)) return data;
+
+  if (Array.isArray(data?.data)) return data.data;
+  if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.withdrawals)) return data.withdrawals;
+
+  if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.result)) return data.data.result;
+  if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
 
   return [];
 };
 
-const normalizeWithdrawal = (item) => {
+export const normalizeAdminWithdrawal = (item) => {
   if (!item) return null;
 
   const withdrawalRequestId = getValue(
     item.withdrawalRequestId,
     item.WithdrawalRequestId,
+    item.withdrawalId,
+    item.WithdrawalId,
     item.id,
     item.Id
   );
+
+  const status = String(getValue(item.status, item.Status, "PENDING"))
+    .trim()
+    .toUpperCase();
 
   return {
     withdrawalRequestId,
     id: withdrawalRequestId,
 
-    userId: getValue(item.userId, item.UserId),
+    expertId: getValue(
+      item.expertId,
+      item.ExpertId,
+      item.expertProfileId,
+      item.ExpertProfileId,
+      item.expert?.expertProfileId,
+      item.Expert?.ExpertProfileId,
+      null
+    ),
 
-    userFullName: getValue(
-      item.userFullName,
-      item.UserFullName,
+    expertName: getValue(
+      item.expertName,
+      item.ExpertName,
       item.fullName,
       item.FullName,
-      item.userName,
-      item.UserName,
-      "Unknown User"
+      item.expert?.fullName,
+      item.Expert?.FullName,
+      "Expert"
     ),
 
-    userEmail: getValue(
-      item.userEmail,
-      item.UserEmail,
+    expertEmail: getValue(
+      item.expertEmail,
+      item.ExpertEmail,
       item.email,
       item.Email,
-      "No email"
+      item.expert?.email,
+      item.Expert?.Email,
+      ""
     ),
 
-    amount: Number(getValue(item.amount, item.Amount, 0)),
+    amount: toNumber(getValue(item.amount, item.Amount, item.requestedAmount, item.RequestedAmount, 0)),
 
-    bankName: getValue(item.bankName, item.BankName, "N/A"),
+    currency: getValue(item.currency, item.Currency, "USD"),
 
+    status,
+
+    bankName: getValue(item.bankName, item.BankName, ""),
+    bankAccountName: getValue(
+      item.bankAccountName,
+      item.BankAccountName,
+      item.accountName,
+      item.AccountName,
+      ""
+    ),
     bankAccountNumber: getValue(
       item.bankAccountNumber,
       item.BankAccountNumber,
-      "N/A"
+      item.accountNumber,
+      item.AccountNumber,
+      ""
     ),
 
-    bankAccountHolder: getValue(
-      item.bankAccountHolder,
-      item.BankAccountHolder,
-      "N/A"
+    paymentMethod: getValue(
+      item.paymentMethod,
+      item.PaymentMethod,
+      item.method,
+      item.Method,
+      ""
     ),
 
-    status: String(getValue(item.status, item.Status, "PENDING"))
-      .trim()
-      .toUpperCase(),
-
-    adminNote: getValue(item.adminNote, item.AdminNote, ""),
-
-    createdAt: getValue(item.createdAt, item.CreatedAt, ""),
-
-    processedAt: getValue(item.processedAt, item.ProcessedAt, ""),
-
-    processedByAdminId: getValue(
-      item.processedByAdminId,
-      item.ProcessedByAdminId,
-      null
+    adminNote: getValue(item.adminNote, item.AdminNote, item.note, item.Note, ""),
+    rejectionReason: getValue(
+      item.rejectionReason,
+      item.RejectionReason,
+      item.rejectReason,
+      item.RejectReason,
+      ""
     ),
+
+    createdAt: getValue(item.createdAt, item.CreatedAt, item.requestedAt, item.RequestedAt, ""),
+    updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
+    approvedAt: getValue(item.approvedAt, item.ApprovedAt, ""),
+    rejectedAt: getValue(item.rejectedAt, item.RejectedAt, ""),
 
     raw: item,
   };
 };
 
-const buildProcessPayload = (adminNote) => {
+const buildApprovePayload = (formData = {}) => {
   return {
-    adminNote: String(adminNote || "").trim(),
+    reason:
+      String(formData.reason || formData.adminNote || "Approve withdrawal request.").trim(),
+  };
+};
+
+const buildRejectPayload = (formData = {}) => {
+  return {
+    reason: String(formData.reason || formData.rejectionReason || "").trim(),
   };
 };
 
 const adminWithdrawalService = {
-  async getAllWithdrawals(status = "ALL") {
-    const response = await adminWithdrawalApi.getAllWithdrawals(status);
-    const raw = unwrapData(response);
+  async getWithdrawals(params = {}) {
+    const response = await adminWithdrawalApi.getWithdrawals(params);
 
-    return normalizeArray(raw).map(normalizeWithdrawal).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeAdminWithdrawal)
+      .filter(Boolean);
   },
 
-  async approveWithdrawal(withdrawalRequestId, adminNote = "") {
+  async approveWithdrawal(withdrawalRequestId, formData = {}) {
+    if (isInvalidId(withdrawalRequestId)) {
+      throw new Error("Invalid withdrawal request id.");
+    }
+
+    const payload = buildApprovePayload(formData);
     const response = await adminWithdrawalApi.approveWithdrawal(
       withdrawalRequestId,
-      buildProcessPayload(adminNote)
+      payload
     );
 
-    return normalizeWithdrawal(unwrapData(response));
+    return normalizeAdminWithdrawal(unwrapData(response));
   },
 
-  async rejectWithdrawal(withdrawalRequestId, adminNote = "") {
+  async rejectWithdrawal(withdrawalRequestId, formData = {}) {
+    if (isInvalidId(withdrawalRequestId)) {
+      throw new Error("Invalid withdrawal request id.");
+    }
+
+    const payload = buildRejectPayload(formData);
     const response = await adminWithdrawalApi.rejectWithdrawal(
       withdrawalRequestId,
-      buildProcessPayload(adminNote)
+      payload
     );
 
-    return normalizeWithdrawal(unwrapData(response));
+    return normalizeAdminWithdrawal(unwrapData(response));
   },
 };
 

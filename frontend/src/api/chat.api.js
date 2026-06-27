@@ -1,16 +1,27 @@
 import axiosInstance from "./axiosInstance";
 
 const chatApi = {
+  createConversation(data) {
+    return axiosInstance.post("/conversations", data);
+  },
+
   getConversations() {
-    return axiosInstance.get("/messages/conversations");
+    return axiosInstance.get("/conversations/me");
+  },
+
+  getConversationById(conversationId) {
+    return axiosInstance.get(`/conversations/${conversationId}`);
   },
 
   getMessages(conversationId) {
-    return axiosInstance.get(`/messages/conversations/${conversationId}`);
+    return axiosInstance.get(`/conversations/${conversationId}/messages`);
   },
 
-  sendMessage(data) {
-    return axiosInstance.post("/messages", data);
+  sendMessage(conversationId, data) {
+    return axiosInstance.post(
+      `/conversations/${conversationId}/messages`,
+      data
+    );
   },
 };
 

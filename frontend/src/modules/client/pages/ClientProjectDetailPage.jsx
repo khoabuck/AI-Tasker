@@ -11,7 +11,7 @@
 //    khi đã nhận toàn bộ sản phẩm, không gắn riêng 1 milestone).
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -42,32 +42,100 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [reason, setReason] = useState("");
   const [disputedAmount, setDisputedAmount] = useState(milestone?.amount ?? project?.totalAmount ?? "");
   const [evidenceText, setEvidenceText] = useState("");
+  const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const respondentUserId = project?.expertUserId ?? project?.expertId ?? project?.expert?.userId;
+  const respondentUserId =
+    project?.expertUserId ??
+    project?.expert?.userId ??
+    project?.expert?.expertUserId ??
+    project?.expertProfile?.userId ??
+    project?.expertProfile?.expertUserId;
+
+  // BE chỉ có /uploads/images — chỉ hỗ trợ ảnh làm bằng chứng (screenshot, ảnh chụp
+  // sản phẩm lỗi...). Không có endpoint upload PDF/file thường, nên ô input giới
+  // hạn accept="image/*" để tránh người dùng chọn file sẽ luôn lỗi khi gửi lên.
+  const handleUploadImage = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    setUploadError("");
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await axiosInstance.post("/uploads/images", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const raw = res.data?.data ?? res.data;
+
+      const url =
+        raw?.url ??
+        raw?.fileUrl ??
+        raw?.imageUrl ??
+        raw?.path ??
+        raw?.data?.url ??
+        "";
+
+      setEvidenceFileUrl(String(url || ""));
+    } catch (err) {
+      setUploadError(err?.response?.data?.message || "Tải ảnh lên thất bại. Vui lòng thử lại.");
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!reason.trim()) { setError("Vui lòng nhập lý do khiếu nại."); return; }
-    if (!respondentUserId) { setError("Không xác định được Expert liên quan. Vui lòng tải lại trang."); return; }
+    if (!reason.trim()) {
+      setError("Vui lòng nhập lý do khiếu nại.");
+      return;
+    }
+
+    if (!Number(project?.projectId ?? project?.id)) {
+      setError("Không xác định được project. Vui lòng tải lại trang.");
+      return;
+    }
+
+    if (!Number(respondentUserId)) {
+      setError("Không xác định được Expert liên quan. Vui lòng tải lại trang.");
+      return;
+    }
+
+    if (!Number(disputedAmount) || Number(disputedAmount) <= 0) {
+      setError("Số tiền tranh chấp phải lớn hơn 0.");
+      return;
+    }
 
     setSubmitting(true);
     setError("");
     try {
-      await axiosInstance.post("/disputes", {
-        projectId: project.projectId,
-        milestoneId: milestone?.milestoneId ?? null,
-        respondentUserId,
+      const payload = {
+        projectId: Number(project.projectId ?? project.id),
+        milestoneId: Number(milestone?.milestoneId ?? milestone?.id ?? 0),
+        respondentUserId: Number(respondentUserId),
         disputedAmount: Number(disputedAmount) || 0,
         reason: reason.trim(),
         evidenceText: evidenceText.trim() || "",
-        evidenceFileUrl: "",
-      });
+        evidenceFileUrl: String(evidenceFileUrl || ""),
+      };
+
+      console.log("DISPUTE_PAYLOAD:");
+      console.log(JSON.stringify(payload, null, 2));
+
+      await axiosInstance.post("/disputes", payload);
       onSubmitted();
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || "Mở khiếu nại thất bại. Vui lòng thử lại.");
-    } finally {
+        console.log("DISPUTE_ERROR_STATUS:", err?.response?.status);
+        console.log("DISPUTE_ERROR_DATA:", err?.response?.data);
+
+        setError(
+          err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          "Mở khiếu nại thất bại. Vui lòng thử lại."
+        );
+      }finally {
       setSubmitting(false);
     }
   };
@@ -116,6 +184,59 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
           </div>
 
+          {/* Upload ảnh bằng chứng — chỉ hỗ trợ ảnh vì BE chỉ có /uploads/images */}
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "#8c90a0",
+                marginBottom: 8,
+              }}
+            >
+              Link bằng chứng (tùy chọn)
+            </label>
+
+            <input
+              type="url"
+              value={evidenceFileUrl}
+              onChange={(e) => setEvidenceFileUrl(e.target.value)}
+              placeholder="https://drive.google.com/... hoặc https://example.com/file.pdf"
+              style={{
+                width: "100%",
+                background: "#1d2026",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 10,
+                padding: "12px 14px",
+                color: "#e1e2eb",
+                fontSize: 14,
+                outline: "none",
+                boxSizing: "border-box",
+              }}
+            />
+
+            <p
+              style={{
+                marginTop: 8,
+                color: "#8c90a0",
+                fontSize: 12,
+                lineHeight: 1.5,
+              }}
+            >
+              Dán link Google Drive, Dropbox, OneDrive
+            </p>
+
+            {uploadError && (
+              <p style={{ fontSize: 12, color: "#f87171", marginTop: 6 }}>{uploadError}</p>
+            )}
+            <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
+              Chỉ hỗ trợ ảnh. Để đính kèm tài liệu khác (PDF, video...), dán link vào ô "Bằng chứng" phía trên.
+            </p>
+          </div>
+
           {error && (
             <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>
           )}
@@ -124,8 +245,8 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
               Hủy
             </button>
-            <button onClick={handleSubmit} disabled={submitting}
-              style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+            <button onClick={handleSubmit} disabled={submitting || uploading}
+              style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting || uploading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {submitting
                 ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang gửi...</>
                 : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Gửi khiếu nại</>}
@@ -140,17 +261,25 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 export default function ClientProjectDetailPage() {
   const { id: projectId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [disputeModal, setDisputeModal] = useState(null); // { milestone } | { milestone: null } khi mở cho cả project
-  const [disputeSentMsg, setDisputeSentMsg] = useState("");
+  // bannerMsg dùng chung cho mọi thông báo thành công cần hiện khi quay lại trang
+  // này — ví dụ sau khi vừa approve 1 deliverable ở MilestoneDeliverablesPage và
+  // navigate về đây kèm state.successMsg, hoặc sau khi vừa mở dispute thành công.
+  const [bannerMsg, setBannerMsg] = useState(location.state?.successMsg || "");
 
-  const fetchData = useCallback(async (signal) => {
-    setLoading(true);
+  const fetchData = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
+
     setError("");
+
     try {
       const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
       const projectData = res.data?.data ?? res.data;
@@ -161,14 +290,18 @@ export default function ClientProjectDetailPage() {
         const msRaw = msRes.data?.data ?? msRes.data;
         setMilestones(Array.isArray(msRaw) ? msRaw : msRaw?.items ?? []);
       } catch {
-        // Milestone lỗi không chặn việc hiện thông tin project chính
         setMilestones([]);
       }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải thông tin project.");
+
+      if (!silent) {
+        setError(err?.response?.data?.message || "Không thể tải thông tin project.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [projectId]);
 
@@ -177,6 +310,16 @@ export default function ClientProjectDetailPage() {
     fetchData(controller.signal);
     return () => controller.abort();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (project?.status !== "ACTIVE") return;
+
+    const intervalId = setInterval(() => {
+      fetchData(undefined, true);
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [project?.status, fetchData]);
 
   if (loading) {
     return (
@@ -220,10 +363,10 @@ export default function ClientProjectDetailPage() {
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* Back */}
-        <button onClick={() => navigate("/client/projects")}
+        <button onClick={() => navigate(-1)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 24, padding: 0 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to My Projects
+          Back 
         </button>
 
         {/* Header card */}
@@ -280,10 +423,10 @@ export default function ClientProjectDetailPage() {
           </div>
         </div>
 
-        {disputeSentMsg && (
+        {bannerMsg && (
           <div style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 10, padding: "12px 16px", color: "#4ade80", fontSize: 14, marginBottom: 20, display: "flex", alignItems: "center", gap: 8 }}>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>
-            {disputeSentMsg}
+            {bannerMsg}
           </div>
         )}
 
@@ -332,6 +475,7 @@ export default function ClientProjectDetailPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
+                const normalizedStatus = (m.status || "").toUpperCase();
                 const mCfg = MILESTONE_STATUS[m.status] || MILESTONE_STATUS.PENDING;
                 const isCurrent = index === currentMilestoneIndex;
                 const hasSubmittedDeliverable = m.status === "SUBMITTED";
@@ -391,7 +535,7 @@ export default function ClientProjectDetailPage() {
           project={project}
           milestone={disputeModal.milestone}
           onClose={() => setDisputeModal(null)}
-          onSubmitted={() => setDisputeSentMsg("Khiếu nại đã được gửi. Admin sẽ xem xét và phản hồi sớm nhất.")}
+          onSubmitted={() => setBannerMsg("Khiếu nại đã được gửi. Admin sẽ xem xét và phản hồi sớm nhất.")}
         />
       )}
     </ClientLayout>

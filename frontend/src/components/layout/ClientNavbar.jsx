@@ -17,13 +17,7 @@ const NAV_ITEMS = [
   { label: "MY JOBS", to: "/client/jobs", dropdown: null },
   { label: "MY PROJECTS", to: "/client/projects", dropdown: null },
   { label: "MESSAGES", to: "/client/messages", dropdown: null },
-  {
-    label: "FINANCE",
-    dropdown: [
-      { icon: "account_balance_wallet", label: "Wallet", to: "/client/wallet" },
-      { icon: "receipt_long", label: "Transactions", to: "/client/transactions" },
-    ],
-  },
+  { label: "FINANCE", icon: "account_balance_wallet", to: "/client/wallet", dropdown: null },
 ];
 
 function NavItem({ label, to, dropdown, active }) {
