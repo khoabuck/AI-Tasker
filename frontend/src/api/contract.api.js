@@ -29,21 +29,6 @@ const contractApi = {
     return axiosInstance.put(`/contracts/${contractId}/draft`, data);
   },
 
-  // EXPERT/FE2 + CLIENT/FE1: get milestone drafts
-  getContractMilestoneDrafts(contractId) {
-    return axiosInstance.get(`/contracts/${contractId}/milestone-drafts`);
-  },
-
-  // CLIENT/FE1: replace/update milestone drafts
-  updateContractMilestoneDrafts(contractId, data) {
-    return axiosInstance.put(`/contracts/${contractId}/milestone-drafts`, data);
-  },
-
-  // Alias giữ tương thích code cũ
-  replaceContractMilestoneDrafts(contractId, data) {
-    return axiosInstance.put(`/contracts/${contractId}/milestone-drafts`, data);
-  },
-
   // EXPERT/FE2 + CLIENT/FE1: get contract by contractId
   getContractById(contractId) {
     return axiosInstance.get(`/contracts/${contractId}`);
@@ -64,7 +49,22 @@ const contractApi = {
     return axiosInstance.get(`/proposals/${proposalId}/contract`);
   },
 
-  // EXPERT/FE2: accept contract
+  // EXPERT/FE2 + CLIENT/FE1: get milestone drafts
+  getContractMilestoneDrafts(contractId) {
+    return axiosInstance.get(`/contracts/${contractId}/milestone-drafts`);
+  },
+
+  // CLIENT/FE1: replace/update milestone drafts
+  updateContractMilestoneDrafts(contractId, data) {
+    return axiosInstance.put(`/contracts/${contractId}/milestone-drafts`, data);
+  },
+
+  // Alias giữ tương thích code cũ
+  replaceContractMilestoneDrafts(contractId, data) {
+    return axiosInstance.put(`/contracts/${contractId}/milestone-drafts`, data);
+  },
+
+  // EXPERT/FE2: accept/confirm contract
   confirmContract(contractId, data) {
     return axiosInstance.post(
       `/contracts/${contractId}/confirm`,

@@ -124,7 +124,7 @@ export default function MyProposalsPage() {
       return;
     }
 
-    setError("Cannot open contract because contract information is missing.");
+    setError("Cannot open contract because proposal id is missing.");
   };
 
   const handleCancelProposal = async (proposal) => {
@@ -481,12 +481,16 @@ function getProposalId(proposal) {
   return (
     proposal?.proposalId ||
     proposal?.ProposalId ||
+    proposal?.proposalID ||
+    proposal?.ProposalID ||
     proposal?.id ||
     proposal?.Id ||
     proposal?.expertProposalId ||
     proposal?.ExpertProposalId ||
     raw?.proposalId ||
     raw?.ProposalId ||
+    raw?.proposalID ||
+    raw?.ProposalID ||
     raw?.id ||
     raw?.Id ||
     raw?.expertProposalId ||
@@ -521,16 +525,38 @@ function getContractId(proposal) {
   return (
     proposal?.contractId ||
     proposal?.ContractId ||
+    proposal?.contractID ||
+    proposal?.ContractID ||
     proposal?.contract?.contractId ||
+    proposal?.contract?.ContractId ||
+    proposal?.contract?.contractID ||
+    proposal?.contract?.ContractID ||
+    proposal?.contract?.id ||
+    proposal?.contract?.Id ||
     proposal?.Contract?.ContractId ||
+    proposal?.Contract?.ContractID ||
+    proposal?.Contract?.Id ||
     proposal?.projectContractId ||
     proposal?.ProjectContractId ||
+    proposal?.projectContractID ||
+    proposal?.ProjectContractID ||
     raw?.contractId ||
     raw?.ContractId ||
+    raw?.contractID ||
+    raw?.ContractID ||
     raw?.contract?.contractId ||
+    raw?.contract?.ContractId ||
+    raw?.contract?.contractID ||
+    raw?.contract?.ContractID ||
+    raw?.contract?.id ||
+    raw?.contract?.Id ||
     raw?.Contract?.ContractId ||
+    raw?.Contract?.ContractID ||
+    raw?.Contract?.Id ||
     raw?.projectContractId ||
     raw?.ProjectContractId ||
+    raw?.projectContractID ||
+    raw?.ProjectContractID ||
     ""
   );
 }
@@ -539,7 +565,11 @@ function getProposalStatus(proposal) {
   const raw = proposal?.raw || proposal?.Raw || proposal || {};
 
   return String(
-    proposal?.status || proposal?.Status || raw?.status || raw?.Status || "SUBMITTED"
+    proposal?.status ||
+      proposal?.Status ||
+      raw?.status ||
+      raw?.Status ||
+      "SUBMITTED"
   )
     .trim()
     .toUpperCase();
@@ -564,7 +594,9 @@ function getProposalStatusGroup(status) {
     return "REJECTED";
   }
 
-  if (value === "ACCEPTED") return "ACCEPTED";
+  if (["ACCEPTED", "APPROVED", "SELECTED"].includes(value)) {
+    return "ACCEPTED";
+  }
 
   if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
     return "CANCELLED";

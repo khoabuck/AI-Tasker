@@ -21,12 +21,10 @@ const deliverableApi = {
     return axiosInstance.post(`/deliverables/${deliverableId}/revision`, data);
   },
 
-  // CLIENT/FE1 dùng
   approveDeliverable(deliverableId) {
     return axiosInstance.post(`/deliverables/${deliverableId}/approve`);
   },
 
-  // CLIENT/FE1 dùng
   requestRevision(deliverableId, data) {
     return axiosInstance.post(
       `/deliverables/${deliverableId}/request-revision`,

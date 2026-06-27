@@ -20,7 +20,13 @@ const toInteger = (value, fallback = 0) => {
 };
 
 const isInvalidId = (value) => {
-  return !value || value === "undefined" || value === "null";
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
 };
 
 const unwrapData = (response) => {
@@ -67,36 +73,76 @@ export const normalizeContract = (contract) => {
   const contractId = getValue(
     contract.contractId,
     contract.ContractId,
+    contract.contractID,
+    contract.ContractID,
     contract.id,
     contract.Id
+  );
+
+  const proposalId = getValue(
+    contract.proposalId,
+    contract.ProposalId,
+    contract.proposalID,
+    contract.ProposalID,
+    contract.proposal?.proposalId,
+    contract.Proposal?.ProposalId,
+    null
+  );
+
+  const jobId = getValue(
+    contract.jobId,
+    contract.JobId,
+    contract.projectId,
+    contract.ProjectId,
+    contract.job?.jobId,
+    contract.Job?.JobId,
+    contract.project?.projectId,
+    contract.Project?.ProjectId,
+    null
   );
 
   return {
     contractId,
     id: contractId,
 
-    proposalId: getValue(contract.proposalId, contract.ProposalId, null),
+    proposalId,
 
-    jobId: getValue(
-      contract.jobId,
-      contract.JobId,
-      contract.projectId,
-      contract.ProjectId,
-      contract.job?.jobId,
-      contract.Job?.JobId,
-      null
-    ),
+    jobId,
 
     jobTitle: getValue(
       contract.jobTitle,
       contract.JobTitle,
       contract.projectTitle,
       contract.ProjectTitle,
+      contract.contractTitle,
+      contract.ContractTitle,
       contract.job?.title,
       contract.Job?.Title,
+      contract.project?.title,
+      contract.Project?.Title,
       contract.title,
       contract.Title,
       "Contract"
+    ),
+
+    clientId: getValue(
+      contract.clientId,
+      contract.ClientId,
+      contract.client?.userId,
+      contract.client?.clientId,
+      contract.Client?.UserId,
+      contract.Client?.ClientId,
+      null
+    ),
+
+    expertId: getValue(
+      contract.expertId,
+      contract.ExpertId,
+      contract.expert?.userId,
+      contract.expert?.expertId,
+      contract.Expert?.UserId,
+      contract.Expert?.ExpertId,
+      null
     ),
 
     clientName: getValue(
@@ -119,7 +165,15 @@ export const normalizeContract = (contract) => {
       "Expert"
     ),
 
-    status: String(getValue(contract.status, contract.Status, "PENDING"))
+    status: String(
+      getValue(
+        contract.status,
+        contract.Status,
+        contract.contractStatus,
+        contract.ContractStatus,
+        "PENDING"
+      )
+    )
       .trim()
       .toUpperCase(),
 
@@ -133,8 +187,18 @@ export const normalizeContract = (contract) => {
         contract.ContractAmount,
         contract.price,
         contract.Price,
+        contract.budget,
+        contract.Budget,
         0
       )
+    ),
+
+    currency: getValue(
+      contract.currency,
+      contract.Currency,
+      contract.currencyCode,
+      contract.CurrencyCode,
+      "VND"
     ),
 
     timelineDays: toInteger(
@@ -266,23 +330,25 @@ export const getFriendlyContractError = (
         error?.message ||
         "";
 
-  if (message.includes("not found")) {
+  const normalizedMessage = String(message || "").toLowerCase();
+
+  if (normalizedMessage.includes("not found")) {
     return "Contract could not be found.";
   }
 
-  if (message.includes("already")) {
+  if (normalizedMessage.includes("already")) {
     return "This contract has already been processed.";
   }
 
-  if (message.includes("confirm")) {
+  if (normalizedMessage.includes("confirm")) {
     return "This contract cannot be confirmed right now.";
   }
 
-  if (message.includes("cancel")) {
+  if (normalizedMessage.includes("cancel")) {
     return "This contract cannot be cancelled right now.";
   }
 
-  if (message.includes("proposal")) {
+  if (normalizedMessage.includes("proposal")) {
     return "Cannot find a contract for this proposal.";
   }
 

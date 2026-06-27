@@ -20,7 +20,7 @@ export default function DeliverableDetailPage() {
   const { deliverableId } = useParams();
   const navigate = useNavigate();
 
-  const [deliverable, setDeliverable] = useState(null);
+  const [submission, setSubmission] = useState(null);
   const [revisionForm, setRevisionForm] = useState(emptyRevisionForm);
 
   const [loading, setLoading] = useState(true);
@@ -30,11 +30,11 @@ export default function DeliverableDetailPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadDeliverable();
+    loadSubmission();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deliverableId]);
 
-  const loadDeliverable = async () => {
+  const loadSubmission = async () => {
     try {
       setLoading(true);
       setError("");
@@ -42,7 +42,8 @@ export default function DeliverableDetailPage() {
 
       const data = await deliverableService.getDeliverableById(deliverableId);
 
-      setDeliverable(data);
+      setSubmission(data);
+
       setRevisionForm({
         feedback: "",
         fileUrl: data?.fileUrl || "",
@@ -52,9 +53,9 @@ export default function DeliverableDetailPage() {
         handoverNotes: data?.handoverNotes || "",
       });
     } catch (err) {
-      console.error("LOAD DELIVERABLE DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load deliverable detail."));
-      setDeliverable(null);
+      console.error("LOAD SUBMISSION DETAIL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load submission detail."));
+      setSubmission(null);
     } finally {
       setLoading(false);
     }
@@ -72,7 +73,7 @@ export default function DeliverableDetailPage() {
 
   const validateRevision = () => {
     if (!revisionForm.description.trim()) {
-      return "Revision description is required.";
+      return "Please describe what you changed.";
     }
 
     if (revisionForm.description.trim().length < 20) {
@@ -115,13 +116,21 @@ export default function DeliverableDetailPage() {
       );
 
       if (data?.deliverableId) {
-        setDeliverable(data);
+        setSubmission(data);
+
+        setRevisionForm({
+          feedback: "",
+          fileUrl: data?.fileUrl || "",
+          demoUrl: data?.demoUrl || "",
+          testResultUrl: data?.testResultUrl || "",
+          description: data?.description || "",
+          handoverNotes: data?.handoverNotes || "",
+        });
       } else {
-        await loadDeliverable();
+        await loadSubmission();
       }
 
       setMessage("Revision submitted successfully.");
-      setRevisionForm(emptyRevisionForm);
     } catch (err) {
       console.error("SUBMIT REVISION ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot submit revision."));
@@ -130,25 +139,34 @@ export default function DeliverableDetailPage() {
     }
   };
 
+  const goBack = () => {
+    if (submission?.milestoneId) {
+      navigate(`/expert/milestones/${submission.milestoneId}`);
+      return;
+    }
+
+    navigate("/expert/projects");
+  };
+
   if (loading) {
     return (
       <ExpertLayout>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading deliverable detail...
+          Loading submission...
         </div>
       </ExpertLayout>
     );
   }
 
-  if (!deliverable) {
+  if (!submission) {
     return (
       <ExpertLayout>
         <div className="px-5 py-10 md:px-8">
           <div className="mx-auto max-w-5xl">
             <Alert
               type="danger"
-              title="Deliverable not found"
-              message={error || "Cannot load deliverable detail."}
+              title="Submission not found"
+              message={error || "Cannot load this submission."}
             />
 
             <button
@@ -164,8 +182,9 @@ export default function DeliverableDetailPage() {
     );
   }
 
-  const status = String(deliverable.status || "").toUpperCase();
+  const status = String(submission.status || "SUBMITTED").toUpperCase();
   const canRevision = canSubmitDeliverableRevision(status);
+  const hasClientFeedback = Boolean(String(submission.clientFeedback || "").trim());
 
   return (
     <ExpertLayout>
@@ -173,234 +192,238 @@ export default function DeliverableDetailPage() {
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
-            onClick={() => {
-              if (deliverable.milestoneId) {
-                navigate(
-                  `/expert/milestones/${deliverable.milestoneId}/deliverables`
-                );
-              } else {
-                navigate("/expert/projects");
-              }
-            }}
+            onClick={goBack}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
             <span className="material-symbols-outlined text-sm">
               arrow_back
             </span>
-            Back to deliverables
+            Back to milestone
           </button>
 
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Deliverable Detail
-              </p>
+          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                  Submission Detail
+                </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {deliverable.title || `Deliverable #${deliverable.deliverableId}`}
-              </h1>
+                <h1 className="text-3xl font-bold text-white md:text-4xl">
+                  {submission.title || "Submitted Work"}
+                </h1>
 
-              <p className="mt-2 text-sm text-gray-400">
-                Version {deliverable.versionNumber || 1} · Milestone #
-                {deliverable.milestoneId || "N/A"}
-              </p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                  Review your submitted work, check client feedback, and send a
+                  revision when requested.
+                </p>
 
-              <div className="mt-4">
-                <StatusBadge status={status} />
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <SubmissionStatusBadge status={status} />
+
+                  <InfoPill
+                    icon="history"
+                    label={`Version ${submission.versionNumber || 1}`}
+                  />
+
+                  <InfoPill
+                    icon="schedule"
+                    label={`Submitted ${formatDate(submission.submittedAt)}`}
+                  />
+                </div>
               </div>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              {deliverable.milestoneId && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate(`/expert/milestones/${deliverable.milestoneId}`)
-                  }
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
-                >
-                  View Milestone
-                </button>
-              )}
 
               <button
                 type="button"
-                onClick={loadDeliverable}
-                className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                onClick={loadSubmission}
+                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
                 Refresh
               </button>
             </div>
-          </div>
+          </section>
 
           {message && (
             <Alert type="success" title="Success" message={message} />
           )}
 
           {error && (
-            <Alert type="danger" title="Deliverable error" message={error} />
+            <Alert type="danger" title="Submission error" message={error} />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_390px]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <Card title="Description">
+              <Card title="What you submitted" icon="description">
                 <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {deliverable.description || "No description."}
+                  {submission.description || "No description provided."}
                 </p>
               </Card>
 
-              <Card title="Handover Notes">
+              <Card title="Submitted links" icon="link">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <LinkBox label="File" url={submission.fileUrl} />
+                  <LinkBox label="Demo" url={submission.demoUrl} />
+                  <LinkBox
+                    label="Test Result"
+                    url={submission.testResultUrl}
+                  />
+                </div>
+              </Card>
+
+              <Card title="Handover notes" icon="notes">
                 <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {deliverable.handoverNotes || "No handover notes."}
+                  {submission.handoverNotes || "No handover notes provided."}
                 </p>
               </Card>
 
-              {deliverable.clientFeedback && (
-                <Card title="Client Feedback">
-                  <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-7 text-yellow-100">
-                    {deliverable.clientFeedback}
+              {hasClientFeedback && (
+                <Card title="Client feedback" icon="feedback">
+                  <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-sm leading-7 text-yellow-100">
+                    {submission.clientFeedback}
                   </div>
                 </Card>
               )}
 
-              <Card title="Links">
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <LinkBox label="File URL" url={deliverable.fileUrl} />
-                  <LinkBox label="Demo URL" url={deliverable.demoUrl} />
-                  <LinkBox
-                    label="Test Result URL"
-                    url={deliverable.testResultUrl}
-                  />
-                </div>
-              </Card>
+              {canRevision && (
+                <Card title="Submit revision" icon="published_with_changes">
+                  <div className="mb-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm leading-6 text-yellow-100">
+                    The client requested changes. Update the links and explain
+                    what you changed before submitting a revision.
+                  </div>
+
+                  <form onSubmit={handleSubmitRevision} className="space-y-5">
+                    <Field label="Revision Notes">
+                      <textarea
+                        rows={3}
+                        value={revisionForm.feedback}
+                        disabled={submittingRevision}
+                        onChange={(event) =>
+                          updateRevisionField("feedback", event.target.value)
+                        }
+                        placeholder="Briefly explain what you changed..."
+                        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </Field>
+
+                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                      <Field label="File URL">
+                        <input
+                          type="url"
+                          value={revisionForm.fileUrl}
+                          disabled={submittingRevision}
+                          onChange={(event) =>
+                            updateRevisionField("fileUrl", event.target.value)
+                          }
+                          placeholder="https://..."
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </Field>
+
+                      <Field label="Demo URL">
+                        <input
+                          type="url"
+                          value={revisionForm.demoUrl}
+                          disabled={submittingRevision}
+                          onChange={(event) =>
+                            updateRevisionField("demoUrl", event.target.value)
+                          }
+                          placeholder="https://..."
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </Field>
+
+                      <Field label="Test Result URL">
+                        <input
+                          type="url"
+                          value={revisionForm.testResultUrl}
+                          disabled={submittingRevision}
+                          onChange={(event) =>
+                            updateRevisionField(
+                              "testResultUrl",
+                              event.target.value
+                            )
+                          }
+                          placeholder="https://..."
+                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                        />
+                      </Field>
+                    </div>
+
+                    <Field label="Revision Description">
+                      <textarea
+                        rows={5}
+                        value={revisionForm.description}
+                        disabled={submittingRevision}
+                        onChange={(event) =>
+                          updateRevisionField("description", event.target.value)
+                        }
+                        placeholder="Describe the updated work and how the client can review it..."
+                        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </Field>
+
+                    <Field label="Handover Notes">
+                      <textarea
+                        rows={4}
+                        value={revisionForm.handoverNotes}
+                        disabled={submittingRevision}
+                        onChange={(event) =>
+                          updateRevisionField(
+                            "handoverNotes",
+                            event.target.value
+                          )
+                        }
+                        placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
+                        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+                    </Field>
+
+                    <button
+                      type="submit"
+                      disabled={submittingRevision}
+                      className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submittingRevision ? "Submitting..." : "Submit Revision"}
+                    </button>
+                  </form>
+                </Card>
+              )}
             </main>
 
             <aside className="space-y-6">
-              <Card title="Summary">
-                <Info
-                  label="Deliverable ID"
-                  value={`#${deliverable.deliverableId}`}
-                />
-
-                <Info
-                  label="Milestone ID"
-                  value={
-                    deliverable.milestoneId
-                      ? `#${deliverable.milestoneId}`
-                      : "N/A"
-                  }
-                />
-
+              <Card title="Quick Overview" icon="monitoring">
+                <Info label="Status" value={getSubmissionStatusLabel(status)} />
                 <Info
                   label="Version"
-                  value={deliverable.versionNumber || 1}
+                  value={`Version ${submission.versionNumber || 1}`}
                 />
-
                 <Info
-                  label="Status"
-                  value={DELIVERABLE_STATUS_LABEL[status] || status}
+                  label="Submitted"
+                  value={formatDate(submission.submittedAt)}
                 />
-
                 <Info
-                  label="Submitted At"
-                  value={formatDate(deliverable.submittedAt)}
+                  label="Client Feedback"
+                  value={hasClientFeedback ? "Available" : "No feedback yet"}
                 />
               </Card>
 
-              <Card title="Submit Revision">
-                {!canRevision && (
-                  <div className="mb-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm text-yellow-200">
-                    Revision can only be submitted when status is
-                    REVISION_REQUESTED.
+              {!canRevision && (
+                <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
+                  <div className="flex items-start gap-3">
+                    <span className="material-symbols-outlined text-cyan-300">
+                      info
+                    </span>
+
+                    <div>
+                      <h3 className="font-bold text-white">Revision status</h3>
+
+                      <p className="mt-2 text-sm leading-6 text-gray-300">
+                        Revision can be submitted only when the client requests
+                        changes.
+                      </p>
+                    </div>
                   </div>
-                )}
-
-                <form onSubmit={handleSubmitRevision} className="space-y-5">
-                  <Field label="Revision Feedback / Notes">
-                    <textarea
-                      rows={3}
-                      value={revisionForm.feedback}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("feedback", event.target.value)
-                      }
-                      placeholder="Explain what you changed..."
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="File URL">
-                    <input
-                      type="url"
-                      value={revisionForm.fileUrl}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("fileUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="Demo URL">
-                    <input
-                      type="url"
-                      value={revisionForm.demoUrl}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("demoUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="Test Result URL">
-                    <input
-                      type="url"
-                      value={revisionForm.testResultUrl}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("testResultUrl", event.target.value)
-                      }
-                      placeholder="https://..."
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="Revision Description">
-                    <textarea
-                      rows={4}
-                      value={revisionForm.description}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("description", event.target.value)
-                      }
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="Handover Notes">
-                    <textarea
-                      rows={3}
-                      value={revisionForm.handoverNotes}
-                      disabled={!canRevision || submittingRevision}
-                      onChange={(event) =>
-                        updateRevisionField("handoverNotes", event.target.value)
-                      }
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <button
-                    type="submit"
-                    disabled={!canRevision || submittingRevision}
-                    className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submittingRevision ? "Submitting..." : "Submit Revision"}
-                  </button>
-                </form>
-              </Card>
+                </section>
+              )}
             </aside>
           </div>
         </div>
@@ -409,10 +432,21 @@ export default function DeliverableDetailPage() {
   );
 }
 
-function Card({ title, children }) {
+function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-      <h2 className="mb-5 text-xl font-extrabold text-white">{title}</h2>
+      <div className="mb-4 flex items-center gap-3">
+        {icon && (
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+            <span className="material-symbols-outlined text-xl text-cyan-300">
+              {icon}
+            </span>
+          </div>
+        )}
+
+        <h2 className="text-xl font-extrabold text-white">{title}</h2>
+      </div>
+
       {children}
     </section>
   );
@@ -433,26 +467,18 @@ function Info({ label, value }) {
   return (
     <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 break-words font-bold text-white">{value || "N/A"}</p>
+      <p className="mt-1 break-words font-bold text-white">
+        {formatInfoValue(value)}
+      </p>
     </div>
   );
 }
 
-function StatusBadge({ status }) {
-  const style =
-    status === "APPROVED"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "REVISION_REQUESTED"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "DISPUTED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
-
+function InfoPill({ icon, label }) {
   return (
-    <span
-      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
-    >
-      {DELIVERABLE_STATUS_LABEL[status] || status}
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300">
+      <span className="material-symbols-outlined text-sm">{icon}</span>
+      {label}
     </span>
   );
 }
@@ -467,14 +493,34 @@ function LinkBox({ label, url }) {
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="mt-2 block break-words text-sm font-bold text-cyan-300 hover:text-cyan-200"
+          className="mt-2 inline-flex items-center gap-2 text-sm font-bold text-cyan-300 hover:text-cyan-200"
         >
           Open Link
+          <span className="material-symbols-outlined text-sm">open_in_new</span>
         </a>
       ) : (
-        <p className="mt-2 text-sm font-bold text-gray-500">N/A</p>
+        <p className="mt-2 text-sm font-bold text-gray-500">Not provided</p>
       )}
     </div>
+  );
+}
+
+function SubmissionStatusBadge({ status }) {
+  const style =
+    status === "APPROVED"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : status === "REVISION_REQUESTED"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+      : status === "DISPUTED" || status === "REJECTED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+
+  return (
+    <span
+      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+    >
+      {getSubmissionStatusLabel(status)}
+    </span>
   );
 }
 
@@ -492,6 +538,10 @@ function Alert({ type, title, message }) {
   );
 }
 
+function getSubmissionStatusLabel(status) {
+  return DELIVERABLE_STATUS_LABEL[status] || formatStatusLabel(status || "");
+}
+
 function formatDate(value) {
   if (!value) return "N/A";
 
@@ -499,15 +549,28 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString();
+  return date.toLocaleDateString();
+}
+
+function formatInfoValue(value) {
+  if (value === undefined || value === null || value === "") {
+    return "N/A";
+  }
+
+  return value;
+}
+
+function formatStatusLabel(status) {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  return data?.message || data?.title || err?.message || fallback;
 }

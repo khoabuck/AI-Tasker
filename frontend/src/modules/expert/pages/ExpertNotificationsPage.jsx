@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import notificationService from "../../../services/notification.service";
 
 export default function ExpertNotificationsPage() {
+  const navigate = useNavigate();
+
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState("all");
 
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState(null);
+  const [openingId, setOpeningId] = useState(null);
 
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
@@ -41,7 +45,7 @@ export default function ExpertNotificationsPage() {
 
       const data = await notificationService.getMyNotifications();
 
-      setNotifications(data);
+      setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD NOTIFICATIONS ERROR:", err?.response?.data || err);
 
@@ -50,6 +54,19 @@ export default function ExpertNotificationsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const updateNotificationAsReadLocal = (notificationId) => {
+    setNotifications((prev) =>
+      prev.map((item) =>
+        item.notificationId === notificationId
+          ? {
+              ...item,
+              isRead: true,
+            }
+          : item
+      )
+    );
   };
 
   const handleMarkAsRead = async (notificationId) => {
@@ -62,16 +79,7 @@ export default function ExpertNotificationsPage() {
 
       await notificationService.markAsRead(notificationId);
 
-      setNotifications((prev) =>
-        prev.map((item) =>
-          item.notificationId === notificationId
-            ? {
-                ...item,
-                isRead: true,
-              }
-            : item
-        )
-      );
+      updateNotificationAsReadLocal(notificationId);
     } catch (err) {
       console.error("MARK NOTIFICATION READ ERROR:", err?.response?.data || err);
 
@@ -105,6 +113,34 @@ export default function ExpertNotificationsPage() {
       setError(getFriendlyError(err, "Cannot mark all notifications as read."));
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleOpenNotification = async (notification) => {
+    const notificationId = notification.notificationId;
+    const action = getNotificationAction(notification);
+
+    try {
+      setOpeningId(notificationId || action.targetPath);
+      setError("");
+      setMessage("");
+
+      if (!notification.isRead && notificationId) {
+        await notificationService.markAsRead(notificationId);
+        updateNotificationAsReadLocal(notificationId);
+      }
+
+      if (action.targetPath) {
+        navigate(action.targetPath);
+        return;
+      }
+
+      setMessage("This notification does not have a related page yet.");
+    } catch (err) {
+      console.error("OPEN NOTIFICATION ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot open notification."));
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -225,12 +261,17 @@ export default function ExpertNotificationsPage() {
               <EmptyState filter={filter} />
             ) : (
               <div className="space-y-3">
-                {filteredNotifications.map((notification) => (
+                {filteredNotifications.map((notification, index) => (
                   <NotificationItem
-                    key={notification.notificationId}
+                    key={notification.notificationId || index}
                     notification={notification}
                     marking={markingId === notification.notificationId}
+                    opening={
+                      openingId === notification.notificationId ||
+                      openingId === getNotificationAction(notification).targetPath
+                    }
                     onMarkAsRead={handleMarkAsRead}
+                    onOpen={handleOpenNotification}
                   />
                 ))}
               </div>
@@ -280,7 +321,16 @@ function FilterButton({ label, active, onClick }) {
   );
 }
 
-function NotificationItem({ notification, marking, onMarkAsRead }) {
+function NotificationItem({
+  notification,
+  marking,
+  opening,
+  onMarkAsRead,
+  onOpen,
+}) {
+  const action = getNotificationAction(notification);
+  const typeLabel = getNotificationType(notification);
+
   return (
     <div
       className={`rounded-2xl border p-5 transition ${
@@ -299,17 +349,25 @@ function NotificationItem({ notification, marking, onMarkAsRead }) {
             }`}
           >
             <span className="material-symbols-outlined">
-              {getNotificationIcon(notification.type)}
+              {getNotificationIcon(typeLabel)}
             </span>
           </div>
 
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h3 className="font-bold text-white">{notification.title}</h3>
+              <h3 className="font-bold text-white">
+                {notification.title || "Notification"}
+              </h3>
 
               {!notification.isRead && (
                 <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
                   New
+                </span>
+              )}
+
+              {action.badge && (
+                <span className="rounded-full border border-green-400/40 bg-green-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-300">
+                  {action.badge}
                 </span>
               )}
             </div>
@@ -321,26 +379,46 @@ function NotificationItem({ notification, marking, onMarkAsRead }) {
             <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
               <span>{formatDateTime(notification.createdAt)}</span>
 
-              {notification.type && (
+              {typeLabel && (
                 <>
                   <span>•</span>
-                  <span className="uppercase">{notification.type}</span>
+                  <span className="uppercase">{typeLabel}</span>
+                </>
+              )}
+
+              {action.relatedText && (
+                <>
+                  <span>•</span>
+                  <span>{action.relatedText}</span>
                 </>
               )}
             </div>
           </div>
         </div>
 
-        {!notification.isRead && (
-          <button
-            type="button"
-            onClick={() => onMarkAsRead(notification.notificationId)}
-            disabled={marking}
-            className="shrink-0 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {marking ? "Marking..." : "Mark as read"}
-          </button>
-        )}
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
+          {action.targetPath && (
+            <button
+              type="button"
+              onClick={() => onOpen(notification)}
+              disabled={opening}
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {opening ? "Opening..." : action.label}
+            </button>
+          )}
+
+          {!notification.isRead && (
+            <button
+              type="button"
+              onClick={() => onMarkAsRead(notification.notificationId)}
+              disabled={marking}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {marking ? "Marking..." : "Mark as read"}
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -363,6 +441,279 @@ function EmptyState({ filter }) {
       <h3 className="font-bold text-white">No notifications</h3>
       <p className="mt-2 text-sm text-gray-500">{text}</p>
     </div>
+  );
+}
+
+function getNotificationAction(notification) {
+  const type = getNotificationType(notification);
+  const proposalId = getRelatedProposalId(notification);
+  const contractId = getRelatedContractId(notification);
+  const jobId = getRelatedJobId(notification);
+  const projectId = getRelatedProjectId(notification);
+  const disputeId = getRelatedDisputeId(notification);
+
+  if (contractId) {
+    return {
+      label: "View Contract",
+      badge: "Contract",
+      targetPath: `/expert/contracts/${contractId}`,
+      relatedText: `Contract #${contractId}`,
+    };
+  }
+
+  if (proposalId && isProposalAcceptedNotification(notification)) {
+    return {
+      label: "Check Contract",
+      badge: "Accepted Proposal",
+      targetPath: `/expert/proposals/${proposalId}/contract`,
+      relatedText: `Proposal #${proposalId}`,
+    };
+  }
+
+  if (proposalId) {
+    return {
+      label: "View Proposal",
+      badge: type.includes("PROPOSAL") ? "Proposal" : "",
+      targetPath: `/expert/proposals/${proposalId}`,
+      relatedText: `Proposal #${proposalId}`,
+    };
+  }
+
+  if (projectId) {
+    return {
+      label: "View Project",
+      badge: type.includes("PROJECT") ? "Project" : "",
+      targetPath: `/expert/projects/${projectId}`,
+      relatedText: `Project #${projectId}`,
+    };
+  }
+
+  if (jobId) {
+    return {
+      label: "View Job",
+      badge: type.includes("JOB") ? "Job" : "",
+      targetPath: `/expert/jobs/${jobId}`,
+      relatedText: `Job #${jobId}`,
+    };
+  }
+
+  if (disputeId) {
+    return {
+      label: "View Dispute",
+      badge: type.includes("DISPUTE") ? "Dispute" : "",
+      targetPath: `/expert/disputes/${disputeId}`,
+      relatedText: `Dispute #${disputeId}`,
+    };
+  }
+
+  if (type.includes("WALLET") || type.includes("WITHDRAW")) {
+    return {
+      label: "Open Wallet",
+      badge: "Wallet",
+      targetPath: "/expert/wallet",
+      relatedText: "",
+    };
+  }
+
+  return {
+    label: "Open",
+    badge: "",
+    targetPath: "",
+    relatedText: "",
+  };
+}
+
+function getNotificationType(notification) {
+  return String(
+    notification.type ||
+      notification.notificationType ||
+      notification.category ||
+      notification.eventType ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function isProposalAcceptedNotification(notification) {
+  const type = getNotificationType(notification);
+  const text = `${notification.title || ""} ${notification.message || ""}`
+    .toUpperCase()
+    .trim();
+
+  return (
+    type.includes("PROPOSAL_ACCEPTED") ||
+    type.includes("ACCEPT_PROPOSAL") ||
+    type.includes("PROPOSAL_APPROVED") ||
+    type.includes("ACCEPTED_PROPOSAL") ||
+    (type.includes("PROPOSAL") && text.includes("ACCEPT")) ||
+    (text.includes("PROPOSAL") && text.includes("ACCEPTED"))
+  );
+}
+
+function getNotificationPayload(notification) {
+  const rawPayload =
+    notification.data ||
+    notification.metadata ||
+    notification.payload ||
+    notification.extraData ||
+    notification.additionalData ||
+    {};
+
+  if (!rawPayload) return {};
+
+  if (typeof rawPayload === "object") return rawPayload;
+
+  if (typeof rawPayload === "string") {
+    try {
+      const parsed = JSON.parse(rawPayload);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  return {};
+}
+
+function getRelatedProposalId(notification) {
+  const payload = getNotificationPayload(notification);
+
+  if (isEntity(notification, "PROPOSAL")) {
+    return getFirstValue(
+      notification.proposalId,
+      notification.relatedEntityId,
+      notification.entityId,
+      notification.referenceId,
+      notification.targetId,
+      payload.proposalId,
+      payload.relatedProposalId,
+      payload.relatedEntityId,
+      payload.entityId,
+      payload.referenceId,
+      payload.targetId
+    );
+  }
+
+  return getFirstValue(
+    notification.proposalId,
+    notification.relatedProposalId,
+    notification.relatedProposalID,
+    payload.proposalId,
+    payload.relatedProposalId,
+    payload.relatedProposalID
+  );
+}
+
+function getRelatedContractId(notification) {
+  const payload = getNotificationPayload(notification);
+
+  if (isEntity(notification, "CONTRACT")) {
+    return getFirstValue(
+      notification.contractId,
+      notification.relatedEntityId,
+      notification.entityId,
+      notification.referenceId,
+      notification.targetId,
+      payload.contractId,
+      payload.relatedContractId,
+      payload.relatedEntityId,
+      payload.entityId,
+      payload.referenceId,
+      payload.targetId
+    );
+  }
+
+  return getFirstValue(
+    notification.contractId,
+    notification.relatedContractId,
+    notification.relatedContractID,
+    payload.contractId,
+    payload.relatedContractId,
+    payload.relatedContractID
+  );
+}
+
+function getRelatedJobId(notification) {
+  const payload = getNotificationPayload(notification);
+
+  if (isEntity(notification, "JOB")) {
+    return getFirstValue(
+      notification.jobId,
+      notification.relatedEntityId,
+      notification.entityId,
+      notification.referenceId,
+      notification.targetId,
+      payload.jobId,
+      payload.relatedEntityId,
+      payload.entityId,
+      payload.referenceId,
+      payload.targetId
+    );
+  }
+
+  return getFirstValue(notification.jobId, payload.jobId);
+}
+
+function getRelatedProjectId(notification) {
+  const payload = getNotificationPayload(notification);
+
+  if (isEntity(notification, "PROJECT")) {
+    return getFirstValue(
+      notification.projectId,
+      notification.relatedEntityId,
+      notification.entityId,
+      notification.referenceId,
+      notification.targetId,
+      payload.projectId,
+      payload.relatedEntityId,
+      payload.entityId,
+      payload.referenceId,
+      payload.targetId
+    );
+  }
+
+  return getFirstValue(notification.projectId, payload.projectId);
+}
+
+function getRelatedDisputeId(notification) {
+  const payload = getNotificationPayload(notification);
+
+  if (isEntity(notification, "DISPUTE")) {
+    return getFirstValue(
+      notification.disputeId,
+      notification.relatedEntityId,
+      notification.entityId,
+      notification.referenceId,
+      notification.targetId,
+      payload.disputeId,
+      payload.relatedEntityId,
+      payload.entityId,
+      payload.referenceId,
+      payload.targetId
+    );
+  }
+
+  return getFirstValue(notification.disputeId, payload.disputeId);
+}
+
+function isEntity(notification, entityName) {
+  const value = String(
+    notification.entityName ||
+      notification.relatedEntityType ||
+      notification.entityType ||
+      notification.targetType ||
+      getNotificationPayload(notification).entityName ||
+      getNotificationPayload(notification).relatedEntityType ||
+      ""
+  ).toUpperCase();
+
+  return value.includes(entityName);
+}
+
+function getFirstValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
   );
 }
 
