@@ -34,6 +34,21 @@ public class ExpertProfileRepository : IExpertProfileRepository
             .AnyAsync(x => x.UserId == userId);
     }
 
+    public async Task<bool> CertificateUrlExistsForAnotherExpertAsync(
+        string certificateUrl,
+        int? currentExpertProfileId
+    )
+    {
+        var normalizedUrl = certificateUrl.Trim().ToLower();
+
+        return await _context.ExpertCertificates
+            .AnyAsync(x =>
+                x.CertificateUrl.ToLower() == normalizedUrl
+                && (!currentExpertProfileId.HasValue
+                    || x.ExpertProfileId != currentExpertProfileId.Value)
+            );
+    }
+
     public async Task AddAsync(ExpertProfile expertProfile)
     {
         await _context.ExpertProfiles.AddAsync(expertProfile);

@@ -2,6 +2,8 @@ namespace AITasker.Application.DTOs.Requests;
 
 public class CertificateVerificationRequest
 {
+    public string CertificateType { get; set; } = string.Empty;
+
     public string CertificateName { get; set; } = string.Empty;
 
     public string CertificateIssuer { get; set; } = string.Empty;

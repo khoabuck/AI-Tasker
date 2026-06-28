@@ -14,6 +14,14 @@ public class ClientProfile
 
     public decimal PlatformFeeRate { get; set; }
 
+    public int FreeJobPostCredits { get; set; } = 1;
+
+    public int PaidJobPostCredits { get; set; } = 0;
+
+    public int FreeAiGenerationCredits { get; set; } = 3;
+
+    public int PaidAiGenerationCredits { get; set; } = 0;
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }

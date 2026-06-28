@@ -20,7 +20,21 @@ public class User
 
     public string Status { get; set; } = "PENDING_ROLE";
 
+    public string? StatusBeforeSuspension { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime? UpdatedAt { get; set; }
+
+    public int LockoutCount { get; set; } = 0;
+
+    public DateTime? LockoutEnd { get; set; }
+
+    public DateTime? LastLockedAt { get; set; }
+
+    public string? LockReason { get; set; }
+
+    public DateTime? BannedAt { get; set; }
+
+    public string? BanReason { get; set; }
 }

@@ -1,6 +1,6 @@
 // src/modules/client/pages/PostJobPage.jsx
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -53,22 +53,71 @@ const labelStyle = {
   marginBottom: 8,
 };
 
+const getTotalJobCredits = (profile) =>
+  Number(profile?.freeJobPostCredits || 0) + Number(profile?.paidJobPostCredits || 0);
+
+const getTotalAiCredits = (profile) =>
+  Number(profile?.freeAiGenerationCredits || 0) + Number(profile?.paidAiGenerationCredits || 0);
+
+const toNullableNumber = (value) => {
+  if (value === "" || value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+};
+
 const buildPayload = (form) => ({
   title: form.title,
   description: form.description,
   aiGeneratedDescription: form.aiGeneratedDescription || null,
-  budgetMin: Number(form.budgetMin),
-  budgetMax: Number(form.budgetMax),
-  deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+  budgetMin: toNullableNumber(form.budgetMin),
+  budgetMax: toNullableNumber(form.budgetMax),
+  deadline: form.deadline
+    ? new Date(form.deadline).toISOString()
+    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
   isAiAssisted: !!form.aiGeneratedDescription,
-  skillIds: form.skills.map((s) => s.id),
+  skillIds: form.skills
+    .map((s) => Number(s.id))
+    .filter((id) => Number.isInteger(id) && id > 0),
 });
+
+  const validateJobForm = (form) => {
+  const budgetMin = Number(form.budgetMin);
+  const budgetMax = Number(form.budgetMax);
+
+  if (!form.title.trim()) return "Job title is required.";
+  if (form.budgetMin === "") return "Budget min is required.";
+  if (form.budgetMax === "") return "Budget max is required.";
+  if (Number.isNaN(budgetMin) || Number.isNaN(budgetMax)) return "Budget must be valid numbers.";
+  if (budgetMin < 0 || budgetMax < 0) return "Budget cannot be negative.";
+  if (budgetMin >= budgetMax) return "Budget min must be less than budget max.";
+  if (!form.projectType.trim()) return "Project type is required.";
+  if (!form.complexity.trim()) return "Complexity is required.";
+  if (!form.deadline) return "Deadline is required.";
+  if (!form.description.trim()) return "Description is required.";
+  if (!form.expectedDeliverables.trim()) return "Expected deliverables is required.";
+  if (!Array.isArray(form.skills) || form.skills.length === 0) return "Please select at least one skill.";
+
+  return "";
+};
 
 export default function PostJobPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const searchParams = new URLSearchParams(location.search);
+  const editId = searchParams.get("editId");
+  const rawReturnStatus = searchParams.get("returnStatus");
+
+  const returnStatus = ["DRAFT", "OPEN", "CANCELLED"].includes(
+    String(rawReturnStatus || "").toUpperCase()
+  )
+    ? String(rawReturnStatus).toUpperCase()
+    : "DRAFT";
+  const isEditMode = !!editId;
+
   const [mode, setMode] = useState("manual"); // "manual" | "ai"
   const [form, setForm] = useState(DEFAULT_FORM);
   const [generating, setGenerating] = useState(false);
@@ -76,29 +125,146 @@ export default function PostJobPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [draftSaved, setDraftSaved] = useState(false);
+  const [customSkill, setCustomSkill] = useState("");
+  const [aiSuggestedSkills, setAiSuggestedSkills] = useState([]);
+  const [irrelevantSkills, setIrrelevantSkills] = useState([]);
+  const [clientProfile, setClientProfile] = useState(null);
+  const [budgetNote, setBudgetNote] = useState("");
+  const [budgetEstimated, setBudgetEstimated] = useState(false);
+
+  const totalJobCredits = getTotalJobCredits(clientProfile);
+  const totalAiCredits = getTotalAiCredits(clientProfile);
+
+  const isBusinessNotVerified =
+    clientProfile?.clientType === "BUSINESS" &&
+    clientProfile?.businessProfile?.verificationStatus !== "VERIFIED";
+
+  const cannotUseAi = totalAiCredits <= 0 || isBusinessNotVerified;
+  const cannotPublish = totalJobCredits <= 0 || isBusinessNotVerified;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const loadClientProfile = async () => {
+      try {
+        const res = await axiosInstance.get("/client-profiles/me", {
+          signal: controller.signal,
+        });
+
+        setClientProfile(res.data?.data ?? res.data);
+      } catch (err) {
+        if (err?.code === "ERR_CANCELED") return;
+        console.error("Load client profile failed:", err);
+      }
+    };
+
+    loadClientProfile();
+
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+  if (!editId) return;
+
+  const loadJobForEdit = async () => {
+    try {
+      const res = await axiosInstance.get(`/jobs/${editId}`);
+      const job = res.data;
+
+      setForm({
+        title: job.title || "",
+        budgetMin: job.budgetMin || "",
+        budgetMax: job.budgetMax || "",
+        projectType: job.projectType || "",
+        complexity: job.complexity || "",
+        description: job.description || "",
+        aiGeneratedDescription: job.aiGeneratedDescription || "",
+        expectedDeliverables: job.expectedDeliverables || "",
+        deadline: job.deadline ? job.deadline.split("T")[0] : "",
+        skills: (job.skills || [])
+          .map((s) => ({
+            id: Number(s.skillId ?? s.id),
+            name: s.skillName ?? s.name,
+          }))
+          .filter((s) => Number.isInteger(s.id) && s.id > 0),
+      });
+
+      setMode(job.aiGeneratedDescription ? "ai" : "manual");
+    } catch (err) {
+      console.error("Load job edit failed:", err);
+      setError("Không tải được dữ liệu job để chỉnh sửa.");
+    }
+  };
+
+  loadJobForEdit();
+}, [editId]);
 
   const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError("");
-    setDraftSaved(false);
-  };
+  const { name, value } = e.target;
 
-  const toggleSkill = (skill) => {
-    const exists = form.skills.find((s) => s.id === skill.id);
-    setForm((prev) => ({
-      ...prev,
-      skills: exists
-        ? prev.skills.filter((s) => s.id !== skill.id)
-        : [...prev.skills, skill],
-    }));
-  };
+  if ((name === "budgetMin" || name === "budgetMax") && Number(value) < 0) {
+    return;
+  }
+
+  setForm((prev) => ({ ...prev, [name]: value }));
+  setError("");
+  setDraftSaved(false);
+};
+
+  const removeSkill = (skill) => {
+  setForm((prev) => ({
+    ...prev,
+    skills: prev.skills.filter(
+      (s) =>
+        Number(s.id) !== Number(skill.id) &&
+        s.name.toLowerCase() !== skill.name.toLowerCase()
+    ),
+  }));
+
+  setIrrelevantSkills((prev) =>
+    prev.filter(
+      (name) => name.toLowerCase() !== skill.name.toLowerCase()
+    )
+  );
+};
+
+const toggleSkill = (skill) => {
+  const exists = form.skills.some(
+    (s) =>
+      Number(s.id) === Number(skill.id) ||
+      s.name.toLowerCase() === skill.name.toLowerCase()
+  );
+
+  const isAiSuggested = aiSuggestedSkills.some(
+    (s) =>
+      Number(s.id) === Number(skill.id) ||
+      s.name.toLowerCase() === skill.name.toLowerCase()
+  );
+
+  if (exists) {
+    removeSkill(skill);
+    return;
+  }
+
+  setForm((prev) => ({
+    ...prev,
+    skills: [...prev.skills, skill],
+  }));
+
+  if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
+    setIrrelevantSkills((prev) =>
+      prev.includes(skill.name) ? prev : [...prev, skill.name]
+    );
+  }
+};
 
   const switchMode = (newMode) => {
-    setMode(newMode);
-    setForm(DEFAULT_FORM);
-    setError("");
-    setDraftSaved(false);
-  };
+  setMode(newMode);
+  setError("");
+  setDraftSaved(false);
+  setBudgetEstimated(false);
+  setBudgetNote("");
+};
 
   // POST /api/jobs/ai-assistant/analyze
   const handleGenerate = async () => {
@@ -106,27 +272,94 @@ export default function PostJobPage() {
       alert("Please enter a description before generating!");
       return;
     }
+
+    if (cannotUseAi) {
+      setError(
+        isBusinessNotVerified
+          ? "Business profile must be verified before using AI Job Assistant."
+          : "You have used all AI generation credits. Please buy a job credit package."
+      );
+      return;
+    }
+
     setGenerating(true);
     setError("");
     try {
       const res = await axiosInstance.post("/jobs/ai-assistant/analyze", {
         rawRequirement: form.description,
-        budgetMin: Number(form.budgetMin) || 0,
-        budgetMax: Number(form.budgetMax) || 0,
+        budgetMin: toNullableNumber(form.budgetMin),
+        budgetMax: toNullableNumber(form.budgetMax),
         deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
         projectTypeHint: form.projectType || "",
+        complexityHint: "",
       });
-      const data = res.data;
+      const data = res.data?.data ?? res.data;
+      console.log(data);
+
+      const normalizeComplexity = (value) => {
+        const v = String(value || "").trim().toUpperCase();
+
+        if (["SIMPLE", "EASY", "LOW"].includes(v)) return "SIMPLE";
+        if (["MEDIUM", "MODERATE", "MID"].includes(v)) return "MEDIUM";
+        if (["COMPLEX", "HARD", "HIGH"].includes(v)) return "COMPLEX";
+
+        return "";
+      };
+
+      const aiComplexity = normalizeComplexity(
+        data.suggestedComplexity ??
+        data.complexity ??
+        data.complexityLevel
+      );
+
+const suggestedSkills = (data.suggestedSkills || [])
+      .map((s) => ({
+        id: Number(s.skillId ?? s.SkillId ?? s.id),
+        name: s.skillName ?? s.SkillName ?? s.name,
+      }))
+      .filter((s) => Number.isInteger(s.id) && s.id > 0);
+
+    setAiSuggestedSkills(suggestedSkills);
+    setIrrelevantSkills([]);
+      const defaultDeadline = new Date(
+        Date.now() + 30 * 24 * 60 * 60 * 1000
+      )
+        .toISOString()
+        .split("T")[0];
+
       setForm((prev) => ({
         ...prev,
         title: data.suggestedTitle || prev.title,
         description: data.improvedDescription || prev.description,
         aiGeneratedDescription: data.aiGeneratedDescription || "",
+        budgetMin: data.suggestedBudgetMin ?? prev.budgetMin,
+        budgetMax: data.suggestedBudgetMax ?? prev.budgetMax,
         projectType: data.suggestedProjectType || prev.projectType,
-        complexity: data.suggestedComplexity || "",
+        complexity: aiComplexity || prev.complexity || "",
         expectedDeliverables: data.expectedDeliverables || "",
-        skills: (data.suggestedSkills || []).map(s => ({ id: s.skillId, name: s.skillName })),
+
+        deadline:
+          data.suggestedDeadline?.split?.("T")[0] ||
+          prev.deadline ||
+          defaultDeadline,
+
+        skills: suggestedSkills,
       }));
+
+      setBudgetEstimated(!!data.isBudgetEstimated);
+      setBudgetNote(data.budgetSuggestionNote || "");
+
+      setClientProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              freeAiGenerationCredits:
+                data.remainingFreeAiGenerationCredits ?? prev.freeAiGenerationCredits,
+              paidAiGenerationCredits:
+                data.remainingPaidAiGenerationCredits ?? prev.paidAiGenerationCredits,
+            }
+          : prev
+      );
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to generate. Please try again.");
     } finally {
@@ -136,81 +369,221 @@ export default function PostJobPage() {
 
   // POST /api/jobs/draft
   const handleSaveDraft = async () => {
-    if (!form.title.trim()) {
-      setError("Please enter a job title before saving draft.");
-      return;
+  const validationMessage = validateJobForm(form);
+  if (validationMessage) {
+    setError(validationMessage);
+    return;
+  }
+
+  setSavingDraft(true);
+  setError("");
+
+  try {
+    if (isEditMode) {
+      await axiosInstance.put(
+        `/jobs/${editId}`,
+        buildPayload(form)
+      );
+    } else {
+      await axiosInstance.post(
+        "/jobs/draft",
+        buildPayload(form)
+      );
     }
-    setSavingDraft(true);
-    setError("");
-    try {
-      await axiosInstance.post("/jobs/draft", buildPayload(form));
-      setDraftSaved(true);
-    } catch (err) {
-      setError(err?.response?.data?.message || "Failed to save draft.");
-    } finally {
-      setSavingDraft(false);
-    }
-  };
+
+    setDraftSaved(true);
+    navigate(`/client/jobs?status=${returnStatus}`, { replace: true });
+  } catch (err) {
+    setError(
+      err?.response?.data?.message ||
+      "Failed to save draft."
+    );
+  } finally {
+    setSavingDraft(false);
+  }
+};
 
   // POST /api/jobs/submit
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-    try {
-      await axiosInstance.post("/jobs/submit", buildPayload(form));
-      setForm(DEFAULT_FORM);
-      navigate("/client/projects");
-    } catch (err) {
-      setError(err?.response?.data?.message || "Failed to post job.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  e.preventDefault();
 
-  const [customSkill, setCustomSkill] = useState("");
+  setError("");
+
+  const validationMessage = validateJobForm(form);
+  if (validationMessage) {
+    setError(validationMessage);
+    return;
+  }
+
+  if (!isEditMode && cannotPublish) {
+    setError(
+      isBusinessNotVerified
+        ? "Business profile must be verified before publishing jobs."
+        : "You have no job posting credits left. Please buy a job credit package."
+    );
+    return;
+  }
+
+  setSubmitting(true);
+
+  try {
+    if (isEditMode) {
+      await axiosInstance.put(
+        `/jobs/${editId}`,
+        buildPayload(form)
+      );
+    } else {
+      await axiosInstance.post(
+        "/jobs/submit",
+        buildPayload(form)
+      );
+    }
+
+    setForm(DEFAULT_FORM);
+
+      if (isEditMode) {
+        navigate(`/client/jobs?status=${returnStatus}`);
+      } else {
+        navigate("/client/jobs?status=OPEN");
+      }
+  } catch (err) {
+    setError(
+      err?.response?.data?.message ||
+      "Failed to save job."
+    );
+  } finally {
+    setSubmitting(false);
+  }
+};
+
 
   const addCustomSkill = () => {
-  const s = customSkill.trim();
-  if (!s) return;
-  const exists = form.skills.find((sk) => sk.name.toLowerCase() === s.toLowerCase());
-  if (!exists) {
-    setForm((prev) => ({ ...prev, skills: [...prev.skills, { id: -(Date.now()), name: s }] }));
-  }
-  setCustomSkill("");
-};
+    const s = customSkill.trim();
+    if (!s) return;
+
+    const exists = form.skills.find(
+      (sk) => sk.name.toLowerCase() === s.toLowerCase()
+    );
+
+    if (!exists) {
+      setForm((prev) => ({
+        ...prev,
+        skills: [...prev.skills, { id: -Date.now(), name: s }],
+      }));
+
+      const isAiSuggested = aiSuggestedSkills.some(
+        (skill) => skill.name.toLowerCase() === s.toLowerCase()
+      );
+
+      if (mode === "ai" && aiSuggestedSkills.length > 0 && !isAiSuggested) {
+        setIrrelevantSkills((prev) =>
+          prev.includes(s) ? prev : [...prev, s]
+        );
+      }
+    }
+
+    setCustomSkill("");
+  };
 
   return (
     <ClientLayout>
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "48px 24px" }}>
+      <div style={{ maxWidth: 1280, margin: "0 auto", padding: "48px 32px" }}>
 
         {/* Header */}
-        <div style={{ marginBottom: 40, display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
-          <div>
-            <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 8 }}>
+          <div className="mb-7">
+            <h1 className="mb-2 font-['Hanken_Grotesk'] text-[34px] font-extrabold text-[#e1e2eb]">
               Post an AI Job
             </h1>
-            <p style={{ color: "#8c90a0", fontSize: 15 }}>
-              {mode === "manual"
-                ? "Fill in all details manually to post your job."
-                : "Describe your need and let AI build the perfect job post."}
+            <p className="m-0 text-[15px] text-[#8c90a0]">
+              Tạo job bằng Job Credit. Dùng AI Assistant sẽ trừ thêm AI Generation Credit.
             </p>
           </div>
 
-          {/* Mode toggle buttons */}
-          <div style={{ display: "flex", gap: 10 }}>
-            <button type="button" onClick={() => switchMode("manual")}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: mode === "manual" ? "rgba(255,255,255,0.08)" : "transparent", color: mode === "manual" ? "#e1e2eb" : "#8c90a0", border: `1px solid ${mode === "manual" ? "rgba(255,255,255,0.2)" : "rgba(255,255,255,0.08)"}`, borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>
-              Manual
-            </button>
-            <button type="button" onClick={() => switchMode("ai")}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: mode === "ai" ? "rgba(0,240,255,0.1)" : "transparent", color: mode === "ai" ? "#00F0FF" : "#8c90a0", border: `1px solid ${mode === "ai" ? "rgba(0,240,255,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius: 999, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s", boxShadow: mode === "ai" ? "0 0 12px rgba(0,240,255,0.15)" : "none" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
-              Generate with AI
+          {/* Credit summary */}
+          <div className="mb-6 grid grid-cols-[1fr_1fr_auto] gap-4">
+            <div className="rounded-[18px] border border-white/10 bg-[#101319]/90 p-5">
+              <p className="mb-2 font-mono text-xs uppercase text-[#8c90a0]">
+                Job Credits
+              </p>
+              <h3 className="m-0 font-mono text-[28px] text-cyan-400">
+                {totalJobCredits}
+              </h3>
+            </div>
+
+            <div className="rounded-[18px] border border-white/10 bg-[#101319]/90 p-5">
+              <p className="mb-2 font-mono text-xs uppercase text-[#8c90a0]">
+                AI Credits
+              </p>
+              <h3 className="m-0 font-mono text-[28px] text-cyan-400">
+                {totalAiCredits}
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/client/job-credit-packages")}
+              className="flex items-center gap-2 whitespace-nowrap rounded-[18px] bg-cyan-500 px-6 py-3 font-bold text-white shadow-lg shadow-cyan-500/30 transition hover:bg-cyan-400"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                shopping_cart
+              </span>
+              Buy a package
             </button>
           </div>
-        </div>
+
+          {isBusinessNotVerified && (
+            <div className="mb-6 rounded-xl border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-[13px] text-amber-400">
+              Business profile must be VERIFIED before using AI Assistant or publishing jobs.
+            </div>
+          )}
+
+          {/* Mode cards */}
+          <div className="mb-7 grid grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => switchMode("manual")}
+              className={`cursor-pointer rounded-[18px] p-[22px] text-left transition ${
+                mode === "manual"
+                  ? "border border-white/20 bg-white/[0.06]"
+                  : "border border-white/10 bg-[#101319]/90"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[28px] text-[#c2c6d6]">
+                edit_note
+              </span>
+              <h3 className="my-[10px] mb-1.5 text-lg font-extrabold text-[#e1e2eb]">
+                Manual Post
+              </h3>
+              <p className="m-0 text-[13px] text-[#8c90a0]">
+                Dùng 1 Job Credit khi publish. Save Draft không trừ credit.
+              </p>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => !cannotUseAi && switchMode("ai")}
+              disabled={cannotUseAi}
+              className={`rounded-[18px] p-[22px] text-left transition ${
+                mode === "ai"
+                  ? "border border-cyan-400/45 bg-gradient-to-b from-cyan-400/10 to-[#101319]/90"
+                  : "border border-white/10 bg-[#101319]/90"
+              } ${
+                cannotUseAi
+                  ? "cursor-not-allowed opacity-55"
+                  : "cursor-pointer"
+              }`}
+            >
+              <span className="material-symbols-outlined text-[28px] text-cyan-400">
+                auto_awesome
+              </span>
+              <h3 className="my-[10px] mb-1.5 text-lg font-extrabold text-[#e1e2eb]">
+                Generate with AI
+              </h3>
+              <p className="m-0 text-[13px] text-[#8c90a0]">
+                Dùng AI Generation Credit khi generate và 1 Job Credit khi publish.
+              </p>
+            </button>
+          </div>
 
         <form onSubmit={handleSubmit}>
           <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -241,7 +614,7 @@ export default function PostJobPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
                           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMin" value={form.budgetMin} onChange={handleChange} required
+                          <input type="number" min="0" name="budgetMin" value={form.budgetMin} onChange={handleChange} required
                             placeholder="Min" style={{ ...inputStyle, paddingLeft: 28 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
@@ -249,7 +622,7 @@ export default function PostJobPage() {
                         <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>—</span>
                         <div style={{ position: "relative" }}>
                           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMax" value={form.budgetMax} onChange={handleChange} required
+                          <input type="number" min="0" name="budgetMax" value={form.budgetMax} onChange={handleChange} required
                             placeholder="Max" style={{ ...inputStyle, paddingLeft: 28 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
@@ -356,10 +729,54 @@ export default function PostJobPage() {
                     </div>
 
                   {form.skills.length > 0 && (
-                    <p style={{ fontSize: 12, color: "#00F0FF", marginTop: 10 }}>
-                      {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
-                    </p>
-                  )}
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
+                        {form.skills.map((skill) => (
+                          <button
+                            key={`${skill.id}-${skill.name}`}
+                            type="button"
+                            onClick={() => removeSkill(skill)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 6,
+                              padding: "6px 10px",
+                              borderRadius: 999,
+                              background: "rgba(0,240,255,0.08)",
+                              border: "1px solid rgba(0,240,255,0.25)",
+                              color: "#00F0FF",
+                              fontSize: 12,
+                              cursor: "pointer",
+                            }}
+                          >
+                            {skill.name}
+                            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                              close
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                  {mode === "ai" && irrelevantSkills.length > 0 && (
+                      <div
+                        style={{
+                          marginTop: 10,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 6,
+                          color: "#fbbf24",
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                          warning
+                        </span>
+                        These skills were added outside AI suggestion: {irrelevantSkills.join(", ")}
+                      </div>
+                    )}
+
+                  
                 </div>
               </>
             )}
@@ -389,24 +806,63 @@ export default function PostJobPage() {
 
                     {/* Budget */}
                     <div>
-                      <label style={labelStyle}>Budget Range (USD/Month)</label>
+                      <label style={labelStyle}>Budget Range (VND)</label>
+
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMin" value={form.budgetMin} onChange={handleChange}
-                            placeholder="Min" style={{ ...inputStyle, paddingLeft: 28 }}
+                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>
+                            ₫
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            name="budgetMin"
+                            value={form.budgetMin}
+                            onChange={handleChange}
+                            placeholder="Min"
+                            style={{ ...inputStyle, paddingLeft: 32 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                          />
                         </div>
-                        <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>—</span>
+
+                        <span style={{ color: "#414754", fontSize: 20, textAlign: "center" }}>
+                          —
+                        </span>
+
                         <div style={{ position: "relative" }}>
-                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>
-                          <input type="number" name="budgetMax" value={form.budgetMax} onChange={handleChange}
-                            placeholder="Max" style={{ ...inputStyle, paddingLeft: 28 }}
+                          <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>
+                            ₫
+                          </span>
+                          <input
+                            type="number"
+                            min="0"
+                            name="budgetMax"
+                            value={form.budgetMax}
+                            onChange={handleChange}
+                            placeholder="Max"
+                            style={{ ...inputStyle, paddingLeft: 32 }}
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                            onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                          />
                         </div>
                       </div>
+
+                      {budgetEstimated && budgetNote && (
+                        <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-400/20 bg-amber-400/10 p-3">
+                          <span className="material-symbols-outlined text-[18px] text-amber-400">
+                            auto_awesome
+                          </span>
+                          <div>
+                            <p className="text-sm font-semibold text-amber-300">
+                              AI Estimated Budget
+                            </p>
+                            <p className="text-xs text-amber-200">
+                              {budgetNote}
+                            </p>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Project Type */}
@@ -423,7 +879,7 @@ export default function PostJobPage() {
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 8 }}>
                         <label style={{ ...labelStyle, marginBottom: 0 }}>Your Requirements <span style={{ color: "#f87171" }}>*</span></label>
-                        <button type="button" onClick={handleGenerate} disabled={generating}
+                        <button type="button" onClick={handleGenerate} disabled={generating || cannotUseAi}
                           style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 18px", background: generating ? "#1d2026" : "linear-gradient(135deg, rgba(23,114,235,0.2), rgba(0,240,255,0.15))", color: generating ? "#8c90a0" : "#00F0FF", border: "1px solid rgba(0,240,255,0.4)", borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", opacity: generating ? 0.6 : 1, boxShadow: generating ? "none" : "0 0 12px rgba(0,240,255,0.2)" }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 18, animation: generating ? "spin 1s linear infinite" : "none" }}>
                             {generating ? "autorenew" : "auto_awesome"}
@@ -512,6 +968,28 @@ export default function PostJobPage() {
                         </div>
                       </div>
 
+                      <div>
+                        <label style={labelStyle}>
+                          Deadline <span style={{ color: "#f87171" }}>*</span>
+                        </label>
+
+                        <input
+                          type="date"
+                          name="deadline"
+                          value={form.deadline}
+                          onChange={handleChange}
+                          min={new Date().toISOString().split("T")[0]}
+                          style={{
+                            ...inputStyle,
+                            colorScheme: "dark",
+                          }}
+                          onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
+                          onBlur={(e) =>
+                            (e.target.style.borderColor = "rgba(255,255,255,0.12)")
+                          }
+                        />
+                      </div>
+
                       {/* Expected Deliverables */}
                       <div>
                         <label style={labelStyle}>Expected Deliverables</label>
@@ -528,10 +1006,47 @@ export default function PostJobPage() {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
                         {SKILL_OPTIONS.map((skill) => {
                           const selected = !!form.skills.find((s) => s.id === skill.id);
+
+                          const isIrrelevant = irrelevantSkills.some(
+                            (name) => name.toLowerCase() === skill.name.toLowerCase()
+                          );
+
                           return (
-                            <button key={skill.id} type="button" onClick={() => toggleSkill(skill)}
-                              style={{ padding: "7px 16px", borderRadius: 999, fontSize: 12, fontFamily: "JetBrains Mono, monospace", cursor: "pointer", transition: "all 0.15s", background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", color: selected ? "#00F0FF" : "#8c90a0", border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)", fontWeight: selected ? 700 : 400 }}>
-                              {selected ? "✓ " : ""}{skill.name}
+                            <button
+                              key={skill.id}
+                              type="button"
+                              onClick={() => toggleSkill(skill)}
+                              style={{
+                                padding: "7px 16px",
+                                borderRadius: 999,
+                                fontSize: 12,
+                                fontFamily: "JetBrains Mono, monospace",
+                                cursor: "pointer",
+                                transition: "all 0.15s",
+
+                                background: isIrrelevant
+                                  ? "rgba(245,158,11,0.12)"
+                                  : selected
+                                  ? "rgba(0,240,255,0.12)"
+                                  : "rgba(255,255,255,0.04)",
+
+                                color: isIrrelevant
+                                  ? "#fbbf24"
+                                  : selected
+                                  ? "#00F0FF"
+                                  : "#8c90a0",
+
+                                border: isIrrelevant
+                                  ? "1px solid rgba(245,158,11,0.45)"
+                                  : selected
+                                  ? "1px solid rgba(0,240,255,0.4)"
+                                  : "1px solid rgba(255,255,255,0.1)",
+
+                                fontWeight: selected ? 700 : 400,
+                              }}
+                            >
+                              {selected ? "✓ " : ""}
+                              {skill.name}
                             </button>
                           );
                         })}
@@ -556,9 +1071,68 @@ export default function PostJobPage() {
                       </div>
 
                       {form.skills.length > 0 && (
-                        <p style={{ fontSize: 12, color: "#00F0FF", marginTop: 10 }}>
-                          {form.skills.length} skill{form.skills.length > 1 ? "s" : ""} selected: {form.skills.map(s => s.name).join(", ")}
-                        </p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {form.skills.map((skill) => {
+                              const isIrrelevant = irrelevantSkills.some(
+                                (name) => name.toLowerCase() === skill.name.toLowerCase()
+                              );
+
+                              return (
+                                <button
+                                  key={`${skill.id}-${skill.name}`}
+                                  type="button"
+                                  onClick={() => removeSkill(skill)}
+                                  className={`flex items-center gap-1 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
+                                    isIrrelevant
+                                      ? "border-amber-400/40 bg-amber-400/10 text-amber-400 hover:bg-amber-400/20"
+                                      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-400 hover:bg-cyan-400/20"
+                                  }`}
+                                >
+                                  {isIrrelevant && (
+                                    <span className="material-symbols-outlined text-[14px]">
+                                      warning
+                                    </span>
+                                  )}
+
+                                  <span>{skill.name}</span>
+
+                                  <span className="material-symbols-outlined text-[14px]">
+                                    close
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                      {irrelevantSkills.length > 0 && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: "8px 12px",
+                            borderRadius: 8,
+                            background: "rgba(245,158,11,0.08)",
+                            border: "1px solid rgba(245,158,11,0.25)",
+                            color: "#fbbf24",
+                            fontSize: 12,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: 16 }}
+                          >
+                            warning
+                          </span>
+
+                          <span>
+                            Warning: These skills were not suggested by AI:
+                            {" "}
+                            <strong>{irrelevantSkills.join(", ")}</strong>
+                          </span>
+                        </div>
                       )}
                     </div>
                     </div>
@@ -598,10 +1172,36 @@ export default function PostJobPage() {
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>save</span>
                   {savingDraft ? "Saving..." : "Save Draft"}
                 </button>
-                <button type="submit" disabled={submitting}
-                  style={{ padding: "12px 32px", borderRadius: 8, background: submitting ? "#1d2026" : "#00F0FF", color: submitting ? "#8c90a0" : "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, border: "none", cursor: submitting ? "not-allowed" : "pointer", boxShadow: submitting ? "none" : "0 0 20px rgba(0,240,255,0.25)", display: "flex", alignItems: "center", gap: 8 }}>
-                  {submitting && <span className="material-symbols-outlined" style={{ fontSize: 18 }}>progress_activity</span>}
-                  {submitting ? "Posting..." : "Post Job"}
+                <button
+                  type="submit"
+                  disabled={submitting || (!isEditMode && cannotPublish)}
+                  style={{
+                    padding: "12px 32px",
+                    borderRadius: 8,
+                    background: submitting || (!isEditMode && cannotPublish) ? "#1d2026" : "#00F0FF",
+                    color: submitting || (!isEditMode && cannotPublish) ? "#8c90a0" : "#002022",
+                    fontWeight: 700,
+                    fontFamily: "Hanken Grotesk, sans-serif",
+                    fontSize: 15,
+                    border: "none",
+                    cursor: submitting || (!isEditMode && cannotPublish) ? "not-allowed" : "pointer",
+                    boxShadow: submitting || (!isEditMode && cannotPublish) ? "none" : "0 0 20px rgba(0,240,255,0.25)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  {submitting && (
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                      progress_activity
+                    </span>
+                  )}
+
+                  {!isEditMode && totalJobCredits <= 0
+                    ? "Buy Credits to Post"
+                    : submitting
+                    ? "Posting..."
+                    : "Post Job"}
                 </button>
               </div>
             </div>

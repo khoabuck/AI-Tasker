@@ -3,10 +3,24 @@ import { useLocation, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
+import { useAuth } from "../../../context/AuthContext";
 
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
+
+const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
+
+const CERTIFICATE_TYPE_OPTIONS = [
+  { label: "Course Certificate", value: "COURSE_CERTIFICATE" },
+  { label: "Professional Certificate", value: "PROFESSIONAL_CERTIFICATE" },
+  { label: "Bootcamp Certificate", value: "BOOTCAMP_CERTIFICATE" },
+  { label: "Degree Certificate", value: "DEGREE_CERTIFICATE" },
+  { label: "Award Certificate", value: "AWARD_CERTIFICATE" },
+  { label: "Other", value: "OTHER" },
+];
+
+const CERTIFICATE_TYPES = CERTIFICATE_TYPE_OPTIONS.map((item) => item.value);
 
 const emptyForm = {
   avatarUrl: "",
@@ -14,32 +28,30 @@ const emptyForm = {
   bio: "",
   skills: "",
   yearsOfExperience: "",
-  expectedProjectBudgetMin: "",
-  expectedProjectBudgetMax: "",
-  preferredProjectDurationDays: "",
   availableForWork: true,
   portfolioUrl: "",
   linkedInUrl: "",
   gitHubUrl: "",
-  certificates: [
-    {
-      certificateName: "",
-      certificateIssuer: "",
-      certificateUrl: "",
-      issuedAt: "",
-    },
-  ],
+  certificates: [],
 };
+
+function createEmptyForm() {
+  return {
+    ...emptyForm,
+    certificates: [],
+  };
+}
 
 export default function SetupExpertProfilePage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { handleLogout: logoutContext } = useAuth();
 
   const isEditPage = location.pathname === "/expert/profile/edit";
   const draftKey = isEditPage ? EDIT_DRAFT_KEY : SETUP_DRAFT_KEY;
 
-  const [formData, setFormData] = useState(emptyForm);
-  const [loading, setLoading] = useState(isEditPage);
+  const [formData, setFormData] = useState(() => createEmptyForm());
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
@@ -49,15 +61,35 @@ export default function SetupExpertProfilePage() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
 
+  const [reviewLimit, setReviewLimit] = useState({
+    submissionCount: 0,
+    lockedUntil: "",
+    reviewStatus: "",
+    userStatus: "",
+    remainingAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
+    maxAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
+  });
+
   const formErrors = useMemo(() => validateForm(formData), [formData]);
+
+  const isReviewLocked = isExpertProfileReviewLocked(reviewLimit);
+  const isNoAttemptsLeft = hasNoExpertProfileAttemptsLeft(reviewLimit);
+  const remainingReviewAttempts =
+    getRemainingExpertProfileAttempts(reviewLimit);
+
+  const shouldDisableSubmit =
+    saving || uploadingAvatar || isReviewLocked || isNoAttemptsLeft;
 
   useEffect(() => {
     loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditPage]);
 
   useEffect(() => {
-    localStorage.setItem(draftKey, JSON.stringify(formData));
-  }, [formData, draftKey]);
+    if (!loading) {
+      localStorage.setItem(draftKey, JSON.stringify(formData));
+    }
+  }, [formData, draftKey, loading]);
 
   const loadInitialData = async () => {
     try {
@@ -67,71 +99,105 @@ export default function SetupExpertProfilePage() {
       const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
       const normalDraft = readJson(draftKey);
 
+      let profile = null;
+
+      try {
+        profile = await expertProfileService.getMyExpertProfile();
+
+        const nextLimit = extractExpertProfileReviewLimit(profile);
+        setReviewLimit(nextLimit);
+
+        if (shouldRedirectToLockedPage(nextLimit)) {
+          updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+          navigate("/expert/profile-locked", { replace: true });
+          return;
+        }
+
+        const reviewStatus = getReviewStatus(profile);
+        const userStatus = getUserStatus(profile);
+
+        if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
+          updateLocalUserStatus("ACTIVE");
+          navigate("/expert/dashboard", { replace: true });
+          return;
+        }
+
+        if (!isEditPage) {
+          const hasExistingProfile =
+            reviewStatus === "NEEDS_CORRECTION" ||
+            reviewStatus === "REJECTED" ||
+            userStatus === "PENDING_PROFILE";
+
+          if (hasExistingProfile) {
+            navigate("/expert/profile/edit", { replace: true });
+            return;
+          }
+        }
+      } catch (profileErr) {
+        if (
+          profileErr?.response?.status !== 404 &&
+          profileErr?.status !== 404
+        ) {
+          throw profileErr;
+        }
+
+        profile = null;
+      }
+
       if (correctionDraft) {
+        const safeDraft = removeDeprecatedExpertFields(correctionDraft);
+
         setFormData({
-          ...emptyForm,
-          ...correctionDraft,
-          certificates:
-            Array.isArray(correctionDraft.certificates) &&
-            correctionDraft.certificates.length > 0
-              ? correctionDraft.certificates
-              : emptyForm.certificates,
+          ...createEmptyForm(),
+          ...safeDraft,
+          certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
+
         return;
       }
 
       if (normalDraft) {
+        const safeDraft = removeDeprecatedExpertFields(normalDraft);
+
         setFormData({
-          ...emptyForm,
-          ...normalDraft,
-          certificates:
-            Array.isArray(normalDraft.certificates) &&
-            normalDraft.certificates.length > 0
-              ? normalDraft.certificates
-              : emptyForm.certificates,
+          ...createEmptyForm(),
+          ...safeDraft,
+          certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
+
         return;
       }
 
-      if (isEditPage) {
-        const profile = await expertProfileService.getMyExpertProfile();
-
-        setFormData({
-          avatarUrl: profile?.avatarUrl || "",
-          professionalTitle: profile?.professionalTitle || "",
-          bio: profile?.bio || "",
-          skills: profile?.skills || "",
-          yearsOfExperience: profile?.yearsOfExperience ?? "",
-          expectedProjectBudgetMin: profile?.expectedProjectBudgetMin ?? "",
-          expectedProjectBudgetMax: profile?.expectedProjectBudgetMax ?? "",
-          preferredProjectDurationDays:
-            profile?.preferredProjectDurationDays ?? "",
-          availableForWork:
-            profile?.availableForWork === undefined
-              ? true
-              : Boolean(profile.availableForWork),
-          portfolioUrl: profile?.portfolioUrl || "",
-          linkedInUrl: profile?.linkedInUrl || "",
-          gitHubUrl: profile?.gitHubUrl || "",
-          certificates:
-            Array.isArray(profile?.certificates) &&
-            profile.certificates.length > 0
-              ? profile.certificates.map((item) => ({
-                  certificateName: item.certificateName || "",
-                  certificateIssuer: item.certificateIssuer || "",
-                  certificateUrl: item.certificateUrl || "",
-                  issuedAt: item.issuedAt
-                    ? String(item.issuedAt).slice(0, 10)
-                    : "",
-                }))
-              : emptyForm.certificates,
-        });
+      if (isEditPage && profile) {
+        setFormData(buildFormFromProfile(profile));
+        return;
       }
+
+      setFormData(createEmptyForm());
     } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      console.error("LOAD EXPERT PROFILE ERROR:", getRawBackendPayload(err));
+      setError(
+        "We could not load your expert profile right now. Please try again."
+      );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshProfileLimitFromServer = async () => {
+    try {
+      const profile = await expertProfileService.getMyExpertProfile();
+      const nextLimit = extractExpertProfileReviewLimit(profile);
+
+      setReviewLimit(nextLimit);
+      return nextLimit;
+    } catch (refreshError) {
+      console.error(
+        "REFRESH PROFILE LIMIT ERROR:",
+        getRawBackendPayload(refreshError)
+      );
+
+      return null;
     }
   };
 
@@ -144,14 +210,6 @@ export default function SetupExpertProfilePage() {
 
   const getFieldError = (name) => {
     if (!submitted && !touched[name]) return "";
-    return formErrors[name] || "";
-  };
-
-  const getGroupError = (name, fieldNames = []) => {
-    const groupTouched = fieldNames.some((fieldName) => touched[fieldName]);
-
-    if (!submitted && !groupTouched) return "";
-
     return formErrors[name] || "";
   };
 
@@ -170,7 +228,7 @@ export default function SetupExpertProfilePage() {
     setModal(null);
 
     setFormData((prev) => {
-      const nextCertificates = [...prev.certificates];
+      const nextCertificates = [...(prev.certificates || [])];
 
       nextCertificates[index] = {
         ...nextCertificates[index],
@@ -185,32 +243,25 @@ export default function SetupExpertProfilePage() {
   };
 
   const addCertificate = () => {
+    if ((formData.certificates || []).length >= 10) return;
+
     setFormData((prev) => ({
       ...prev,
       certificates: [
-        ...prev.certificates,
+        ...(prev.certificates || []),
         {
-          certificateName: "",
-          certificateIssuer: "",
           certificateUrl: "",
-          issuedAt: "",
+          certificateType: "COURSE_CERTIFICATE",
         },
       ],
     }));
   };
 
   const removeCertificate = (index) => {
-    setFormData((prev) => {
-      const nextCertificates = prev.certificates.filter((_, i) => i !== index);
-
-      return {
-        ...prev,
-        certificates:
-          nextCertificates.length > 0
-            ? nextCertificates
-            : emptyForm.certificates,
-      };
-    });
+    setFormData((prev) => ({
+      ...prev,
+      certificates: (prev.certificates || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleAvatarUpload = async (event) => {
@@ -223,22 +274,39 @@ export default function SetupExpertProfilePage() {
       setError("");
       setModal(null);
 
-      const imageUrl = await uploadService.uploadImage(file, "avatar");
+      const uploadResult = await uploadService.uploadImage(file, "avatar");
+      const imageUrl = extractUploadUrl(uploadResult);
+
+      if (!imageUrl) {
+        throw new Error("Avatar upload succeeded but image URL was not found.");
+      }
 
       updateField("avatarUrl", imageUrl);
+
+      if (typeof authService.updateMyAvatar === "function") {
+        try {
+          await authService.updateMyAvatar(imageUrl);
+        } catch (avatarErr) {
+          console.error(
+            "SYNC AUTH AVATAR ERROR:",
+            getRawBackendPayload(avatarErr)
+          );
+        }
+      }
     } catch (err) {
-      console.error("AVATAR UPLOAD ERROR:", err?.response?.data || err);
+      console.error("AVATAR UPLOAD ERROR:", getRawBackendPayload(err));
 
       setModal({
         type: "danger",
         title: "Upload failed",
-        message: getFriendlyError(err),
-        detail: "",
+        message: "We could not upload your avatar. Please try again.",
+        feedback: null,
         showResubmit: false,
         showClose: true,
       });
     } finally {
       setUploadingAvatar(false);
+      event.target.value = "";
     }
   };
 
@@ -249,10 +317,17 @@ export default function SetupExpertProfilePage() {
     setError("");
     setModal(null);
 
+    if (isReviewLocked || isNoAttemptsLeft) {
+      navigate("/expert/profile-locked", { replace: true });
+      return;
+    }
+
     const errors = validateForm(formData);
 
     if (Object.keys(errors).length > 0) {
-      setError("Please check the highlighted fields before submitting.");
+      setError(
+        "Please check the highlighted fields before submitting your profile."
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -260,16 +335,49 @@ export default function SetupExpertProfilePage() {
     try {
       setSaving(true);
 
-      const result = isEditPage
-        ? await expertProfileService.resubmitExpertProfile(formData)
-        : await expertProfileService.createExpertProfile(formData);
+      const submitPayload = {
+        ...formData,
+        certificates: normalizeCertificatesForPayload(formData.certificates),
+      };
 
-      console.log("EXPERT PROFILE SUBMIT SUCCESS:", result);
+      const previousLimit = reviewLimit;
+
+      const result = isEditPage
+        ? await expertProfileService.resubmitExpertProfile(submitPayload)
+        : await expertProfileService.createExpertProfile(submitPayload);
+
+      const nextLimitFromResult = extractExpertProfileReviewLimit(result);
+      const refreshedLimit = await refreshProfileLimitFromServer();
+
+      let nextLimit = chooseBestReviewLimit(
+        previousLimit,
+        nextLimitFromResult,
+        refreshedLimit
+      );
+
+      if (!didReviewLimitMoveForward(previousLimit, nextLimit)) {
+        nextLimit = advanceReviewLimitLocally(previousLimit, result);
+      }
+
+      setReviewLimit(nextLimit);
 
       const reviewStatus = getReviewStatus(result);
       const userStatus = getUserStatus(result);
-      const reviewNote = getReviewNote(result);
       const missingInformation = getMissingInformation(result);
+
+      const feedback = buildReviewFeedback({
+        backendPayload: result,
+        missingInformation,
+        limit: nextLimit,
+      });
+
+      if (shouldRedirectToLockedPage(nextLimit)) {
+        saveCorrectionDraft(submitPayload);
+        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+
+        navigate("/expert/profile-locked", { replace: true });
+        return;
+      }
 
       if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         clearExpertProfileDrafts();
@@ -277,9 +385,9 @@ export default function SetupExpertProfilePage() {
 
         setModal({
           type: "success",
-          title: "Setup profile successfully",
+          title: "Profile approved",
           message: "Your expert profile has been approved.",
-          detail: "Redirecting to dashboard...",
+          feedback,
           showResubmit: false,
           showClose: false,
         });
@@ -292,19 +400,15 @@ export default function SetupExpertProfilePage() {
       }
 
       if (reviewStatus === "NEEDS_CORRECTION") {
-        saveCorrectionDraft(formData);
+        saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("PENDING_PROFILE");
 
         setModal({
           type: "warning",
-          title: "Profile needs correction",
-          message:
-            reviewNote ||
-            "Your profile was submitted, but it needs some corrections before approval.",
-          detail:
-            missingInformation ||
-            "Please review your bio, skills, public links, and certificates.",
-          showResubmit: true,
+          title: "Your profile needs improvement",
+          message: "Please update the items below and submit again.",
+          feedback,
+          showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
 
@@ -312,47 +416,51 @@ export default function SetupExpertProfilePage() {
       }
 
       if (reviewStatus === "REJECTED") {
-        saveCorrectionDraft(formData);
+        saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("PENDING_PROFILE");
 
         setModal({
           type: "danger",
-          title: "Profile was rejected",
-          message:
-            reviewNote ||
-            "Your expert profile was rejected. Please update your information and submit again.",
-          detail:
-            missingInformation ||
-            "Please check your profile information, public links, and certificates.",
-          showResubmit: true,
+          title: "Your profile could not be approved",
+          message: "Please review the feedback below and submit again.",
+          feedback,
+          showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
         });
 
         return;
       }
 
-      saveCorrectionDraft(formData);
+      saveCorrectionDraft(submitPayload);
 
       setModal({
         type: "info",
         title: "Profile submitted",
-        message:
-          "Your expert profile has been submitted. Please check your profile status later.",
-        detail: "",
+        message: "Your profile was submitted. Please review the feedback below.",
+        feedback,
         showResubmit: false,
         showClose: true,
       });
     } catch (err) {
-      console.error("EXPERT PROFILE SUBMIT ERROR:", err?.response?.data || err);
+      console.error("EXPERT PROFILE SUBMIT ERROR:", getRawBackendPayload(err));
 
       saveCorrectionDraft(formData);
+
+      const refreshedLimit = await refreshProfileLimitFromServer();
+
+      if (shouldRedirectToLockedPage(refreshedLimit)) {
+        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+        navigate("/expert/profile-locked", { replace: true });
+        return;
+      }
 
       setModal({
         type: "danger",
         title: "Submit failed",
-        message: getFriendlyError(err),
-        detail:
-          "Your form data has been saved. You can go to resubmit page and try again.",
+        message:
+          getSimpleSubmitError(err) ||
+          "We could not submit your profile. Please check your information and try again.",
+        feedback: null,
         showResubmit: true,
         showClose: true,
       });
@@ -369,7 +477,7 @@ export default function SetupExpertProfilePage() {
 
   const handleClearDraft = () => {
     clearExpertProfileDrafts();
-    setFormData(emptyForm);
+    setFormData(createEmptyForm());
     setTouched({});
     setSubmitted(false);
     setModal(null);
@@ -377,15 +485,38 @@ export default function SetupExpertProfilePage() {
   };
 
   const handleLogout = async () => {
-    await authService.logout();
-    navigate("/login", { replace: true });
+    try {
+      if (typeof logoutContext === "function") {
+        logoutContext();
+      }
+    } catch (logoutError) {
+      console.error("AUTH CONTEXT LOGOUT ERROR:", logoutError);
+    }
+
+    try {
+      if (typeof authService.logout === "function") {
+        await authService.logout();
+      }
+    } catch (logoutError) {
+      console.error("AUTH SERVICE LOGOUT ERROR:", logoutError);
+    }
+
+    localStorage.removeItem("token");
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+
+    sessionStorage.clear();
+
+    window.location.replace("/login");
   };
 
   if (loading) {
     return (
       <SetupShell onLogout={handleLogout}>
         <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading expert profile form...
+          Loading your profile form...
         </div>
       </SetupShell>
     );
@@ -397,23 +528,43 @@ export default function SetupExpertProfilePage() {
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {isEditPage ? "Resubmit Expert Profile" : "Setup Expert Profile"}
+              {isEditPage ? "Update Expert Profile" : "Setup Expert Profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Update and resubmit your expert profile"
+                ? "Improve and resubmit your profile"
                 : "Create your expert profile"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
               Complete your profile so clients can understand your skills,
-              experience, budget, and public work links.
+              experience, public work links, and optional certificates.
+              Portfolio and GitHub are required. LinkedIn is optional.
             </p>
           </div>
 
+          {(isEditPage ||
+            Number(reviewLimit.submissionCount || 0) > 0 ||
+            reviewLimit.lockedUntil) && (
+            <ExpertProfileReviewLimitNotice
+              submissionCount={reviewLimit.submissionCount}
+              remainingAttempts={remainingReviewAttempts}
+              lockedUntil={reviewLimit.lockedUntil}
+              locked={isReviewLocked || isNoAttemptsLeft}
+              max={
+                reviewLimit.maxAttempts ||
+                MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS
+              }
+            />
+          )}
+
           {error && (
-            <Alert type="danger" title="Please check your form" message={error} />
+            <Alert
+              type="danger"
+              title="Please check your form"
+              message={error}
+            />
           )}
 
           <form
@@ -449,6 +600,7 @@ export default function SetupExpertProfilePage() {
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={uploadingAvatar || saving}
                       onChange={handleAvatarUpload}
                       className="hidden"
                     />
@@ -465,7 +617,7 @@ export default function SetupExpertProfilePage() {
                     }
                     onBlur={() => markTouched("professionalTitle")}
                     error={getFieldError("professionalTitle")}
-                    placeholder="Example: Full-stack React Developer"
+                    placeholder="Example: AI Automation Engineer"
                   />
 
                   <TextArea
@@ -475,7 +627,7 @@ export default function SetupExpertProfilePage() {
                     onChange={(value) => updateField("bio", value)}
                     onBlur={() => markTouched("bio")}
                     error={getFieldError("bio")}
-                    placeholder="At least 50 characters."
+                    placeholder="At least 50 characters. Describe your AI experience, projects, and strengths."
                   />
 
                   <TextInput
@@ -485,7 +637,7 @@ export default function SetupExpertProfilePage() {
                     onChange={(value) => updateField("skills", value)}
                     onBlur={() => markTouched("skills")}
                     error={getFieldError("skills")}
-                    placeholder="React, JavaScript, C#, SQL"
+                    placeholder="AI Automation, RAG, Chatbot, Python, ASP.NET Core"
                   />
                 </div>
               </div>
@@ -493,7 +645,7 @@ export default function SetupExpertProfilePage() {
 
             <section className="border-t border-white/10 pt-6">
               <h2 className="mb-4 text-lg font-bold text-white">
-                Work Preferences
+                Work Availability
               </h2>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -504,57 +656,30 @@ export default function SetupExpertProfilePage() {
                   onChange={(value) => updateField("yearsOfExperience", value)}
                   onBlur={() => markTouched("yearsOfExperience")}
                   error={getFieldError("yearsOfExperience")}
-                  placeholder="Example: 2"
+                  placeholder="Example: 3"
                 />
 
-                <NumberInput
-                  label="Preferred Duration Days"
-                  required
-                  value={formData.preferredProjectDurationDays}
-                  onChange={(value) =>
-                    updateField("preferredProjectDurationDays", value)
-                  }
-                  onBlur={() => markTouched("preferredProjectDurationDays")}
-                  error={getFieldError("preferredProjectDurationDays")}
-                  placeholder="Example: 14"
-                />
+                <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
+                  <div>
+                    <p className="text-sm font-bold text-gray-300">
+                      Available for work
+                    </p>
 
-                <NumberInput
-                  label="Minimum Budget"
-                  required
-                  value={formData.expectedProjectBudgetMin}
-                  onChange={(value) =>
-                    updateField("expectedProjectBudgetMin", value)
-                  }
-                  onBlur={() => markTouched("expectedProjectBudgetMin")}
-                  error={getFieldError("expectedProjectBudgetMin")}
-                  placeholder="Example: 100"
-                />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Show clients that you are ready for new projects.
+                    </p>
+                  </div>
 
-                <NumberInput
-                  label="Maximum Budget"
-                  required
-                  value={formData.expectedProjectBudgetMax}
-                  onChange={(value) =>
-                    updateField("expectedProjectBudgetMax", value)
-                  }
-                  onBlur={() => markTouched("expectedProjectBudgetMax")}
-                  error={getFieldError("expectedProjectBudgetMax")}
-                  placeholder="Example: 1000"
-                />
+                  <input
+                    type="checkbox"
+                    checked={Boolean(formData.availableForWork)}
+                    onChange={(event) =>
+                      updateField("availableForWork", event.target.checked)
+                    }
+                    className="h-5 w-5 accent-cyan-400"
+                  />
+                </label>
               </div>
-
-              <label className="mt-4 flex items-center gap-3 text-sm text-gray-300">
-                <input
-                  type="checkbox"
-                  checked={formData.availableForWork}
-                  onChange={(event) =>
-                    updateField("availableForWork", event.target.checked)
-                  }
-                  className="h-4 w-4"
-                />
-                Available for work
-              </label>
             </section>
 
             <section className="border-t border-white/10 pt-6">
@@ -563,12 +688,14 @@ export default function SetupExpertProfilePage() {
               </h2>
 
               <p className="mb-4 text-sm text-gray-500">
-                Add at least 2 public links.
+                Portfolio and GitHub are required for verification. LinkedIn is
+                optional.
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <TextInput
                   label="Portfolio URL"
+                  required
                   value={formData.portfolioUrl}
                   onChange={(value) => updateField("portfolioUrl", value)}
                   onBlur={() => markTouched("portfolioUrl")}
@@ -587,6 +714,7 @@ export default function SetupExpertProfilePage() {
 
                 <TextInput
                   label="GitHub URL"
+                  required
                   value={formData.gitHubUrl}
                   onChange={(value) => updateField("gitHubUrl", value)}
                   onBlur={() => markTouched("gitHubUrl")}
@@ -595,23 +723,31 @@ export default function SetupExpertProfilePage() {
                 />
               </div>
 
-              <FieldError
-                message={getGroupError("publicLinks", [
-                  "portfolioUrl",
-                  "linkedInUrl",
-                  "gitHubUrl",
-                ])}
-              />
+              <FieldError message={submitted ? formErrors.publicLinks : ""} />
             </section>
 
             <section className="border-t border-white/10 pt-6">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-lg font-bold text-white">Certificates</h2>
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    Certificates
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Optional. If you add one, only Certificate URL and
+                    Certificate Type are required.
+                  </p>
+                </div>
 
                 <button
                   type="button"
                   onClick={addCertificate}
-                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  disabled={
+                    saving ||
+                    uploadingAvatar ||
+                    (formData.certificates || []).length >= 10
+                  }
+                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   Add Certificate
                 </button>
@@ -622,103 +758,96 @@ export default function SetupExpertProfilePage() {
                 message={submitted ? formErrors.duplicateCertificates : ""}
               />
 
-              <div className="space-y-4">
-                {formData.certificates.map((certificate, index) => (
-                  <div
-                    key={index}
-                    className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
-                  >
-                    <div className="mb-4 flex items-center justify-between">
-                      <p className="font-bold text-white">
-                        Certificate {index + 1}
-                      </p>
+              {(formData.certificates || []).length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.03] p-5 text-sm leading-6 text-gray-400">
+                  <p className="font-bold text-gray-300">
+                    No certificates added.
+                  </p>
+                  <p className="mt-1">
+                    You can submit without certificates. Adding certificates can
+                    help strengthen your profile.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {formData.certificates.map((certificate, index) => (
+                    <div
+                      key={index}
+                      className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div className="mb-4 flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-white">
+                            Certificate {index + 1}
+                          </p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            We will review the certificate link automatically.
+                          </p>
+                        </div>
 
-                      <button
-                        type="button"
-                        onClick={() => removeCertificate(index)}
-                        className="text-sm font-bold text-red-300 hover:text-red-200"
-                      >
-                        Remove
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => removeCertificate(index)}
+                          disabled={saving || uploadingAvatar}
+                          className="text-sm font-bold text-red-300 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Remove
+                        </button>
+                      </div>
 
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <TextInput
-                        label="Certificate Name"
-                        required
-                        value={certificate.certificateName}
-                        onChange={(value) =>
-                          updateCertificate(index, "certificateName", value)
-                        }
-                        onBlur={() => markTouched(`certificateName_${index}`)}
-                        error={getFieldError(`certificateName_${index}`)}
-                        placeholder="Example: React Developer Certificate"
-                      />
-
-                      <TextInput
-                        label="Issuer"
-                        required
-                        value={certificate.certificateIssuer}
-                        onChange={(value) =>
-                          updateCertificate(index, "certificateIssuer", value)
-                        }
-                        onBlur={() => markTouched(`certificateIssuer_${index}`)}
-                        error={getFieldError(`certificateIssuer_${index}`)}
-                        placeholder="Example: Coursera"
-                      />
-
-                      <TextInput
-                        label="Certificate URL"
-                        required
-                        value={certificate.certificateUrl}
-                        onChange={(value) =>
-                          updateCertificate(index, "certificateUrl", value)
-                        }
-                        onBlur={() => markTouched(`certificateUrl_${index}`)}
-                        error={getFieldError(`certificateUrl_${index}`)}
-                        placeholder="https://certificate-link.com"
-                      />
-
-                      <div>
-                        <label className="mb-2 block text-sm font-bold text-gray-300">
-                          Issued At
-                        </label>
-
-                        <input
-                          type="date"
-                          value={certificate.issuedAt}
-                          onChange={(event) =>
-                            updateCertificate(
-                              index,
-                              "issuedAt",
-                              event.target.value
-                            )
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <TextInput
+                          label="Certificate URL"
+                          value={certificate.certificateUrl || ""}
+                          onChange={(value) =>
+                            updateCertificate(index, "certificateUrl", value)
                           }
-                          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
+                          onBlur={() => markTouched(`certificateUrl_${index}`)}
+                          error={getFieldError(`certificateUrl_${index}`)}
+                          placeholder="https://www.coursera.org/account/accomplishments/verify/ABC123"
+                        />
+
+                        <SelectInput
+                          label="Certificate Type"
+                          value={
+                            certificate.certificateType ||
+                            "COURSE_CERTIFICATE"
+                          }
+                          onChange={(value) =>
+                            updateCertificate(index, "certificateType", value)
+                          }
+                          onBlur={() => markTouched(`certificateType_${index}`)}
+                          error={getFieldError(`certificateType_${index}`)}
+                          options={CERTIFICATE_TYPE_OPTIONS}
                         />
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </section>
 
             <div className="flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={handleClearDraft}
-                className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                disabled={saving || uploadingAvatar}
+                className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Clear Draft
               </button>
 
               <button
                 type="submit"
-                disabled={saving || uploadingAvatar}
+                disabled={shouldDisableSubmit}
                 className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving
                   ? "Submitting..."
+                  : isReviewLocked
+                  ? "Profile Locked"
+                  : isNoAttemptsLeft
+                  ? "No Attempts Left"
                   : isEditPage
                   ? "Resubmit Profile"
                   : "Submit Profile"}
@@ -767,6 +896,58 @@ function SetupShell({ children, onLogout }) {
   );
 }
 
+function ExpertProfileReviewLimitNotice({
+  submissionCount,
+  remainingAttempts,
+  lockedUntil,
+  locked,
+  max,
+}) {
+  const style = locked
+    ? "border-red-500/30 bg-red-500/10 text-red-300"
+    : remainingAttempts <= 1
+    ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+    : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200";
+
+  return (
+    <section className={`mb-6 rounded-2xl border p-5 ${style}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="font-bold">
+            {locked ? "Submission limit reached" : "Profile submissions"}
+          </p>
+
+          <p className="mt-2 text-sm leading-6">
+            {locked
+              ? "You have no remaining profile submission attempts."
+              : "You have a limited number of attempts to improve and resubmit your profile."}
+          </p>
+
+          {lockedUntil && (
+            <p className="mt-2 text-sm font-bold">
+              Available again: {formatDateTime(lockedUntil)}
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-black/20 px-5 py-3 text-center">
+          <p className="text-xs uppercase tracking-wider opacity-80">
+            Attempts Remaining
+          </p>
+
+          <p className="mt-1 text-2xl font-black">
+            {remainingAttempts}/{max}
+          </p>
+
+          <p className="mt-1 text-xs opacity-70">
+            Used: {submissionCount}/{max}
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function ResultModal({ modal, onClose, onGoResubmit }) {
   const icon =
     modal.type === "success"
@@ -795,30 +976,32 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
-        <div className="mb-5 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-            <span className={`material-symbols-outlined text-3xl ${color}`}>
-              {icon}
-            </span>
-          </div>
+      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="border-b border-white/10 p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+              <span className={`material-symbols-outlined text-3xl ${color}`}>
+                {icon}
+              </span>
+            </div>
 
-          <div>
-            <h3 className="text-xl font-extrabold text-white">{modal.title}</h3>
+            <div>
+              <h3 className="text-xl font-extrabold text-white">
+                {modal.title}
+              </h3>
 
-            <p className="mt-2 text-sm leading-6 text-gray-300">
-              {modal.message}
-            </p>
+              <p className="mt-2 text-sm leading-6 text-gray-300">
+                {modal.message}
+              </p>
+            </div>
           </div>
         </div>
 
-        {modal.detail && (
-          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
-            {modal.detail}
-          </div>
-        )}
+        {modal.feedback ? (
+          <SimpleReviewFeedback feedback={modal.feedback} />
+        ) : null}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-white/10 p-6 sm:flex-row sm:justify-end">
           {modal.showClose && (
             <button
               type="button"
@@ -835,11 +1018,64 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
               onClick={onGoResubmit}
               className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${buttonColor}`}
             >
-              Go to Resubmit
+              Update Profile
             </button>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SimpleReviewFeedback({ feedback }) {
+  return (
+    <div className="space-y-5 p-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <FeedbackMetric label="Score" value={feedback.scoreText || "N/A"} />
+        <FeedbackMetric
+          label="Passing score"
+          value={feedback.passThreshold || "N/A"}
+        />
+        <FeedbackMetric
+          label="Attempts"
+          value={`${feedback.attempts.used}/${feedback.attempts.max}`}
+          subText={`${feedback.attempts.remaining} remaining`}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-200">
+          Main issue
+        </p>
+
+        <p className="mt-3 text-sm leading-6 text-gray-200">
+          {feedback.mainIssue}
+        </p>
+      </div>
+
+      <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-5">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+          What to improve
+        </p>
+
+        <p className="mt-3 text-sm leading-6 text-gray-200">
+          {feedback.fixAction}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackMetric({ label, value, subText }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-2 text-lg font-black text-white">{value}</p>
+
+      {subText ? <p className="mt-1 text-xs text-gray-500">{subText}</p> : null}
     </div>
   );
 }
@@ -863,6 +1099,9 @@ function validateForm(data) {
 
   if (isEmpty(data.professionalTitle)) {
     errors.professionalTitle = "Professional title is required.";
+  } else if (String(data.professionalTitle).trim().length < 5) {
+    errors.professionalTitle =
+      "Professional title should be at least 5 characters.";
   }
 
   if (isEmpty(data.bio)) {
@@ -881,101 +1120,64 @@ function validateForm(data) {
     errors.yearsOfExperience = "Years of experience is required.";
   }
 
-  if (isEmpty(data.expectedProjectBudgetMin)) {
-    errors.expectedProjectBudgetMin = "Minimum budget is required.";
+  const years = Number(data.yearsOfExperience || 0);
+
+  if (
+    !isEmpty(data.yearsOfExperience) &&
+    (!Number.isFinite(years) || years < 0)
+  ) {
+    errors.yearsOfExperience = "Years of experience must be 0 or higher.";
   }
 
-  if (isEmpty(data.expectedProjectBudgetMax)) {
-    errors.expectedProjectBudgetMax = "Maximum budget is required.";
+  if (isEmpty(data.portfolioUrl)) {
+    errors.portfolioUrl = "Portfolio URL is required.";
+  } else if (!isValidUrl(data.portfolioUrl)) {
+    errors.portfolioUrl = "Portfolio URL must start with http:// or https://";
   }
 
-  if (isEmpty(data.preferredProjectDurationDays)) {
-    errors.preferredProjectDurationDays = "Preferred duration is required.";
+  if (isEmpty(data.gitHubUrl)) {
+    errors.gitHubUrl = "GitHub URL is required.";
+  } else if (!isValidUrl(data.gitHubUrl)) {
+    errors.gitHubUrl = "GitHub URL must start with http:// or https://";
+  } else if (!isGitHubUrl(data.gitHubUrl)) {
+    errors.gitHubUrl = "Please enter a valid GitHub profile URL.";
   }
 
-  const minBudget = Number(data.expectedProjectBudgetMin || 0);
-  const maxBudget = Number(data.expectedProjectBudgetMax || 0);
-
-  if (minBudget < 0) {
-    errors.expectedProjectBudgetMin = "Minimum budget must be 0 or higher.";
+  if (!isEmpty(data.linkedInUrl) && !isValidUrl(data.linkedInUrl)) {
+    errors.linkedInUrl =
+      "LinkedIn URL must start with http:// or https://. You can leave it empty.";
   }
 
-  if (maxBudget < 0) {
-    errors.expectedProjectBudgetMax = "Maximum budget must be 0 or higher.";
-  }
-
-  if (minBudget && maxBudget && minBudget > maxBudget) {
-    errors.expectedProjectBudgetMax =
-      "Maximum budget must be greater than minimum budget.";
-  }
-
-  const duration = Number(data.preferredProjectDurationDays || 0);
-
-  if (duration <= 0) {
-    errors.preferredProjectDurationDays =
-      "Preferred duration must be greater than 0.";
-  }
-
-  const publicLinks = [
-    data.portfolioUrl,
-    data.linkedInUrl,
-    data.gitHubUrl,
-  ].filter((item) => !isEmpty(item));
-
-  if (publicLinks.length < 2) {
+  if (errors.portfolioUrl || errors.gitHubUrl) {
     errors.publicLinks =
-      "Please add at least 2 links: Portfolio, LinkedIn, or GitHub.";
+      "Portfolio and GitHub are required. LinkedIn is optional.";
   }
-
-  ["portfolioUrl", "linkedInUrl", "gitHubUrl"].forEach((field) => {
-    if (!isEmpty(data[field]) && !isValidUrl(data[field])) {
-      errors[field] = "URL must start with http:// or https://";
-    }
-  });
 
   const certificateUrls = [];
   const certificates = data.certificates || [];
 
-  const validCertificates = certificates.filter(
-    (item) =>
-      !isEmpty(item.certificateName) ||
-      !isEmpty(item.certificateIssuer) ||
-      !isEmpty(item.certificateUrl)
-  );
-
-  if (validCertificates.length === 0) {
-    errors.certificates = "At least one certificate is required.";
+  if (certificates.length > 10) {
+    errors.certificates = "Maximum 10 certificates are allowed.";
   }
 
   certificates.forEach((item, index) => {
-    const hasAnyValue =
-      !isEmpty(item.certificateName) ||
-      !isEmpty(item.certificateIssuer) ||
-      !isEmpty(item.certificateUrl) ||
-      !isEmpty(item.issuedAt);
+    const certificateUrl = String(item?.certificateUrl || "").trim();
+    const certificateType = String(item?.certificateType || "").trim();
 
-    if (!hasAnyValue) return;
+    if (!certificateUrl) return;
 
-    if (isEmpty(item.certificateName)) {
-      errors[`certificateName_${index}`] = "Certificate name is required.";
-    }
-
-    if (isEmpty(item.certificateIssuer)) {
-      errors[`certificateIssuer_${index}`] = "Certificate issuer is required.";
-    }
-
-    if (isEmpty(item.certificateUrl)) {
-      errors[`certificateUrl_${index}`] = "Certificate URL is required.";
-    }
-
-    if (!isEmpty(item.certificateUrl) && !isValidUrl(item.certificateUrl)) {
+    if (!isValidUrl(certificateUrl)) {
       errors[`certificateUrl_${index}`] =
         "Certificate URL must start with http:// or https://";
     }
 
-    if (!isEmpty(item.certificateUrl)) {
-      certificateUrls.push(String(item.certificateUrl).trim().toLowerCase());
+    if (!certificateType) {
+      errors[`certificateType_${index}`] = "Certificate type is required.";
+    } else if (!CERTIFICATE_TYPES.includes(certificateType)) {
+      errors[`certificateType_${index}`] = "Certificate type is invalid.";
     }
+
+    certificateUrls.push(certificateUrl.toLowerCase());
   });
 
   if (certificateUrls.length !== new Set(certificateUrls).size) {
@@ -993,6 +1195,8 @@ function TextInput({
   placeholder,
   required,
   error,
+  type = "text",
+  inputMode,
 }) {
   return (
     <div>
@@ -1001,12 +1205,15 @@ function TextInput({
       </label>
 
       <input
-        type="text"
-        value={value}
+        type={type}
+        inputMode={inputMode}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -1018,10 +1225,50 @@ function NumberInput(props) {
   return (
     <TextInput
       {...props}
+      inputMode="numeric"
       onChange={(nextValue) => {
         if (/^\d*$/.test(nextValue)) props.onChange(nextValue);
       }}
     />
+  );
+}
+
+function SelectInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  required,
+  error,
+  options,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <select
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            className="bg-[#151a22] text-white"
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <FieldError message={error} />
+    </div>
   );
 }
 
@@ -1041,12 +1288,14 @@ function TextArea({
       </label>
 
       <textarea
-        value={value}
+        value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
         rows={5}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
       />
 
       <FieldError message={error} />
@@ -1060,112 +1309,786 @@ function FieldError({ message }) {
   return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
 }
 
-function getReviewStatus(result) {
+function buildFormFromProfile(profile) {
+  const certificates = profile?.certificates || profile?.Certificates || [];
+
+  return {
+    avatarUrl: profile?.avatarUrl || profile?.AvatarUrl || "",
+    professionalTitle:
+      profile?.professionalTitle || profile?.ProfessionalTitle || "",
+    bio: profile?.bio || profile?.Bio || "",
+    skills: profile?.skills || profile?.Skills || "",
+    yearsOfExperience:
+      profile?.yearsOfExperience ?? profile?.YearsOfExperience ?? "",
+    availableForWork:
+      profile?.availableForWork ?? profile?.AvailableForWork ?? true,
+    portfolioUrl: profile?.portfolioUrl || profile?.PortfolioUrl || "",
+    linkedInUrl:
+      profile?.linkedInUrl ||
+      profile?.LinkedInUrl ||
+      profile?.linkedinUrl ||
+      "",
+    gitHubUrl:
+      profile?.gitHubUrl || profile?.GitHubUrl || profile?.githubUrl || "",
+    certificates: normalizeCertificatesForForm(certificates),
+  };
+}
+
+function removeDeprecatedExpertFields(data) {
+  const next = { ...(data || {}) };
+
+  delete next.expectedProjectBudgetMin;
+  delete next.expectedProjectBudgetMax;
+  delete next.preferredProjectDurationDays;
+  delete next.ExpectedProjectBudgetMin;
+  delete next.ExpectedProjectBudgetMax;
+  delete next.PreferredProjectDurationDays;
+
+  delete next.linkedinUrl;
+  delete next.githubUrl;
+
+  next.certificates = normalizeCertificatesForForm(next.certificates);
+
+  return next;
+}
+
+function normalizeCertificatesForForm(certificates) {
+  if (!Array.isArray(certificates)) return [];
+
+  return certificates
+    .map((item) => {
+      const certificateUrl =
+        item?.certificateUrl || item?.CertificateUrl || item?.url || "";
+
+      const certificateType =
+        item?.certificateType || item?.CertificateType || "OTHER";
+
+      return {
+        certificateUrl: String(certificateUrl || "").trim(),
+        certificateType: CERTIFICATE_TYPES.includes(certificateType)
+          ? certificateType
+          : "OTHER",
+      };
+    })
+    .filter((item) => item.certificateUrl);
+}
+
+function normalizeCertificatesForPayload(certificates) {
+  if (!Array.isArray(certificates)) return [];
+
+  return certificates
+    .map((item) => ({
+      certificateUrl: String(item?.certificateUrl || "").trim(),
+      certificateType: CERTIFICATE_TYPES.includes(item?.certificateType)
+        ? item.certificateType
+        : "OTHER",
+    }))
+    .filter((item) => item.certificateUrl);
+}
+
+function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
+  const reviewNote = getReviewNote(backendPayload);
+
+  const scoreInfo = extractProfileScoreInfo(backendPayload);
+  const parsedScore = parseFinalProfileScore(reviewNote);
+
+  const scoreText =
+    parsedScore.text ||
+    scoreInfo.profileScoreText ||
+    buildScoreText(scoreInfo) ||
+    "N/A";
+
+  const passThreshold =
+    parsePassThreshold(reviewNote) ?? scoreInfo.profilePassScore ?? "N/A";
+
+  const normalizedLimit = normalizeReviewLimit(limit);
+
+  return {
+    scoreText,
+    passThreshold,
+    mainIssue: buildMainIssue(reviewNote),
+    fixAction: buildFixAction({
+      reviewNote,
+      missingInformation,
+    }),
+    attempts: {
+      used: normalizedLimit.submissionCount,
+      remaining: normalizedLimit.remainingAttempts,
+      max: normalizedLimit.maxAttempts,
+    },
+  };
+}
+
+function buildMainIssue(reviewNote) {
+  const text = String(reviewNote || "").trim();
+
+  if (!text) {
+    return "Your profile needs stronger evidence before it can be approved.";
+  }
+
+  return (
+    extractSentence(text, /extremely high and not supported/i) ||
+    extractSentence(text, /claimed experience is much higher/i) ||
+    extractSentence(text, /lacks strong evidence/i) ||
+    firstSentence(text) ||
+    "Your profile needs stronger evidence before it can be approved."
+  );
+}
+
+function buildFixAction({ reviewNote, missingInformation }) {
+  const missingText = String(missingInformation || "").trim();
+
+  if (missingText) return missingText;
+
+  const text = String(reviewNote || "").trim();
+
+  return (
+    extractSentence(text, /Additional evidence is required/i) ||
+    "Add stronger evidence such as detailed project descriptions, certificates, GitHub repositories, portfolio links, or a LinkedIn profile."
+  );
+}
+
+function extractProfileScoreInfo(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const profileScore = toNumberOrNull(
+    pickFirst(
+      data?.profileScore,
+      data?.ProfileScore,
+      data?.score,
+      data?.Score,
+      raw?.profileScore,
+      raw?.ProfileScore,
+      raw?.score,
+      raw?.Score
+    )
+  );
+
+  const profileScoreMax = toNumberOrNull(
+    pickFirst(
+      data?.profileScoreMax,
+      data?.ProfileScoreMax,
+      data?.maxScore,
+      data?.MaxScore,
+      data?.scoreMax,
+      data?.ScoreMax,
+      raw?.profileScoreMax,
+      raw?.ProfileScoreMax,
+      raw?.maxScore,
+      raw?.MaxScore,
+      raw?.scoreMax,
+      raw?.ScoreMax
+    )
+  );
+
+  const profilePassScore = toNumberOrNull(
+    pickFirst(
+      data?.profilePassScore,
+      data?.ProfilePassScore,
+      data?.passScore,
+      data?.PassScore,
+      data?.requiredScore,
+      data?.RequiredScore,
+      raw?.profilePassScore,
+      raw?.ProfilePassScore,
+      raw?.passScore,
+      raw?.PassScore,
+      raw?.requiredScore,
+      raw?.RequiredScore
+    )
+  );
+
+  const profileScoreText =
+    pickFirst(
+      data?.profileScoreText,
+      data?.ProfileScoreText,
+      raw?.profileScoreText,
+      raw?.ProfileScoreText
+    ) || buildScoreText({ profileScore, profileScoreMax });
+
+  return {
+    profileScore,
+    profileScoreMax,
+    profilePassScore,
+    profileScoreText,
+  };
+}
+
+function parseFinalProfileScore(text) {
+  const match = String(text || "").match(
+    /Final profile score:\s*(\d+)\s*\/\s*(\d+)/i
+  );
+
+  if (!match) {
+    return {
+      score: null,
+      maxScore: null,
+      text: "",
+    };
+  }
+
+  return {
+    score: Number(match[1]),
+    maxScore: Number(match[2]),
+    text: `${match[1]}/${match[2]}`,
+  };
+}
+
+function parsePassThreshold(text) {
+  return extractNumber(text, /Pass threshold:\s*(\d+)/i);
+}
+
+function extractExpertProfileReviewLimit(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const maxAttempts =
+    toNumberOrNull(
+      pickFirst(
+        data?.maxReviewAttempts,
+        data?.MaxReviewAttempts,
+        data?.profileReviewMaxSubmissions,
+        data?.ProfileReviewMaxSubmissions,
+        data?.maxAttempts,
+        data?.MaxAttempts,
+        raw?.maxReviewAttempts,
+        raw?.MaxReviewAttempts,
+        raw?.profileReviewMaxSubmissions,
+        raw?.ProfileReviewMaxSubmissions,
+        raw?.maxAttempts,
+        raw?.MaxAttempts
+      )
+    ) || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const submissionCount =
+    toNumberOrNull(
+      pickFirst(
+        data?.profileReviewSubmissionCount,
+        data?.ProfileReviewSubmissionCount,
+        data?.reviewAttempts,
+        data?.ReviewAttempts,
+        data?.submissionCount,
+        data?.SubmissionCount,
+        data?.submissionCountUsed,
+        data?.SubmissionCountUsed,
+        raw?.profileReviewSubmissionCount,
+        raw?.ProfileReviewSubmissionCount,
+        raw?.reviewAttempts,
+        raw?.ReviewAttempts,
+        raw?.submissionCount,
+        raw?.SubmissionCount,
+        raw?.submissionCountUsed,
+        raw?.SubmissionCountUsed
+      )
+    ) || 0;
+
+  const explicitRemaining = toNumberOrNull(
+    pickFirst(
+      data?.remainingReviewAttempts,
+      data?.RemainingReviewAttempts,
+      data?.profileReviewRemainingAttempts,
+      data?.ProfileReviewRemainingAttempts,
+      data?.remainingAttempts,
+      data?.RemainingAttempts,
+      raw?.remainingReviewAttempts,
+      raw?.RemainingReviewAttempts,
+      raw?.profileReviewRemainingAttempts,
+      raw?.ProfileReviewRemainingAttempts,
+      raw?.remainingAttempts,
+      raw?.RemainingAttempts
+    )
+  );
+
+  const remainingAttempts =
+    explicitRemaining !== null
+      ? Math.max(0, explicitRemaining)
+      : Math.max(0, maxAttempts - submissionCount);
+
+  return {
+    submissionCount,
+    lockedUntil:
+      pickFirst(
+        data?.profileReviewLockedUntil,
+        data?.ProfileReviewLockedUntil,
+        data?.lockedUntil,
+        data?.LockedUntil,
+        raw?.profileReviewLockedUntil,
+        raw?.ProfileReviewLockedUntil,
+        raw?.lockedUntil,
+        raw?.LockedUntil
+      ) || "",
+    reviewStatus: String(
+      pickFirst(
+        data?.profileReviewStatus,
+        data?.ProfileReviewStatus,
+        data?.reviewStatus,
+        data?.ReviewStatus,
+        data?.status,
+        data?.Status,
+        raw?.profileReviewStatus,
+        raw?.ProfileReviewStatus,
+        raw?.reviewStatus,
+        raw?.ReviewStatus,
+        raw?.status,
+        raw?.Status
+      ) || ""
+    )
+      .trim()
+      .toUpperCase(),
+    userStatus: String(
+      pickFirst(
+        data?.userStatus,
+        data?.UserStatus,
+        raw?.userStatus,
+        raw?.UserStatus
+      ) || ""
+    )
+      .trim()
+      .toUpperCase(),
+    remainingAttempts,
+    maxAttempts,
+  };
+}
+
+function chooseBestReviewLimit(previousLimit, resultLimit, refreshedLimit) {
+  if (isMeaningfulReviewLimit(refreshedLimit)) {
+    return normalizeReviewLimit(refreshedLimit);
+  }
+
+  if (isMeaningfulReviewLimit(resultLimit)) {
+    return normalizeReviewLimit(resultLimit);
+  }
+
+  return normalizeReviewLimit(previousLimit);
+}
+
+function isMeaningfulReviewLimit(limit) {
+  if (!limit) return false;
+
+  return (
+    Number(limit.submissionCount || 0) > 0 ||
+    Number(limit.remainingAttempts || 0) <
+      Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
+    Boolean(limit.lockedUntil) ||
+    Boolean(limit.reviewStatus) ||
+    Boolean(limit.userStatus)
+  );
+}
+
+function normalizeReviewLimit(limit) {
+  const maxAttempts =
+    Number(limit?.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const submissionCount = Math.max(0, Number(limit?.submissionCount || 0));
+
+  const remainingAttempts =
+    limit?.remainingAttempts !== "" &&
+    limit?.remainingAttempts !== null &&
+    limit?.remainingAttempts !== undefined
+      ? Math.max(0, Number(limit.remainingAttempts || 0))
+      : Math.max(0, maxAttempts - submissionCount);
+
+  return {
+    submissionCount,
+    lockedUntil: limit?.lockedUntil || "",
+    reviewStatus: String(limit?.reviewStatus || "").toUpperCase(),
+    userStatus: String(limit?.userStatus || "").toUpperCase(),
+    remainingAttempts,
+    maxAttempts,
+  };
+}
+
+function didReviewLimitMoveForward(previousLimit, nextLimit) {
+  if (!previousLimit || !nextLimit) return false;
+
+  const previousUsed = Number(previousLimit.submissionCount || 0);
+  const nextUsed = Number(nextLimit.submissionCount || 0);
+
+  const previousRemaining = getRemainingExpertProfileAttempts(previousLimit);
+  const nextRemaining = getRemainingExpertProfileAttempts(nextLimit);
+
+  return nextUsed > previousUsed || nextRemaining < previousRemaining;
+}
+
+function advanceReviewLimitLocally(previousLimit, result) {
+  const base = normalizeReviewLimit(previousLimit);
+  const reviewStatus = getReviewStatus(result);
+
+  const shouldCountAttempt =
+    reviewStatus === "NEEDS_CORRECTION" ||
+    reviewStatus === "REJECTED" ||
+    reviewStatus === "PENDING" ||
+    reviewStatus === "";
+
+  if (!shouldCountAttempt) {
+    return base;
+  }
+
+  const nextUsed = Math.min(base.maxAttempts, Number(base.submissionCount) + 1);
+
+  return {
+    ...base,
+    submissionCount: nextUsed,
+    remainingAttempts: Math.max(0, base.maxAttempts - nextUsed),
+    reviewStatus: reviewStatus || base.reviewStatus,
+  };
+}
+
+function isExpertProfileReviewLocked(limit) {
+  if (!limit) return false;
+
+  const reviewStatus = String(limit.reviewStatus || "").toUpperCase();
+  const userStatus = String(limit.userStatus || "").toUpperCase();
+
+  if (
+    reviewStatus === "LOCKED" ||
+    userStatus === "EXPERT_PROFILE_LOCKED" ||
+    userStatus === "LOCKED"
+  ) {
+    return true;
+  }
+
+  if (!limit.lockedUntil) return false;
+
+  const lockedUntilTime = new Date(limit.lockedUntil).getTime();
+
+  if (!Number.isFinite(lockedUntilTime)) return false;
+
+  return lockedUntilTime > Date.now();
+}
+
+function hasNoExpertProfileAttemptsLeft(limit) {
+  if (!limit) return false;
+  if (isExpertProfileReviewLocked(limit)) return true;
+
+  const max = Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS);
+  const remaining = getRemainingExpertProfileAttempts(limit);
+
+  return remaining <= 0 && Number(limit.submissionCount || 0) >= max;
+}
+
+function getRemainingExpertProfileAttempts(limit) {
+  if (!limit) return MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  if (
+    limit.remainingAttempts !== "" &&
+    limit.remainingAttempts !== null &&
+    limit.remainingAttempts !== undefined
+  ) {
+    const remaining = Number(limit.remainingAttempts);
+
+    if (Number.isFinite(remaining)) {
+      return Math.max(0, remaining);
+    }
+  }
+
+  const max = Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS);
+  const used = Number(limit.submissionCount || 0);
+
+  return Math.max(0, max - used);
+}
+
+function shouldRedirectToLockedPage(limit) {
+  if (!limit) return false;
+
+  return (
+    isExpertProfileReviewLocked(limit) ||
+    hasNoExpertProfileAttemptsLeft(limit)
+  );
+}
+
+function buildScoreText(scoreInfo) {
+  const score = scoreInfo?.profileScore;
+  const maxScore = scoreInfo?.profileScoreMax;
+
+  if (score === null || score === undefined) return "";
+  if (maxScore === null || maxScore === undefined) return String(score);
+
+  return `${score}/${maxScore}`;
+}
+
+function getReviewStatus(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
   return String(
-    result?.profileReviewStatus ||
-      result?.ProfileReviewStatus ||
-      result?.reviewStatus ||
-      result?.ReviewStatus ||
-      ""
+    pickFirst(
+      data?.profileReviewStatus,
+      data?.ProfileReviewStatus,
+      data?.reviewStatus,
+      data?.ReviewStatus,
+      data?.status,
+      data?.Status,
+      raw?.profileReviewStatus,
+      raw?.ProfileReviewStatus,
+      raw?.reviewStatus,
+      raw?.ReviewStatus,
+      raw?.status,
+      raw?.Status
+    ) || ""
   )
     .trim()
     .toUpperCase();
 }
 
-function getUserStatus(result) {
-  return String(result?.userStatus || result?.UserStatus || "")
+function getUserStatus(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  return String(
+    pickFirst(
+      data?.userStatus,
+      data?.UserStatus,
+      raw?.userStatus,
+      raw?.UserStatus
+    ) || ""
+  )
     .trim()
     .toUpperCase();
 }
 
-function getReviewNote(result) {
+function getReviewNote(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
   return (
-    result?.profileReviewNote ||
-    result?.ProfileReviewNote ||
-    result?.reviewNote ||
-    result?.ReviewNote ||
-    result?.aiReviewNote ||
-    result?.AiReviewNote ||
-    ""
+    pickFirst(
+      data?.reviewNote,
+      data?.ReviewNote,
+      data?.correctionNote,
+      data?.CorrectionNote,
+      data?.rejectionReason,
+      data?.RejectionReason,
+      data?.verificationNote,
+      data?.VerificationNote,
+      raw?.reviewNote,
+      raw?.ReviewNote,
+      raw?.correctionNote,
+      raw?.CorrectionNote,
+      raw?.rejectionReason,
+      raw?.RejectionReason,
+      raw?.verificationNote,
+      raw?.VerificationNote
+    ) || ""
   );
 }
 
-function getMissingInformation(result) {
-  const value =
-    result?.missingInformation ||
-    result?.MissingInformation ||
-    result?.missingInfo ||
-    result?.MissingInfo ||
-    "";
+function getMissingInformation(data) {
+  const raw = data?.raw || data?.Raw || data || {};
+
+  const value = pickFirst(
+    data?.missingInformation,
+    data?.MissingInformation,
+    data?.missingFields,
+    data?.MissingFields,
+    raw?.missingInformation,
+    raw?.MissingInformation,
+    raw?.missingFields,
+    raw?.MissingFields
+  );
 
   if (Array.isArray(value)) return value.join(", ");
 
   return String(value || "");
 }
 
-function saveCorrectionDraft(data) {
-  localStorage.setItem(CORRECTION_DRAFT_KEY, JSON.stringify(data));
-  localStorage.setItem(EDIT_DRAFT_KEY, JSON.stringify(data));
-  localStorage.setItem(SETUP_DRAFT_KEY, JSON.stringify(data));
-}
-
-function clearExpertProfileDrafts() {
-  localStorage.removeItem(SETUP_DRAFT_KEY);
-  localStorage.removeItem(EDIT_DRAFT_KEY);
-  localStorage.removeItem(CORRECTION_DRAFT_KEY);
-}
-
 function updateLocalUserStatus(status) {
   try {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const rawUser = localStorage.getItem("user");
+
+    if (!rawUser) return;
+
+    const user = JSON.parse(rawUser);
 
     localStorage.setItem(
       "user",
       JSON.stringify({
         ...user,
-        role: "EXPERT",
         status,
       })
     );
-  } catch (error) {
-    console.error("UPDATE LOCAL USER STATUS ERROR:", error);
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function saveCorrectionDraft(data) {
+  try {
+    localStorage.setItem(
+      CORRECTION_DRAFT_KEY,
+      JSON.stringify({
+        ...data,
+        certificates: normalizeCertificatesForPayload(data?.certificates),
+      })
+    );
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function clearExpertProfileDrafts() {
+  try {
+    localStorage.removeItem(SETUP_DRAFT_KEY);
+    localStorage.removeItem(EDIT_DRAFT_KEY);
+    localStorage.removeItem(CORRECTION_DRAFT_KEY);
+  } catch {
+    // Ignore localStorage errors
   }
 }
 
 function readJson(key) {
   try {
     const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : null;
+
+    if (!value) return null;
+
+    return JSON.parse(value);
   } catch {
     return null;
   }
 }
 
+function extractUploadUrl(result) {
+  if (!result) return "";
+
+  if (typeof result === "string") return result;
+
+  return (
+    result.url ||
+    result.imageUrl ||
+    result.fileUrl ||
+    result.avatarUrl ||
+    result.data?.url ||
+    result.data?.imageUrl ||
+    result.data?.fileUrl ||
+    result.data?.avatarUrl ||
+    ""
+  );
+}
+
+function getRawBackendPayload(error) {
+  return (
+    error?.originalError?.response?.data ||
+    error?.response?.data ||
+    error?.data ||
+    error
+  );
+}
+
+function getSimpleSubmitError(error) {
+  const payload = getRawBackendPayload(error);
+
+  if (typeof payload === "string") return payload;
+
+  const message =
+    payload?.message ||
+    payload?.title ||
+    payload?.detail ||
+    payload?.error ||
+    error?.message ||
+    "";
+
+  if (!message) return "";
+
+  if (message.includes("Certificate URL is invalid")) {
+    return "One of your certificate links is invalid.";
+  }
+
+  if (message.includes("Certificate type is invalid")) {
+    return "One of your certificate types is invalid.";
+  }
+
+  if (message.includes("Duplicate certificate URL")) {
+    return "Certificate links must not be duplicated.";
+  }
+
+  if (message.includes("already used by another expert")) {
+    return "One of your certificate links is already used by another expert.";
+  }
+
+  return message;
+}
+
+function pickFirst(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null && value !== "") {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function toNumberOrNull(value) {
+  if (value === undefined || value === null || value === "") return null;
+
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return null;
+
+  return number;
+}
+
+function extractNumber(text, regex) {
+  const match = String(text || "").match(regex);
+
+  if (!match) return null;
+
+  const value = Number(match[1]);
+
+  return Number.isFinite(value) ? value : null;
+}
+
+function extractSentence(text, regex) {
+  const sentences = String(text || "")
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+
+  return sentences.find((sentence) => regex.test(sentence)) || "";
+}
+
+function firstSentence(text) {
+  return (
+    String(text || "")
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter(Boolean)[0] || ""
+  );
+}
+
 function isEmpty(value) {
-  return String(value || "").trim() === "";
+  return String(value ?? "").trim().length === 0;
 }
 
 function isValidUrl(value) {
-  return /^https?:\/\//i.test(String(value || ""));
+  try {
+    const url = new URL(String(value || "").trim());
+
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
-function getFriendlyError(err) {
-  const status = err?.response?.status;
+function isGitHubUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    const pathParts = url.pathname.split("/").filter(Boolean);
 
-  if (status === 401) {
-    return "Your session has expired. Please login again.";
+    return host === "github.com" && pathParts.length >= 1;
+  } catch {
+    return false;
   }
+}
 
-  if (status === 403) {
-    return "Backend blocked this request because the current token does not have EXPERT permission.";
+function formatDateTime(value) {
+  if (!value) return "";
+
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(value));
+  } catch {
+    return String(value);
   }
-
-  const rawMessage =
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    "";
-
-  return String(rawMessage || "Something went wrong. Please try again.");
 }

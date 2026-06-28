@@ -1,30 +1,67 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
-import proposalService from "../../../services/proposal.service";
+import proposalService, {
+  getFriendlyProposalError,
+} from "../../../services/proposal.service";
+import { validateProposalForm } from "../../../utils/validateProposal";
+
+const createEmptyMilestone = () => ({
+  title: "",
+  amount: "",
+  durationDays: "",
+});
+
+const createEmptyForm = () => ({
+  coverLetter: "",
+  proposedPrice: "",
+  proposedTimelineDays: "",
+  expectedOutputs: "",
+  workingApproach: "",
+  preliminaryMilestonePlan: "",
+  milestones: [createEmptyMilestone()],
+});
 
 export default function SubmitProposalPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
 
   const [job, setJob] = useState(null);
-
-  const [formData, setFormData] = useState({
-    coverLetter: "",
-    proposedBudget: "",
-    estimatedDurationDays: "",
-    workPlan: "",
-  });
+  const [formData, setFormData] = useState(createEmptyForm);
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  const [submitted, setSubmitted] = useState(false);
+  const [touched, setTouched] = useState({});
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  const formErrors = useMemo(() => validateProposalForm(formData), [formData]);
+
+  const milestoneTotal = useMemo(() => {
+    return formData.milestones.reduce((total, milestone) => {
+      const amount = Number(milestone.amount || 0);
+
+      return total + (Number.isNaN(amount) ? 0 : amount);
+    }, 0);
+  }, [formData.milestones]);
+
+  const milestoneDuration = useMemo(() => {
+    return formData.milestones.reduce((total, milestone) => {
+      const durationDays = Number(milestone.durationDays || 0);
+
+      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
+    }, 0);
+  }, [formData.milestones]);
+
+  const priceDifference = Number(formData.proposedPrice || 0) - milestoneTotal;
+
   useEffect(() => {
     loadJobDetail();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   const loadJobDetail = async () => {
@@ -32,143 +69,166 @@ export default function SubmitProposalPage() {
       setLoading(true);
       setError("");
 
-      const data = await jobService.getJobById(jobId);
+      const response = await jobService.getJobById(jobId);
+      const data = unwrapData(response);
+
       setJob(data);
     } catch (err) {
-      console.error(err);
-      setError("Cannot load job detail. Please check backend API.");
+      console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load job detail."));
       setJob(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
+  const updateField = (name, value) => {
+    setMessage("");
+    setError("");
 
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [name]: value,
+    }));
+  };
+
+  const updateMilestone = (index, name, value) => {
+    setMessage("");
+    setError("");
+
+    setFormData((prev) => {
+      const nextMilestones = [...prev.milestones];
+
+      nextMilestones[index] = {
+        ...nextMilestones[index],
+        [name]: value,
+      };
+
+      return {
+        ...prev,
+        milestones: nextMilestones,
+      };
     });
   };
 
-  const validateForm = () => {
-    const budget = Number(formData.proposedBudget);
-    const duration = Number(formData.estimatedDurationDays);
+  const addMilestone = () => {
+    setFormData((prev) => ({
+      ...prev,
+      milestones: [...prev.milestones, createEmptyMilestone()],
+    }));
+  };
 
-    if (!formData.coverLetter.trim()) {
-      return "Cover letter is required.";
-    }
+  const removeMilestone = (index) => {
+    setFormData((prev) => {
+      const nextMilestones = prev.milestones.filter((_, i) => i !== index);
 
-    if (formData.coverLetter.trim().length < 30) {
-      return "Cover letter must be at least 30 characters.";
-    }
+      return {
+        ...prev,
+        milestones:
+          nextMilestones.length > 0 ? nextMilestones : [createEmptyMilestone()],
+      };
+    });
+  };
 
-    if (formData.proposedBudget === "") {
-      return "Proposed budget is required.";
-    }
+  const syncFromMilestones = () => {
+    setMessage("");
+    setError("");
 
-    if (Number.isNaN(budget) || budget <= 0) {
-      return "Proposed budget must be greater than 0.";
-    }
+    setFormData((prev) => ({
+      ...prev,
+      proposedPrice: String(milestoneTotal || ""),
+      proposedTimelineDays: String(milestoneDuration || ""),
+    }));
+  };
 
-    if (formData.estimatedDurationDays === "") {
-      return "Estimated duration is required.";
-    }
+  const markTouched = (name) => {
+    setTouched((prev) => ({
+      ...prev,
+      [name]: true,
+    }));
+  };
 
-    if (Number.isNaN(duration) || duration < 1 || !Number.isInteger(duration)) {
-      return "Estimated duration must be an integer and at least 1 day.";
-    }
+  const markMilestoneTouched = (index, name) => {
+    markTouched(`milestones.${index}.${name}`);
+  };
 
-    if (!formData.workPlan.trim()) {
-      return "Work plan is required.";
-    }
+  const getFieldError = (name) => {
+    if (!submitted && !touched[name]) return "";
 
-    if (formData.workPlan.trim().length < 30) {
-      return "Work plan must be at least 30 characters.";
-    }
+    return formErrors[name] || "";
+  };
 
-    return "";
+  const getMilestoneFieldError = (index, name) => {
+    const key = `milestones.${index}.${name}`;
+
+    if (!submitted && !touched[key]) return "";
+
+    return formErrors?.milestones?.[index]?.[name] || "";
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
+    setSubmitted(true);
     setMessage("");
     setError("");
 
-    const validateError = validateForm();
+    const errors = validateProposalForm(formData);
 
-    if (validateError) {
-      setError(validateError);
+    if (Object.keys(errors).length > 0) {
+      setError("Please check the highlighted fields before submitting.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if (!jobId) {
+      setError("Job information is missing. Please go back and choose a job.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
 
     try {
       setSubmitting(true);
 
-      await proposalService.submitProposal(jobId, formData);
+      const proposal = await proposalService.submitProposal(jobId, formData);
+      const proposalId = proposal?.proposalId || proposal?.id;
 
       setMessage("Proposal submitted successfully.");
 
       setTimeout(() => {
-        navigate("/expert/proposals");
-      }, 800);
+        if (proposalId) {
+          navigate(`/expert/proposals/${proposalId}`, { replace: true });
+          return;
+        }
+
+        navigate("/expert/proposals", { replace: true });
+      }, 700);
     } catch (err) {
-      console.error(err);
-      setError("Cannot submit proposal. Please check backend API.");
+      console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
+
+      setError(
+        getFriendlyProposalError
+          ? getFriendlyProposalError(err, "Cannot submit proposal.")
+          : getFriendlyError(err, "Cannot submit proposal.")
+      );
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getJobTitle = () => {
-    return job?.title || job?.jobTitle || job?.name || "Untitled Job";
-  };
+  const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
 
-  const getJobDescription = () => {
-    return job?.description || job?.jobDescription || job?.summary || "";
-  };
-
-  const getBudgetText = () => {
-    const min =
-      job?.budgetMin ||
-      job?.minBudget ||
-      job?.expectedBudgetMin ||
-      job?.projectBudgetMin;
-
-    const max =
-      job?.budgetMax ||
-      job?.maxBudget ||
-      job?.expectedBudgetMax ||
-      job?.projectBudgetMax;
-
-    if (min && max) return `$${min} - $${max}`;
-    if (min) return `From $${min}`;
-    if (max) return `Up to $${max}`;
-
-    return "Budget not set";
-  };
-
-  const getDurationText = () => {
-    const duration =
-      job?.durationDays ||
-      job?.preferredProjectDurationDays ||
-      job?.estimatedDurationDays;
-
-    if (!duration) return "Duration not set";
-
-    return `${duration} days`;
-  };
-
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
-
-  const inputStyle =
-    "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
-
-  const labelStyle =
-    "mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400";
+  if (loading) {
+    return (
+      <ExpertLayout>
+        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
+          Loading job information...
+        </div>
+      </ExpertLayout>
+    );
+  }
 
   return (
     <ExpertLayout>
@@ -195,212 +255,262 @@ export default function SubmitProposalPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Write a clear proposal with your price, estimated duration and
-              work plan.
+              Fill in your price, timeline, delivery plan, and milestones.
             </p>
           </div>
 
-          {loading && (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading job information...
-            </div>
-          )}
-
           {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
+            <Alert type="danger" title="Proposal error" message={error} />
           )}
 
           {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
+            <Alert type="success" title="Success" message={message} />
+          )}
+
+          {!job && (
+            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
+              <p className="text-gray-400">Job not found.</p>
+
+              <button
+                type="button"
+                onClick={() => navigate("/expert/jobs")}
+                className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                Back to Jobs
+              </button>
             </div>
           )}
 
-          {!loading && job && (
+          {job && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-              {/* Proposal form */}
               <form onSubmit={handleSubmit} className="space-y-6">
-                <section className={`${cardStyle} p-6 md:p-8`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
-                      <span className="material-symbols-outlined text-xl text-[#00F0FF]">
-                        description
-                      </span>
-                    </div>
+                {!isJobOpen && (
+                  <Alert
+                    type="warning"
+                    title="Job is not open"
+                    message="This job is not open for proposals right now."
+                  />
+                )}
 
-                    <div>
-                      <h2 className="text-lg font-bold text-white">
-                        Proposal Content
-                      </h2>
-                      <p className="text-sm text-gray-500">
-                        Tell the client why you are suitable.
-                      </p>
-                    </div>
-                  </div>
-
-                  <label className={labelStyle}>Cover Letter</label>
-
-                  <textarea
-                    name="coverLetter"
+                <Card title="Proposal Content" icon="description">
+                  <TextArea
+                    label="Cover Letter"
+                    required
                     value={formData.coverLetter}
-                    onChange={handleChange}
-                    rows="6"
-                    placeholder="Introduce yourself and explain why you can complete this job..."
-                    className={`${inputStyle} resize-none`}
+                    onChange={(value) => updateField("coverLetter", value)}
+                    onBlur={() => markTouched("coverLetter")}
+                    error={getFieldError("coverLetter")}
+                    placeholder="Introduce yourself and explain why you are suitable for this job..."
+                    rows={6}
                   />
+                </Card>
 
-                  <p className="mt-2 text-xs text-gray-500">
-                    Minimum 30 characters.
-                  </p>
-                </section>
-
-                <section className={`${cardStyle} p-6 md:p-8`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
-                      <span className="material-symbols-outlined text-xl text-[#00F0FF]">
-                        payments
-                      </span>
-                    </div>
-
-                    <div>
-                      <h2 className="text-lg font-bold text-white">
-                        Price & Time
-                      </h2>
-                      <p className="text-sm text-gray-500">
-                        Your proposed budget and delivery time.
-                      </p>
-                    </div>
-                  </div>
-
+                <Card title="Price & Timeline" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                    <div>
-                      <label className={labelStyle}>Proposed Budget</label>
-                      <input
-                        type="number"
-                        name="proposedBudget"
-                        value={formData.proposedBudget}
-                        onChange={handleChange}
-                        min="1"
-                        placeholder="500"
-                        className={inputStyle}
-                      />
-                    </div>
+                    <NumberInput
+                      label="Proposed Price"
+                      required
+                      min="0"
+                      value={formData.proposedPrice}
+                      onChange={(value) => updateField("proposedPrice", value)}
+                      onBlur={() => markTouched("proposedPrice")}
+                      error={getFieldError("proposedPrice")}
+                      placeholder="500"
+                    />
 
-                    <div>
-                      <label className={labelStyle}>
-                        Estimated Duration Days
-                      </label>
-                      <input
-                        type="number"
-                        name="estimatedDurationDays"
-                        value={formData.estimatedDurationDays}
-                        onChange={handleChange}
-                        min="1"
-                        step="1"
-                        placeholder="14"
-                        className={inputStyle}
-                      />
-                    </div>
+                    <NumberInput
+                      label="Proposed Timeline Days"
+                      required
+                      min="1"
+                      value={formData.proposedTimelineDays}
+                      onChange={(value) =>
+                        updateField("proposedTimelineDays", value)
+                      }
+                      onBlur={() => markTouched("proposedTimelineDays")}
+                      error={getFieldError("proposedTimelineDays")}
+                      placeholder="14"
+                    />
                   </div>
-                </section>
 
-                <section className={`${cardStyle} p-6 md:p-8`}>
-                  <div className="mb-6 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
-                      <span className="material-symbols-outlined text-xl text-[#00F0FF]">
-                        checklist
+                  <button
+                    type="button"
+                    onClick={syncFromMilestones}
+                    className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                  >
+                    Sync price and timeline from milestones
+                  </button>
+                </Card>
+
+                <Card title="Delivery Plan" icon="task_alt">
+                  <div className="space-y-5">
+                    <TextArea
+                      label="Expected Outputs"
+                      required
+                      value={formData.expectedOutputs}
+                      onChange={(value) =>
+                        updateField("expectedOutputs", value)
+                      }
+                      onBlur={() => markTouched("expectedOutputs")}
+                      error={getFieldError("expectedOutputs")}
+                      placeholder="List the final outputs you will deliver to the client..."
+                      rows={5}
+                    />
+
+                    <TextArea
+                      label="Working Approach"
+                      required
+                      value={formData.workingApproach}
+                      onChange={(value) =>
+                        updateField("workingApproach", value)
+                      }
+                      onBlur={() => markTouched("workingApproach")}
+                      error={getFieldError("workingApproach")}
+                      placeholder="Explain your working method, communication plan, and implementation steps..."
+                      rows={5}
+                    />
+
+                    <TextArea
+                      label="Preliminary Milestone Plan"
+                      required
+                      value={formData.preliminaryMilestonePlan}
+                      onChange={(value) =>
+                        updateField("preliminaryMilestonePlan", value)
+                      }
+                      onBlur={() => markTouched("preliminaryMilestonePlan")}
+                      error={getFieldError("preliminaryMilestonePlan")}
+                      placeholder="Example: Milestone 1: analysis, Milestone 2: implementation, Milestone 3: testing..."
+                      rows={4}
+                    />
+                  </div>
+                </Card>
+
+                <Card title="Milestones" icon="flag">
+                  <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <p className="text-sm font-bold text-cyan-300">
+                      Milestone requirement
+                    </p>
+
+                    <p className="mt-2 text-xs leading-5 text-gray-400">
+                      Each milestone only needs title, payment amount, and
+                      duration days.
+                    </p>
+                  </div>
+
+                  <div className="space-y-5">
+                    {formData.milestones.map((milestone, index) => (
+                      <MilestoneEditor
+                        key={index}
+                        index={index}
+                        milestone={milestone}
+                        canRemove={formData.milestones.length > 1}
+                        onChange={updateMilestone}
+                        onBlur={markMilestoneTouched}
+                        onRemove={removeMilestone}
+                        getError={getMilestoneFieldError}
+                      />
+                    ))}
+
+                    <button
+                      type="button"
+                      onClick={addMilestone}
+                      className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        add
                       </span>
-                    </div>
-
-                    <div>
-                      <h2 className="text-lg font-bold text-white">
-                        Work Plan
-                      </h2>
-                      <p className="text-sm text-gray-500">
-                        Explain how you will complete the job.
-                      </p>
-                    </div>
+                      Add Milestone
+                    </button>
                   </div>
 
-                  <label className={labelStyle}>Work Plan</label>
+                  <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <Info
+                      label="Proposed Price"
+                      value={formatMoney(formData.proposedPrice)}
+                    />
 
-                  <textarea
-                    name="workPlan"
-                    value={formData.workPlan}
-                    onChange={handleChange}
-                    rows="6"
-                    placeholder="Step 1: Analyze requirements. Step 2: Build solution. Step 3: Test and deliver..."
-                    className={`${inputStyle} resize-none`}
-                  />
+                    <Info
+                      label="Milestone Total"
+                      value={formatMoney(milestoneTotal)}
+                    />
 
-                  <p className="mt-2 text-xs text-gray-500">
-                    Minimum 30 characters.
-                  </p>
-                </section>
+                    <Info
+                      label="Difference"
+                      value={formatMoney(priceDifference)}
+                      tone={
+                        Math.abs(priceDifference) < 0.01
+                          ? "green"
+                          : priceDifference > 0
+                          ? "warning"
+                          : "danger"
+                      }
+                    />
+                  </div>
+                </Card>
 
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/expert/jobs/${jobId}`)}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
+                  >
+                    Cancel
+                  </button>
+
                   <button
                     type="submit"
-                    disabled={submitting}
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-8 py-3 text-sm font-bold text-cyan-300 shadow-[0_0_20px_rgba(0,240,255,0.15)] transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={submitting || !isJobOpen}
+                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {submitting ? "Submitting..." : "Submit Proposal"}
                   </button>
                 </div>
               </form>
 
-              {/* Job summary */}
               <aside className="space-y-6">
-                <section className={`${cardStyle} p-6`}>
-                  <h2 className="mb-4 text-lg font-bold text-white">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
                     Job Summary
-                  </h2>
-
-                  <h3 className="text-xl font-bold text-white">
-                    {getJobTitle()}
-                  </h3>
-
-                  <p className="mt-3 line-clamp-5 text-sm leading-6 text-gray-400">
-                    {getJobDescription() || "No description provided."}
                   </p>
 
-                  <div className="mt-6 space-y-5">
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-gray-500">
-                        Client Budget
-                      </p>
-                      <p className="mt-1 text-xl font-bold text-white">
-                        {getBudgetText()}
-                      </p>
-                    </div>
+                  <h2 className="text-xl font-bold text-white">
+                    {getJobTitle(job)}
+                  </h2>
 
-                    <div>
-                      <p className="text-xs uppercase tracking-wider text-gray-500">
-                        Duration
-                      </p>
-                      <p className="mt-1 text-sm font-semibold text-gray-300">
-                        {getDurationText()}
-                      </p>
-                    </div>
+                  <p className="mt-3 text-sm leading-6 text-gray-400">
+                    {getJobDescription(job)}
+                  </p>
+
+                  <div className="mt-5 space-y-3">
+                    <Info label="Client" value={getClientName(job)} />
+
+                    <Info
+                      label="Budget"
+                      value={formatBudget(
+                        getValue(job?.budgetMin, job?.BudgetMin),
+                        getValue(job?.budgetMax, job?.BudgetMax)
+                      )}
+                    />
+
+                    <Info
+                      label="Duration"
+                      value={
+                        getJobDuration(job)
+                          ? `${getJobDuration(job)} days`
+                          : "N/A"
+                      }
+                    />
+
+                    <Info label="Status" value={getJobStatus(job) || "OPEN"} />
                   </div>
                 </section>
 
-                <section className={`${cardStyle} p-6`}>
-                  <h2 className="mb-4 text-lg font-bold text-white">
-                    Tips for better proposal
-                  </h2>
+                <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
+                  <p className="font-bold">Before submitting</p>
 
-                  <ul className="space-y-3 text-sm leading-6 text-gray-400">
-                    <li>• Explain your relevant experience.</li>
-                    <li>• Give a clear working plan.</li>
-                    <li>• Make your budget reasonable.</li>
-                    <li>• Keep your proposal short and clear.</li>
-                  </ul>
+                  <p className="mt-2 text-sm leading-6">
+                    Make sure your milestone total matches your proposed price
+                    and your timeline is realistic.
+                  </p>
                 </section>
               </aside>
             </div>
@@ -409,4 +519,320 @@ export default function SubmitProposalPage() {
       </div>
     </ExpertLayout>
   );
+}
+
+function Card({ title, icon, children }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8">
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+          <span className="material-symbols-outlined text-xl text-[#00F0FF]">
+            {icon}
+          </span>
+        </div>
+
+        <h2 className="text-lg font-bold text-white">{title}</h2>
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function MilestoneEditor({
+  index,
+  milestone,
+  canRemove,
+  onChange,
+  onBlur,
+  onRemove,
+  getError,
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-extrabold text-white">
+            Milestone {index + 1}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-500">
+            Define title, payment amount and estimated duration.
+          </p>
+        </div>
+
+        {canRemove && (
+          <button
+            type="button"
+            onClick={() => onRemove(index)}
+            className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_180px_180px]">
+        <TextInput
+          label="Title"
+          required
+          value={milestone.title}
+          onChange={(value) => onChange(index, "title", value)}
+          onBlur={() => onBlur(index, "title")}
+          error={getError(index, "title")}
+          placeholder="Milestone title"
+        />
+
+        <NumberInput
+          label="Amount"
+          required
+          min="0"
+          value={milestone.amount}
+          onChange={(value) => onChange(index, "amount", value)}
+          onBlur={() => onBlur(index, "amount")}
+          error={getError(index, "amount")}
+          placeholder="200"
+        />
+
+        <NumberInput
+          label="Duration Days"
+          required
+          min="1"
+          value={milestone.durationDays}
+          onChange={(value) => onChange(index, "durationDays", value)}
+          onBlur={() => onBlur(index, "durationDays")}
+          error={getError(index, "durationDays")}
+          placeholder="7"
+        />
+      </div>
+    </div>
+  );
+}
+
+function TextInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <input
+        type="text"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+  rows = 4,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        rows={rows}
+        placeholder={placeholder}
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function NumberInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+  min = "0",
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <input
+        type="number"
+        min={min}
+        step="1"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function FieldError({ message }) {
+  if (!message) return null;
+
+  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
+}
+
+function Info({ label, value, tone = "default" }) {
+  const toneClass =
+    tone === "green"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : tone === "warning"
+      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-200"
+      : tone === "danger"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-white/10 bg-white/[0.03] text-white";
+
+  return (
+    <div className={`rounded-xl border p-4 ${toneClass}`}>
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+
+      <p className="mt-1 font-bold">{value}</p>
+    </div>
+  );
+}
+
+function Alert({ type, title, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : type === "warning"
+      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
+
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
+      <p className="font-bold">{title}</p>
+      <p className="mt-1">{message}</p>
+    </div>
+  );
+}
+
+function formatBudget(min, max) {
+  const minValue = Number(min || 0);
+  const maxValue = Number(max || 0);
+
+  if (minValue && maxValue) return `$${minValue} - $${maxValue}`;
+  if (minValue) return `From $${minValue}`;
+  if (maxValue) return `Up to $${maxValue}`;
+
+  return "Budget not set";
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function unwrapData(response) {
+  if (!response) return response;
+  if (response.data?.data) return response.data.data;
+  if (response.data) return response.data;
+  return response;
+}
+
+function getValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
+}
+
+function getJobTitle(job) {
+  return getValue(job?.title, job?.Title, job?.projectTitle, "Untitled Job");
+}
+
+function getJobDescription(job) {
+  return getValue(
+    job?.description,
+    job?.Description,
+    job?.projectDescription,
+    "No description."
+  );
+}
+
+function getClientName(job) {
+  return getValue(
+    job?.clientName,
+    job?.ClientName,
+    job?.client?.fullName,
+    job?.Client?.FullName,
+    "Client"
+  );
+}
+
+function getJobStatus(job) {
+  return getValue(job?.status, job?.Status, "OPEN");
+}
+
+function getJobDuration(job) {
+  return getValue(
+    job?.durationDays,
+    job?.DurationDays,
+    job?.projectDurationDays,
+    job?.ProjectDurationDays,
+    ""
+  );
+}
+
+function getFriendlyError(err, fallback) {
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || fallback;
 }

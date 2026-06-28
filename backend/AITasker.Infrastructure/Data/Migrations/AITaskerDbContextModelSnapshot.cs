@@ -22,6 +22,60 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
+                {
+                    b.Property<int>("AdminAuditLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AdminAuditLogId"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("AdminId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EntityName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NewValue")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("OldValue")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.HasKey("AdminAuditLogId");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("AdminId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("EntityId");
+
+                    b.HasIndex("EntityName");
+
+                    b.ToTable("AdminAuditLogs", (string)null);
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
                 {
                     b.Property<int>("BusinessProfileId")
@@ -89,6 +143,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("BusinessProfileId");
 
+                    b.HasIndex("BusinessEmail")
+                        .IsUnique()
+                        .HasFilter("[BusinessEmail] IS NOT NULL");
+
                     b.HasIndex("ClientProfileId")
                         .IsUnique();
 
@@ -118,6 +176,26 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<int>("FreeAiGenerationCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
+
+                    b.Property<int>("FreeJobPostCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("PaidAiGenerationCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("PaidJobPostCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("PhoneNumber")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -133,6 +211,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int");
 
                     b.HasKey("ClientProfileId");
+
+                    b.HasIndex("PhoneNumber")
+                        .IsUnique();
 
                     b.HasIndex("UserId")
                         .IsUnique();
@@ -710,13 +791,24 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("CertificateIssuer")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(255)")
+                        .HasDefaultValue("");
 
                     b.Property<string>("CertificateName")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
+                        .HasColumnType("nvarchar(255)")
+                        .HasDefaultValue("");
+
+                    b.Property<string>("CertificateType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("OTHER");
 
                     b.Property<string>("CertificateUrl")
                         .IsRequired()
@@ -732,6 +824,17 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<string>("DetectedCertificateName")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("DetectedHolderName")
+                        .HasMaxLength(255)
+                        .HasColumnType("nvarchar(255)");
+
+                    b.Property<DateTime?>("DetectedIssuedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DetectedIssuedDateText")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("DetectedIssuer")
                         .HasMaxLength(255)
@@ -757,9 +860,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)")
-                        .HasDefaultValue("NEEDS_EVIDENCE");
+                        .HasDefaultValue("NEEDS_REVIEW");
 
                     b.HasKey("ExpertCertificateId");
+
+                    b.HasIndex("CertificateUrl");
 
                     b.HasIndex("ExpertProfileId", "CertificateUrl")
                         .IsUnique();
@@ -893,6 +998,82 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("ExpertProfiles", (string)null);
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfileScoringPolicy", b =>
+                {
+                    b.Property<int>("ExpertProfileScoringPolicyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertProfileScoringPolicyId"));
+
+                    b.Property<decimal>("AiSkillMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("BioMinimumLength")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("CertificateMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("CertificateUnverifiedMaxProfileScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExperienceMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("GitHubMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<decimal>("LinkedInMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("MaxCertificates")
+                        .HasColumnType("int");
+
+                    b.Property<int>("MaxReviewSubmissions")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("PassThreshold")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("PortfolioMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<decimal>("ProfileCompletenessMaxScore")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("ReviewLockDurationHours")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("RiskMaxPenalty")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("SkillsMinimumLength")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("ExpertProfileScoringPolicyId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.ToTable("ExpertProfileScoringPolicies", (string)null);
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
                 {
                     b.Property<int>("ExpertSkillId")
@@ -931,6 +1112,187 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ExpertSkills", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobCreditPackage", b =>
+                {
+                    b.Property<int>("JobCreditPackageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobCreditPackageId"));
+
+                    b.Property<int>("AiGenerationCredits")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)")
+                        .HasDefaultValue("VND");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("DisplayOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("JobPostCredits")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("JobCreditPackageId");
+
+                    b.HasIndex("DisplayOrder");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("PackageName")
+                        .IsUnique();
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.ToTable("JobCreditPackages", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_JobCreditPackages_CreditsAndPrice", "[JobPostCredits] > 0 AND [AiGenerationCredits] >= 0 AND [Price] >= 0");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            JobCreditPackageId = 1,
+                            AiGenerationCredits = 10,
+                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "VND",
+                            Description = "3 job posting credits and 10 AI generation credits.",
+                            DisplayOrder = 1,
+                            IsActive = true,
+                            JobPostCredits = 3,
+                            PackageName = "Basic",
+                            Price = 49000m
+                        },
+                        new
+                        {
+                            JobCreditPackageId = 2,
+                            AiGenerationCredits = 35,
+                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "VND",
+                            Description = "10 job posting credits and 35 AI generation credits.",
+                            DisplayOrder = 2,
+                            IsActive = true,
+                            JobPostCredits = 10,
+                            PackageName = "Pro",
+                            Price = 149000m
+                        },
+                        new
+                        {
+                            JobCreditPackageId = 3,
+                            AiGenerationCredits = 120,
+                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Currency = "VND",
+                            Description = "30 job posting credits and 120 AI generation credits.",
+                            DisplayOrder = 3,
+                            IsActive = true,
+                            JobPostCredits = 30,
+                            PackageName = "Business",
+                            Price = 399000m
+                        });
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobCreditPackagePurchase", b =>
+                {
+                    b.Property<int>("JobCreditPackagePurchaseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobCreditPackagePurchaseId"));
+
+                    b.Property<int>("AiGenerationCreditsAdded")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClientProfileId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("DescriptionSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("JobCreditPackageId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("JobPostCreditsAdded")
+                        .HasColumnType("int");
+
+                    b.Property<string>("PackageNameSnapshot")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("PricePaid")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("PurchasedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("TransactionReferenceId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("JobCreditPackagePurchaseId");
+
+                    b.HasIndex("ClientProfileId");
+
+                    b.HasIndex("JobCreditPackageId");
+
+                    b.HasIndex("PurchasedAt");
+
+                    b.HasIndex("TransactionReferenceId")
+                        .IsUnique();
+
+                    b.ToTable("JobCreditPackagePurchases", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_JobCreditPackagePurchases_CreditsAndPrice", "[JobPostCreditsAdded] > 0 AND [AiGenerationCreditsAdded] >= 0 AND [PricePaid] >= 0");
+
+                            t.HasCheckConstraint("CK_JobCreditPackagePurchases_Status", "[Status] IN ('SUCCESS','FAILED','CANCELLED')");
+                        });
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
@@ -979,10 +1341,20 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<string>("PostingChargeType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("NONE");
+
                     b.Property<string>("ProjectType")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -1004,6 +1376,86 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("Status", "Deadline");
 
                     b.ToTable("JobPostings", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobPostingAiPolicy", b =>
+                {
+                    b.Property<int>("JobPostingAiPolicyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("JobPostingAiPolicyId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("InitialFreeAiGenerationCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3);
+
+                    b.Property<int>("InitialFreeJobPostCredits")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("MaxDraftJobsPerClient")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(10);
+
+                    b.Property<int>("MaxRecommendationResults")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(50);
+
+                    b.Property<int>("MaxSkillsPerJob")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(8);
+
+                    b.Property<int>("MaxSuggestedSkills")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(8);
+
+                    b.Property<int>("MinimumRecommendationMatchScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1);
+
+                    b.Property<int>("MinimumSkillRelevanceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(60);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("JobPostingAiPolicyId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.ToTable("JobPostingAiPolicies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Credits", "[InitialFreeJobPostCredits] >= 0 AND [InitialFreeAiGenerationCredits] >= 0");
+
+                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Limits", "[MaxDraftJobsPerClient] BETWEEN 1 AND 100 AND [MaxSkillsPerJob] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] BETWEEN 1 AND 30 AND [MaxSuggestedSkills] <= [MaxSkillsPerJob]");
+
+                            t.HasCheckConstraint("CK_JobPostingAiPolicies_RecommendationResults", "[MaxRecommendationResults] BETWEEN 1 AND 100");
+
+                            t.HasCheckConstraint("CK_JobPostingAiPolicies_Scores", "[MinimumSkillRelevanceScore] BETWEEN 0 AND 100 AND [MinimumRecommendationMatchScore] BETWEEN 0 AND 100");
+                        });
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
@@ -1245,6 +1697,48 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("PasswordResetTokens", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.PlatformFeePolicy", b =>
+                {
+                    b.Property<int>("PlatformFeePolicyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PlatformFeePolicyId"));
+
+                    b.Property<decimal>("BusinessClientFeeRate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExpertFeeRate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(15.00m);
+
+                    b.Property<decimal>("IndividualClientFeeRate")
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("PlatformFeePolicyId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.ToTable("PlatformFeePolicies", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
@@ -1755,6 +2249,13 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("BanReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime?>("BannedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1772,6 +2273,21 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
+                    b.Property<DateTime?>("LastLockedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("LockReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("LockoutCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("LockoutEnd")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -1782,6 +2298,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<string>("Status")
                         .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("StatusBeforeSuspension")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
@@ -1796,6 +2316,12 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("GoogleId")
                         .IsUnique()
                         .HasFilter("[GoogleId] IS NOT NULL");
+
+                    b.HasIndex("LockoutEnd");
+
+                    b.HasIndex("Role");
+
+                    b.HasIndex("Status");
 
                     b.ToTable("Users", (string)null);
                 });
@@ -1928,6 +2454,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("WithdrawalRequests", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "Admin")
+                        .WithMany()
+                        .HasForeignKey("AdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Admin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
@@ -2189,6 +2725,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.ExpertProfileScoringPolicy", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.ExpertSkill", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
@@ -2208,6 +2754,35 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("Skill");
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.JobCreditPackage", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobCreditPackagePurchase", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
+                        .WithMany()
+                        .HasForeignKey("ClientProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("AITasker.Domain.Entities.JobCreditPackage", "JobCreditPackage")
+                        .WithMany("Purchases")
+                        .HasForeignKey("JobCreditPackageId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ClientProfile");
+
+                    b.Navigation("JobCreditPackage");
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.ClientProfile", "ClientProfile")
@@ -2217,6 +2792,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("ClientProfile");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobPostingAiPolicy", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.JobSkill", b =>
@@ -2269,6 +2854,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.PlatformFeePolicy", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>
@@ -2460,6 +3055,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("Certificates");
 
                     b.Navigation("ExpertSkills");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.JobCreditPackage", b =>
+                {
+                    b.Navigation("Purchases");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.JobPosting", b =>

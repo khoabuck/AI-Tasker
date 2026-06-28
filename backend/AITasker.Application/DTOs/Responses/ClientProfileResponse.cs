@@ -20,6 +20,14 @@ public class ClientProfileResponse
 
     public decimal PlatformFeeRate { get; set; }
 
+    public int FreeJobPostCredits { get; set; }
+
+    public int PaidJobPostCredits { get; set; }
+
+    public int FreeAiGenerationCredits { get; set; }
+
+    public int PaidAiGenerationCredits { get; set; }
+
     public string UserStatus { get; set; } = string.Empty;
 
     public BusinessProfileResponse? BusinessProfile { get; set; }

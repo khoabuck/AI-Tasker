@@ -161,7 +161,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             : string.Join(
                 "\n",
                 request.Certificates.Select((c, index) =>
-                    $"{index + 1}. Name: {c.CertificateName}; Issuer: {c.CertificateIssuer}; Url: {c.CertificateUrl}; IssuedAt: {c.IssuedAt:yyyy-MM-dd}"
+                    $"{index + 1}. Type: {c.CertificateType}; Url: {c.CertificateUrl}"
                 )
             );
 
@@ -232,12 +232,12 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         - Do not approve only because many skills are listed.
         - Use Backend URL Inspection Evidence as the source of truth for whether links are reachable.
         - The yearsOfExperience field is claimed by the expert. Do not automatically trust it.
-        - The frontend and backend require at least 2 of these 3 proof links: Portfolio URL, LinkedIn URL, GitHub URL.
-        - At least one certificate is required.
+        - Portfolio URL and GitHub URL are required proof links. LinkedIn URL is optional and should not block approval by itself.
+        - Certificates are optional. If certificates are provided, the user only provides certificate type and URL; name, issuer, and issued date may be detected from page content by backend.
         - APPROVED only if profileScore is at least 70 and the profile is AI-related with credible supporting evidence.
         - Do not approve based only on user-written text.
-        - Even if the URL format is valid, only approve the profile when the proof links and certificate evidence are reachable and relevant.
-        - If proof links or certificate URLs are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION.
+        - Even if the URL format is valid, only approve the profile when the required proof links are reachable and relevant. Certificate evidence can increase confidence but missing certificates should not automatically fail a profile.
+        - If required proof links are fake, unreachable, unrelated, blocked, timed out, rate-limited, or cannot support the claimed experience, return NEEDS_CORRECTION. If an optional certificate URL is blocked, mention it as weak certificate evidence instead of treating certificate absence as an automatic failure.
         - If a required proof URL returns 404, 500, invalid content, or clearly unrelated content, return NEEDS_CORRECTION.
         - If URL content does not match the claimed certificate, skill, portfolio, or AI experience, return NEEDS_CORRECTION.
         - If the expert claims 5+ years but has weak evidence, return NEEDS_CORRECTION.

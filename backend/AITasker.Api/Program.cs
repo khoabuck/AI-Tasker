@@ -180,6 +180,12 @@ builder.Services.AddAuthorization();
 // =========================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 
+builder.Services.AddScoped<IAdminAuditLogRepository, AdminAuditLogRepository>();
+
+builder.Services.AddScoped<IPlatformFeePolicyRepository, PlatformFeePolicyRepository>();
+
+builder.Services.AddScoped<IExpertProfileScoringPolicyRepository, ExpertProfileScoringPolicyRepository>();
+
 builder.Services.AddScoped<
     IEmailVerificationTokenRepository,
     EmailVerificationTokenRepository
@@ -210,6 +216,18 @@ builder.Services.AddScoped<IClientProfileService, ClientProfileService>();
 builder.Services.AddScoped<IExpertProfileService, ExpertProfileService>();
 
 // =========================
+// Admin User Management + Audit Log
+// =========================
+builder.Services.AddScoped<IAdminUserService, AdminUserService>();
+builder.Services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
+
+builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>();
+
+builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
+
+builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
+
+// =========================
 // Upload Images - Cloudinary
 // =========================
 builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
@@ -236,11 +254,17 @@ builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
 
+builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
+
 // =========================
 // BE2 - AI Job Assistant
 // =========================
 builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
 builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
+builder.Services.AddHttpClient<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
 
 // =========================
 // BE2 - Proposal / Contract / Project / Milestone Flow
