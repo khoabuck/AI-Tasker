@@ -46,6 +46,10 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<ProposalMilestoneDraft> ProposalMilestoneDrafts { get; set; }
 
+    public DbSet<ProposalCreditPackage> ProposalCreditPackages => Set<ProposalCreditPackage>();
+
+    public DbSet<ProposalCreditPackagePurchase> ProposalCreditPackagePurchases => Set<ProposalCreditPackagePurchase>();
+
     public DbSet<Conversation> Conversations { get; set; }
 
     public DbSet<ConversationMessage> ConversationMessages { get; set; }
@@ -59,6 +63,10 @@ public class AITaskerDbContext : DbContext
     public DbSet<Milestone> Milestones { get; set; }
 
     public DbSet<Wallet> Wallets { get; set; }
+
+    public DbSet<PlatformWallet> PlatformWallets { get; set; }
+
+    public DbSet<PlatformTransaction> PlatformTransactions { get; set; }
 
     public DbSet<DepositOrder> DepositOrders { get; set; }
 
@@ -81,6 +89,8 @@ public class AITaskerDbContext : DbContext
     public DbSet<JobCreditPackage> JobCreditPackages => Set<JobCreditPackage>();
 
     public DbSet<JobCreditPackagePurchase> JobCreditPackagePurchases => Set<JobCreditPackagePurchase>();
+
+    public DbSet<MarketplaceWorkflowPolicy> MarketplaceWorkflowPolicies => Set<MarketplaceWorkflowPolicy>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -248,6 +258,56 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.IsActive);
 
             entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        // =========================
+        // MarketplaceWorkflowPolicies
+        // =========================
+        modelBuilder.Entity<MarketplaceWorkflowPolicy>(entity =>
+        {
+            entity.ToTable("MarketplaceWorkflowPolicies");
+
+            entity.HasKey(x => x.MarketplaceWorkflowPolicyId);
+
+            entity.Property(x => x.MinimumWithdrawalAmount)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.WithdrawalFeeRate)
+                .HasColumnType("decimal(18,4)");
+
+            entity.Property(x => x.MinimumDepositAmount)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.MaximumDepositAmount)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.UpdateReason)
+                .HasMaxLength(500);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasData(new MarketplaceWorkflowPolicy
+            {
+                MarketplaceWorkflowPolicyId = 1,
+                ProposalDraftLimit = 10,
+                ProposalMilestoneLimit = 10,
+                FreeProposalSubmitCount = 1,
+                ResubmitNoteMaxLength = 1000,
+                EscrowLockWindowHours = 24,
+                ExpertMaxActiveProjects = 3,
+                DeliverableReviewWindowHours = 24,
+                DeliverableAutoApproveGraceHours = 6,
+                MinimumWithdrawalAmount = 1000m,
+                WithdrawalFeeRate = 0.10m,
+                MinimumDepositAmount = 1000m,
+                MaximumDepositAmount = 500000000m,
+                DisputeLostWarningThreshold = 3,
+                IsActive = true,
+                UpdatedByAdminId = null,
+                UpdateReason = "Default marketplace workflow policy.",
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
         });
 
 
@@ -1356,6 +1416,176 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // ProposalCreditPackages
+        // =========================
+        modelBuilder.Entity<ProposalCreditPackage>(entity =>
+        {
+            entity.ToTable("ProposalCreditPackages", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProposalCreditPackages_CreditsAndPrice",
+                    "[ProposalSubmitCredits] > 0 AND [Price] >= 0"
+                );
+            });
+
+            entity.HasKey(x => x.ProposalCreditPackageId);
+
+            entity.Property(x => x.PackageName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(x => x.PackageName)
+                .IsUnique();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalSubmitCredits)
+                .IsRequired();
+
+            entity.Property(x => x.Price)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Currency)
+                .HasMaxLength(10)
+                .HasDefaultValue("VND")
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.DisplayOrder)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
+
+            entity.HasIndex(x => x.DisplayOrder);
+
+            entity.HasData(
+                new ProposalCreditPackage
+                {
+                    ProposalCreditPackageId = 1,
+                    PackageName = "Basic",
+                    Description = "5 proposal submit credits.",
+                    ProposalSubmitCredits = 5,
+                    Price = 49000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 1,
+                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new ProposalCreditPackage
+                {
+                    ProposalCreditPackageId = 2,
+                    PackageName = "Pro",
+                    Description = "20 proposal submit credits.",
+                    ProposalSubmitCredits = 20,
+                    Price = 149000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 2,
+                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
+                },
+                new ProposalCreditPackage
+                {
+                    ProposalCreditPackageId = 3,
+                    PackageName = "Business",
+                    Description = "60 proposal submit credits.",
+                    ProposalSubmitCredits = 60,
+                    Price = 399000m,
+                    Currency = "VND",
+                    IsActive = true,
+                    DisplayOrder = 3,
+                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
+                }
+            );
+        });
+
+        // =========================
+        // ProposalCreditPackagePurchases
+        // =========================
+        modelBuilder.Entity<ProposalCreditPackagePurchase>(entity =>
+        {
+            entity.ToTable("ProposalCreditPackagePurchases", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProposalCreditPackagePurchases_CreditsAndPrice",
+                    "[ProposalSubmitCreditsAdded] > 0 AND [PricePaid] >= 0"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_ProposalCreditPackagePurchases_Status",
+                    "[Status] IN ('SUCCESS','FAILED','CANCELLED')"
+                );
+            });
+
+            entity.HasKey(x => x.ProposalCreditPackagePurchaseId);
+
+            entity.Property(x => x.PackageNameSnapshot)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.DescriptionSnapshot)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalSubmitCreditsAdded)
+                .IsRequired();
+
+            entity.Property(x => x.PricePaid)
+                .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(x => x.Currency)
+                .HasMaxLength(10)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.TransactionReferenceId)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.HasIndex(x => x.TransactionReferenceId)
+                .IsUnique();
+
+            entity.Property(x => x.PurchasedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.ExpertProfile)
+                .WithMany()
+                .HasForeignKey(x => x.ExpertProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ProposalCreditPackage)
+                .WithMany(x => x.Purchases)
+                .HasForeignKey(x => x.ProposalCreditPackageId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.ExpertProfileId);
+
+            entity.HasIndex(x => x.ProposalCreditPackageId);
+
+            entity.HasIndex(x => x.PurchasedAt);
+        });
+
+        // =========================
         // Conversation
         // =========================
         modelBuilder.Entity<Conversation>(entity =>
@@ -1946,6 +2176,106 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(e => e.PaymentLinkId)
                 .HasFilter("[PaymentLinkId] IS NOT NULL");
+        });
+
+        // =========================
+        // PlatformWallet
+        // =========================
+        modelBuilder.Entity<PlatformWallet>(entity =>
+        {
+            entity.ToTable("PlatformWallets", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_PlatformWallets_Balances",
+                    "[AvailableBalance] >= 0 AND [TotalRevenue] >= 0 AND [PlatformFeeRevenue] >= 0 AND [WithdrawalFeeRevenue] >= 0");
+            });
+
+            entity.HasKey(x => x.PlatformWalletId);
+
+            entity.Property(x => x.WalletCode)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.HasIndex(x => x.WalletCode)
+                .IsUnique();
+
+            entity.Property(x => x.AvailableBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.TotalRevenue)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.PlatformFeeRevenue)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.WithdrawalFeeRevenue)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.AdjustmentBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.HasData(new PlatformWallet
+            {
+                PlatformWalletId = 1,
+                WalletCode = "MAIN",
+                AvailableBalance = 0,
+                TotalRevenue = 0,
+                PlatformFeeRevenue = 0,
+                WithdrawalFeeRevenue = 0,
+                AdjustmentBalance = 0,
+                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+            });
+        });
+
+        // =========================
+        // PlatformTransaction
+        // =========================
+        modelBuilder.Entity<PlatformTransaction>(entity =>
+        {
+            entity.ToTable("PlatformTransactions", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_PlatformTransactions_Amount",
+                    "[Amount] > 0");
+            });
+
+            entity.HasKey(x => x.PlatformTransactionId);
+
+            entity.Property(x => x.Type)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.Description)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.ReferenceId)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Amount)
+                .HasColumnType("decimal(18,2)");
+
+            entity.HasIndex(x => x.Type);
+
+            entity.HasIndex(x => x.Status);
+
+            entity.HasIndex(x => x.ReferenceId);
+
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.HasIndex(x => x.ContractId);
+
+            entity.HasIndex(x => x.WithdrawalRequestId);
+
+            entity.HasOne(x => x.PlatformWallet)
+                .WithMany(x => x.Transactions)
+                .HasForeignKey(x => x.PlatformWalletId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         // =========================

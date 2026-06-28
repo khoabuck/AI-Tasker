@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260628084922_AddPlatformWalletLedger")]
+    partial class AddPlatformWalletLedger
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1491,99 +1494,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("JobSkills", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.MarketplaceWorkflowPolicy", b =>
-                {
-                    b.Property<int>("MarketplaceWorkflowPolicyId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MarketplaceWorkflowPolicyId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DeliverableAutoApproveGraceHours")
-                        .HasColumnType("int");
-
-                    b.Property<int>("DeliverableReviewWindowHours")
-                        .HasColumnType("int");
-
-                    b.Property<int>("DisputeLostWarningThreshold")
-                        .HasColumnType("int");
-
-                    b.Property<int>("EscrowLockWindowHours")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ExpertMaxActiveProjects")
-                        .HasColumnType("int");
-
-                    b.Property<int>("FreeProposalSubmitCount")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<decimal>("MaximumDepositAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("MinimumDepositAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("MinimumWithdrawalAmount")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ProposalDraftLimit")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProposalMilestoneLimit")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ResubmitNoteMaxLength")
-                        .HasColumnType("int");
-
-                    b.Property<string>("UpdateReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.Property<decimal>("WithdrawalFeeRate")
-                        .HasColumnType("decimal(18,4)");
-
-                    b.HasKey("MarketplaceWorkflowPolicyId");
-
-                    b.HasIndex("IsActive");
-
-                    b.ToTable("MarketplaceWorkflowPolicies", (string)null);
-
-                    b.HasData(
-                        new
-                        {
-                            MarketplaceWorkflowPolicyId = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DeliverableAutoApproveGraceHours = 6,
-                            DeliverableReviewWindowHours = 24,
-                            DisputeLostWarningThreshold = 3,
-                            EscrowLockWindowHours = 24,
-                            ExpertMaxActiveProjects = 3,
-                            FreeProposalSubmitCount = 1,
-                            IsActive = true,
-                            MaximumDepositAmount = 500000000m,
-                            MinimumDepositAmount = 1000m,
-                            MinimumWithdrawalAmount = 1000m,
-                            ProposalDraftLimit = 10,
-                            ProposalMilestoneLimit = 10,
-                            ResubmitNoteMaxLength = 1000,
-                            UpdateReason = "Default marketplace workflow policy.",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            WithdrawalFeeRate = 0.10m
-                        });
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.Milestone", b =>
                 {
                     b.Property<int>("MilestoneId")
@@ -2187,178 +2097,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                             t.HasCheckConstraint("CK_Proposals_Price_Timeline", "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
                             t.HasCheckConstraint("CK_Proposals_Status", "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
-                        });
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalCreditPackage", b =>
-                {
-                    b.Property<int>("ProposalCreditPackageId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalCreditPackageId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)")
-                        .HasDefaultValue("VND");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("DisplayOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.Property<bool>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("PackageName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<decimal>("Price")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ProposalSubmitCredits")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.HasKey("ProposalCreditPackageId");
-
-                    b.HasIndex("DisplayOrder");
-
-                    b.HasIndex("IsActive");
-
-                    b.HasIndex("PackageName")
-                        .IsUnique();
-
-                    b.HasIndex("UpdatedByAdminId");
-
-                    b.ToTable("ProposalCreditPackages", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProposalCreditPackages_CreditsAndPrice", "[ProposalSubmitCredits] > 0 AND [Price] >= 0");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            ProposalCreditPackageId = 1,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "5 proposal submit credits.",
-                            DisplayOrder = 1,
-                            IsActive = true,
-                            PackageName = "Basic",
-                            Price = 49000m,
-                            ProposalSubmitCredits = 5
-                        },
-                        new
-                        {
-                            ProposalCreditPackageId = 2,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "20 proposal submit credits.",
-                            DisplayOrder = 2,
-                            IsActive = true,
-                            PackageName = "Pro",
-                            Price = 149000m,
-                            ProposalSubmitCredits = 20
-                        },
-                        new
-                        {
-                            ProposalCreditPackageId = 3,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "60 proposal submit credits.",
-                            DisplayOrder = 3,
-                            IsActive = true,
-                            PackageName = "Business",
-                            Price = 399000m,
-                            ProposalSubmitCredits = 60
-                        });
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalCreditPackagePurchase", b =>
-                {
-                    b.Property<int>("ProposalCreditPackagePurchaseId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalCreditPackagePurchaseId"));
-
-                    b.Property<string>("Currency")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("nvarchar(10)");
-
-                    b.Property<string>("DescriptionSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("ExpertProfileId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("PackageNameSnapshot")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<decimal>("PricePaid")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<int>("ProposalCreditPackageId")
-                        .HasColumnType("int");
-
-                    b.Property<int>("ProposalSubmitCreditsAdded")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("PurchasedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("TransactionReferenceId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("ProposalCreditPackagePurchaseId");
-
-                    b.HasIndex("ExpertProfileId");
-
-                    b.HasIndex("ProposalCreditPackageId");
-
-                    b.HasIndex("PurchasedAt");
-
-                    b.HasIndex("TransactionReferenceId")
-                        .IsUnique();
-
-                    b.ToTable("ProposalCreditPackagePurchases", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProposalCreditPackagePurchases_CreditsAndPrice", "[ProposalSubmitCreditsAdded] > 0 AND [PricePaid] >= 0");
-
-                            t.HasCheckConstraint("CK_ProposalCreditPackagePurchases_Status", "[Status] IN ('SUCCESS','FAILED','CANCELLED')");
                         });
                 });
 
@@ -3328,35 +3066,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("JobPosting");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalCreditPackage", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("UpdatedByAdmin");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalCreditPackagePurchase", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.ExpertProfile", "ExpertProfile")
-                        .WithMany()
-                        .HasForeignKey("ExpertProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("AITasker.Domain.Entities.ProposalCreditPackage", "ProposalCreditPackage")
-                        .WithMany("Purchases")
-                        .HasForeignKey("ProposalCreditPackageId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ExpertProfile");
-
-                    b.Navigation("ProposalCreditPackage");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.ProposalMilestoneDraft", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.Proposal", "Proposal")
@@ -3525,11 +3234,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("ProjectContract");
 
                     b.Navigation("ProposalVersions");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.ProposalCreditPackage", b =>
-                {
-                    b.Navigation("Purchases");
                 });
 #pragma warning restore 612, 618
         }

@@ -397,6 +397,277 @@ namespace AITasker.Infrastructure.Dashboards
             return result;
         }
 
+        public async Task<AdminFinanceOverviewResponse> GetFinanceOverviewAsync()
+        {
+            var platformWallet = await _context.PlatformWallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.WalletCode == "MAIN");
+
+            var wallets = await _context.Wallets
+                .AsNoTracking()
+                .ToListAsync();
+
+            var escrows = await _context.Escrows
+                .AsNoTracking()
+                .ToListAsync();
+
+            var withdrawalRequests = await _context.WithdrawalRequests
+                .AsNoTracking()
+                .ToListAsync();
+
+            return new AdminFinanceOverviewResponse
+            {
+                GeneratedAt = DateTime.UtcNow,
+
+                PlatformAvailableBalance = platformWallet?.AvailableBalance ?? 0,
+                PlatformTotalRevenue = platformWallet?.TotalRevenue ?? 0,
+                PlatformFeeRevenue = platformWallet?.PlatformFeeRevenue ?? 0,
+                WithdrawalFeeRevenue = platformWallet?.WithdrawalFeeRevenue ?? 0,
+                AdjustmentBalance = platformWallet?.AdjustmentBalance ?? 0,
+
+                TotalUserAvailableBalance = wallets.Sum(x => x.AvailableBalance),
+                TotalUserLockedBalance = wallets.Sum(x => x.LockedBalance),
+                TotalExpertEarnings = wallets.Sum(x => x.TotalEarning),
+
+                TotalEscrowLocked = escrows
+                    .Where(x => IsStatus(x.Status, "LOCKED"))
+                    .Sum(x => x.Amount),
+
+                TotalEscrowFrozen = escrows
+                    .Where(x => IsStatus(x.Status, "FROZEN"))
+                    .Sum(x => x.Amount),
+
+                TotalEscrowReleased = escrows
+                    .Where(x => IsStatus(x.Status, "RELEASED"))
+                    .Sum(x => x.Amount),
+
+                TotalEscrowRefunded = escrows
+                    .Where(x => IsStatus(x.Status, "REFUNDED"))
+                    .Sum(x => x.Amount),
+
+                PendingWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "PENDING")),
+
+                PendingWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "PENDING"))
+                    .Sum(x => x.Amount),
+
+                ApprovedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "APPROVED")),
+
+                ApprovedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "APPROVED"))
+                    .Sum(x => x.Amount),
+
+                PaidSimulatedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "PAID_SIMULATED")),
+
+                PaidSimulatedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "PAID_SIMULATED"))
+                    .Sum(x => x.Amount)
+            };
+        }
+
+        public async Task<PlatformWalletResponse> GetPlatformWalletAsync()
+        {
+            var wallet = await _context.PlatformWallets
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.WalletCode == "MAIN");
+
+            if (wallet == null)
+            {
+                return new PlatformWalletResponse
+                {
+                    PlatformWalletId = 0,
+                    WalletCode = "MAIN",
+                    AvailableBalance = 0,
+                    TotalRevenue = 0,
+                    PlatformFeeRevenue = 0,
+                    WithdrawalFeeRevenue = 0,
+                    AdjustmentBalance = 0,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
+                };
+            }
+
+            return new PlatformWalletResponse
+            {
+                PlatformWalletId = wallet.PlatformWalletId,
+                WalletCode = wallet.WalletCode,
+                AvailableBalance = wallet.AvailableBalance,
+                TotalRevenue = wallet.TotalRevenue,
+                PlatformFeeRevenue = wallet.PlatformFeeRevenue,
+                WithdrawalFeeRevenue = wallet.WithdrawalFeeRevenue,
+                AdjustmentBalance = wallet.AdjustmentBalance,
+                CreatedAt = wallet.CreatedAt,
+                UpdatedAt = wallet.UpdatedAt
+            };
+        }
+
+        public async Task<IReadOnlyList<PlatformTransactionResponse>> GetPlatformTransactionsAsync(
+            string? type = null,
+            int take = 100)
+        {
+            take = NormalizeTake(take);
+
+            var query = _context.PlatformTransactions
+                .AsNoTracking()
+                .OrderByDescending(x => x.CreatedAt)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(type))
+            {
+                var normalizedType = type.Trim().ToUpperInvariant();
+                query = query.Where(x => x.Type == normalizedType);
+            }
+
+            var transactions = await query
+                .Take(take)
+                .ToListAsync();
+
+            return transactions
+                .Select(x => new PlatformTransactionResponse
+                {
+                    PlatformTransactionId = x.PlatformTransactionId,
+                    PlatformWalletId = x.PlatformWalletId,
+                    ProjectId = x.ProjectId,
+                    ContractId = x.ContractId,
+                    WithdrawalRequestId = x.WithdrawalRequestId,
+                    UserId = x.UserId,
+                    Type = x.Type,
+                    Amount = x.Amount,
+                    Status = x.Status,
+                    Description = x.Description,
+                    ReferenceId = x.ReferenceId,
+                    CreatedAt = x.CreatedAt
+                })
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<AdminUserWalletResponse>> GetUserWalletsAsync(
+            string? role = null,
+            int take = 100)
+        {
+            take = NormalizeTake(take);
+
+            var query =
+                from wallet in _context.Wallets.AsNoTracking()
+                join user in _context.Users.AsNoTracking()
+                    on wallet.UserId equals user.UserId
+                select new
+                {
+                    Wallet = wallet,
+                    User = user
+                };
+
+            if (!string.IsNullOrWhiteSpace(role))
+            {
+                var normalizedRole = role.Trim().ToUpperInvariant();
+                query = query.Where(x => x.User.Role == normalizedRole);
+            }
+
+            var rows = await query
+                .OrderByDescending(x => x.Wallet.UpdatedAt)
+                .Take(take)
+                .ToListAsync();
+
+            return rows
+                .Select(x => new AdminUserWalletResponse
+                {
+                    WalletId = x.Wallet.WalletId,
+                    UserId = x.User.UserId,
+                    Email = x.User.Email,
+                    FullName = x.User.FullName,
+                    Role = x.User.Role,
+                    UserStatus = x.User.Status,
+                    AvailableBalance = x.Wallet.AvailableBalance,
+                    LockedBalance = x.Wallet.LockedBalance,
+                    TotalEarning = x.Wallet.TotalEarning,
+                    UpdatedAt = x.Wallet.UpdatedAt
+                })
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<AdminRevenueTransactionItemResponse>> GetTransactionsAsync(
+            string? type = null,
+            int take = 100)
+        {
+            take = NormalizeTake(take);
+
+            var query = _context.Transactions
+                .AsNoTracking()
+                .OrderByDescending(x => x.CreatedAt)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(type))
+            {
+                var normalizedType = type.Trim().ToUpperInvariant();
+                query = query.Where(x => x.Type == normalizedType);
+            }
+
+            var transactions = await query
+                .Take(take)
+                .ToListAsync();
+
+            return transactions
+                .Select(MapTransaction)
+                .ToList();
+        }
+
+        public async Task<IReadOnlyList<AdminEscrowFinanceItemResponse>> GetEscrowsAsync(
+            string? status = null,
+            int take = 100)
+        {
+            take = NormalizeTake(take);
+
+            var query =
+                from escrow in _context.Escrows.AsNoTracking()
+                join project in _context.Projects.AsNoTracking()
+                    on escrow.ProjectId equals project.ProjectId
+                join clientProfile in _context.ClientProfiles.AsNoTracking()
+                    on escrow.ClientProfileId equals clientProfile.ClientProfileId
+                join clientUser in _context.Users.AsNoTracking()
+                    on clientProfile.UserId equals clientUser.UserId
+                join milestone in _context.Milestones.AsNoTracking()
+                    on escrow.MilestoneId equals milestone.MilestoneId into milestoneJoin
+                from milestone in milestoneJoin.DefaultIfEmpty()
+                select new
+                {
+                    Escrow = escrow,
+                    Project = project,
+                    ClientUser = clientUser,
+                    Milestone = milestone
+                };
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                var normalizedStatus = status.Trim().ToUpperInvariant();
+                query = query.Where(x => x.Escrow.Status == normalizedStatus);
+            }
+
+            var rows = await query
+                .OrderByDescending(x => x.Escrow.CreatedAt)
+                .Take(take)
+                .ToListAsync();
+
+            return rows
+                .Select(x => new AdminEscrowFinanceItemResponse
+                {
+                    EscrowId = x.Escrow.EscrowId,
+                    ProjectId = x.Escrow.ProjectId,
+                    MilestoneId = x.Escrow.MilestoneId,
+                    ClientProfileId = x.Escrow.ClientProfileId,
+                    ProjectTitle = x.Project.Title,
+                    MilestoneTitle = x.Milestone?.Title,
+                    ClientName = x.ClientUser.FullName,
+                    Amount = x.Escrow.Amount,
+                    Status = x.Escrow.Status,
+                    CreatedAt = x.Escrow.CreatedAt,
+                    UpdatedAt = x.Escrow.UpdatedAt
+                })
+                .ToList();
+        }
+
         private static AdminRevenueTransactionItemResponse MapTransaction(
             Transaction transaction)
         {
@@ -427,6 +698,16 @@ namespace AITasker.Infrastructure.Dashboards
             return transactions
                 .Where(t => normalizedTypes.Contains(Normalize(t.Type)))
                 .Sum(t => Math.Abs(t.Amount));
+        }
+
+        private static int NormalizeTake(int take)
+        {
+            if (take <= 0)
+            {
+                return 100;
+            }
+
+            return Math.Min(take, 500);
         }
 
         private static bool IsStatus(

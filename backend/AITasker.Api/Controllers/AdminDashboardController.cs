@@ -85,5 +85,151 @@ namespace AITasker.Api.Controllers
                 });
             }
         }
+
+        [HttpGet("finance")]
+        public async Task<IActionResult> GetFinanceOverview()
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetFinanceOverviewAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("platform-wallet")]
+        public async Task<IActionResult> GetPlatformWallet()
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetPlatformWalletAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("platform-transactions")]
+        public async Task<IActionResult> GetPlatformTransactions(
+            [FromQuery] string? type,
+            [FromQuery] int take = 100)
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetPlatformTransactionsAsync(type, take);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("user-wallets")]
+        public async Task<IActionResult> GetUserWallets(
+            [FromQuery] string? role,
+            [FromQuery] int take = 100)
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetUserWalletsAsync(role, take);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("transactions")]
+        public async Task<IActionResult> GetTransactions(
+            [FromQuery] string? type,
+            [FromQuery] int take = 100)
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetTransactionsAsync(type, take);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("escrows")]
+        public async Task<IActionResult> GetEscrows(
+            [FromQuery] string? status,
+            [FromQuery] int take = 100)
+        {
+            try
+            {
+                var result = await _adminDashboardService.GetEscrowsAsync(status, take);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
     }
 }
