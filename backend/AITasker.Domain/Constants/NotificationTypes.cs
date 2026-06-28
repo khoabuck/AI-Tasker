@@ -10,6 +10,9 @@ namespace AITasker.Domain.Constants
         public const string ProposalAccepted = "PROPOSAL_ACCEPTED";
         public const string ProposalRejected = "PROPOSAL_REJECTED";
         public const string ProposalWithdrawn = "PROPOSAL_WITHDRAWN";
+        public const string ProposalCreditPackagePurchased = "PROPOSAL_CREDIT_PACKAGE_PURCHASED";
+        public const string ProposalCreditUsed = "PROPOSAL_CREDIT_USED";
+        public const string ProposalCreditLow = "PROPOSAL_CREDIT_LOW";
 
         // Contract
         public const string ContractDraftCreated = "CONTRACT_DRAFT_CREATED";
