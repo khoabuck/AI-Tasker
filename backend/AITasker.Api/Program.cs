@@ -273,6 +273,7 @@ builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.P
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
+builder.Services.AddHostedService<AITasker.Infrastructure.Projects.PendingEscrowDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================

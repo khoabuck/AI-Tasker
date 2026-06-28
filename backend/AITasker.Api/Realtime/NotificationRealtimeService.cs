@@ -23,7 +23,17 @@ namespace AITasker.Api.Realtime
             string title,
             string content,
             string type,
-            DateTime createdAt)
+            DateTime createdAt,
+            string? relatedEntityType = null,
+            int? relatedEntityId = null,
+            int? relatedJobId = null,
+            int? relatedProposalId = null,
+            int? relatedContractId = null,
+            int? relatedProjectId = null,
+            int? relatedMilestoneId = null,
+            int? relatedDeliverableId = null,
+            int? relatedDisputeId = null,
+            int? relatedConversationId = null)
         {
             var createdAtUtc = SpecifyUtc(createdAt);
             var createdAtVietnam = ConvertUtcToVietnamTime(createdAtUtc);
@@ -38,6 +48,18 @@ namespace AITasker.Api.Realtime
                     title,
                     content,
                     type,
+
+                    relatedEntityType,
+                    relatedEntityId,
+                    relatedJobId,
+                    relatedProposalId,
+                    relatedContractId,
+                    relatedProjectId,
+                    relatedMilestoneId,
+                    relatedDeliverableId,
+                    relatedDisputeId,
+                    relatedConversationId,
+                    
                     isRead = false,
                     createdAt = createdAtVietnam,
                     createdAtUtc,

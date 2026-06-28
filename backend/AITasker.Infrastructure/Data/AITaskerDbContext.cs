@@ -864,6 +864,14 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerifiedAt);
 
+            entity.Property(x => x.FreeProposalSubmitUsed)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalSubmitCredits)
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(x => x.CreatedAt)
                 .IsRequired();
 
@@ -1160,7 +1168,7 @@ public class AITaskerDbContext : DbContext
             {
                 t.HasCheckConstraint(
                     "CK_Proposals_Status",
-                    "[Status] IN ('SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN','NOT_SELECTED')");
+                    "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
 
                 t.HasCheckConstraint(
                     "CK_Proposals_Price_Timeline",
@@ -1705,6 +1713,12 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.EscrowLockDeadlineAt);
+
+            entity.Property(e => e.EscrowLockedAt);
+
+            entity.Property(e => e.EscrowExpiredAt);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -1740,6 +1754,10 @@ public class AITaskerDbContext : DbContext
                 "[OrderIndex] > 0");
 
                 t.HasCheckConstraint(
+                "CK_Milestones_DurationDays",
+                "[DurationDays] > 0");
+
+                t.HasCheckConstraint(
                 "CK_Milestones_Revision",
                 "[RevisionUsed] >= 0");
 
@@ -1769,6 +1787,9 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.DurationDays)
                 .IsRequired();
 
             entity.Property(e => e.Status)
@@ -2335,6 +2356,40 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(n => n.Type)
                 .HasMaxLength(50);
+
+            entity.Property(n => n.RelatedEntityType)
+                .HasMaxLength(50);
+
+            entity.Property(n => n.RelatedEntityId);
+
+            entity.Property(n => n.RelatedJobId);
+
+            entity.Property(n => n.RelatedProposalId);
+
+            entity.Property(n => n.RelatedContractId);
+
+            entity.Property(n => n.RelatedProjectId);
+
+            entity.Property(n => n.RelatedMilestoneId);
+
+            entity.Property(n => n.RelatedDeliverableId);
+
+            entity.Property(n => n.RelatedDisputeId);
+
+            entity.Property(n => n.RelatedConversationId);
+
+            entity.HasIndex(n => new
+            {
+                n.RelatedEntityType,
+                n.RelatedEntityId
+            });
+
+            entity.HasIndex(n => n.RelatedConversationId);
+            entity.HasIndex(n => n.RelatedProposalId);
+            entity.HasIndex(n => n.RelatedProjectId);
+            entity.HasIndex(n => n.RelatedMilestoneId);
+            entity.HasIndex(n => n.RelatedDeliverableId);
+            entity.HasIndex(n => n.RelatedDisputeId);
 
             entity.HasOne(n => n.User)
                 .WithMany()

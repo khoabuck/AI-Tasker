@@ -21,5 +21,9 @@ namespace AITasker.Application.DTOs.Responses
         public string? AttachmentUrl { get; set; }
 
         public DateTime CreatedAt { get; set; }
+
+        public DateTime CreatedAtUtc { get; set; }
+
+        public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
     }
 }

@@ -90,6 +90,209 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpGet("me/credits")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> GetMyProposalCredits()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.GetMyProposalCreditsAsync(userId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpGet("drafts/me")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> GetMyProposalDrafts()
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.GetMyProposalDraftsAsync(userId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("drafts")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> SaveProposalDraft(
+            [FromBody] SubmitProposalRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.SaveProposalDraftAsync(
+                    userId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal draft saved successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPut("drafts/{proposalId:int}")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> UpdateProposalDraft(
+            int proposalId,
+            [FromBody] SubmitProposalRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.UpdateProposalDraftAsync(
+                    userId,
+                    proposalId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal draft updated successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("drafts/{proposalId:int}/submit")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> SubmitProposalDraft(int proposalId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.SubmitProposalDraftAsync(
+                    userId,
+                    proposalId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal draft submitted successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpDelete("drafts/{proposalId:int}")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> DeleteProposalDraft(int proposalId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                await _proposalService.DeleteProposalDraftAsync(
+                    userId,
+                    proposalId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Proposal draft deleted successfully."
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpGet("/api/jobs/{jobId:int}/proposals")]
         [Authorize(Roles = "CLIENT")]
         public async Task<IActionResult> GetJobProposals(int jobId)
