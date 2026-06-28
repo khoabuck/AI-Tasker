@@ -404,23 +404,6 @@ export default function ClientJobDetailPage() {
                                 <span className="material-symbols-outlined" style={{ fontSize: 17 }}>chat</span>
                               </button>
 
-                              {isPending && (
-                                <button onClick={() => handleAccept(proposal.proposalId)} disabled={isProcessing}
-                                  style={{ padding: "7px 14px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: isProcessing ? "not-allowed" : "pointer", opacity: isProcessing ? 0.6 : 1, minWidth: 72, textAlign: "center", transition: "all 0.2s" }}
-                                  onMouseEnter={(e) => { if (!isProcessing) { e.currentTarget.style.background = "rgba(34,197,94,0.15)"; e.currentTarget.style.boxShadow = "0 0 10px rgba(34,197,94,0.2)"; }}}
-                                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; }}>
-                                  {isAccepting ? "..." : "Accept"}
-                                </button>
-                              )}
-
-                              {isPending && (
-                                <button onClick={() => handleDecline(proposal.proposalId)} disabled={isProcessing}
-                                  style={{ padding: "7px 14px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: isProcessing ? "not-allowed" : "pointer", opacity: isProcessing ? 0.6 : 1, transition: "all 0.2s" }}
-                                  onMouseEnter={(e) => { if (!isProcessing) e.currentTarget.style.background = "rgba(248,113,113,0.15)"; }}
-                                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.08)"; }}>
-                                  {isDeclining ? "..." : "Decline"}
-                                </button>
-                              )}
                             </div>
                           </div>
                         </div>

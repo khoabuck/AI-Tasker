@@ -255,6 +255,34 @@ export default function ClientProposalDetailPage() {
 }, []);
 
   useEffect(() => {
+  const fetchExistingContractDraft = async () => {
+    try {
+      const res = await axiosInstance.get(`/proposals/${proposalId}/contract`);
+      const contract = res.data?.data ?? res.data;
+
+      if (!contract) return;
+
+      setContractCreated(contract);
+
+      setProposal((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: "ACCEPTED",
+            }
+          : prev
+      );
+    } catch (err) {
+      if (err?.response?.status !== 404) {
+        console.error("Fetch existing contract draft failed:", err);
+      }
+    }
+  };
+
+  fetchExistingContractDraft();
+}, [proposalId]);
+
+  useEffect(() => {
     if (!showWaitingExpertModal) return;
 
     const intervalId = setInterval(() => {
