@@ -19,8 +19,17 @@ export default function LoginPage() {
   const [rememberedLogins, setRememberedLogins] = useState([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
 
-    useEffect(() => {
-      const savedLogins = localStorage.getItem("rememberLogins");
+  const clearAuthSession = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+  };
+
+  useEffect(() => {
+    clearAuthSession();
+
+    const savedLogins = localStorage.getItem("rememberLogins");
 
       if (savedLogins) {
         try {
@@ -47,7 +56,7 @@ export default function LoginPage() {
     setForm((prev) => ({
       ...prev,
       email: account.email || "",
-      password: account.password || "",
+      password: "",
       remember: true,
     }));
 
@@ -57,9 +66,8 @@ export default function LoginPage() {
 
   const saveRememberedLogin = () => {
     const email = form.email.trim();
-    const password = form.password;
 
-    if (!form.remember || !email || !password) {
+    if (!form.remember || !email) {
       return;
     }
 
@@ -74,7 +82,7 @@ export default function LoginPage() {
     }
 
     const next = [
-      { email, password },
+      { email },
       ...existing.filter((item) => item.email !== email),
     ];
 
@@ -346,7 +354,7 @@ export default function LoginPage() {
                             {account.email}
                           </p>
                           <p className="text-xs text-gray-400">
-                            Saved password
+                             Saved email
                           </p>
                         </div>
                       </button>
@@ -514,6 +522,7 @@ export default function LoginPage() {
               Don&apos;t have an account?{" "}
               <Link
                 to="/register"
+                onClick={clearAuthSession}
                 className="ml-1 font-semibold text-neon-cyan hover:underline"
               >
                 Register
