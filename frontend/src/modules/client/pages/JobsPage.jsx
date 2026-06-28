@@ -39,13 +39,14 @@ function JobCard({ job, onStatusChange }) {
 
   const handleCancel = async (e) => {
     e.stopPropagation();
-    if (!confirm("Hủy job này?")) return;
+    if (!confirm("Cancel job ?")) return;
     setActionLoading(true);
     try {
       await axiosInstance.put(`/jobs/${job.jobPostingId}/cancel`);
       onStatusChange(job.jobPostingId, "CANCELLED");
+      navigate("/client/jobs?status=CANCELLED");
     } catch (err) {
-      alert(err?.response?.data?.message || "Hủy thất bại.");
+      alert(err?.response?.data?.message || "Cancellation failed.");
     } finally { setActionLoading(false); }
   };
 
@@ -89,9 +90,21 @@ function JobCard({ job, onStatusChange }) {
               >
                 Edit
               </button>
-              <button onClick={handleSubmit} disabled={actionLoading}
-                style={{ padding: "6px 12px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}>
+
+              <button
+                onClick={handleSubmit}
+                disabled={actionLoading}
+                style={{ padding: "6px 12px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
+              >
                 {actionLoading ? "..." : "Submit"}
+              </button>
+
+              <button
+                onClick={handleCancel}
+                disabled={actionLoading}
+                style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
+              >
+                {actionLoading ? "..." : "Cancel"}
               </button>
             </>
           )}

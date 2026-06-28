@@ -122,9 +122,9 @@ export default function EditJobPage() {
       .catch((err) => {
         if (err?.code === "ERR_CANCELED") return;
         const msg =
-          err?.response?.status === 404 ? "Không tìm thấy job này." :
-          err?.response?.status === 403 ? "Bạn không có quyền chỉnh sửa job này." :
-          "Không thể tải dữ liệu. Vui lòng thử lại.";
+          err?.response?.status === 404 ? "Job not found." :
+          err?.response?.status === 403 ? "You do not have permission to edit this job." :
+          "Unable to load data. Please try again.";
         setFetchError(msg);
       })
       .finally(() => setLoading(false));
@@ -164,7 +164,7 @@ export default function EditJobPage() {
   // ── PUT /api/jobs/{id} — lưu thay đổi ─────────────────────────────
   const handleSave = async () => {
     if (!form.title.trim()) {
-      setSaveError("Job title không được để trống.");
+      setSaveError("Job title cannot be empty.");
       return;
     }
     setSaving(true);
@@ -174,7 +174,7 @@ export default function EditJobPage() {
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       navigate("/client/projects");
     } catch (err) {
-      setSaveError(err?.response?.data?.message || "Lưu thất bại. Vui lòng thử lại.");
+      setSaveError(err?.response?.data?.message || "Save failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -183,19 +183,19 @@ export default function EditJobPage() {
   // ── PUT /api/jobs/{id}/submit — submit draft lên OPEN ──────────────
   const handleSubmit = async () => {
     if (!form.title.trim()) {
-      setSaveError("Job title không được để trống.");
+      setSaveError("Job title cannot be empty.");
       return;
     }
-    if (!confirm("Lưu thay đổi và submit job này?")) return;
+    if (!confirm("Save changes and submit this job?")) return;
     setSubmitting(true);
     setSaveError("");
     try {
-      // Lưu thay đổi trước, sau đó submit
+      // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       await axiosInstance.put(`/jobs/${id}/submit`);
       navigate("/client/projects");
     } catch (err) {
-      setSaveError(err?.response?.data?.message || "Submit thất bại. Vui lòng thử lại.");
+      setSaveError(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
       setSubmitting(false);
     }

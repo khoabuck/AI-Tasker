@@ -192,7 +192,7 @@ export default function PostJobPage() {
       setMode(job.aiGeneratedDescription ? "ai" : "manual");
     } catch (err) {
       console.error("Load job edit failed:", err);
-      setError("Không tải được dữ liệu job để chỉnh sửa.");
+      setError("Unable to load job data for editing.");
     }
   };
 

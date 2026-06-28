@@ -51,13 +51,13 @@ function JobCard({ job, onStatusChange }) {
 
   // ── Submit DRAFT → OPEN ──────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!confirm("Submit job này để tìm Expert?")) return;
+    if (!confirm("Submit this job to find an expert?")) return;
     setActionLoading("submit");
     try {
       await axiosInstance.put(`/jobs/${jobId}/submit`);
       onStatusChange(jobId, "OPEN");
     } catch (err) {
-      alert(err?.response?.data?.message || "Submit thất bại. Vui lòng thử lại.");
+      alert(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
       setActionLoading(null);
     }
@@ -65,13 +65,13 @@ function JobCard({ job, onStatusChange }) {
 
   // ── Cancel job ───────────────────────────────────────────────────
   const handleCancel = async () => {
-    if (!confirm("Bạn chắc chắn muốn cancel job này?")) return;
+    if (!confirm("Are you sure you want to cancel this job?")) return;
     setActionLoading("cancel");
     try {
       await axiosInstance.put(`/jobs/${jobId}/cancel`);
       onStatusChange(jobId, "CANCELLED");
     } catch (err) {
-      alert(err?.response?.data?.message || "Cancel thất bại. Vui lòng thử lại.");
+      alert(err?.response?.data?.message || "Cancel failed. Please try again.");
     } finally {
       setActionLoading(null);
     }

@@ -96,7 +96,7 @@ function MessageModal({ proposal, onClose, navigate }) {
         }
       }, 1200);
     } catch (err) {
-      setSendError(err?.response?.data?.message || "Gửi tin nhắn thất bại.");
+      setSendError(err?.response?.data?.message || "Send message failed.");
     } finally {
       setSending(false);
     }
@@ -185,7 +185,7 @@ export default function ClientProposalDetailPage() {
       }
 
       if (!proposalData) {
-        setError("Không tìm thấy proposal này.");
+        setError("Proposal not found.");
         return;
       }
 
@@ -193,9 +193,9 @@ export default function ClientProposalDetailPage() {
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(
-        err?.response?.status === 404 ? "Không tìm thấy proposal này." :
-        err?.response?.status === 403 ? "Bạn không có quyền xem proposal này." :
-        err?.response?.data?.message || "Đã có lỗi xảy ra."
+        err?.response?.status === 404 ? "Proposal not found." :
+        err?.response?.status === 403 ? "You do not have permission to view this proposal." :
+        err?.response?.data?.message || "An error occurred."
       );
     } finally {
       setLoading(false);
@@ -418,13 +418,13 @@ const checkContractAndGoProject = async () => {
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
-    if (!confirm("Từ chối proposal này?")) return;
+    if (!confirm("Decline this proposal?")) return;
     setActionLoading("decline");
     try {
       await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
       setProposal((prev) => ({ ...prev, status: "REJECTED" }));
     } catch (err) {
-      alert(err?.response?.data?.message || "Decline thất bại.");
+      alert(err?.response?.data?.message || "Decline failed.");
     } finally {
       setActionLoading(null);
     }
@@ -775,7 +775,7 @@ const checkContractAndGoProject = async () => {
             </div>
           )}
 
-          {/* Counter Offer — nếu có */}
+          {/* Counter Offer — if present */}
           {(proposal.counterPrice || proposal.counterMessage) && (
             <div style={{ ...cardStyle, border: "1px solid rgba(249,115,22,0.2)", background: "rgba(249,115,22,0.02)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(249,115,22,0.1)" }}>

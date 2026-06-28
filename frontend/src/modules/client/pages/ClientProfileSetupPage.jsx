@@ -157,8 +157,8 @@ function IndividualForm({ data, onChange }) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="md:col-span-2">
-          <Field label="Họ và tên">
-            <input type="text" name="fullName" placeholder="Nguyễn Văn A"
+          <Field label="Full name">
+            <input type="text" name="fullName" placeholder="Full name..."
               value={data.fullName} onChange={onChange} className={inputClass} />
           </Field>
         </div>
@@ -168,7 +168,7 @@ function IndividualForm({ data, onChange }) {
             value={data.email} onChange={onChange} className={inputClass} />
         </Field>
 
-        <Field label="Số điện thoại">
+        <Field label="Phone number">
           <input type="tel" name="phone" placeholder="0901 234 567"
             value={data.phone} onChange={onChange} className={inputClass} />
         </Field>

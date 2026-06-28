@@ -338,7 +338,7 @@ export default function ClientProjectDetailPage() {
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 24px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy project."}</p>
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Project not found."}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
             Back to list

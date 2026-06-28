@@ -139,7 +139,7 @@ export default function ExpertSearchPage() {
       navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
     } catch (err) {
       console.error("Create conversation failed:", err);
-      alert("Không thể tạo cuộc trò chuyện với Expert.");
+      alert("Unable to start a conversation with the expert.");
     }
   };
 
@@ -225,7 +225,7 @@ export default function ExpertSearchPage() {
           <h1 className="mb-2 font-display text-4xl font-bold text-gray-100">
             Expert <span className="text-cyan-400">Search</span>
           </h1>
-          <p className="text-[15px] text-gray-400">Tìm kiếm Expert theo tên, kỹ năng hoặc từ khóa</p>
+          <p className="text-[15px] text-gray-400">Search experts by name, skill, or keyword</p>
         </div>
 
         {/* Search Bar */}
@@ -313,7 +313,7 @@ export default function ExpertSearchPage() {
                 {experts.length === 0 ? (
                   <div className="py-16 text-center text-gray-400">
                     <span className="material-symbols-outlined mb-3 block text-[#232A35]" style={{ fontSize: 56 }}>search_off</span>
-                    <p className="text-[15px]">Không tìm thấy Expert phù hợp</p>
+                    <p className="text-[15px]">No matching experts found</p>
                   </div>
                 ) : (
                   <div className="grid gap-6" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>

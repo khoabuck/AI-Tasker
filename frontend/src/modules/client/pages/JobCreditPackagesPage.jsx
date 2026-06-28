@@ -34,7 +34,7 @@ const cardStyle = {
 };
 
 function formatVND(amount) {
-  return Number(amount || 0).toLocaleString("vi-VN") + " VNĐ";
+  return Number(amount || 0).toLocaleString("vi-VN") + " VND";
 }
 
 export default function JobCreditPackagesPage() {
