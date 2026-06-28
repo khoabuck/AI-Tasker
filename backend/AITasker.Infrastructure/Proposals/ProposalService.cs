@@ -2,6 +2,7 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
@@ -19,7 +20,8 @@ namespace AITasker.Infrastructure.Proposals
 
         public const string ProposalResubmitted = "PROPOSAL_RESUBMITTED";
 
-        private const int MaxProposalDrafts = 10;
+        private const string ProposalCreditUsageFree = "FREE";
+        private const string ProposalCreditUsagePaid = "PAID";
 
         private const string JobStatusActive = "ACTIVE";
 
@@ -28,25 +30,31 @@ namespace AITasker.Infrastructure.Proposals
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public ProposalService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<ProposalResponse> SubmitProposalAsync(
             int userId,
             SubmitProposalRequest request)
         {
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+
             ValidateSubmitProposalRequest(request);
 
             ValidateProposalMilestonesRequest(
                 request.Milestones,
                 request.ProposedPrice,
-                request.ProposedTimelineDays);
+                request.ProposedTimelineDays,
+                policy.ProposalMilestoneLimit);
 
             var expert = await _context.ExpertProfiles
                 .FirstOrDefaultAsync(x => x.UserId == userId);
@@ -93,7 +101,7 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("You already have a draft or submitted proposal for this job.");
             }
 
-            ConsumeProposalSubmitCredit(expert);
+            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
 
             var proposal = new Proposal
             {
@@ -132,6 +140,13 @@ namespace AITasker.Infrastructure.Proposals
                 relatedEntityId: proposal.ProposalId,
                 relatedJobId: job.JobPostingId,
                 relatedProposalId: proposal.ProposalId);
+
+            await NotifyProposalCreditUsedAsync(
+                userId,
+                proposalCreditUsageType,
+                expert,
+                proposal,
+                job);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -176,7 +191,9 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Expert profile not found.");
             }
 
-            return BuildProposalCreditResponse(expert);
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+
+            return BuildProposalCreditResponse(expert, policy);
         }
 
         public async Task<IReadOnlyList<ProposalResponse>> GetMyProposalDraftsAsync(int userId)
@@ -212,12 +229,15 @@ namespace AITasker.Infrastructure.Proposals
             int userId,
             SubmitProposalRequest request)
         {
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+
             ValidateSubmitProposalRequest(request);
 
             ValidateProposalMilestonesRequest(
                 request.Milestones,
                 request.ProposedPrice,
-                request.ProposedTimelineDays);
+                request.ProposedTimelineDays,
+                policy.ProposalMilestoneLimit);
 
             var expert = await _context.ExpertProfiles
                 .FirstOrDefaultAsync(x => x.UserId == userId);
@@ -231,9 +251,10 @@ namespace AITasker.Infrastructure.Proposals
                 x.ExpertId == expert.ExpertProfileId &&
                 x.Status == StatusDraft);
 
-            if (currentDraftCount >= MaxProposalDrafts)
+            if (currentDraftCount >= policy.ProposalDraftLimit)
             {
-                throw new InvalidOperationException($"You can only save up to {MaxProposalDrafts} proposal drafts.");
+                throw new InvalidOperationException(
+                    $"You can only save up to {policy.ProposalDraftLimit} proposal drafts.");
             }
 
             var job = await _context.JobPostings
@@ -297,12 +318,15 @@ namespace AITasker.Infrastructure.Proposals
             int proposalId,
             SubmitProposalRequest request)
         {
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+
             ValidateSubmitProposalRequest(request);
 
             ValidateProposalMilestonesRequest(
                 request.Milestones,
                 request.ProposedPrice,
-                request.ProposedTimelineDays);
+                request.ProposedTimelineDays,
+                policy.ProposalMilestoneLimit);
 
             var proposal = await GetProposalByIdAsync(proposalId);
 
@@ -406,9 +430,14 @@ namespace AITasker.Infrastructure.Proposals
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            ValidateSavedProposalDraftForSubmit(proposal, milestoneDrafts);
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
 
-            ConsumeProposalSubmitCredit(expert);
+            ValidateSavedProposalDraftForSubmit(
+                proposal,
+                milestoneDrafts,
+                policy.ProposalMilestoneLimit);
+
+            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
 
             proposal.Status = StatusSubmitted;
 
@@ -425,6 +454,13 @@ namespace AITasker.Infrastructure.Proposals
                 relatedEntityId: proposal.ProposalId,
                 relatedJobId: job.JobPostingId,
                 relatedProposalId: proposal.ProposalId);
+
+            await NotifyProposalCreditUsedAsync(
+                userId,
+                proposalCreditUsageType,
+                expert,
+                proposal,
+                job);
 
             return await MapToProposalResponseAsync(proposal);
         }
@@ -724,25 +760,40 @@ namespace AITasker.Infrastructure.Proposals
             }
         }
 
-        private static void ConsumeProposalSubmitCredit(ExpertProfile expert)
+        private static string ConsumeProposalSubmitCredit(
+            ExpertProfile expert,
+            MarketplaceWorkflowPolicyResponse policy)
         {
-            if (!expert.FreeProposalSubmitUsed)
+            var hasFreeSubmitAvailable =
+                policy.FreeProposalSubmitCount > 0 &&
+                !expert.FreeProposalSubmitUsed;
+
+            if (hasFreeSubmitAvailable)
             {
                 expert.FreeProposalSubmitUsed = true;
-                return;
+                return ProposalCreditUsageFree;
             }
 
             if (expert.ProposalSubmitCredits <= 0)
             {
-                throw new InvalidOperationException("You need ProposalSubmitCredit to submit a new proposal.");
+                throw new InvalidOperationException(
+                    "You need ProposalSubmitCredit to submit a new proposal. Please buy a proposal credit package.");
             }
 
             expert.ProposalSubmitCredits -= 1;
+
+            return ProposalCreditUsagePaid;
         }
 
-        private static ProposalCreditResponse BuildProposalCreditResponse(ExpertProfile expert)
+        private static ProposalCreditResponse BuildProposalCreditResponse(
+            ExpertProfile expert,
+            MarketplaceWorkflowPolicyResponse policy)
         {
-            var freeSubmitRemaining = expert.FreeProposalSubmitUsed ? 0 : 1;
+            var freeSubmitRemaining =
+                policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
+                    ? 1
+                    : 0;
+
             var canSubmit = freeSubmitRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
             return new ProposalCreditResponse
@@ -755,7 +806,7 @@ namespace AITasker.Infrastructure.Proposals
                     ? freeSubmitRemaining > 0
                         ? "Free proposal submit is still available."
                         : "Proposal submit credit is available."
-                    : "You need ProposalSubmitCredit to submit a new proposal."
+                    : "You need ProposalSubmitCredit to submit a new proposal. Please buy a proposal credit package."
             };
         }
 
@@ -1039,12 +1090,17 @@ namespace AITasker.Infrastructure.Proposals
             int proposalId,
             ResubmitProposalRequest request)
         {
-            ValidateResubmitProposalRequestLocal(request);
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+
+            ValidateResubmitProposalRequestLocal(
+                request,
+                policy.ResubmitNoteMaxLength);
 
             ValidateProposalMilestonesRequest(
                 request.Milestones,
                 request.ProposedPrice,
-                request.ProposedTimelineDays);
+                request.ProposedTimelineDays,
+                policy.ProposalMilestoneLimit);
 
             var proposal = await LoadProposalForVersionAsync(proposalId);
 
@@ -1276,7 +1332,9 @@ namespace AITasker.Infrastructure.Proposals
             await _context.SaveChangesAsync();
         }
 
-        private static void ValidateResubmitProposalRequestLocal(ResubmitProposalRequest request)
+        private static void ValidateResubmitProposalRequestLocal(
+            ResubmitProposalRequest request,
+            int resubmitNoteMaxLength)
         {
             if (request == null)
             {
@@ -1309,9 +1367,9 @@ namespace AITasker.Infrastructure.Proposals
             }
 
             if (!string.IsNullOrWhiteSpace(request.ResubmitNote) &&
-                request.ResubmitNote.Trim().Length > 1000)
+                request.ResubmitNote.Trim().Length > resubmitNoteMaxLength)
             {
-                throw new InvalidOperationException("Resubmit note cannot exceed 1000 characters.");
+                throw new InvalidOperationException($"Resubmit note cannot exceed {resubmitNoteMaxLength} characters.");
             }
         }
 
@@ -1354,16 +1412,17 @@ namespace AITasker.Infrastructure.Proposals
         private static void ValidateProposalMilestonesRequest(
             List<ProposalMilestoneDraftItemRequest> milestones,
             decimal proposedPrice,
-            int proposedTimelineDays)
+            int proposedTimelineDays,
+            int proposalMilestoneLimit)
         {
             if (milestones == null || milestones.Count == 0)
             {
                 throw new InvalidOperationException("At least one proposal milestone is required.");
             }
 
-            if (milestones.Count > 10)
+            if (milestones.Count > proposalMilestoneLimit)
             {
-                throw new InvalidOperationException("A proposal cannot have more than 10 milestones.");
+                throw new InvalidOperationException($"A proposal cannot have more than {proposalMilestoneLimit} milestones.");
             }
 
             foreach (var milestone in milestones)
@@ -1401,7 +1460,8 @@ namespace AITasker.Infrastructure.Proposals
 
         private static void ValidateSavedProposalDraftForSubmit(
             Proposal proposal,
-            IReadOnlyList<ProposalMilestoneDraft> milestones)
+            IReadOnlyList<ProposalMilestoneDraft> milestones,
+            int proposalMilestoneLimit)
         {
             if (string.IsNullOrWhiteSpace(proposal.CoverLetter))
             {
@@ -1433,9 +1493,9 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("At least one proposal milestone is required.");
             }
 
-            if (milestones.Count > 10)
+            if (milestones.Count > proposalMilestoneLimit)
             {
-                throw new InvalidOperationException("A proposal cannot have more than 10 milestones.");
+                throw new InvalidOperationException($"A proposal cannot have more than {proposalMilestoneLimit} milestones.");
             }
 
             var totalAmount = milestones.Sum(x => x.Amount);
@@ -1451,6 +1511,96 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Total milestone duration cannot exceed proposed timeline.");
             }
+        }
+
+        private async Task NotifyProposalCreditUsedAsync(
+            int userId,
+            string proposalCreditUsageType,
+            ExpertProfile expert,
+            Proposal proposal,
+            JobPosting job)
+        {
+            try
+            {
+                var isFreeUsage = proposalCreditUsageType == ProposalCreditUsageFree;
+
+                await _notificationService.CreateNotificationAsync(
+                    userId,
+                    isFreeUsage
+                        ? "The free proposal submission attempt has been used."
+                        : "Used 1 ProposalSubmitCredit",
+                    isFreeUsage
+                        ? $"You have used your free proposal submission for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}."
+                        : $"You have used 1 ProposalSubmitCredit for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}.",
+                    NotificationTypes.ProposalCreditUsed,
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: proposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId);
+
+                var currentTier = await GetCurrentProposalCreditTierAsync(expert.ExpertProfileId);
+                var warningMessage = BuildProposalCreditWarningMessage(
+                    expert.ProposalSubmitCredits,
+                    currentTier);
+
+                if (!string.IsNullOrWhiteSpace(warningMessage))
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        userId,
+                        "Proposal credit warning",
+                        warningMessage,
+                        NotificationTypes.ProposalCreditLow,
+                        relatedEntityType: "PROPOSAL_CREDIT",
+                        relatedEntityId: expert.ExpertProfileId,
+                        relatedProposalId: proposal.ProposalId);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private async Task<string?> GetCurrentProposalCreditTierAsync(int expertProfileId)
+        {
+            var latestPurchase = await _context.ProposalCreditPackagePurchases
+                .AsNoTracking()
+                .Where(x => x.ExpertProfileId == expertProfileId)
+                .OrderByDescending(x => x.PurchasedAt)
+                .FirstOrDefaultAsync();
+
+            return latestPurchase?.PackageNameSnapshot;
+        }
+
+        private static string? BuildProposalCreditWarningMessage(
+            int proposalSubmitCredits,
+            string? currentTier)
+        {
+            var threshold = ResolveProposalCreditWarningThreshold(currentTier);
+
+            if (proposalSubmitCredits > threshold)
+            {
+                return null;
+            }
+
+            if (proposalSubmitCredits <= 0)
+            {
+                return "You have used up all your proposal submissions. Please purchase additional proposal credit to continue submitting proposals.";
+            }
+
+            return $"You only have {proposalSubmitCredits} proposal submissions left. Please consider purchasing additional proposal credit.";
+        }
+
+        private static int ResolveProposalCreditWarningThreshold(string? tier)
+        {
+            var normalizedTier = tier?.Trim().ToUpperInvariant() ?? string.Empty;
+
+            return normalizedTier switch
+            {
+                "BASIC" => 1,
+                "PRO" => 3,
+                "BUSINESS" => 5,
+                _ => 0
+            };
         }
 
         private static List<ProposalMilestoneDraft> BuildProposalMilestoneDrafts(
