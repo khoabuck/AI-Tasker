@@ -269,7 +269,10 @@ builder.Services.AddHttpClient<IJobSkillRelevanceValidator, GroqJobSkillRelevanc
 // =========================
 // BE2 - Proposal / Contract / Project / Milestone Flow
 // =========================
+builder.Services.AddScoped<IMarketplaceWorkflowPolicyService, MarketplaceWorkflowPolicyService>();
+builder.Services.AddScoped<IAdminProposalCreditService, AdminProposalCreditService>();
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
+builder.Services.AddScoped<IProposalCreditPackageService, ProposalCreditPackageService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
@@ -292,6 +295,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 builder.Services.AddHttpClient<IWalletService, WalletService>();
 builder.Services.AddHttpClient<IBankAccountVerificationService, MockBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
+builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
 
 // =========================
 // BE3 - Deliverables / Disputes

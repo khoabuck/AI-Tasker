@@ -69,17 +69,20 @@ namespace AITasker.Infrastructure.Banking
         private readonly INotificationService _notificationService;
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
+        private readonly IPlatformWalletService _platformWalletService;
 
         public WalletService(
                 AITaskerDbContext context,
                 INotificationService notificationService,
                 IConfiguration configuration,
-                HttpClient httpClient)
+                HttpClient httpClient,
+                IPlatformWalletService platformWalletService)
         {
             _context = context;
             _notificationService = notificationService;
             _configuration = configuration;
             _httpClient = httpClient;
+            _platformWalletService = platformWalletService;
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)
@@ -780,6 +783,8 @@ namespace AITasker.Infrastructure.Banking
 
                 if (contract.PlatformFeeAmount > 0)
                 {
+                    var platformFeeReferenceId = $"PROJECT_{project.ProjectId}_PLATFORM_FEE";
+
                     _context.Transactions.Add(new Transaction
                     {
                         UserId = clientProfile.UserId,
@@ -790,9 +795,17 @@ namespace AITasker.Infrastructure.Banking
                         Type = TxPlatformFee,
                         Status = TransactionStatusSuccess,
                         Description = $"[Platform Fee] Platform fee for Project ID {project.ProjectId}",
-                        ReferenceId = $"PROJECT_{project.ProjectId}_PLATFORM_FEE",
+                        ReferenceId = platformFeeReferenceId,
                         CreatedAt = now
                     });
+
+                    await _platformWalletService.RecordPlatformFeeAsync(
+                        project.ProjectId,
+                        contract.ContractId,
+                        clientProfile.UserId,
+                        contract.PlatformFeeAmount,
+                        platformFeeReferenceId,
+                        now);
                 }
 
                 await _context.SaveChangesAsync();
