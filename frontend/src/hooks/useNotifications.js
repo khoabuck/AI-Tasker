@@ -17,17 +17,20 @@ export function useNotifications() {
     } catch {}
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true);
+  const fetchNotifications = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+
     try {
       const res = await axiosInstance.get("/notifications/me");
       const body = res.data;
+
       setNotifications(body.data ?? []);
-      setTotalCount(body.totalCount ?? 0);
       setUnreadCount(body.unreadCount ?? 0);
-    } catch {}
-    finally {
-      setLoading(false);
+      setTotalCount(body.totalCount ?? 0);
+    } catch (err) {
+      console.error("Fetch notifications failed:", err);
+    } finally {
+      if (showLoading) setLoading(false);
     }
   }, []);
 
@@ -55,14 +58,14 @@ export function useNotifications() {
 
   useEffect(() => {
     fetchUnreadCount();
-    fetchNotifications();
+    fetchNotifications(true);
 
-    const interval = setInterval(() => {
+    const intervalId = setInterval(() => {
       fetchUnreadCount();
-      fetchNotifications();
+      fetchNotifications(false);
     }, POLL_INTERVAL);
 
-    return () => clearInterval(interval);
+    return () => clearInterval(intervalId);
   }, [fetchUnreadCount, fetchNotifications]);
 
   return {

@@ -34,6 +34,110 @@ function timeAgo(dateStr) {
   return new Date(dateStr).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
+  function parseMetadata(notification) {
+  try {
+    if (!notification?.metadata) return {};
+
+    return typeof notification.metadata === "string"
+      ? JSON.parse(notification.metadata)
+      : notification.metadata;
+  } catch {
+    return {};
+  }
+}
+
+function getValue(notification, metadata, keys) {
+  for (const key of keys) {
+    if (
+      notification?.[key] !== undefined &&
+      notification?.[key] !== null
+    ) {
+      return notification[key];
+    }
+
+    if (
+      metadata?.[key] !== undefined &&
+      metadata?.[key] !== null
+    ) {
+      return metadata[key];
+    }
+  }
+
+  return null;
+}
+
+function getNotificationTargetUrl(notification) {
+  const type = notification?.type || "SYSTEM";
+  const metadata = parseMetadata(notification);
+
+  if (notification?.actionUrl) return notification.actionUrl;
+  if (notification?.link) return notification.link;
+  if (notification?.url) return notification.url;
+  if (notification?.targetUrl) return notification.targetUrl;
+
+  const proposalId = getValue(notification, metadata, [
+    "proposalId",
+    "relatedProposalId",
+    "targetProposalId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
+  const conversationId = getValue(notification, metadata, [
+    "conversationId",
+    "relatedConversationId",
+    "targetConversationId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
+  const milestoneId = getValue(notification, metadata, [
+    "milestoneId",
+    "relatedMilestoneId",
+    "targetMilestoneId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
+  switch (type) {
+    case "CHAT_MESSAGE_RECEIVED":
+    case "MESSAGE_RECEIVED":
+      return conversationId
+        ? `/client/messages/${conversationId}`
+        : "/client/messages";
+
+    case "PROPOSAL_SUBMITTED":
+    case "PROPOSAL_RESUBMITTED":
+    case "PROPOSAL_ACCEPTED":
+    case "PROPOSAL_REJECTED":
+      return proposalId
+        ? `/client/proposals/${proposalId}`
+        : "/client/projects";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
+
+    case "DELIVERABLE_SUBMITTED":
+    case "MILESTONE_DELIVERABLE_SUBMITTED":
+    case "DELIVERABLE_CREATED":
+      return milestoneId
+        ? `/client/milestones/${milestoneId}/deliverables`
+        : "/client/projects";
+
+    case "DEPOSIT":
+    case "WITHDRAWAL":
+    case "WITHDRAWAL_APPROVED":
+    case "WITHDRAWAL_REJECTED":
+    case "ESCROW_RELEASED":
+      return "/client/wallet";
+
+    default:
+      return "/client/notifications";
+  }
+}
 // ── Pagination ────────────────────────────────────────────────────────
 function Pagination({ page, totalPages, onChange }) {
   if (totalPages <= 1) return null;
@@ -135,10 +239,21 @@ export default function NotificationsPage() {
   const totalPages = Math.ceil(notifications.length / pageSize);
   const paginated = notifications.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleClick = (n) => {
-    if (!n.isRead) markRead(n.notificationId);
-    const link = n.actionUrl || n.link;
-    if (link) navigate(link);
+  const handleClick = async (n) => {
+    const targetUrl = getNotificationTargetUrl(n);
+
+    console.log("Notification:", n);
+    console.log("Target URL:", targetUrl);
+
+    try {
+      if (!n.isRead && n.notificationId) {
+        await markRead(n.notificationId);
+      }
+    } catch (err) {
+      console.error("Mark read failed:", err);
+    } finally {
+      navigate(targetUrl);
+    }
   };
 
   const handlePageChange = (p) => {
@@ -215,7 +330,7 @@ export default function NotificationsPage() {
                   <div
                     key={n.notificationId}
                     onClick={() => handleClick(n)}
-                    style={{ padding: "18px 24px", borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 16, alignItems: "flex-start", cursor: n.actionUrl || n.link ? "pointer" : "default", background: isUnread ? "rgba(0,240,255,0.02)" : "transparent", transition: "background 0.2s", position: "relative" }}
+                    style={{ padding: "18px 24px", borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.06)", display: "flex", gap: 16, alignItems: "flex-start", cursor: "pointer", background: isUnread ? "rgba(0,240,255,0.02)" : "transparent", transition: "background 0.2s", position: "relative" }}
                     onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
                     onMouseLeave={(e) => (e.currentTarget.style.background = isUnread ? "rgba(0,240,255,0.02)" : "transparent")}
                   >
@@ -264,9 +379,9 @@ export default function NotificationsPage() {
                       </div>
                     </div>
 
-                    {(n.actionUrl || n.link) && (
-                      <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#414754", flexShrink: 0, alignSelf: "center" }}>chevron_right</span>
-                    )}
+                    <span className="material-symbols-outlined self-center shrink-0 text-[18px] text-[#414754]">
+                      chevron_right
+                    </span>
                   </div>
                 );
               })}

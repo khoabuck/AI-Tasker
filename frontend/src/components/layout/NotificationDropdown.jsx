@@ -59,6 +59,11 @@ const TYPE_CONFIG = {
     color: "text-indigo-300",
     bg: "bg-indigo-300/10",
   },
+  DELIVERABLE_SUBMITTED: {
+    icon: "upload_file",
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/10",
+  },
   SYSTEM: {
     icon: "notifications",
     color: "text-gray-400",
@@ -160,6 +165,15 @@ function getNotificationTargetUrl(notification) {
     "targetId",
   ]);
 
+  const milestoneId = getValue(notification, metadata, [
+    "milestoneId",
+    "relatedMilestoneId",
+    "targetMilestoneId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
   switch (type) {
     case "CHAT_MESSAGE_RECEIVED":
     case "MESSAGE_RECEIVED":
@@ -178,6 +192,16 @@ function getNotificationTargetUrl(notification) {
     case "JOB_INVITED":
       return "/expert/messages";
 
+    case "DELIVERABLE_SUBMITTED":
+    case "MILESTONE_DELIVERABLE_SUBMITTED":
+    case "DELIVERABLE_CREATED":
+    case "DELIVERABLE_APPROVED":
+    case "MILESTONE_APPROVED":
+    case "MILESTONE_DELIVERABLE_APPROVED":
+      return milestoneId
+        ? `/client/milestones/${milestoneId}/deliverables`
+        : "/client/projects";
+
     case "DEPOSIT":
     case "WITHDRAWAL":
     case "WITHDRAWAL_APPROVED":
@@ -193,6 +217,7 @@ export default function NotificationDropdown() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const hasFetchedWhenOpenRef = useRef(false);
 
   const {
     notifications,
@@ -204,8 +229,18 @@ export default function NotificationDropdown() {
   } = useNotifications();
 
   useEffect(() => {
-    if (open) fetchNotifications();
-  }, [open, fetchNotifications]);
+    if (!open) {
+      hasFetchedWhenOpenRef.current = false;
+      return;
+    }
+
+    if (hasFetchedWhenOpenRef.current) return;
+
+    hasFetchedWhenOpenRef.current = true;
+    fetchNotifications();
+  }, [open]);
+
+    
 
   useEffect(() => {
     const handler = (e) => {

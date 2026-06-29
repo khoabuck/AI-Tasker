@@ -169,6 +169,8 @@ export default function ClientProposalDetailPage() {
   const [contractCreated, setContractCreated] = useState(null);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showWaitingExpertModal, setShowWaitingExpertModal] = useState(false);
+  const [showEscrowModal, setShowEscrowModal] = useState(false);
+  const [projectReadyForEscrow, setProjectReadyForEscrow] = useState(null);
 
   const fetchProposal = useCallback(async (signal) => {
     setLoading(true);
@@ -354,16 +356,20 @@ export default function ClientProposalDetailPage() {
     setContractCreated(confirmedContract);
 
     const clientSigned =
-      confirmedContract?.clientConfirmedAt ||
-      confirmedContract?.clientSignedAt;
+    confirmedContract?.clientConfirmed === true ||
+    Boolean(confirmedContract?.clientConfirmedAt) ||
+    Boolean(confirmedContract?.clientSignedAt);
 
-    const expertSigned =
-      confirmedContract?.expertConfirmedAt ||
-      confirmedContract?.expertSignedAt;
+  const expertSigned =
+    confirmedContract?.expertConfirmed === true ||
+    Boolean(confirmedContract?.expertConfirmedAt) ||
+    Boolean(confirmedContract?.expertSignedAt);
 
-    const contractStatus = (confirmedContract?.status || "").toUpperCase();
+  const contractStatus = (confirmedContract?.status || "").toUpperCase();
 
-    const isBothSigned = Boolean(clientSigned) && Boolean(expertSigned);
+  const isBothSigned =
+    (clientSigned && expertSigned) ||
+    ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
 
     if (isBothSigned) {
       try {
@@ -377,9 +383,24 @@ export default function ClientProposalDetailPage() {
         }
       }
 
+     const projectId = confirmedContract?.projectId ?? null;
+
       setShowWaitingExpertModal(false);
-      navigate("/client/projects?status=ACTIVE");
-      return;
+
+      if (projectId) {
+        setProjectReadyForEscrow({
+          projectId,
+          totalClientPayment: confirmedContract?.totalClientPayment,
+          finalPrice: confirmedContract?.finalPrice,
+          platformFeeAmount: confirmedContract?.platformFeeAmount,
+        });
+
+        setShowEscrowModal(true);
+        return;
+}
+
+navigate("/client/projects?status=PENDING_ESCROW");
+return;
     }
 
     setShowWaitingExpertModal(true);
@@ -407,16 +428,20 @@ const checkContractAndGoProject = async () => {
     const contract = res.data?.data ?? res.data;
 
     const clientSigned =
-      contract?.clientConfirmedAt ||
-      contract?.clientSignedAt;
+      contract?.clientConfirmed === true ||
+      Boolean(contract?.clientConfirmedAt) ||
+      Boolean(contract?.clientSignedAt);
 
     const expertSigned =
-      contract?.expertConfirmedAt ||
-      contract?.expertSignedAt;
+      contract?.expertConfirmed === true ||
+      Boolean(contract?.expertConfirmedAt) ||
+      Boolean(contract?.expertSignedAt);
 
     const contractStatus = (contract?.status || "").toUpperCase();
 
-    const isBothSigned = Boolean(clientSigned) && Boolean(expertSigned);
+    const isBothSigned =
+      (clientSigned && expertSigned) ||
+      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
 
     if (!isBothSigned) return;
 
@@ -431,10 +456,53 @@ const checkContractAndGoProject = async () => {
       }
     }
 
+    const projectId = contract?.projectId ?? null;
+
     setShowWaitingExpertModal(false);
-    navigate("/client/projects?status=ACTIVE");
+
+    if (projectId) {
+      setProjectReadyForEscrow({
+        projectId,
+        totalClientPayment: contract?.totalClientPayment,
+        finalPrice: contract?.finalPrice,
+        platformFeeAmount: contract?.platformFeeAmount,
+      });
+
+      setShowEscrowModal(true);
+      return;
+    }
+
+    navigate("/client/projects?status=PENDING_ESCROW");
   } catch (err) {
     console.error("Check contract failed:", err);
+  }
+};
+
+  const handleLockEscrow = async () => {
+  const projectId = projectReadyForEscrow?.projectId;
+
+  if (!projectId) {
+    alert("Project not found.");
+    return;
+  }
+
+  setActionLoading("lockEscrow");
+
+  try {
+    await axiosInstance.post(`/escrows/projects/${projectId}/lock`);
+
+    setShowEscrowModal(false);
+    setProjectReadyForEscrow(null);
+
+    navigate("/client/projects?status=ACTIVE");
+  } catch (err) {
+    alert(
+      err?.response?.data?.message ||
+      err?.message ||
+      "Lock escrow failed."
+    );
+  } finally {
+    setActionLoading(null);
   }
 };
 
@@ -932,6 +1000,70 @@ const checkContractAndGoProject = async () => {
                   className="rounded-lg bg-cyan-400 px-8 py-3 font-bold text-white transition hover:brightness-110"
                 >
                   Check Project Status
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showEscrowModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+            <div className="w-full max-w-[520px] rounded-2xl border border-cyan-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
+              <h2 className="mb-3 text-2xl font-bold text-cyan-400">
+                Lock Project Escrow
+              </h2>
+
+              <p className="mb-5 leading-relaxed text-slate-300">
+                Both sides have confirmed the contract. Do you want to lock escrow now
+                to activate this project?
+              </p>
+
+              <div className="mb-5 rounded-xl bg-white/5 p-4 text-sm text-slate-300">
+                <div className="mb-2">
+                  Project ID:{" "}
+                  <span className="font-bold text-white">
+                    {projectReadyForEscrow?.projectId}
+                  </span>
+                </div>
+
+                <div className="mb-2">
+                  Project Price:{" "}
+                  <span className="font-bold text-white">
+                    ${Number(projectReadyForEscrow?.finalPrice ?? 0).toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="mb-2">
+                  Platform Fee:{" "}
+                  <span className="font-bold text-white">
+                    ${Number(projectReadyForEscrow?.platformFeeAmount ?? 0).toLocaleString()}
+                  </span>
+                </div>
+
+                <div>
+                  Total Payment:{" "}
+                  <span className="font-bold text-cyan-400">
+                    ${Number(projectReadyForEscrow?.totalClientPayment ?? 0).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowEscrowModal(false)}
+                  className="rounded-lg border border-white/15 px-5 py-2.5 text-slate-300 transition hover:bg-white/5"
+                >
+                  Later
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleLockEscrow}
+                  disabled={actionLoading === "lockEscrow"}
+                  className="rounded-lg bg-cyan-400 px-5 py-2.5 font-bold text-[#002022] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {actionLoading === "lockEscrow" ? "Locking..." : "Agree & Lock Escrow"}
                 </button>
               </div>
             </div>
