@@ -1,9 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
 import proposalService, {
   getFriendlyProposalError,
+  mapProposalToForm,
 } from "../../../services/proposal.service";
 import proposalCreditPackageService from "../../../services/proposalCreditPackage.service";
 import expertWalletService from "../../../services/expertWallet.service";
@@ -28,9 +33,16 @@ const createEmptyForm = () => ({
 export default function SubmitProposalPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const draftId = searchParams.get("draftId") || "";
 
   const [job, setJob] = useState(null);
   const [formData, setFormData] = useState(createEmptyForm);
+
+  const [currentDraftId, setCurrentDraftId] = useState(draftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submittingDraft, setSubmittingDraft] = useState(false);
 
   const [proposalCredits, setProposalCredits] = useState(null);
   const [creditPackages, setCreditPackages] = useState([]);
@@ -83,14 +95,22 @@ export default function SubmitProposalPage() {
   useEffect(() => {
     loadInitialData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+  }, [jobId, draftId]);
 
   const loadInitialData = async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
       await Promise.all([loadJobDetailOnly(), loadSubmitAccess()]);
+
+      if (draftId) {
+        await loadDraftDetail(draftId);
+      } else {
+        setCurrentDraftId("");
+        setFormData(createEmptyForm());
+      }
     } finally {
       setLoading(false);
     }
@@ -137,6 +157,23 @@ export default function SubmitProposalPage() {
       console.error("LOAD SUBMIT ACCESS ERROR:", err?.response?.data || err);
     } finally {
       setAccessLoading(false);
+    }
+  };
+
+  const loadDraftDetail = async (proposalId) => {
+    try {
+      const draft = await proposalService.getDraftProposalById(proposalId);
+
+      if (!draft) {
+        setError("Draft not found.");
+        return;
+      }
+
+      setCurrentDraftId(draft.proposalId || proposalId);
+      setFormData(mapProposalToForm(draft));
+    } catch (err) {
+      console.error("LOAD DRAFT DETAIL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load draft detail."));
     }
   };
 
@@ -223,6 +260,103 @@ export default function SubmitProposalPage() {
     return formErrors?.milestones?.[index]?.[name] || "";
   };
 
+  const handleSaveDraft = async () => {
+    if (!jobId) {
+      setError("Job information is missing. Please go back and choose a job.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    try {
+      setSavingDraft(true);
+      setError("");
+      setMessage("");
+
+      const draft = currentDraftId
+        ? await proposalService.updateDraftProposal(
+            currentDraftId,
+            jobId,
+            formData
+          )
+        : await proposalService.createDraftProposal(jobId, formData);
+
+      const savedDraftId = draft?.proposalId || draft?.id || currentDraftId;
+
+      if (savedDraftId) {
+        setCurrentDraftId(savedDraftId);
+        setSearchParams({ draftId: String(savedDraftId) });
+      }
+
+      setMessage("Draft saved successfully.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      console.error("SAVE DRAFT ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot save draft."));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const handleSubmitDraft = async () => {
+    if (!currentDraftId) {
+      await handleSaveDraft();
+      setMessage("Draft saved. Please click Submit Draft again.");
+      return;
+    }
+
+    setSubmitted(true);
+    setMessage("");
+    setError("");
+
+    const errors = validateProposalForm(formData);
+
+    if (Object.keys(errors).length > 0) {
+      setError("Please check the highlighted fields before submitting.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    if (shouldRequireUpgrade) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    try {
+      setSubmittingDraft(true);
+
+      await proposalService.updateDraftProposal(currentDraftId, jobId, formData);
+
+      const proposal = await proposalService.submitDraftProposal(currentDraftId);
+      const proposalId = proposal?.proposalId || proposal?.id || currentDraftId;
+
+      setMessage("Draft submitted successfully.");
+      await loadSubmitAccess();
+
+      setTimeout(() => {
+        navigate(`/expert/proposals/${proposalId}`, { replace: true });
+      }, 700);
+    } catch (err) {
+      console.error("SUBMIT DRAFT ERROR:", err?.response?.data || err);
+
+      const friendlyError = getFriendlyProposalError(
+        err,
+        "Cannot submit draft."
+      );
+
+      setError(friendlyError);
+
+      if (isCreditError(friendlyError)) {
+        await loadSubmitAccess();
+        setShowUpgradeModal(true);
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSubmittingDraft(false);
+    }
+  };
+
   const handleBuyCreditPackage = async (pkg) => {
     const packageId = pkg?.packageId;
 
@@ -237,7 +371,7 @@ export default function SubmitProposalPage() {
     if (price > balance) {
       navigate("/expert/wallet", {
         state: {
-          returnTo: window.location.pathname,
+          returnTo: window.location.pathname + window.location.search,
           reason: "BUY_PROPOSAL_CREDITS",
           packageId,
         },
@@ -270,7 +404,7 @@ export default function SubmitProposalPage() {
       if (isWalletError(friendlyError)) {
         navigate("/expert/wallet", {
           state: {
-            returnTo: window.location.pathname,
+            returnTo: window.location.pathname + window.location.search,
             reason: "BUY_PROPOSAL_CREDITS",
             packageId,
           },
@@ -373,15 +507,19 @@ export default function SubmitProposalPage() {
 
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Submit Proposal
+              {currentDraftId ? "Edit Proposal Draft" : "Submit Proposal"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Send proposal to client
+              {currentDraftId
+                ? "Continue your draft"
+                : "Send proposal to client"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in your price, timeline, delivery plan, and milestones.
+              {currentDraftId
+                ? "Update your saved draft, then submit it when you are ready."
+                : "Fill in your price, timeline, delivery plan, and milestones."}
             </p>
           </div>
 
@@ -416,6 +554,31 @@ export default function SubmitProposalPage() {
                     title="Job is not open"
                     message="This job is not open for proposals right now."
                   />
+                )}
+
+                {currentDraftId && (
+                  <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-bold text-cyan-200">
+                          You are editing a saved draft.
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-cyan-100/80">
+                          Saving draft will not submit it to the client and will
+                          not use proposal credits.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate("/expert/proposals/drafts")}
+                        className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                      >
+                        My Drafts
+                      </button>
+                    </div>
+                  </section>
                 )}
 
                 {shouldRequireUpgrade && (
@@ -598,7 +761,7 @@ export default function SubmitProposalPage() {
                   </div>
                 </Card>
 
-                <div className="flex justify-end gap-3">
+                <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
                     onClick={() => navigate(`/expert/jobs/${jobId}`)}
@@ -608,16 +771,56 @@ export default function SubmitProposalPage() {
                   </button>
 
                   <button
-                    type="submit"
-                    disabled={submitting || !isJobOpen || accessLoading}
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={savingDraft || submitting || submittingDraft}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting
-                      ? "Submitting..."
-                      : accessLoading
-                      ? "Checking..."
-                      : "Submit Proposal"}
+                    {savingDraft
+                      ? "Saving..."
+                      : currentDraftId
+                      ? "Update Draft"
+                      : "Save Draft"}
                   </button>
+
+                  {currentDraftId ? (
+                    <button
+                      type="button"
+                      onClick={handleSubmitDraft}
+                      disabled={
+                        submittingDraft ||
+                        submitting ||
+                        savingDraft ||
+                        !isJobOpen ||
+                        accessLoading
+                      }
+                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submittingDraft
+                        ? "Submitting..."
+                        : accessLoading
+                        ? "Checking..."
+                        : "Submit Draft"}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={
+                        submitting ||
+                        submittingDraft ||
+                        savingDraft ||
+                        !isJobOpen ||
+                        accessLoading
+                      }
+                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submitting
+                        ? "Submitting..."
+                        : accessLoading
+                        ? "Checking..."
+                        : "Submit Proposal"}
+                    </button>
+                  )}
                 </div>
               </form>
 
@@ -721,7 +924,7 @@ export default function SubmitProposalPage() {
           onGoWallet={(pkg) =>
             navigate("/expert/wallet", {
               state: {
-                returnTo: window.location.pathname,
+                returnTo: window.location.pathname + window.location.search,
                 reason: "BUY_PROPOSAL_CREDITS",
                 packageId: pkg?.packageId,
               },
@@ -1172,7 +1375,10 @@ function getCanSubmitNewProposal(credits) {
   );
 
   if (value === undefined) {
-    return getAvailableProposalCredits(credits) + getFreeSubmitRemaining(credits) > 0;
+    return (
+      getAvailableProposalCredits(credits) + getFreeSubmitRemaining(credits) >
+      0
+    );
   }
 
   return Boolean(value);

@@ -432,14 +432,6 @@ export default function ExpertWalletPage() {
             </div>
           </section>
 
-          {shouldShowCreditReturn && (
-            <ContinueCreditsBanner
-              balance={balance}
-              onContinue={goToProposalCredits}
-              onDeposit={openDepositModal}
-            />
-          )}
-
           {message && <Alert type="success" message={message} />}
           {error && <Alert type="danger" message={error} />}
 
@@ -597,53 +589,6 @@ export default function ExpertWalletPage() {
           />
         )}
     </ExpertLayout>
-  );
-}
-
-function ContinueCreditsBanner({ balance, onContinue, onDeposit }) {
-  return (
-    <section className="mb-6 overflow-hidden rounded-[1.6rem] border border-purple-400/30 bg-purple-400/10 shadow-[0_18px_55px_rgba(0,0,0,0.22)]">
-      <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-purple-400/30 bg-purple-400/10 text-purple-300">
-            <span className="material-symbols-outlined">workspace_premium</span>
-          </div>
-
-          <div>
-            <p className="text-lg font-black text-white">
-              Continue buying proposal credits
-            </p>
-
-            <p className="mt-1 text-sm leading-6 text-purple-100/80">
-              Current wallet balance:{" "}
-              <span className="font-black text-cyan-300">
-                {formatMoney(balance?.availableBalance || 0)}
-              </span>
-              . Use your balance to buy proposal credits and submit more
-              proposals.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onDeposit}
-            className="rounded-2xl border border-white/10 bg-white/[0.05] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
-          >
-            Deposit More
-          </button>
-
-          <button
-            type="button"
-            onClick={onContinue}
-            className="rounded-2xl bg-purple-400 px-5 py-3 text-sm font-black text-black transition hover:bg-purple-300"
-          >
-            Continue Buying Credits
-          </button>
-        </div>
-      </div>
-    </section>
   );
 }
 

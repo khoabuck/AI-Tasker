@@ -9,7 +9,31 @@ const proposalApi = {
     return axiosInstance.get("/proposals/me");
   },
 
-  getJobProposals(jobId) {
+  getMyProposalCredits() {
+    return axiosInstance.get("/proposals/me/credits");
+  },
+
+  getMyDraftProposals() {
+    return axiosInstance.get("/proposals/drafts/me");
+  },
+
+  createDraftProposal(data) {
+    return axiosInstance.post("/proposals/drafts", data);
+  },
+
+  updateDraftProposal(proposalId, data) {
+    return axiosInstance.put(`/proposals/drafts/${proposalId}`, data);
+  },
+
+  deleteDraftProposal(proposalId) {
+    return axiosInstance.delete(`/proposals/drafts/${proposalId}`);
+  },
+
+  submitDraftProposal(proposalId) {
+    return axiosInstance.post(`/proposals/drafts/${proposalId}/submit`);
+  },
+
+  getProposalsByJob(jobId) {
     return axiosInstance.get(`/jobs/${jobId}/proposals`);
   },
 
@@ -25,14 +49,12 @@ const proposalApi = {
     return axiosInstance.post(`/proposals/${proposalId}/resubmit`, data);
   },
 
-  decideProposal(proposalId, decision) {
-    return axiosInstance.post(`/proposals/${proposalId}/decision`, null, {
-      params: { decision },
-    });
+  decisionProposal(proposalId, data) {
+    return axiosInstance.post(`/proposals/${proposalId}/decision`, data);
   },
 
-  withdrawProposal(proposalId) {
-    return axiosInstance.patch(`/proposals/${proposalId}/withdraw`);
+  withdrawProposal(proposalId, data = {}) {
+    return axiosInstance.patch(`/proposals/${proposalId}/withdraw`, data);
   },
 };
 
