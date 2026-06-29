@@ -363,9 +363,7 @@ export default function ClientProposalDetailPage() {
 
     const contractStatus = (confirmedContract?.status || "").toUpperCase();
 
-    const isBothSigned =
-      (clientSigned && expertSigned) ||
-      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+    const isBothSigned = Boolean(clientSigned) && Boolean(expertSigned);
 
     if (isBothSigned) {
       try {
@@ -418,9 +416,7 @@ const checkContractAndGoProject = async () => {
 
     const contractStatus = (contract?.status || "").toUpperCase();
 
-    const isBothSigned =
-      (clientSigned && expertSigned) ||
-      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+    const isBothSigned = Boolean(clientSigned) && Boolean(expertSigned);
 
     if (!isBothSigned) return;
 

@@ -1,26 +1,107 @@
 // src/components/layout/NotificationDropdown.jsx
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useNotifications } from "../../hooks/useNotifications";
 
-// ── Icon theo type ────────────────────────────────────────────────────
 const TYPE_CONFIG = {
-  PROPOSAL_SUBMITTED: { icon: "description",        color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
-  PROPOSAL_RESUBMITTED: { icon: "edit_document", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
-  PROPOSAL_ACCEPTED:  { icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
-  PROPOSAL_REJECTED:  { icon: "cancel",              color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
-  MESSAGE_RECEIVED:      { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
-  CHAT_MESSAGE_RECEIVED: { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
-  DEPOSIT:            { icon: "add_card",            color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
-  WITHDRAWAL:         { icon: "outbox",              color: "#facc15", bg: "rgba(250,204,21,0.1)"  },
-  WITHDRAWAL_APPROVED:{ icon: "check_circle",        color: "#22c55e", bg: "rgba(34,197,94,0.1)"  },
-  WITHDRAWAL_REJECTED:{ icon: "cancel",              color: "#ef4444", bg: "rgba(239,68,68,0.1)"  },
-  JOB_INVITED:        { icon: "person_add",          color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
-  SYSTEM:             { icon: "notifications",       color: "#8c90a0", bg: "rgba(140,144,160,0.1)" },
+  PROPOSAL_SUBMITTED: {
+    icon: "description",
+    color: "text-cyan-400",
+    bg: "bg-cyan-400/10",
+  },
+  PROPOSAL_RESUBMITTED: {
+    icon: "edit_document",
+    color: "text-cyan-400",
+    bg: "bg-cyan-400/10",
+  },
+  PROPOSAL_ACCEPTED: {
+    icon: "check_circle",
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/10",
+  },
+  PROPOSAL_REJECTED: {
+    icon: "cancel",
+    color: "text-red-400",
+    bg: "bg-red-400/10",
+  },
+  MESSAGE_RECEIVED: {
+    icon: "chat",
+    color: "text-indigo-300",
+    bg: "bg-indigo-300/10",
+  },
+  CHAT_MESSAGE_RECEIVED: {
+    icon: "chat",
+    color: "text-indigo-300",
+    bg: "bg-indigo-300/10",
+  },
+  DEPOSIT: {
+    icon: "add_card",
+    color: "text-cyan-400",
+    bg: "bg-cyan-400/10",
+  },
+  WITHDRAWAL: {
+    icon: "outbox",
+    color: "text-yellow-400",
+    bg: "bg-yellow-400/10",
+  },
+  WITHDRAWAL_APPROVED: {
+    icon: "check_circle",
+    color: "text-emerald-400",
+    bg: "bg-emerald-400/10",
+  },
+  WITHDRAWAL_REJECTED: {
+    icon: "cancel",
+    color: "text-red-400",
+    bg: "bg-red-400/10",
+  },
+  JOB_INVITED: {
+    icon: "person_add",
+    color: "text-indigo-300",
+    bg: "bg-indigo-300/10",
+  },
+  SYSTEM: {
+    icon: "notifications",
+    color: "text-gray-400",
+    bg: "bg-gray-400/10",
+  },
 };
 
 function getTypeConfig(type) {
   return TYPE_CONFIG[type] || TYPE_CONFIG.SYSTEM;
+}
+
+function parseMetadata(notification) {
+  try {
+    if (!notification?.metadata) return {};
+    return typeof notification.metadata === "string"
+      ? JSON.parse(notification.metadata)
+      : notification.metadata;
+  } catch {
+    return {};
+  }
+}
+
+function getValue(notification, metadata, keys) {
+  for (const key of keys) {
+    if (notification?.[key] !== undefined && notification?.[key] !== null) {
+      return notification[key];
+    }
+
+    if (metadata?.[key] !== undefined && metadata?.[key] !== null) {
+      return metadata[key];
+    }
+  }
+
+  return null;
+}
+
+function getNotificationId(notification) {
+  return (
+    notification?.notificationId ||
+    notification?.id ||
+    notification?.notificationID ||
+    notification?.notification_id
+  );
 }
 
 function formatNotificationTime(dateStr) {
@@ -30,26 +111,16 @@ function formatNotificationTime(dateStr) {
   if (Number.isNaN(date.getTime())) return "";
 
   const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
 
-  const isToday =
-    date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate();
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) {
+    return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
+  }
 
-  if (isToday) {
-    const diffMs = now.getTime() - date.getTime();
-    const diffMinutes = Math.max(0, Math.floor(diffMs / 60000));
-
-    if (diffMinutes < 1) {
-      return "Just now";
-    }
-
-    if (diffMinutes < 60) {
-      return `${diffMinutes} minute${diffMinutes > 1 ? "s" : ""} ago`;
-    }
-
-    const diffHours = Math.floor(diffMinutes / 60);
-
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
     return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`;
   }
 
@@ -60,6 +131,62 @@ function formatNotificationTime(dateStr) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function getNotificationTargetUrl(notification) {
+  const type = notification?.type || "SYSTEM";
+  const metadata = parseMetadata(notification);
+
+  if (notification?.actionUrl) return notification.actionUrl;
+  if (notification?.link) return notification.link;
+  if (notification?.url) return notification.url;
+  if (notification?.targetUrl) return notification.targetUrl;
+
+  const proposalId = getValue(notification, metadata, [
+    "proposalId",
+    "relatedProposalId",
+    "targetProposalId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
+  const conversationId = getValue(notification, metadata, [
+    "conversationId",
+    "relatedConversationId",
+    "targetConversationId",
+    "entityId",
+    "referenceId",
+    "targetId",
+  ]);
+
+  switch (type) {
+    case "CHAT_MESSAGE_RECEIVED":
+    case "MESSAGE_RECEIVED":
+      return conversationId
+        ? `/client/messages/${conversationId}`
+        : "/client/messages";
+
+    case "PROPOSAL_SUBMITTED":
+    case "PROPOSAL_RESUBMITTED":
+    case "PROPOSAL_ACCEPTED":
+    case "PROPOSAL_REJECTED":
+      return proposalId
+        ? `/client/proposals/${proposalId}`
+        : "/client/projects";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
+
+    case "DEPOSIT":
+    case "WITHDRAWAL":
+    case "WITHDRAWAL_APPROVED":
+    case "WITHDRAWAL_REJECTED":
+      return "/client/wallet";
+
+    default:
+      return "/client/notifications";
+  }
 }
 
 export default function NotificationDropdown() {
@@ -76,253 +203,176 @@ export default function NotificationDropdown() {
     markAllRead,
   } = useNotifications();
 
-  // Fetch khi mở dropdown
   useEffect(() => {
     if (open) fetchNotifications();
   }, [open, fetchNotifications]);
 
-  // Click outside để đóng
   useEffect(() => {
     const handler = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setOpen(false);
       }
     };
+
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const getNotificationTargetUrl = (notification) => {
-  const type = notification.type;
-
-  if (notification.actionUrl || notification.link) {
-    return notification.actionUrl || notification.link;
-  }
-
-  let metadata = {};
-
-  try {
-    metadata =
-      typeof notification.metadata === "string"
-        ? JSON.parse(notification.metadata)
-        : notification.metadata || {};
-  } catch {
-    metadata = {};
-  }
-
-  const proposalId =
-    notification.proposalId ||
-    notification.relatedProposalId ||
-    notification.entityId ||
-    notification.referenceId ||
-    notification.targetId ||
-    metadata.proposalId ||
-    metadata.relatedProposalId ||
-    metadata.entityId ||
-    metadata.referenceId ||
-    metadata.targetId;
-
-  switch (type) {
-    case "CHAT_MESSAGE_RECEIVED":
-    case "MESSAGE_RECEIVED":
-      return "/client/messages";
-
-    case "PROPOSAL_SUBMITTED":
-    case "PROPOSAL_RESUBMITTED":
-    case "PROPOSAL_ACCEPTED":
-    case "PROPOSAL_REJECTED":
-      return proposalId
-        ? `/client/proposals/${proposalId}`
-        : "/client/notifications";
-
-    case "JOB_INVITED":
-      return "/expert/messages";
-
-    case "DEPOSIT":
-    case "WITHDRAWAL":
-    case "WITHDRAWAL_APPROVED":
-    case "WITHDRAWAL_REJECTED":
-      return "/client/wallet";
-
-    default:
-      return "/client/notifications";
-  }
-};
-
-  const handleNotificationClick = (notification) => {
+  const handleNotificationClick = async (notification) => {
+    const notificationId = getNotificationId(notification);
     const targetUrl = getNotificationTargetUrl(notification);
 
     console.log("Notification:", notification);
     console.log("Target URL:", targetUrl);
 
-    if (!notification.isRead) {
-      markRead(notification.notificationId);
+    try {
+      if (!notification?.isRead && notificationId) {
+        await markRead(notificationId);
+      }
+    } finally {
+      navigate(targetUrl);
+      setOpen(false);
     }
-
-    navigate(targetUrl);
-    setOpen(false);
   };
 
   return (
-    <div ref={dropdownRef} style={{ position: "relative" }}>
-
-      {/* Bell button */}
+    <div ref={dropdownRef} className="relative">
       <button
+        type="button"
         onClick={() => setOpen((prev) => !prev)}
-        style={{ position: "relative", width: 38, height: 38, borderRadius: 10, background: open ? "rgba(0,240,255,0.08)" : "rgba(255,255,255,0.04)", border: `1px solid ${open ? "rgba(0,240,255,0.3)" : "rgba(255,255,255,0.1)"}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "all 0.2s", color: open ? "#00F0FF" : "#8c90a0" }}
-        onMouseEnter={(e) => { if (!open) { e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; e.currentTarget.style.color = "#00F0FF"; }}}
-        onMouseLeave={(e) => { if (!open) { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#8c90a0"; }}}
+        className={`relative flex h-[38px] w-[38px] items-center justify-center rounded-xl border transition-all duration-200 ${
+          open
+            ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-400"
+            : "border-white/10 bg-white/[0.04] text-gray-400 hover:border-cyan-400/25 hover:text-cyan-400"
+        }`}
       >
-        <span className="material-symbols-outlined" style={{ fontSize: 20 }}>notifications</span>
+        <span className="material-symbols-outlined text-[20px]">
+          notifications
+        </span>
 
-        {/* Badge */}
         {unreadCount > 0 && (
-          <span style={{ position: "absolute", top: -4, right: -4, minWidth: 18, height: 18, borderRadius: 999, background: "#ef4444", color: "#fff", fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px", border: "2px solid #101319", boxShadow: "0 0 8px rgba(239,68,68,0.5)" }}>
+          <span className="absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full border-2 border-[#101319] bg-red-500 px-1 font-mono text-[10px] font-bold text-white shadow-[0_0_8px_rgba(239,68,68,0.5)]">
             {unreadCount > 99 ? "99+" : unreadCount}
           </span>
         )}
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div style={{ position: "absolute", right: -12, top: "calc(100% + 16px)", width: 300, background: "linear-gradient(180deg, rgba(21,25,34,0.98), rgba(12,15,22,0.98))", border: "1px solid rgba(0,240,255,0.22)", borderRadius: 22, boxShadow: "0 24px 80px rgba(0,0,0,0.85), 0 0 50px rgba(0,240,255,0.08)", backdropFilter: "blur(28px)", zIndex: 999, overflow: "hidden" }}>
+        <div className="absolute right-[-12px] top-[calc(100%+16px)] z-[999] w-[300px] overflow-hidden rounded-[22px] border border-cyan-400/20 bg-gradient-to-b from-[#151922]/95 to-[#0c0f16]/95 shadow-[0_24px_80px_rgba(0,0,0,0.85),0_0_50px_rgba(0,240,255,0.08)] backdrop-blur-2xl">
+          <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.025] px-5 py-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[15px] font-bold text-gray-100">
+                Notifications
+              </span>
 
-          
-
-          {/* Header */}
-          <div style={{ padding: "18px 22px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "rgba(255,255,255,0.025)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb" }}>Notifications</span>
               {unreadCount > 0 && (
-                <span style={{ padding: "2px 8px", borderRadius: 999, background: "rgba(0,240,255,0.1)", color: "#00F0FF", fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>
+                <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-400">
                   {unreadCount} new
                 </span>
               )}
             </div>
+
             {unreadCount > 0 && (
-              <button onClick={markAllRead}
-                style={{ fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8c90a0", background: "none", border: "none", cursor: "pointer", transition: "color 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
+              <button
+                type="button"
+                onClick={markAllRead}
+                className="font-mono text-[11px] uppercase tracking-[0.08em] text-gray-400 transition hover:text-cyan-400"
+              >
                 Mark all read
               </button>
             )}
           </div>
 
-          {/* List */}
-          <div  className="
-                        max-h-[220px]
-                        overflow-y-auto
-                        pr-1
-
-                        [&::-webkit-scrollbar]:w-1
-                        [&::-webkit-scrollbar-track]:bg-transparent
-                        [&::-webkit-scrollbar-thumb]:rounded-full
-                        [&::-webkit-scrollbar-thumb]:bg-white/10
-                        hover:[&::-webkit-scrollbar-thumb]:bg-cyan-400/50
-
-                        [scrollbar-width:thin]
-                        [scrollbar-color:rgba(255,255,255,0.12)_transparent]
-                      ">
+          <div className="max-h-[220px] overflow-y-auto pr-1 [scrollbar-color:rgba(255,255,255,0.12)_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-cyan-400/50 [&::-webkit-scrollbar-track]:bg-transparent">
             {loading && (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#8c90a0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 32, display: "block", marginBottom: 8, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
+              <div className="py-10 text-center text-gray-400">
+                <span className="material-symbols-outlined mb-2 block animate-spin text-[32px] text-cyan-400">
+                  autorenew
+                </span>
                 Loading...
               </div>
             )}
 
             {!loading && notifications.length === 0 && (
-              <div style={{ textAlign: "center", padding: "48px 20px", color: "#8c90a0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>notifications_off</span>
-                <p style={{ fontSize: 14, margin: 0 }}>No notifications yet</p>
+              <div className="px-5 py-12 text-center text-gray-400">
+                <span className="material-symbols-outlined mb-3 block text-[48px] text-[#272a30]">
+                  notifications_off
+                </span>
+                <p className="m-0 text-sm">No notifications yet</p>
               </div>
             )}
 
-            {!loading && notifications.map((n) => {
-              const cfg = getTypeConfig(n.type);
-              const isUnread = !n.isRead;
-              return (
-                <div
-                  key={n.notificationId}
-                  onClick={() => handleNotificationClick(n)}
-                  style={{
-                    margin: "8px",
-                    padding: "12px",
-                    borderRadius: "14px",
-                    border: `1px solid ${
+            {!loading &&
+              notifications.map((n) => {
+                const cfg = getTypeConfig(n.type);
+                const isUnread = !n.isRead;
+                const notificationId = getNotificationId(n);
+
+                return (
+                  <button
+                    key={notificationId || `${n.type}-${n.createdAt}`}
+                    type="button"
+                    onClick={() => handleNotificationClick(n)}
+                    className={`group relative m-2 flex w-[calc(100%-16px)] items-start gap-3 rounded-[14px] border p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-cyan-400/10 hover:shadow-[0_6px_20px_rgba(0,240,255,0.12)] ${
                       isUnread
-                        ? "rgba(0,240,255,0.15)"
-                        : "rgba(255,255,255,0.06)"
-                    }`,
-                    cursor: "pointer",
-                    background: isUnread
-                      ? "rgba(0,240,255,0.04)"
-                      : "rgba(255,255,255,0.02)",
-                    transition: "all 0.25s ease",
-                    display: "flex",
-                    gap: 12,
-                    alignItems: "flex-start",
-                    position: "relative"
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = "rgba(0,240,255,0.08)";
-                    e.currentTarget.style.transform = "translateY(-2px)";
-                    e.currentTarget.style.boxShadow =
-                      "0 6px 20px rgba(0,240,255,0.12)";
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = isUnread
-                      ? "rgba(0,240,255,0.04)"
-                      : "rgba(255,255,255,0.02)";
-                    e.currentTarget.style.transform = "translateY(0)";
-                    e.currentTarget.style.boxShadow = "none";
-                  }}
-                >
-                  {/* Unread dot */}
-                  {isUnread && (
-                    <span style={{ position: "absolute", top: 18, left: 8, width: 6, height: 6, borderRadius: "50%", background: "#00F0FF", boxShadow: "0 0 6px rgba(0,240,255,0.6)" }} />
-                  )}
-
-                  {/* Icon */}
-                  <div style={{ width: 42, height: 42, borderRadius: 10, background: cfg.bg, color: cfg.color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{cfg.icon}</span>
-                  </div>
-
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 13, color: isUnread ? "#e1e2eb" : "#c2c6d6", fontWeight: isUnread ? 600 : 400, margin: "0 0 4px", lineHeight: 1.5 }}>
-                      {n.title || n.message || n.content}
-                    </p>
-                    {(n.body || n.description) && (
-                      <p style={{ fontSize: 12, color: "#8c90a0", margin: "0 0 6px", lineHeight: 1.5, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                        {n.body || n.description}
-                      </p>
+                        ? "border-cyan-400/15 bg-cyan-400/[0.04]"
+                        : "border-white/10 bg-white/[0.02]"
+                    }`}
+                  >
+                    {isUnread && (
+                      <span className="absolute left-2 top-[18px] h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_6px_rgba(0,240,255,0.6)]" />
                     )}
-                    <span style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace" }}>
-                      {formatNotificationTime(n.createdAt)}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+
+                    <div
+                      className={`flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl ${cfg.bg} ${cfg.color}`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {cfg.icon}
+                      </span>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p
+                        className={`mb-1 truncate text-[13px] leading-5 ${
+                          isUnread
+                            ? "font-semibold text-gray-100"
+                            : "font-normal text-gray-300"
+                        }`}
+                      >
+                        {n.title || n.message || n.content || "Notification"}
+                      </p>
+
+                      {(n.body || n.description) && (
+                        <p className="mb-1.5 overflow-hidden text-xs leading-5 text-gray-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
+                          {n.body || n.description}
+                        </p>
+                      )}
+
+                      <span className="font-mono text-[11px] text-gray-400">
+                        {formatNotificationTime(n.createdAt)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
           </div>
 
-          {/* Footer */}
           {notifications.length > 0 && (
-            <div style={{ padding: "12px 20px", borderTop: "1px solid rgba(255,255,255,0.08)", textAlign: "center" }}>
+            <div className="border-t border-white/10 px-5 py-3 text-center">
               <button
-                onClick={() => { setOpen(false); navigate("/client/notifications"); }}
-                style={{ fontSize: 12, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.08em", color: "#8c90a0", background: "none", border: "none", cursor: "pointer", transition: "color 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-                onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/client/notifications");
+                }}
+                className="font-mono text-xs uppercase tracking-[0.08em] text-gray-400 transition hover:text-cyan-400"
+              >
                 View all notifications →
               </button>
             </div>
           )}
         </div>
       )}
-
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

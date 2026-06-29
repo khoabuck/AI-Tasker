@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "../api/axiosInstance";
 
-const POLL_INTERVAL = 30_000;
+const POLL_INTERVAL = 5_000;
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -26,14 +26,20 @@ export function useNotifications() {
       setTotalCount(body.totalCount ?? 0);
       setUnreadCount(body.unreadCount ?? 0);
     } catch {}
-    finally { setLoading(false); }
+    finally {
+      setLoading(false);
+    }
   }, []);
 
   const markRead = useCallback(async (notificationId) => {
     try {
       await axiosInstance.post(`/notifications/${notificationId}/read`);
       setNotifications((prev) =>
-        prev.map((n) => n.notificationId === notificationId ? { ...n, isRead: true } : n)
+        prev.map((n) =>
+          n.notificationId === notificationId
+            ? { ...n, isRead: true }
+            : n
+        )
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch {}
@@ -49,9 +55,23 @@ export function useNotifications() {
 
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+    fetchNotifications();
 
-  return { notifications, unreadCount, totalCount, loading, fetchNotifications, markRead, markAllRead };
+    const interval = setInterval(() => {
+      fetchUnreadCount();
+      fetchNotifications();
+    }, POLL_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [fetchUnreadCount, fetchNotifications]);
+
+  return {
+    notifications,
+    unreadCount,
+    totalCount,
+    loading,
+    fetchNotifications,
+    markRead,
+    markAllRead,
+  };
 }

@@ -19,8 +19,10 @@ axiosInstance.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
-    console.log("REQUEST URL:", config.baseURL + config.url);
-    console.log("SEND TOKEN:", Boolean(token));
+    if (import.meta.env.DEV) {
+      console.log("REQUEST URL:", config.baseURL + config.url);
+      console.log("SEND TOKEN:", Boolean(token));
+    }
 
     return config;
   },

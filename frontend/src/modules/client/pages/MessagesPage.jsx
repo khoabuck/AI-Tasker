@@ -9,7 +9,7 @@
 // và field phân biệt "tin nhắn của tôi" trong messages[].
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ClientNavbar from "../../../components/layout/ClientNavbar";
 import axiosInstance from "../../../api/axiosInstance";
 import authService from "../../../services/auth.service";
@@ -168,8 +168,8 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
 
 export default function MessagesPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const initialConvId = searchParams.get("conversationId");
+  const { conversationId } = useParams();
+  const initialConvId = conversationId;
   const currentUser = authService.getCurrentUser();
   const currentUserId = currentUser?.userId ?? currentUser?.id;
 

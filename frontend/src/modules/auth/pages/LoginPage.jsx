@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [focusField, setFocusField] = useState("");
   const [rememberedLogins, setRememberedLogins] = useState([]);
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const clearAuthSession = () => {
     localStorage.removeItem("accessToken");
@@ -199,6 +200,10 @@ export default function LoginPage() {
         },
       });
 
+      const sessionId = crypto.randomUUID();
+      sessionStorage.setItem("sessionId", sessionId);
+      localStorage.setItem("activeSessionId", sessionId);
+
       goNextByRoleAndStatus({
         role: finalRole,
         status: finalStatus,
@@ -219,7 +224,7 @@ export default function LoginPage() {
       return;
     }
 
-    window.location.href = "http://localhost:5070/api/auth/google-login";
+    window.location.href = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
   };
 
   return (
@@ -298,6 +303,11 @@ export default function LoginPage() {
                   className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-xl"
                   style={{
                     color: focusField === "email" ? "#00F0FF" : "#8c90a0",
+                    textShadow:
+                      focusField === "email"
+                        ? "0 0 10px rgba(0,240,255,0.6)"
+                        : "none",
+                    transition: "all .25s ease",
                   }}
                 >
                   mail
@@ -387,32 +397,67 @@ export default function LoginPage() {
                   style={{
                     color:
                       focusField === "password" ? "#00F0FF" : "#8c90a0",
+                    textShadow:
+                      focusField === "password"
+                        ? "0 0 10px rgba(0,240,255,0.6)"
+                        : "none",
+                    transition: "all .25s ease",
                   }}
                 >
                   lock
                 </span>
 
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   name="password"
                   value={form.password}
                   onChange={handleChange}
                   required
-                  className="w-full rounded-xl py-3 pl-12 pr-4 outline-none transition-all"
+                  className="w-full rounded-xl py-3 pl-12 pr-12 outline-none transition-all"
                   style={{
                     background: "#191c22",
-                    border: `1px solid ${focusField === "password"
+                    border: `1px solid ${
+                      focusField === "password"
                         ? "rgba(0,240,255,0.5)"
                         : "rgba(255,255,255,0.12)"
-                      }`,
+                    }`,
                     color: "#e1e2eb",
                   }}
                   onFocus={() => {
                     setFocusField("password");
-                    fillRememberedLogin();
                   }}
                   onBlur={() => setFocusField("")}
                 />
+
+                <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: "absolute",
+                  right: 14,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#00F0FF",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 0,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 22,
+                    textShadow: "0 0 10px rgba(0,240,255,0.55)",
+                    transition: "0.2s",
+                  }}
+                >
+                  {showPassword ? "visibility_off" : "visibility"}
+                </span>
+              </button>
               </div>
             </div>
 
