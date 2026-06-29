@@ -12,13 +12,16 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly IAIUsageCostService _aiUsageCostService;
 
     public GroqJobSkillRelevanceValidator(
         HttpClient httpClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IAIUsageCostService aiUsageCostService)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _aiUsageCostService = aiUsageCostService;
     }
 
     public async Task<JobSkillRelevanceValidationResult> ValidateAsync(
@@ -89,6 +92,14 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
         using var response = await _httpClient.SendAsync(httpRequest);
         var responseContent = await response.Content.ReadAsStringAsync();
 
+        await TryRecordAIUsageAsync(
+            model,
+            jsonBody,
+            responseContent,
+            response.IsSuccessStatusCode ? "SUCCESS" : "FAILED",
+            response.IsSuccessStatusCode ? null : responseContent
+        );
+
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
@@ -98,6 +109,36 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
 
         var aiText = ExtractAssistantText(responseContent);
         return ParseResult(aiText, request.SelectedSkillNames, request.AvailableSkillNames);
+    }
+
+    private async Task TryRecordAIUsageAsync(
+        string model,
+        string requestPayload,
+        string responsePayload,
+        string status,
+        string? errorMessage)
+    {
+        try
+        {
+            await _aiUsageCostService.RecordFromOpenAICompatibleResponseAsync(
+                new RecordAIUsageRequest
+                {
+                    ModuleName = "JOB_SKILL_RELEVANCE_VALIDATOR",
+                    Provider = "GROQ",
+                    ModelName = model,
+                    RequestPayload = requestPayload,
+                    ResponsePayload = responsePayload,
+                    Status = status,
+                    ErrorMessage = errorMessage,
+                    IsChargedToPlatform = true,
+                    IsChargedToUser = false
+                }
+            );
+        }
+        catch
+        {
+            // AI usage logging must not block the user-facing AI feature.
+        }
     }
 
     private static string BuildPrompt(JobSkillRelevanceValidationRequest request)

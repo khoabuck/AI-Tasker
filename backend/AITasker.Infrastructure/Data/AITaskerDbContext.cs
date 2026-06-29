@@ -20,6 +20,10 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
 
+    public DbSet<AIModelPricingPolicy> AIModelPricingPolicies => Set<AIModelPricingPolicy>();
+
+    public DbSet<AIUsageLog> AIUsageLogs => Set<AIUsageLog>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -258,6 +262,145 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.IsActive);
 
             entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+
+        // =========================
+        // AIModelPricingPolicies
+        // =========================
+        modelBuilder.Entity<AIModelPricingPolicy>(entity =>
+        {
+            entity.ToTable("AIModelPricingPolicies", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_AIModelPricingPolicies_Prices",
+                    "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_AIModelPricingPolicies_ExchangeRate",
+                    "[ExchangeRateToVnd] > 0"
+                );
+            });
+
+            entity.HasKey(x => x.AIModelPricingPolicyId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.ModelName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.InputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.OutputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ExchangeRateToVnd)
+                .HasColumnType("decimal(18,4)");
+
+            entity.Property(x => x.UpdateReason)
+                .HasMaxLength(500);
+
+            entity.HasIndex(x => new
+            {
+                x.Provider,
+                x.ModelName,
+                x.IsActive,
+                x.EffectiveFrom
+            });
+        });
+
+        // =========================
+        // AIUsageLogs
+        // =========================
+        modelBuilder.Entity<AIUsageLog>(entity =>
+        {
+            entity.ToTable("AIUsageLogs");
+
+            entity.HasKey(x => x.AIUsageLogId);
+
+            entity.Property(x => x.ModuleName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.ModelName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.InputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.OutputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.EstimatedInputCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.EstimatedOutputCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.EstimatedTotalCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ActualInputCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ActualOutputCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ActualTotalCostUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ExchangeRateToVnd)
+                .HasColumnType("decimal(18,4)");
+
+            entity.Property(x => x.EstimatedTotalCostVnd)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.ActualTotalCostVnd)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.FreeTierSavingsUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.FreeTierSavingsVnd)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.RequestPreview)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.ResponsePreview)
+                .HasMaxLength(1000);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.CreatedAt);
+
+            entity.HasIndex(x => x.Provider);
+
+            entity.HasIndex(x => x.ModuleName);
+
+            entity.HasIndex(x => x.ModelName);
+
+            entity.HasIndex(x => x.Status);
         });
 
         // =========================

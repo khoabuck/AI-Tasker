@@ -415,15 +415,33 @@ namespace AITasker.Infrastructure.Dashboards
                 .AsNoTracking()
                 .ToListAsync();
 
+            var aiUsageLogs = await _context.AIUsageLogs
+                .AsNoTracking()
+                .ToListAsync();
+
+            var platformTotalRevenue = platformWallet?.TotalRevenue ?? 0;
+            var estimatedAiCostVnd = aiUsageLogs.Sum(x => x.EstimatedTotalCostVnd);
+            var actualAiCostVnd = aiUsageLogs.Sum(x => x.ActualTotalCostVnd);
+
             return new AdminFinanceOverviewResponse
             {
                 GeneratedAt = DateTime.UtcNow,
 
                 PlatformAvailableBalance = platformWallet?.AvailableBalance ?? 0,
-                PlatformTotalRevenue = platformWallet?.TotalRevenue ?? 0,
+                PlatformTotalRevenue = platformTotalRevenue,
                 PlatformFeeRevenue = platformWallet?.PlatformFeeRevenue ?? 0,
                 WithdrawalFeeRevenue = platformWallet?.WithdrawalFeeRevenue ?? 0,
                 AdjustmentBalance = platformWallet?.AdjustmentBalance ?? 0,
+
+                TotalAIRequests = aiUsageLogs.Count,
+                TotalAITokens = aiUsageLogs.Sum(x => (long)x.TotalTokens),
+                EstimatedAICostUsd = aiUsageLogs.Sum(x => x.EstimatedTotalCostUsd),
+                EstimatedAICostVnd = estimatedAiCostVnd,
+                ActualAICostUsd = aiUsageLogs.Sum(x => x.ActualTotalCostUsd),
+                ActualAICostVnd = actualAiCostVnd,
+                FreeTierAISavingsVnd = aiUsageLogs.Sum(x => x.FreeTierSavingsVnd),
+                EstimatedNetPlatformProfitVnd = platformTotalRevenue - estimatedAiCostVnd,
+                ActualNetPlatformProfitVnd = platformTotalRevenue - actualAiCostVnd,
 
                 TotalUserAvailableBalance = wallets.Sum(x => x.AvailableBalance),
                 TotalUserLockedBalance = wallets.Sum(x => x.LockedBalance),

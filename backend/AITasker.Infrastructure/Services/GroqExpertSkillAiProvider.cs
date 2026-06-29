@@ -12,13 +12,16 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
 {
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
+    private readonly IAIUsageCostService _aiUsageCostService;
 
     public GroqExpertSkillAiProvider(
         HttpClient httpClient,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IAIUsageCostService aiUsageCostService)
     {
         _httpClient = httpClient;
         _configuration = configuration;
+        _aiUsageCostService = aiUsageCostService;
     }
 
     public async Task<ExpertSkillAiAnalysisResult> AnalyzeAsync(
@@ -98,6 +101,14 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
 
         var responseText = await response.Content.ReadAsStringAsync();
 
+        await TryRecordAIUsageAsync(
+            model,
+            JsonSerializer.Serialize(payload),
+            responseText,
+            response.IsSuccessStatusCode ? "SUCCESS" : "FAILED",
+            response.IsSuccessStatusCode ? null : responseText
+        );
+
         if (!response.IsSuccessStatusCode)
         {
             throw new InvalidOperationException(
@@ -124,6 +135,36 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
                 "AI returned empty skill analysis result."
             }
         };
+    }
+
+    private async Task TryRecordAIUsageAsync(
+        string model,
+        string requestPayload,
+        string responsePayload,
+        string status,
+        string? errorMessage)
+    {
+        try
+        {
+            await _aiUsageCostService.RecordFromOpenAICompatibleResponseAsync(
+                new RecordAIUsageRequest
+                {
+                    ModuleName = "EXPERT_SKILL_ANALYZER",
+                    Provider = "GROQ",
+                    ModelName = model,
+                    RequestPayload = requestPayload,
+                    ResponsePayload = responsePayload,
+                    Status = status,
+                    ErrorMessage = errorMessage,
+                    IsChargedToPlatform = true,
+                    IsChargedToUser = false
+                }
+            );
+        }
+        catch
+        {
+            // AI usage logging must not block the user-facing AI feature.
+        }
     }
 
     private static string BuildPrompt(
