@@ -119,6 +119,13 @@ export default function AdminNavbar() {
           Operations
         </p>
 
+        <NavLink to="/admin/proposal-credits" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            account_balance_wallet
+          </span>
+          Proposal Credits
+        </NavLink>
+
         <NavLink to="/admin/jobs" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">work</span>
           Jobs
