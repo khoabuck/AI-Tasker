@@ -100,6 +100,13 @@ export default function MilestoneDetailPage() {
     }));
   };
 
+  const resetSubmissionForm = () => {
+    setMessage("");
+    setError("");
+    setSubmissionError("");
+    setSubmissionForm({ ...emptySubmissionForm });
+  };
+
   const validateSubmission = () => {
     if (!submissionForm.description.trim()) {
       return "Please describe what you delivered.";
@@ -373,7 +380,9 @@ export default function MilestoneDetailPage() {
               <Card
                 title={formTitle}
                 subtitle={formDescription}
-                icon={needsResubmission ? "published_with_changes" : "upload_file"}
+                icon={
+                  needsResubmission ? "published_with_changes" : "upload_file"
+                }
               >
                 {submissionError && (
                   <Alert
@@ -430,94 +439,88 @@ export default function MilestoneDetailPage() {
                 )}
 
                 {canSubmit && (
-                  <form onSubmit={handleSubmitWork} className="space-y-5">
+                  <form onSubmit={handleSubmitWork} className="space-y-6">
                     <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                      <Field label="File URL">
-                        <input
-                          type="url"
-                          value={submissionForm.fileUrl}
-                          disabled={submitting}
-                          onChange={(event) =>
-                            updateSubmissionField("fileUrl", event.target.value)
-                          }
-                          placeholder="https://..."
-                          className="input-dark"
-                        />
-                      </Field>
+                      <SubmitWorkInput
+                        label="File URL"
+                        value={submissionForm.fileUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("fileUrl", value)
+                        }
+                        placeholder="https://drive.google.com/..."
+                      />
 
-                      <Field label="Demo URL">
-                        <input
-                          type="url"
-                          value={submissionForm.demoUrl}
-                          disabled={submitting}
-                          onChange={(event) =>
-                            updateSubmissionField("demoUrl", event.target.value)
-                          }
-                          placeholder="https://..."
-                          className="input-dark"
-                        />
-                      </Field>
+                      <SubmitWorkInput
+                        label="Demo URL"
+                        value={submissionForm.demoUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("demoUrl", value)
+                        }
+                        placeholder="https://demo.example.com"
+                      />
 
-                      <Field label="Test Result URL">
-                        <input
-                          type="url"
-                          value={submissionForm.testResultUrl}
-                          disabled={submitting}
-                          onChange={(event) =>
-                            updateSubmissionField(
-                              "testResultUrl",
-                              event.target.value
-                            )
-                          }
-                          placeholder="https://..."
-                          className="input-dark"
-                        />
-                      </Field>
+                      <SubmitWorkInput
+                        label="Test Result URL"
+                        value={submissionForm.testResultUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("testResultUrl", value)
+                        }
+                        placeholder="https://docs.google.com/..."
+                      />
                     </div>
 
-                    <Field label="What did you deliver?">
-                      <textarea
-                        rows={5}
-                        value={submissionForm.description}
-                        disabled={submitting}
-                        onChange={(event) =>
-                          updateSubmissionField(
-                            "description",
-                            event.target.value
-                          )
-                        }
-                        placeholder="Describe what you completed, what changed, and how the client can review it..."
-                        className="input-dark resize-none"
-                      />
-                    </Field>
-
-                    <Field label="Notes for client">
-                      <textarea
-                        rows={4}
-                        value={submissionForm.handoverNotes}
-                        disabled={submitting}
-                        onChange={(event) =>
-                          updateSubmissionField(
-                            "handoverNotes",
-                            event.target.value
-                          )
-                        }
-                        placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
-                        className="input-dark resize-none"
-                      />
-                    </Field>
-
-                    <button
-                      type="submit"
+                    <SubmitWorkTextArea
+                      label="What did you deliver?"
+                      required
+                      value={submissionForm.description}
                       disabled={submitting}
-                      className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {submitting
-                        ? "Submitting..."
-                        : needsResubmission
-                        ? "Resubmit Work"
-                        : "Submit Work"}
-                    </button>
+                      onChange={(value) =>
+                        updateSubmissionField("description", value)
+                      }
+                      placeholder="Describe what you completed, what changed, and how the client can review it..."
+                      rows={5}
+                    />
+
+                    <SubmitWorkTextArea
+                      label="Notes for client"
+                      value={submissionForm.handoverNotes}
+                      disabled={submitting}
+                      onChange={(value) =>
+                        updateSubmissionField("handoverNotes", value)
+                      }
+                      placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
+                      rows={4}
+                    />
+
+                    <div className="flex flex-wrap justify-end gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={resetSubmissionForm}
+                        disabled={submitting}
+                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="inline-flex items-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          send
+                        </span>
+
+                        {submitting
+                          ? "Submitting..."
+                          : needsResubmission
+                          ? "Resubmit Work"
+                          : "Submit Work"}
+                      </button>
+                    </div>
                   </form>
                 )}
               </Card>
@@ -591,6 +594,58 @@ export default function MilestoneDetailPage() {
         </div>
       </div>
     </ExpertLayout>
+  );
+}
+
+function SubmitWorkInput({
+  label,
+  value,
+  disabled,
+  onChange,
+  placeholder,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+        {label}
+      </span>
+
+      <input
+        type="url"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-2xl border border-white/10 bg-[#0f141d] px-4 py-3.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function SubmitWorkTextArea({
+  label,
+  required,
+  value,
+  disabled,
+  onChange,
+  placeholder,
+  rows = 4,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </span>
+
+      <textarea
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-2xl border border-white/10 bg-[#0f141d] px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
   );
 }
 
@@ -687,6 +742,7 @@ function Card({ title, subtitle, icon, children }) {
 
         <div>
           <h2 className="text-xl font-extrabold text-white">{title}</h2>
+
           {subtitle && (
             <p className="mt-1 text-sm leading-6 text-gray-500">{subtitle}</p>
           )}
@@ -698,22 +754,12 @@ function Card({ title, subtitle, icon, children }) {
   );
 }
 
-function Field({ label, children }) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
 function HeroInfo({ icon, label, value }) {
   return (
     <div className="border-t border-white/10 p-5 md:border-r md:border-t-0 md:last:border-r-0">
       <div className="mb-2 flex items-center gap-2 text-gray-500">
         <span className="material-symbols-outlined text-lg">{icon}</span>
+
         <span className="text-xs font-bold uppercase tracking-wider">
           {label}
         </span>
@@ -745,6 +791,7 @@ function Step({ number, title, description, active, done }) {
 
       <div>
         <p className="font-bold text-white">{title}</p>
+
         <p className="mt-1 text-sm leading-6 text-gray-400">{description}</p>
       </div>
     </div>
@@ -779,22 +826,6 @@ function LinkPill({ label, url }) {
   );
 }
 
-function InfoPill({ icon, label, variant = "default" }) {
-  const style =
-    variant === "success"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : "border-white/10 bg-white/[0.04] text-gray-300";
-
-  return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold ${style}`}
-    >
-      <span className="material-symbols-outlined text-sm">{icon}</span>
-      {label}
-    </span>
-  );
-}
-
 function EmptyState({ icon, title, description }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
@@ -820,6 +851,7 @@ function Alert({ type, title, message }) {
   return (
     <div className={`mb-5 rounded-2xl border px-5 py-4 text-sm ${style}`}>
       <p className="font-bold">{title}</p>
+
       <p className="mt-1">{message}</p>
     </div>
   );
@@ -970,7 +1002,10 @@ function getMilestoneUiStatus({
     };
   }
 
-  if (isApprovedStatus(milestoneStatus) || isApprovedStatus(latestSubmission?.status)) {
+  if (
+    isApprovedStatus(milestoneStatus) ||
+    isApprovedStatus(latestSubmission?.status)
+  ) {
     return {
       label: "Approved",
       icon: "verified",
@@ -1034,9 +1069,11 @@ function getClientFeedback(submission) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
@@ -1046,7 +1083,7 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatInfoValue(value) {

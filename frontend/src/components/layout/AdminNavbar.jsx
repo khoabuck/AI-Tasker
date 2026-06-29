@@ -99,6 +99,12 @@ export default function AdminNavbar() {
           <span className="material-symbols-outlined text-[20px]">inventory_2</span>
           Credit Packages
         </NavLink>
+        <NavLink to="/admin/proposal-credit-packages" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            workspace_premium
+          </span>
+          Proposal Packages
+        </NavLink>
 
         <NavLink to="/admin/platform-fee-policy" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">

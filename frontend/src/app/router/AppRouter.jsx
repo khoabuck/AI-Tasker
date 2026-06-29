@@ -95,6 +95,7 @@ import AdminExpertScoringPolicyPage from "../../modules/admin/pages/AdminExpertS
 import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformFeePolicyPage";
 import AdminJobPostingAiPolicyPage from "../../modules/admin/pages/AdminJobPostingAiPolicyPage";
 import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCreditPackagesPage";
+import AdminProposalCreditPackagesPage from "../../modules/admin/pages/AdminProposalCreditPackagesPage";
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -230,7 +231,7 @@ export default function AppRouter() {
       <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />  
       <Route path="/admin/job-posting-ai-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobPostingAiPolicyPage /></ProtectedRoute>} />
       <Route path="/admin/job-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobCreditPackagesPage /></ProtectedRoute>} /> 
-
+      <Route path="/admin/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditPackagesPage /></ProtectedRoute>} />
 
 
       {/* 404 */}
