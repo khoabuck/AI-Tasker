@@ -94,7 +94,7 @@ namespace AITasker.Infrastructure.Contracts
                 finalTimelineDays,
                 proposal.ExpectedOutputs,
                 "Acceptance criteria must be confirmed by Client and Expert before project starts.",
-                "Milestone based escrow simulation.",
+                "Milestone-based escrow using internal wallet ledger.",
                 ContractSourceProposal,
                 null);
 

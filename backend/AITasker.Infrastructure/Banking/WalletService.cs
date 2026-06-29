@@ -48,8 +48,6 @@ namespace AITasker.Infrastructure.Banking
 
         private const string DisputeStatusOpen = "OPEN";
 
-        private const string DepositProviderSimulation = "SIMULATION";
-
         private const string TransactionStatusSuccess = "SUCCESS";
 
         private const string TxDeposit = "DEPOSIT";
@@ -345,94 +343,6 @@ namespace AITasker.Infrastructure.Banking
                 order.ProviderReference = string.IsNullOrWhiteSpace(reference)
                     ? paymentLinkId
                     : reference;
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    order.UserId,
-                    "Wallet deposit successful",
-                    $"Your wallet has been credited with {order.Amount:N0}.",
-                    "WALLET_DEPOSIT_SUCCESS");
-
-                return MapDepositOrder(order, MapWallet(wallet));
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
-        }
-
-        public async Task<DepositOrderResponse> SimulateDepositPaidAsync(
-            int currentUserId,
-            int depositOrderId)
-        {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var order = await _context.DepositOrders
-                    .FirstOrDefaultAsync(x => x.DepositOrderId == depositOrderId);
-
-                if (order == null)
-                {
-                    throw new InvalidOperationException("Deposit order not found.");
-                }
-
-                await EnsureUserCanAccessDepositOrderAsync(currentUserId, order);
-
-                if (string.Equals(order.Status, DepositOrderPaid, StringComparison.OrdinalIgnoreCase))
-                {
-                    var paidWallet = await GetOrCreateWalletAsync(order.UserId);
-                    return MapDepositOrder(order, MapWallet(paidWallet));
-                }
-
-                if (!string.Equals(order.Status, DepositOrderPending, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Only PENDING deposit orders can be paid.");
-                }
-
-                if (order.ExpiresAt < DateTime.UtcNow)
-                {
-                    order.Status = DepositOrderExpired;
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-
-                    throw new InvalidOperationException("Deposit order expired.");
-                }
-
-                var existingDepositTransaction = await _context.Transactions.AnyAsync(x =>
-                    x.UserId == order.UserId &&
-                    x.Type == TxDeposit &&
-                    x.Status == TransactionStatusSuccess &&
-                    x.ReferenceId == order.OrderCode);
-
-                var wallet = await GetOrCreateWalletAsync(order.UserId);
-
-                if (!existingDepositTransaction)
-                {
-                    wallet.AvailableBalance += order.Amount;
-                    wallet.UpdatedAt = DateTime.UtcNow;
-
-                    _context.Transactions.Add(new Transaction
-                    {
-                        UserId = order.UserId,
-                        ProjectId = null,
-                        MilestoneId = null,
-                        EscrowId = null,
-                        Amount = order.Amount,
-                        Type = TxDeposit,
-                        Status = TransactionStatusSuccess,
-                        Description = $"[Deposit] Simulated payment for deposit order {order.OrderCode}",
-                        ReferenceId = order.OrderCode,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-
-                order.Status = DepositOrderPaid;
-                order.PaidAt = DateTime.UtcNow;
-                order.ProviderReference = $"SIM_PAID_{order.OrderCode}";
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();

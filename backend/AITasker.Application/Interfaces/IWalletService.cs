@@ -28,10 +28,6 @@ namespace AITasker.Application.Interfaces
             int userId,
             CreateDepositOrderRequest request);
 
-        Task<DepositOrderResponse> SimulateDepositPaidAsync(
-            int currentUserId,
-            int depositOrderId);
-
         Task<IReadOnlyList<EscrowResponse>> GetProjectEscrowsAsync(
             int currentUserId,
             int projectId);
