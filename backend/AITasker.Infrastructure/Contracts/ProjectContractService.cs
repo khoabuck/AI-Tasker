@@ -24,18 +24,17 @@ namespace AITasker.Infrastructure.Contracts
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
 
+        private const int EscrowLockWindowHours = 24;
+
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
-        private readonly IWalletService _walletService;
 
         public ProjectContractService(
             AITaskerDbContext context,
-            INotificationService notificationService,
-            IWalletService walletService)
+            INotificationService notificationService)
         {
             _context = context;
             _notificationService = notificationService;
-            _walletService = walletService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -57,11 +56,23 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Only ACCEPTED proposals can create contract draft.");
             }
 
+            ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
+
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
 
             if (existingContract != null)
             {
+                var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
+                    .AnyAsync(x => x.ContractId == existingContract.ContractId);
+
+                if (!hasMilestoneDrafts)
+                {
+                    await CopyLatestProposalMilestonesToContractDraftAsync(
+                        proposal.ProposalId,
+                        existingContract.ContractId);
+                }
+
                 return await MapToContractResponseAsync(existingContract);
             }
 
@@ -70,6 +81,8 @@ namespace AITasker.Infrastructure.Contracts
 
             var finalPrice = proposal.ProposedPrice;
             var finalTimelineDays = proposal.ProposedTimelineDays;
+
+
 
             var contract = BuildContract(
                 proposal,
@@ -220,7 +233,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract signed by Client",
                     $"The client signed the contract for job: {job.Title}. Please review and sign to create the project.",
-                    "CONTRACT_SIGNED_BY_CLIENT");
+                    "CONTRACT_SIGNED_BY_CLIENT",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
 
                 await _context.SaveChangesAsync();
 
@@ -257,27 +275,29 @@ namespace AITasker.Infrastructure.Contracts
 
                 await _context.SaveChangesAsync();
 
-                var escrowResult = await _walletService.LockProjectEscrowAsync(
-                    clientProfile.UserId,
-                    project.ProjectId);
-
-                if (!escrowResult.Success)
-                {
-                    throw new InvalidOperationException(
-                        escrowResult.Message ?? "Failed to automatically lock project escrow.");
-                }
-
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
-                    "Contract fully confirmed and escrow locked",
-                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically and the project has started.",
-                    "CONTRACT_CONFIRMED_ESCROW_LOCKED");
+                    "Contract fully confirmed",
+                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {EscrowLockWindowHours} hours to start the project.",
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Project started",
-                    $"The contract for job '{job.Title}' is fully confirmed. Client escrow was locked automatically. You can start working on milestones.",
-                    "PROJECT_STARTED");
+                    "Contract fully confirmed",
+                    $"The contract for job '{job.Title}' is fully confirmed. Waiting for Client to lock escrow before work starts.",
+                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
                 return await MapToContractResponseAsync(contract);
             }
@@ -353,7 +373,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract cancelled by Client",
                     $"The client cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    NotificationTypes.ContractCancelled);
+                    NotificationTypes.ContractCancelled,
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
             else
             {
@@ -361,10 +386,24 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract cancelled by Expert",
                     $"The expert cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    NotificationTypes.ContractCancelled);
+                    NotificationTypes.ContractCancelled,
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
 
             return await MapToContractResponseAsync(contract);
+        }
+
+        private static void ValidateProposalPriceWithinJobBudget(decimal proposedPrice, JobPosting job)
+        {
+            if (proposedPrice < job.BudgetMin || proposedPrice > job.BudgetMax)
+            {
+                throw new InvalidOperationException(
+                    $"Accepted proposal price must be between job budget range {job.BudgetMin:N0} and {job.BudgetMax:N0}.");
+            }
         }
 
         private ProjectContract BuildContract(
@@ -427,8 +466,16 @@ namespace AITasker.Infrastructure.Contracts
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
+            var now = DateTime.UtcNow;
+            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(EscrowLockWindowHours);
+
             if (existingProject != null)
             {
+                if (existingProject.EscrowLockDeadlineAt == null)
+                {
+                    existingProject.EscrowLockDeadlineAt = escrowDeadline;
+                }
+
                 return existingProject;
             }
 
@@ -441,7 +488,10 @@ namespace AITasker.Infrastructure.Contracts
                 Status = ProjectStatusPendingEscrow,
                 StartDate = null,
                 EndDate = null,
-                CreatedAt = DateTime.UtcNow
+                EscrowLockDeadlineAt = escrowDeadline,
+                EscrowLockedAt = null,
+                EscrowExpiredAt = null,
+                CreatedAt = now
             };
 
             _context.Projects.Add(project);
@@ -609,7 +659,12 @@ namespace AITasker.Infrastructure.Contracts
                     expertProfile.UserId,
                     "Contract draft created",
                     $"A contract draft was created for job: {job.Title}. Please review it.",
-                    "CONTRACT_DRAFT_CREATED");
+                    "CONTRACT_DRAFT_CREATED",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
 
                 return;
             }
@@ -620,7 +675,12 @@ namespace AITasker.Infrastructure.Contracts
                     clientProfile.UserId,
                     "Contract draft created",
                     $"A contract draft was created for job: {job.Title}. Please review it.",
-                    "CONTRACT_DRAFT_CREATED");
+                    "CONTRACT_DRAFT_CREATED",
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
             }
         }
 
@@ -784,6 +844,9 @@ namespace AITasker.Infrastructure.Contracts
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,
+                ProjectEscrowLockDeadlineAt = project?.EscrowLockDeadlineAt,
+                ProjectEscrowLockedAt = project?.EscrowLockedAt,
+                ProjectEscrowExpiredAt = project?.EscrowExpiredAt,
 
                 CreatedAt = contract.CreatedAt,
                 ConfirmedAt = contract.ConfirmedAt
@@ -993,23 +1056,38 @@ namespace AITasker.Infrastructure.Contracts
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            var baseDate = DateTime.UtcNow;
+            var now = DateTime.UtcNow;
+            var previousDeadlineOffsetDays = 0;
+            var milestones = new List<Milestone>();
 
-            var milestones = drafts.Select(draft => new Milestone
+            foreach (var draft in drafts)
             {
-                ProjectId = project.ProjectId,
-                Title = draft.Title,
-                Description = draft.Description,
-                ExpectedDeliverable = draft.ExpectedDeliverable,
-                AcceptanceCriteria = draft.AcceptanceCriteria,
-                Amount = draft.Amount,
-                OrderIndex = draft.OrderIndex,
-                Deadline = baseDate.AddDays(draft.DeadlineOffsetDays),
-                RevisionUsed = 0,
-                PaymentStatus = "PENDING",
-                Status = "PENDING",
-                CreatedAt = DateTime.UtcNow
-            }).ToList();
+                var durationDays = draft.DeadlineOffsetDays - previousDeadlineOffsetDays;
+
+                if (durationDays <= 0)
+                {
+                    durationDays = Math.Max(1, draft.DeadlineOffsetDays);
+                }
+
+                milestones.Add(new Milestone
+                {
+                    ProjectId = project.ProjectId,
+                    Title = draft.Title,
+                    Description = draft.Description,
+                    ExpectedDeliverable = draft.ExpectedDeliverable,
+                    AcceptanceCriteria = draft.AcceptanceCriteria,
+                    Amount = draft.Amount,
+                    OrderIndex = draft.OrderIndex,
+                    DurationDays = durationDays,
+                    Deadline = now.AddDays(draft.DeadlineOffsetDays),
+                    RevisionUsed = 0,
+                    PaymentStatus = "PENDING",
+                    Status = "PENDING",
+                    CreatedAt = now
+                });
+
+                previousDeadlineOffsetDays = draft.DeadlineOffsetDays;
+            }
 
             _context.Milestones.AddRange(milestones);
         }
@@ -1095,8 +1173,8 @@ namespace AITasker.Infrastructure.Contracts
                     ContractId = contractId,
                     Title = x.Title,
                     Description = x.Description,
-                    ExpectedDeliverable = x.ExpectedDeliverable,
-                    AcceptanceCriteria = x.AcceptanceCriteria,
+                    ExpectedDeliverable = string.Empty,
+                    AcceptanceCriteria = string.Empty,
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
@@ -1107,6 +1185,23 @@ namespace AITasker.Infrastructure.Contracts
             _context.ContractMilestoneDrafts.AddRange(contractMilestones);
 
             await _context.SaveChangesAsync();
+        }
+
+        private async Task EnsureContractMilestoneDraftsCopiedFromProposalAsync(
+            int proposalId,
+            int contractId)
+        {
+            var hasContractMilestoneDrafts = await _context.ContractMilestoneDrafts
+                .AnyAsync(x => x.ContractId == contractId);
+
+            if (hasContractMilestoneDrafts)
+            {
+                return;
+            }
+
+            await CopyLatestProposalMilestonesToContractDraftAsync(
+                proposalId,
+                contractId);
         }
 
         private async Task EnsureExpertCanAcceptNewProjectAsync(int expertId)

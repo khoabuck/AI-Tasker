@@ -44,6 +44,12 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime CreatedAt { get; set; }
 
+        public DateTime CreatedAtUtc { get; set; }
+
         public DateTime? LastMessageAt { get; set; }
+
+        public DateTime? LastMessageAtUtc { get; set; }
+
+        public string TimeZone { get; set; } = "Asia/Ho_Chi_Minh";
     }
 }

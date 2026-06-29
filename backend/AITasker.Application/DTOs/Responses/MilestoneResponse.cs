@@ -20,6 +20,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public int OrderIndex { get; set; }
 
+        public int DurationDays { get; set; }
+
         public DateTime Deadline { get; set; }
 
         public int RevisionUsed { get; set; }

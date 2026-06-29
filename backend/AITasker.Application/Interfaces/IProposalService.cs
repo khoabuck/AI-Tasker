@@ -14,6 +14,29 @@ namespace AITasker.Application.Interfaces
         Task<IReadOnlyList<ProposalResponse>> GetMyProposalsAsync(
             int userId);
 
+        Task<ProposalCreditResponse> GetMyProposalCreditsAsync(
+            int userId);
+
+        Task<IReadOnlyList<ProposalResponse>> GetMyProposalDraftsAsync(
+            int userId);
+
+        Task<ProposalResponse> SaveProposalDraftAsync(
+            int userId,
+            SubmitProposalRequest request);
+
+        Task<ProposalResponse> UpdateProposalDraftAsync(
+            int userId,
+            int proposalId,
+            SubmitProposalRequest request);
+
+        Task<ProposalResponse> SubmitProposalDraftAsync(
+            int userId,
+            int proposalId);
+
+        Task DeleteProposalDraftAsync(
+            int userId,
+            int proposalId);
+
         Task<IReadOnlyList<ProposalResponse>> GetJobProposalsAsync(
             int userId,
             int jobId);

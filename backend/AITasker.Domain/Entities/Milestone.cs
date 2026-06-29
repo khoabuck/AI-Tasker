@@ -20,6 +20,8 @@ namespace AITasker.Domain.Entities
 
         public int OrderIndex { get; set; }
 
+        public int DurationDays { get; set; }
+
         public DateTime Deadline { get; set; }
 
         public DateTime? SubmissionOverdueNotifiedAt { get; set; }
