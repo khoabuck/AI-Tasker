@@ -48,7 +48,6 @@ export default function ExpertNotificationsPage() {
       setNotifications(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD NOTIFICATIONS ERROR:", err?.response?.data || err);
-
       setError(getFriendlyError(err, "Cannot load notifications."));
       setNotifications([]);
     } finally {
@@ -56,13 +55,14 @@ export default function ExpertNotificationsPage() {
     }
   };
 
-  const updateNotificationAsReadLocal = (notificationId) => {
+  const updateReadState = (notificationId) => {
     setNotifications((prev) =>
       prev.map((item) =>
-        item.notificationId === notificationId
+        String(item.notificationId) === String(notificationId)
           ? {
               ...item,
               isRead: true,
+              readAt: item.readAt || new Date().toISOString(),
             }
           : item
       )
@@ -78,11 +78,9 @@ export default function ExpertNotificationsPage() {
       setMessage("");
 
       await notificationService.markAsRead(notificationId);
-
-      updateNotificationAsReadLocal(notificationId);
+      updateReadState(notificationId);
     } catch (err) {
       console.error("MARK NOTIFICATION READ ERROR:", err?.response?.data || err);
-
       setError(getFriendlyError(err, "Cannot mark notification as read."));
     } finally {
       setMarkingId(null);
@@ -103,13 +101,13 @@ export default function ExpertNotificationsPage() {
         prev.map((item) => ({
           ...item,
           isRead: true,
+          readAt: item.readAt || new Date().toISOString(),
         }))
       );
 
       setMessage("All notifications marked as read.");
     } catch (err) {
       console.error("MARK ALL READ ERROR:", err?.response?.data || err);
-
       setError(getFriendlyError(err, "Cannot mark all notifications as read."));
     } finally {
       setMarkingAll(false);
@@ -117,28 +115,32 @@ export default function ExpertNotificationsPage() {
   };
 
   const handleOpenNotification = async (notification) => {
-    const notificationId = notification.notificationId;
-    const action = getNotificationAction(notification);
+    const notificationId = getNotificationId(notification);
+    const target =
+      notification.target ||
+      notificationService.getNotificationTarget(notification);
+
+    if (!target?.path) {
+      setError(
+        "This notification does not include enough information to open a page."
+      );
+      return;
+    }
 
     try {
-      setOpeningId(notificationId || action.targetPath);
+      setOpeningId(notificationId || target.path);
       setError("");
       setMessage("");
 
-      if (!notification.isRead && notificationId) {
+      if (notificationId && !notification.isRead) {
         await notificationService.markAsRead(notificationId);
-        updateNotificationAsReadLocal(notificationId);
+        updateReadState(notificationId);
       }
 
-      if (action.targetPath) {
-        navigate(action.targetPath);
-        return;
-      }
-
-      setMessage("This notification does not have a related page yet.");
+      navigate(target.path);
     } catch (err) {
       console.error("OPEN NOTIFICATION ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot open notification."));
+      setError(getFriendlyError(err, "Cannot open this notification."));
     } finally {
       setOpeningId(null);
     }
@@ -159,8 +161,8 @@ export default function ExpertNotificationsPage() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track updates about proposals, contracts, projects, disputes,
-                wallet and system messages.
+                Open updates about proposals, contracts, projects, milestones,
+                submissions, wallet, reviews, and messages.
               </p>
             </div>
 
@@ -186,15 +188,11 @@ export default function ExpertNotificationsPage() {
           </div>
 
           {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
-            </div>
+            <Alert type="success" message={message} />
           )}
 
           {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
+            <Alert type="danger" message={error} />
           )}
 
           <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -261,19 +259,27 @@ export default function ExpertNotificationsPage() {
               <EmptyState filter={filter} />
             ) : (
               <div className="space-y-3">
-                {filteredNotifications.map((notification, index) => (
-                  <NotificationItem
-                    key={notification.notificationId || index}
-                    notification={notification}
-                    marking={markingId === notification.notificationId}
-                    opening={
-                      openingId === notification.notificationId ||
-                      openingId === getNotificationAction(notification).targetPath
-                    }
-                    onMarkAsRead={handleMarkAsRead}
-                    onOpen={handleOpenNotification}
-                  />
-                ))}
+                {filteredNotifications.map((notification, index) => {
+                  const notificationId = getNotificationId(notification);
+                  const target =
+                    notification.target ||
+                    notificationService.getNotificationTarget(notification);
+
+                  return (
+                    <NotificationItem
+                      key={notificationId || index}
+                      notification={notification}
+                      target={target}
+                      marking={String(markingId) === String(notificationId)}
+                      opening={
+                        String(openingId) === String(notificationId) ||
+                        String(openingId) === String(target?.path)
+                      }
+                      onMarkAsRead={handleMarkAsRead}
+                      onOpen={() => handleOpenNotification(notification)}
+                    />
+                  );
+                })}
               </div>
             )}
           </section>
@@ -323,104 +329,101 @@ function FilterButton({ label, active, onClick }) {
 
 function NotificationItem({
   notification,
+  target,
   marking,
   opening,
   onMarkAsRead,
   onOpen,
 }) {
-  const action = getNotificationAction(notification);
-  const typeLabel = getNotificationType(notification);
+  const unread = !notification.isRead;
+  const notificationId = getNotificationId(notification);
+  const type = String(notification.type || "GENERAL").toUpperCase();
+  const tone = getNotificationTone(type, target?.kind);
 
   return (
-    <div
+    <article
       className={`rounded-2xl border p-5 transition ${
-        notification.isRead
-          ? "border-white/10 bg-white/[0.03]"
-          : "border-cyan-400/30 bg-cyan-400/10"
-      }`}
+        unread
+          ? "border-cyan-400/40 bg-cyan-400/[0.06]"
+          : "border-white/10 bg-white/[0.03]"
+      } ${target?.path ? "cursor-pointer hover:border-cyan-400/50" : ""}`}
+      onClick={() => {
+        if (target?.path && !opening) {
+          onOpen();
+        }
+      }}
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex gap-4">
+        <div className="flex min-w-0 gap-4">
           <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
-              notification.isRead
-                ? "border-white/10 bg-white/[0.04] text-gray-400"
-                : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-            }`}
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${tone.className}`}
           >
-            <span className="material-symbols-outlined">
-              {getNotificationIcon(typeLabel)}
-            </span>
+            <span className="material-symbols-outlined">{tone.icon}</span>
           </div>
 
-          <div>
+          <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <h3 className="font-bold text-white">
-                {notification.title || "Notification"}
-              </h3>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase tracking-wider text-gray-400">
+                {tone.label}
+              </span>
 
-              {!notification.isRead && (
-                <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
+              {unread && (
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
                   New
                 </span>
               )}
 
-              {action.badge && (
-                <span className="rounded-full border border-green-400/40 bg-green-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-green-300">
-                  {action.badge}
-                </span>
-              )}
+              <span className="text-xs text-gray-500">
+                {formatDate(notification.createdAt || notification.createdAtUtc)}
+              </span>
             </div>
 
-            <p className="text-sm leading-6 text-gray-300">
-              {notification.message || "No message content."}
+            <h3 className="text-base font-bold text-white">
+              {notification.title || "Notification"}
+            </h3>
+
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
+              {notification.message || notification.content || "No message."}
             </p>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span>{formatDateTime(notification.createdAt)}</span>
-
-              {typeLabel && (
-                <>
-                  <span>•</span>
-                  <span className="uppercase">{typeLabel}</span>
-                </>
-              )}
-
-              {action.relatedText && (
-                <>
-                  <span>•</span>
-                  <span>{action.relatedText}</span>
-                </>
-              )}
-            </div>
+            {target?.path ? (
+              <p className="mt-3 text-xs font-bold text-cyan-300">
+                Click to open: {target.label}
+              </p>
+            ) : (
+              <p className="mt-3 text-xs font-bold text-gray-500">
+                No linked page available
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-col gap-2 sm:flex-row md:flex-col">
-          {action.targetPath && (
-            <button
-              type="button"
-              onClick={() => onOpen(notification)}
-              disabled={opening}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {opening ? "Opening..." : action.label}
-            </button>
-          )}
-
+        <div
+          className="flex shrink-0 flex-wrap gap-2 md:justify-end"
+          onClick={(event) => event.stopPropagation()}
+        >
           {!notification.isRead && (
             <button
               type="button"
-              onClick={() => onMarkAsRead(notification.notificationId)}
+              onClick={() => onMarkAsRead(notificationId)}
               disabled={marking}
-              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {marking ? "Marking..." : "Mark as read"}
+              {marking ? "Marking..." : "Mark read"}
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={onOpen}
+            disabled={!target?.path || opening}
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {opening ? "Opening..." : target?.label || "Open"}
+          </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -438,316 +441,138 @@ function EmptyState({ filter }) {
         notifications_off
       </span>
 
-      <h3 className="font-bold text-white">No notifications</h3>
-      <p className="mt-2 text-sm text-gray-500">{text}</p>
+      <h3 className="text-lg font-bold text-white">No notifications</h3>
+
+      <p className="mt-2 text-sm text-gray-400">{text}</p>
     </div>
   );
 }
 
-function getNotificationAction(notification) {
-  const type = getNotificationType(notification);
-  const proposalId = getRelatedProposalId(notification);
-  const contractId = getRelatedContractId(notification);
-  const jobId = getRelatedJobId(notification);
-  const projectId = getRelatedProjectId(notification);
-  const disputeId = getRelatedDisputeId(notification);
+function Alert({ type, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
 
-  if (contractId) {
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
+      {message}
+    </div>
+  );
+}
+
+function getNotificationId(notification) {
+  return (
+    notification?.notificationId ||
+    notification?.NotificationId ||
+    notification?.id ||
+    notification?.Id ||
+    notification?.raw?.notificationId ||
+    notification?.raw?.NotificationId ||
+    notification?.raw?.id ||
+    notification?.raw?.Id ||
+    ""
+  );
+}
+
+function getNotificationTone(type, kind) {
+  const value = String(type || "").toUpperCase();
+  const targetKind = String(kind || "").toUpperCase();
+
+  if (value.includes("PROPOSAL") || targetKind === "PROPOSAL") {
     return {
-      label: "View Contract",
-      badge: "Contract",
-      targetPath: `/expert/contracts/${contractId}`,
-      relatedText: `Contract #${contractId}`,
+      label: "Proposal",
+      icon: "description",
+      className: "border-purple-400/20 bg-purple-400/10 text-purple-300",
     };
   }
 
-  if (proposalId && isProposalAcceptedNotification(notification)) {
+  if (value.includes("CONTRACT") || targetKind === "CONTRACT") {
     return {
-      label: "Check Contract",
-      badge: "Accepted Proposal",
-      targetPath: `/expert/proposals/${proposalId}/contract`,
-      relatedText: `Proposal #${proposalId}`,
+      label: "Agreement",
+      icon: "contract",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     };
   }
 
-  if (proposalId) {
+  if (value.includes("PROJECT") || targetKind === "PROJECT") {
     return {
-      label: "View Proposal",
-      badge: type.includes("PROPOSAL") ? "Proposal" : "",
-      targetPath: `/expert/proposals/${proposalId}`,
-      relatedText: `Proposal #${proposalId}`,
+      label: "Project",
+      icon: "work",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     };
   }
 
-  if (projectId) {
+  if (value.includes("MILESTONE") || targetKind === "MILESTONE") {
     return {
-      label: "View Project",
-      badge: type.includes("PROJECT") ? "Project" : "",
-      targetPath: `/expert/projects/${projectId}`,
-      relatedText: `Project #${projectId}`,
+      label: "Milestone",
+      icon: "flag",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
     };
   }
 
-  if (jobId) {
+  if (
+    value.includes("DELIVERABLE") ||
+    value.includes("SUBMISSION") ||
+    value.includes("REVISION") ||
+    targetKind === "SUBMISSION"
+  ) {
     return {
-      label: "View Job",
-      badge: type.includes("JOB") ? "Job" : "",
-      targetPath: `/expert/jobs/${jobId}`,
-      relatedText: `Job #${jobId}`,
+      label: value.includes("REVISION") ? "Changes Requested" : "Submission",
+      icon: value.includes("REVISION") ? "edit_note" : "assignment",
+      className: value.includes("REVISION")
+        ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
     };
   }
 
-  if (disputeId) {
+  if (value.includes("CHAT") || value.includes("MESSAGE") || targetKind === "MESSAGE") {
     return {
-      label: "View Dispute",
-      badge: type.includes("DISPUTE") ? "Dispute" : "",
-      targetPath: `/expert/disputes/${disputeId}`,
-      relatedText: `Dispute #${disputeId}`,
+      label: "Message",
+      icon: "chat",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     };
   }
 
-  if (type.includes("WALLET") || type.includes("WITHDRAW")) {
+  if (value.includes("ESCROW") || value.includes("WALLET") || value.includes("PAYMENT")) {
     return {
-      label: "Open Wallet",
-      badge: "Wallet",
-      targetPath: "/expert/wallet",
-      relatedText: "",
+      label: "Wallet",
+      icon: "account_balance_wallet",
+      className: "border-green-400/20 bg-green-400/10 text-green-300",
+    };
+  }
+
+  if (value.includes("REVIEW") || targetKind === "REVIEW") {
+    return {
+      label: "Review",
+      icon: "star",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (value.includes("DISPUTE") || targetKind === "DISPUTE") {
+    return {
+      label: "Dispute",
+      icon: "gavel",
+      className: "border-red-400/20 bg-red-400/10 text-red-300",
     };
   }
 
   return {
-    label: "Open",
-    badge: "",
-    targetPath: "",
-    relatedText: "",
+    label: "Notification",
+    icon: "notifications",
+    className: "border-white/10 bg-white/[0.04] text-gray-300",
   };
 }
 
-function getNotificationType(notification) {
-  return String(
-    notification.type ||
-      notification.notificationType ||
-      notification.category ||
-      notification.eventType ||
-      ""
-  )
-    .trim()
-    .toUpperCase();
-}
-
-function isProposalAcceptedNotification(notification) {
-  const type = getNotificationType(notification);
-  const text = `${notification.title || ""} ${notification.message || ""}`
-    .toUpperCase()
-    .trim();
-
-  return (
-    type.includes("PROPOSAL_ACCEPTED") ||
-    type.includes("ACCEPT_PROPOSAL") ||
-    type.includes("PROPOSAL_APPROVED") ||
-    type.includes("ACCEPTED_PROPOSAL") ||
-    (type.includes("PROPOSAL") && text.includes("ACCEPT")) ||
-    (text.includes("PROPOSAL") && text.includes("ACCEPTED"))
-  );
-}
-
-function getNotificationPayload(notification) {
-  const rawPayload =
-    notification.data ||
-    notification.metadata ||
-    notification.payload ||
-    notification.extraData ||
-    notification.additionalData ||
-    {};
-
-  if (!rawPayload) return {};
-
-  if (typeof rawPayload === "object") return rawPayload;
-
-  if (typeof rawPayload === "string") {
-    try {
-      const parsed = JSON.parse(rawPayload);
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  return {};
-}
-
-function getRelatedProposalId(notification) {
-  const payload = getNotificationPayload(notification);
-
-  if (isEntity(notification, "PROPOSAL")) {
-    return getFirstValue(
-      notification.proposalId,
-      notification.relatedEntityId,
-      notification.entityId,
-      notification.referenceId,
-      notification.targetId,
-      payload.proposalId,
-      payload.relatedProposalId,
-      payload.relatedEntityId,
-      payload.entityId,
-      payload.referenceId,
-      payload.targetId
-    );
-  }
-
-  return getFirstValue(
-    notification.proposalId,
-    notification.relatedProposalId,
-    notification.relatedProposalID,
-    payload.proposalId,
-    payload.relatedProposalId,
-    payload.relatedProposalID
-  );
-}
-
-function getRelatedContractId(notification) {
-  const payload = getNotificationPayload(notification);
-
-  if (isEntity(notification, "CONTRACT")) {
-    return getFirstValue(
-      notification.contractId,
-      notification.relatedEntityId,
-      notification.entityId,
-      notification.referenceId,
-      notification.targetId,
-      payload.contractId,
-      payload.relatedContractId,
-      payload.relatedEntityId,
-      payload.entityId,
-      payload.referenceId,
-      payload.targetId
-    );
-  }
-
-  return getFirstValue(
-    notification.contractId,
-    notification.relatedContractId,
-    notification.relatedContractID,
-    payload.contractId,
-    payload.relatedContractId,
-    payload.relatedContractID
-  );
-}
-
-function getRelatedJobId(notification) {
-  const payload = getNotificationPayload(notification);
-
-  if (isEntity(notification, "JOB")) {
-    return getFirstValue(
-      notification.jobId,
-      notification.relatedEntityId,
-      notification.entityId,
-      notification.referenceId,
-      notification.targetId,
-      payload.jobId,
-      payload.relatedEntityId,
-      payload.entityId,
-      payload.referenceId,
-      payload.targetId
-    );
-  }
-
-  return getFirstValue(notification.jobId, payload.jobId);
-}
-
-function getRelatedProjectId(notification) {
-  const payload = getNotificationPayload(notification);
-
-  if (isEntity(notification, "PROJECT")) {
-    return getFirstValue(
-      notification.projectId,
-      notification.relatedEntityId,
-      notification.entityId,
-      notification.referenceId,
-      notification.targetId,
-      payload.projectId,
-      payload.relatedEntityId,
-      payload.entityId,
-      payload.referenceId,
-      payload.targetId
-    );
-  }
-
-  return getFirstValue(notification.projectId, payload.projectId);
-}
-
-function getRelatedDisputeId(notification) {
-  const payload = getNotificationPayload(notification);
-
-  if (isEntity(notification, "DISPUTE")) {
-    return getFirstValue(
-      notification.disputeId,
-      notification.relatedEntityId,
-      notification.entityId,
-      notification.referenceId,
-      notification.targetId,
-      payload.disputeId,
-      payload.relatedEntityId,
-      payload.entityId,
-      payload.referenceId,
-      payload.targetId
-    );
-  }
-
-  return getFirstValue(notification.disputeId, payload.disputeId);
-}
-
-function isEntity(notification, entityName) {
-  const value = String(
-    notification.entityName ||
-      notification.relatedEntityType ||
-      notification.entityType ||
-      notification.targetType ||
-      getNotificationPayload(notification).entityName ||
-      getNotificationPayload(notification).relatedEntityType ||
-      ""
-  ).toUpperCase();
-
-  return value.includes(entityName);
-}
-
-function getFirstValue(...values) {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
-  );
-}
-
-function getNotificationIcon(type) {
-  const value = String(type || "").toUpperCase();
-
-  if (value.includes("PROPOSAL")) return "description";
-  if (value.includes("CONTRACT")) return "contract";
-  if (value.includes("PROJECT")) return "folder_managed";
-  if (value.includes("MILESTONE")) return "flag";
-  if (value.includes("DELIVERABLE")) return "inventory_2";
-  if (value.includes("DISPUTE")) return "gavel";
-
-  if (value.includes("WALLET") || value.includes("WITHDRAW")) {
-    return "account_balance_wallet";
-  }
-
-  return "notifications";
-}
-
-function formatDateTime(value) {
-  if (!value) return "No date";
+function formatDate(value) {
+  if (!value) return "N/A";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "No date";
+  if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("vi-VN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return date.toLocaleString();
 }
 
 function getFriendlyError(err, fallback) {
