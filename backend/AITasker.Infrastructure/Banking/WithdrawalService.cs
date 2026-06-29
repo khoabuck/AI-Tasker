@@ -9,9 +9,6 @@ namespace AITasker.Infrastructure.Banking
 {
     public class WithdrawalService : IWithdrawalService
     {
-        private const decimal MinimumWithdrawalAmount = 1000m;
-        private const decimal WithdrawalFeeRate = 0.10m;
-
         private const string WithdrawalStatusPaidSimulated = "PAID_SIMULATED";
         private const string WithdrawalStatusFailed = "FAILED";
         private const string WithdrawalStatusPending = "PENDING";
@@ -30,22 +27,29 @@ namespace AITasker.Infrastructure.Banking
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IBankAccountVerificationService _bankAccountVerificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public WithdrawalService(
             AITaskerDbContext context,
             INotificationService notificationService,
-            IBankAccountVerificationService bankAccountVerificationService)
+            IBankAccountVerificationService bankAccountVerificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
             _bankAccountVerificationService = bankAccountVerificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<WithdrawalResponse> CreateWithdrawalRequestAsync(
             int userId,
             CreateWithdrawalRequest request)
         {
-            ValidateCreateWithdrawalRequest(request);
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
+            ValidateCreateWithdrawalRequest(
+                request,
+                workflowPolicy.MinimumWithdrawalAmount);
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
@@ -126,7 +130,9 @@ namespace AITasker.Infrastructure.Banking
                 if (wallet.AvailableBalance < request.Amount)
                     throw new InvalidOperationException("Insufficient available balance.");
 
-                var feeAmount = CalculateWithdrawalFee(request.Amount);
+                var feeAmount = CalculateWithdrawalFee(
+                    request.Amount,
+                    workflowPolicy.WithdrawalFeeRate);
                 var netAmount = request.Amount - feeAmount;
 
                 if (netAmount <= 0)
@@ -184,7 +190,7 @@ namespace AITasker.Infrastructure.Banking
                         Amount = -feeAmount,
                         Type = TransactionTypeWithdrawalFee,
                         Status = TransactionStatusSuccess,
-                        Description = $"[Withdrawal Fee] Fee 10% for simulated withdrawal {payoutReference}",
+                        Description = $"[Withdrawal Fee] Fee {workflowPolicy.WithdrawalFeeRate:P0} for simulated withdrawal {payoutReference}",
                         ReferenceId = payoutReference,
                         CreatedAt = now
                     });
@@ -382,13 +388,15 @@ namespace AITasker.Infrastructure.Banking
             return await BuildResponseAsync(withdrawalRequestId);
         }
 
-        private static void ValidateCreateWithdrawalRequest(CreateWithdrawalRequest request)
+        private static void ValidateCreateWithdrawalRequest(
+            CreateWithdrawalRequest request,
+            decimal minimumWithdrawalAmount)
         {
             if (request == null)
                 throw new InvalidOperationException("Withdrawal request is required.");
 
-            if (request.Amount < MinimumWithdrawalAmount)
-                throw new InvalidOperationException($"Minimum withdrawal amount is {MinimumWithdrawalAmount:N0} VND.");
+            if (request.Amount < minimumWithdrawalAmount)
+                throw new InvalidOperationException($"Minimum withdrawal amount is {minimumWithdrawalAmount:N0} VND.");
 
             if (string.IsNullOrWhiteSpace(request.BankCode))
                 throw new InvalidOperationException("Bank code is required.");
@@ -403,9 +411,11 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("Bank account holder is required.");
         }
 
-        private static decimal CalculateWithdrawalFee(decimal amount)
+        private static decimal CalculateWithdrawalFee(
+            decimal amount,
+            decimal withdrawalFeeRate)
         {
-            return Math.Round(amount * WithdrawalFeeRate, 0, MidpointRounding.AwayFromZero);
+            return Math.Round(amount * withdrawalFeeRate, 0, MidpointRounding.AwayFromZero);
         }
 
         private static string NormalizeBankCode(string? bankCode)

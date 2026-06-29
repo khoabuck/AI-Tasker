@@ -59,13 +59,16 @@ namespace AITasker.Infrastructure.Disputes
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public DisputeService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<DisputeResponse> OpenDisputeAsync(
@@ -1199,45 +1202,47 @@ namespace AITasker.Infrastructure.Disputes
                 currentDisputeId);
 
             var lostCountAfterCurrent = lostCountBeforeCurrent + 1;
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var warningThreshold = workflowPolicy.DisputeLostWarningThreshold;
 
-            if (lostCountAfterCurrent < 3)
+            if (warningThreshold <= 0 || lostCountAfterCurrent < warningThreshold)
             {
                 return;
             }
 
-            if (lostCountAfterCurrent == 3)
+            if (lostCountAfterCurrent == warningThreshold)
             {
                 await _notificationService.CreateNotificationAsync(
                     loser.UserId,
                     "Dispute warning",
-                    "You have lost 3 disputes. Please review your work quality, communication and contract compliance to avoid account restrictions.",
+                    $"You have lost {warningThreshold} disputes. Please review your work quality, communication and contract compliance to avoid account restrictions.",
                     NotificationTypes.DisputeWarning);
 
                 await NotifyAdminsUserDisputeRiskAsync(
                     loser,
                     lostCountAfterCurrent,
-                    "User has lost 3 disputes and should be reviewed by Admin.");
+                    $"User has lost {warningThreshold} disputes and should be reviewed by Admin.");
 
                 return;
             }
 
-            if (lostCountAfterCurrent == 4)
+            if (lostCountAfterCurrent == warningThreshold + 1)
             {
                 await _notificationService.CreateNotificationAsync(
                     loser.UserId,
                     "Serious dispute warning",
-                    "You have lost 4 disputes. Your account is at high risk of suspension if another dispute is lost.",
+                    $"You have lost {warningThreshold + 1} disputes. Your account is at high risk of suspension if another dispute is lost.",
                     NotificationTypes.DisputeSeriousWarning);
 
                 await NotifyAdminsUserDisputeRiskAsync(
                     loser,
                     lostCountAfterCurrent,
-                    "User has lost 4 disputes. Admin should consider suspension or manual review.");
+                    $"User has lost {warningThreshold + 1} disputes. Admin should consider suspension or manual review.");
 
                 return;
             }
 
-            if (lostCountAfterCurrent >= 5)
+            if (lostCountAfterCurrent >= warningThreshold + 2)
             {
                 if (!string.Equals(loser.Status, UserStatusBanned, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))
@@ -1249,13 +1254,13 @@ namespace AITasker.Infrastructure.Disputes
                 await _notificationService.CreateNotificationAsync(
                     loser.UserId,
                     "Account suspended",
-                    "Your account has been automatically suspended because you lost 5 disputes. Please contact support or wait for Admin review.",
+                    $"Your account has been automatically suspended because you lost {warningThreshold + 2} disputes. Please contact support or wait for Admin review.",
                     NotificationTypes.AccountAutoSuspended);
 
                 await NotifyAdminsUserDisputeRiskAsync(
                     loser,
                     lostCountAfterCurrent,
-                    "User has lost 5 disputes and was automatically suspended by the system.");
+                    $"User has lost {warningThreshold + 2} disputes and was automatically suspended by the system.");
             }
         }
 

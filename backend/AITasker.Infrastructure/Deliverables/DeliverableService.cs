@@ -34,20 +34,21 @@ namespace AITasker.Infrastructure.Deliverables
         private const string DeliverableStatusAutoApproved = "AUTO_APPROVED";
         private const string DeliverableStatusRevisionRequested = "REVISION_REQUESTED";
 
-        private const int ClientReviewWindowHours = 24;
-
         private readonly AITaskerDbContext _context;
         private readonly IWalletService _walletService;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public DeliverableService(
             AITaskerDbContext context,
             IWalletService walletService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _walletService = walletService;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<DeliverableResponse> SubmitDeliverableAsync(
@@ -89,6 +90,7 @@ namespace AITasker.Infrastructure.Deliverables
                 .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
 
             var now = DateTime.UtcNow;
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
 
             var deliverable = new Deliverable
             {
@@ -111,7 +113,7 @@ namespace AITasker.Infrastructure.Deliverables
                 VersionNumber = latestVersion + 1,
                 Status = DeliverableStatusSubmitted,
                 SubmittedAt = now,
-                ReviewDeadlineAt = now.AddHours(ClientReviewWindowHours),
+                ReviewDeadlineAt = now.AddHours(workflowPolicy.DeliverableReviewWindowHours),
                 ReviewedAt = null,
                 OverdueNotifiedAt = null
             };

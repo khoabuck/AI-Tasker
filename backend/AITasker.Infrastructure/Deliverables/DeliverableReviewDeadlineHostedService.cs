@@ -30,8 +30,6 @@ namespace AITasker.Infrastructure.Deliverables
 
         private const string DisputeStatusOpen = "OPEN";
 
-        private const int GracePeriodHours = 6;
-
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<DeliverableReviewDeadlineHostedService> _logger;
 
@@ -67,6 +65,8 @@ namespace AITasker.Infrastructure.Deliverables
             var context = scope.ServiceProvider.GetRequiredService<AITaskerDbContext>();
             var walletService = scope.ServiceProvider.GetRequiredService<IWalletService>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var workflowPolicyService = scope.ServiceProvider.GetRequiredService<IMarketplaceWorkflowPolicyService>();
+            var workflowPolicy = await workflowPolicyService.GetActivePolicyAsync();
 
             var now = DateTime.UtcNow;
 
@@ -88,6 +88,7 @@ namespace AITasker.Infrastructure.Deliverables
                     notificationService,
                     deliverable,
                     now,
+                    workflowPolicy.DeliverableAutoApproveGraceHours,
                     cancellationToken);
             }
         }
@@ -98,6 +99,7 @@ namespace AITasker.Infrastructure.Deliverables
             INotificationService notificationService,
             Domain.Entities.Deliverable deliverable,
             DateTime now,
+            int gracePeriodHours,
             CancellationToken cancellationToken)
         {
             var milestone = await context.Milestones
@@ -173,7 +175,7 @@ namespace AITasker.Infrastructure.Deliverables
                 await notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
                     "Deliverable review overdue",
-                    $"You missed the review deadline for milestone '{milestone.Title}'. Please approve, request revision, or open dispute within 6 hours before auto approval.",
+                    $"You missed the review deadline for milestone '{milestone.Title}'. Please approve, request revision, or open dispute within {gracePeriodHours} hours before auto approval.",
                     "CLIENT_REVIEW_OVERDUE",
                     relatedEntityType: "DELIVERABLE",
                     relatedEntityId: deliverable.DeliverableId,
@@ -184,7 +186,7 @@ namespace AITasker.Infrastructure.Deliverables
                 await notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Client review overdue",
-                    $"Client missed the review deadline for milestone '{milestone.Title}'. The system will auto approve after 6 hours if there is no response.",
+                    $"Client missed the review deadline for milestone '{milestone.Title}'. The system will auto approve after {gracePeriodHours} hours if there is no response.",
                     "CLIENT_REVIEW_OVERDUE",
                     relatedEntityType: "DELIVERABLE",
                     relatedEntityId: deliverable.DeliverableId,
@@ -195,7 +197,7 @@ namespace AITasker.Infrastructure.Deliverables
                 return;
             }
 
-            var autoApproveAt = deliverable.OverdueNotifiedAt.Value.AddHours(GracePeriodHours);
+            var autoApproveAt = deliverable.OverdueNotifiedAt.Value.AddHours(gracePeriodHours);
 
             if (autoApproveAt > now)
             {

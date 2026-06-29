@@ -24,17 +24,18 @@ namespace AITasker.Infrastructure.Contracts
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
 
-        private const int EscrowLockWindowHours = 24;
-
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public ProjectContractService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -257,7 +258,11 @@ namespace AITasker.Infrastructure.Contracts
                     throw new InvalidOperationException("Expert has already signed this contract.");
                 }
 
-                await EnsureExpertCanAcceptNewProjectAsync(contract.ExpertId);
+                var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
+                await EnsureExpertCanAcceptNewProjectAsync(
+                    contract.ExpertId,
+                    workflowPolicy.ExpertMaxActiveProjects);
 
                 await EnsureContractMilestoneDraftsReadyAsync(contract);
 
@@ -267,7 +272,8 @@ namespace AITasker.Infrastructure.Contracts
 
                 var project = await EnsurePendingEscrowProjectExistsAsync(
                     contract,
-                    job);
+                    job,
+                    workflowPolicy.EscrowLockWindowHours);
 
                 await EnsureProjectMilestonesCreatedFromDraftsAsync(
                     contract,
@@ -278,7 +284,7 @@ namespace AITasker.Infrastructure.Contracts
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
                     "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {EscrowLockWindowHours} hours to start the project.",
+                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {workflowPolicy.EscrowLockWindowHours} hours to start the project.",
                     "CONTRACT_CONFIRMED_PENDING_ESCROW",
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
@@ -461,13 +467,14 @@ namespace AITasker.Infrastructure.Contracts
 
         private async Task<Project> EnsurePendingEscrowProjectExistsAsync(
             ProjectContract contract,
-            JobPosting job)
+            JobPosting job,
+            int escrowLockWindowHours)
         {
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
             var now = DateTime.UtcNow;
-            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(EscrowLockWindowHours);
+            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(escrowLockWindowHours);
 
             if (existingProject != null)
             {
@@ -1204,7 +1211,9 @@ namespace AITasker.Infrastructure.Contracts
                 contractId);
         }
 
-        private async Task EnsureExpertCanAcceptNewProjectAsync(int expertId)
+        private async Task EnsureExpertCanAcceptNewProjectAsync(
+            int expertId,
+            int expertMaxActiveProjects)
         {
             var activeProjectCount = await _context.Projects
                 .CountAsync(project =>
@@ -1216,9 +1225,9 @@ namespace AITasker.Infrastructure.Contracts
                         project.Status == "DISPUTED"
                     ));
 
-            if (activeProjectCount >= 3)
+            if (activeProjectCount >= expertMaxActiveProjects)
             {
-                throw new InvalidOperationException("Expert has reached the maximum limit of 3 active projects.");
+                throw new InvalidOperationException($"Expert has reached the maximum limit of {expertMaxActiveProjects} active projects.");
             }
         }
 

@@ -32,17 +32,18 @@ namespace AITasker.Infrastructure.Projects
         
         private const string PaymentStatusPending = "PENDING";
 
-        private const int EscrowLockWindowHours = 24;
-
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public ProjectService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<ProjectResponse> CreateProjectFromContractAsync(
@@ -72,7 +73,9 @@ namespace AITasker.Infrastructure.Projects
             {
                 return await MapToProjectResponseAsync(existingProject);
             }
-            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
+
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
 
             var project = new Project
             {
@@ -155,6 +158,8 @@ namespace AITasker.Infrastructure.Projects
                     $"Milestone total amount ({totalAmount}) must equal contract final price ({contract.FinalPrice}).");
             }
 
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
             using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -164,7 +169,7 @@ namespace AITasker.Infrastructure.Projects
 
                 if (project == null)
                 {
-                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
+                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
 
                     project = new Project
                     {

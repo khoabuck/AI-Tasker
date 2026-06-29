@@ -70,19 +70,22 @@ namespace AITasker.Infrastructure.Banking
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
         private readonly IPlatformWalletService _platformWalletService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
 
         public WalletService(
                 AITaskerDbContext context,
                 INotificationService notificationService,
                 IConfiguration configuration,
                 HttpClient httpClient,
-                IPlatformWalletService platformWalletService)
+                IPlatformWalletService platformWalletService,
+                IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
             _configuration = configuration;
             _httpClient = httpClient;
             _platformWalletService = platformWalletService;
+            _workflowPolicyService = workflowPolicyService;
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)
@@ -185,7 +188,13 @@ namespace AITasker.Infrastructure.Banking
             int userId,
             CreateDepositOrderRequest request)
         {
-            ValidateCreateDepositOrderRequest(request);
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
+            ValidateCreateDepositOrderRequest(
+                request,
+                workflowPolicy.MinimumDepositAmount,
+                workflowPolicy.MaximumDepositAmount);
+
             EnsurePayOsConfigured();
 
             var userExists = await _context.Users.AnyAsync(x => x.UserId == userId);
@@ -1321,7 +1330,10 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static void ValidateCreateDepositOrderRequest(CreateDepositOrderRequest request)
+        private static void ValidateCreateDepositOrderRequest(
+            CreateDepositOrderRequest request,
+            decimal minimumDepositAmount,
+            decimal maximumDepositAmount)
         {
             if (request == null)
             {
@@ -1333,14 +1345,14 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("Deposit amount must be greater than 0.");
             }
 
-            if (request.Amount < 1000)
+            if (request.Amount < minimumDepositAmount)
             {
-                throw new InvalidOperationException("Minimum deposit amount is 1,000.");
+                throw new InvalidOperationException($"Minimum deposit amount is {minimumDepositAmount:N0} VND.");
             }
 
-            if (request.Amount > 500000000)
+            if (request.Amount > maximumDepositAmount)
             {
-                throw new InvalidOperationException("Maximum deposit amount is 500,000,000.");
+                throw new InvalidOperationException($"Maximum deposit amount is {maximumDepositAmount:N0} VND.");
             }
         }
 
