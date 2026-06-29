@@ -60,7 +60,7 @@ builder.Services.AddSwaggerGen(options =>
 // =========================
 var allowedOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? new[] { "http://localhost:5173" };
+    .Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:5174" };
 
 builder.Services.AddCors(options =>
 {
@@ -293,6 +293,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
+// TODO Production: replace MockBankAccountVerificationService with VietQrBankAccountVerificationService if real bank verification is required.
 builder.Services.AddHttpClient<IBankAccountVerificationService, MockBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
@@ -371,8 +372,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Local dev tạm thời không bật HTTPS redirect.
-// app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("FrontendPolicy");
 

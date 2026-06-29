@@ -6,6 +6,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Application.Common;
+using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Application.Services;
 
@@ -17,6 +18,7 @@ public class AuthService : IAuthService
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailSender _emailSender;
+    private readonly IConfiguration _configuration;
 
     public AuthService(
         IUserRepository userRepository,
@@ -24,7 +26,8 @@ public class AuthService : IAuthService
         IPasswordResetTokenRepository passwordResetTokenRepository,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService,
-        IEmailSender emailSender)
+        IEmailSender emailSender,
+        IConfiguration configuration)
     {
         _userRepository = userRepository;
         _emailVerificationTokenRepository = emailVerificationTokenRepository;
@@ -32,6 +35,7 @@ public class AuthService : IAuthService
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
         _emailSender = emailSender;
+        _configuration = configuration;
     }
 
     public async Task<MessageResponse> RegisterAsync(RegisterRequest request)
@@ -492,7 +496,7 @@ public class AuthService : IAuthService
         await _emailVerificationTokenRepository.AddAsync(verificationToken);
         await _emailVerificationTokenRepository.SaveChangesAsync();
 
-        var backendBaseUrl = "http://localhost:5070";
+        var backendBaseUrl = GetBackendBaseUrl();
 
         var verifyUrl =
             $"{backendBaseUrl}/api/auth/verify-email?token={Uri.EscapeDataString(rawToken)}";
@@ -528,7 +532,7 @@ public class AuthService : IAuthService
         await _passwordResetTokenRepository.AddAsync(resetToken);
         await _passwordResetTokenRepository.SaveChangesAsync();
 
-        var frontendBaseUrl = "http://localhost:5173";
+        var frontendBaseUrl = GetFrontendBaseUrl();
 
         var resetUrl =
             $"{frontendBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
@@ -548,6 +552,20 @@ public class AuthService : IAuthService
             "Reset your AITasker password",
             htmlBody
         );
+    }
+
+    private string GetBackendBaseUrl()
+    {
+        return (_configuration["AppUrls:BackendBaseUrl"] ?? "http://localhost:5070")
+            .Trim()
+            .TrimEnd('/');
+    }
+
+    private string GetFrontendBaseUrl()
+    {
+        return (_configuration["AppUrls:FrontendBaseUrl"] ?? "http://localhost:5173")
+            .Trim()
+            .TrimEnd('/');
     }
 
     private static string GenerateSecureToken()

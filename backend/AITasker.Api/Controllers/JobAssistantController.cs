@@ -44,6 +44,11 @@ public class JobAssistantController : ControllerBase
             throw new InvalidOperationException("UserId not found in token.");
         }
 
-        return int.Parse(userIdValue);
+        if (!int.TryParse(userIdValue, out var userId))
+{
+    throw new InvalidOperationException("Invalid userId in token.");
+}
+
+return userId;
     }
 }
