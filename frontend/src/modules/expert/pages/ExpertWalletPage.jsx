@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertWalletService from "../../../services/expertWallet.service";
 
@@ -9,6 +9,15 @@ const DEPOSIT_EXPIRE_SECONDS = 120;
 
 export default function ExpertWalletPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const returnTo = location.state?.returnTo || "/expert/proposal-credit-packages";
+  const returnReason = location.state?.reason || "";
+  const returnPackageId = location.state?.packageId || "";
+
+  const shouldShowCreditReturn =
+    returnReason === "BUY_PROPOSAL_CREDITS" ||
+    returnTo === "/expert/proposal-credit-packages";
 
   const [wallet, setWallet] = useState(null);
   const [balance, setBalance] = useState(null);
@@ -107,6 +116,14 @@ export default function ExpertWalletPage() {
   const latestDepositOrders = useMemo(() => {
     return depositOrders.slice(0, 6);
   }, [depositOrders]);
+
+  const goToProposalCredits = () => {
+    navigate(returnTo || "/expert/proposal-credit-packages", {
+      state: {
+        packageId: returnPackageId,
+      },
+    });
+  };
 
   const updateDepositOrderInList = (order) => {
     if (!order?.depositOrderId) return;
@@ -271,7 +288,9 @@ export default function ExpertWalletPage() {
 
           if (!isPaidDepositStatus(previousStatus)) {
             setMessage(
-              "Payment confirmed. Your wallet balance has been updated."
+              shouldShowCreditReturn
+                ? "Payment confirmed. Your wallet balance has been updated. You can continue buying proposal credits now."
+                : "Payment confirmed. Your wallet balance has been updated."
             );
           }
         } else if (!options.silent) {
@@ -391,6 +410,17 @@ export default function ExpertWalletPage() {
 
               <button
                 type="button"
+                onClick={goToProposalCredits}
+                className="flex items-center gap-2 rounded-2xl border border-purple-400/50 bg-purple-400/10 px-6 py-4 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
+              >
+                <span className="material-symbols-outlined text-[22px]">
+                  workspace_premium
+                </span>
+                Buy Proposal Credits
+              </button>
+
+              <button
+                type="button"
                 onClick={handleWithdraw}
                 className="flex items-center gap-2 rounded-2xl border border-cyan-400/60 bg-transparent px-6 py-4 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
@@ -401,6 +431,14 @@ export default function ExpertWalletPage() {
               </button>
             </div>
           </section>
+
+          {shouldShowCreditReturn && (
+            <ContinueCreditsBanner
+              balance={balance}
+              onContinue={goToProposalCredits}
+              onDeposit={openDepositModal}
+            />
+          )}
 
           {message && <Alert type="success" message={message} />}
           {error && <Alert type="danger" message={error} />}
@@ -540,6 +578,7 @@ export default function ExpertWalletPage() {
             setDepositCountdown(0);
             setDepositMinimized(false);
           }}
+          onContinueCredits={shouldShowCreditReturn ? goToProposalCredits : null}
         />
       )}
 
@@ -561,6 +600,53 @@ export default function ExpertWalletPage() {
   );
 }
 
+function ContinueCreditsBanner({ balance, onContinue, onDeposit }) {
+  return (
+    <section className="mb-6 overflow-hidden rounded-[1.6rem] border border-purple-400/30 bg-purple-400/10 shadow-[0_18px_55px_rgba(0,0,0,0.22)]">
+      <div className="flex flex-col gap-5 p-6 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-purple-400/30 bg-purple-400/10 text-purple-300">
+            <span className="material-symbols-outlined">workspace_premium</span>
+          </div>
+
+          <div>
+            <p className="text-lg font-black text-white">
+              Continue buying proposal credits
+            </p>
+
+            <p className="mt-1 text-sm leading-6 text-purple-100/80">
+              Current wallet balance:{" "}
+              <span className="font-black text-cyan-300">
+                {formatMoney(balance?.availableBalance || 0)}
+              </span>
+              . Use your balance to buy proposal credits and submit more
+              proposals.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onDeposit}
+            className="rounded-2xl border border-white/10 bg-white/[0.05] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+          >
+            Deposit More
+          </button>
+
+          <button
+            type="button"
+            onClick={onContinue}
+            className="rounded-2xl bg-purple-400 px-5 py-3 text-sm font-black text-black transition hover:bg-purple-300"
+          >
+            Continue Buying Credits
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function DepositModal({
   amount,
   setAmount,
@@ -573,6 +659,7 @@ function DepositModal({
   onCheckStatus,
   onCopy,
   onGenerateNew,
+  onContinueCredits,
 }) {
   const isPaid = isPaidDepositStatus(order?.status);
   const isFailed = isFailedDepositStatus(order?.status);
@@ -741,6 +828,16 @@ function DepositModal({
                 <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-3 text-sm font-bold text-red-300">
                   This payment order failed or expired.
                 </div>
+              )}
+
+              {isPaid && onContinueCredits && (
+                <button
+                  type="button"
+                  onClick={onContinueCredits}
+                  className="mt-4 w-full rounded-2xl bg-purple-400 px-4 py-3 text-sm font-black text-black transition hover:bg-purple-300"
+                >
+                  Continue Buying Credits
+                </button>
               )}
 
               {isExpired ? (

@@ -78,6 +78,7 @@ import ExpertNotificationsPage from "../../modules/expert/pages/ExpertNotificati
 import ExpertReviewsPage from "../../modules/expert/pages/ExpertReviewsPage";
 import ExpertSkillsPage from "../../modules/expert/pages/ExpertSkillsPage";
 import ExpertProfileLockedPage from "../../modules/expert/pages/ExpertProfileLockedPage";
+import ProposalCreditPackagesPage from "../../modules/expert/pages/ProposalCreditPackagesPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -184,6 +185,7 @@ export default function AppRouter() {
       <Route path="/expert/proposals/:proposalId/resubmit" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ResubmitProposalPage /></ProtectedRoute>} />
       <Route path="/expert/proposals/:proposalId/contract" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
       <Route path="/expert/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalDetailPage /></ProtectedRoute>} />
+      <Route path="/expert/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalCreditPackagesPage /></ProtectedRoute>} /> 
 
       {/* Expert contracts */}
       <Route path="/expert/contracts/:contractId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
