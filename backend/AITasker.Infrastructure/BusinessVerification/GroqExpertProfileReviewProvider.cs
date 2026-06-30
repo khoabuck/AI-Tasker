@@ -1,10 +1,8 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
-using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Infrastructure.BusinessVerification;
 
@@ -12,16 +10,13 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 {
     private const decimal ExpertProfilePassThreshold = 70m;
 
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
+    private readonly IGroqChatCompletionService _groqChatCompletionService;
 
     public GroqExpertProfileReviewProvider(
-        HttpClient httpClient,
-        IConfiguration configuration
+        IGroqChatCompletionService groqChatCompletionService
     )
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
+        _groqChatCompletionService = groqChatCompletionService;
     }
 
     public async Task<ExpertProfileReviewProviderResult> ReviewAsync(
@@ -29,120 +24,57 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         CancellationToken cancellationToken = default
     )
     {
-        var apiKey = _configuration["BusinessVerification:Groq:ApiKey"];
-        var baseUrl = _configuration["BusinessVerification:Groq:BaseUrl"]
-            ?? "https://api.groq.com/openai/v1";
-        var model = _configuration["BusinessVerification:Groq:Model"]
-            ?? "openai/gpt-oss-120b";
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            return NeedsCorrection(
-                "Groq API key is missing. Please update the profile with valid proof URLs and certificate evidence."
-            );
-        }
-
         try
         {
             var prompt = BuildPrompt(request);
 
-            var payload = new
-            {
-                model,
-                messages = new[]
+            var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(
+                new GroqChatCompletionRequest
                 {
-                    new
+                    Feature = "ExpertProfileReview",
+                    Messages = new List<GroqChatMessage>
                     {
-                        role = "system",
-                        content = """
-                        You are an AI Expert Profile Checker for an AI freelance marketplace.
-                        You review whether an expert profile is credible, AI-related, and supported by URL evidence.
-                        The backend has already inspected URLs using HttpClient.
-                        Use the backend URL inspection evidence as the source of truth.
+                        new()
+                        {
+                            Role = "system",
+                            Content = """
+                            You are an AI Expert Profile Checker for an AI freelance marketplace.
+                            You review whether an expert profile is credible, AI-related, and supported by URL evidence.
+                            The backend has already inspected URLs using HttpClient.
+                            Use the backend URL inspection evidence as the source of truth.
 
-                        Score the whole Expert Profile on a 100-point scale:
-                        - Profile completeness: 15 points
-                        - AI skill relevance: 15 points
-                        - Experience credibility: 20 points
-                        - Portfolio/GitHub/LinkedIn evidence: 25 points
-                        - Certificate evidence: 15 points
-                        - Trust and risk check: 10 points
+                            Score the whole Expert Profile on a 100-point scale:
+                            - Profile completeness: 15 points
+                            - AI skill relevance: 15 points
+                            - Experience credibility: 20 points
+                            - Portfolio/GitHub/LinkedIn evidence: 25 points
+                            - Certificate evidence: 15 points
+                            - Trust and risk check: 10 points
 
-                        Skill relevance is only one criterion in the total profile score.
-                        Do not approve only because many skills are listed.
-                        Be strict with claimed years of experience.
+                            Skill relevance is only one criterion in the total profile score.
+                            Do not approve only because many skills are listed.
+                            Be strict with claimed years of experience.
 
-                        Expert profile review status returned by AI must be either APPROVED or NEEDS_CORRECTION.
-                        APPROVED means profileScore is 70 or higher.
-                        NEEDS_CORRECTION means profileScore is below 70.
-                        LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
+                            Expert profile review status returned by AI must be either APPROVED or NEEDS_CORRECTION.
+                            APPROVED means profileScore is 70 or higher.
+                            NEEDS_CORRECTION means profileScore is below 70.
+                            LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
 
-                        If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
-                        Return JSON only. Do not return markdown. Do not add text outside JSON.
-
-                        """
-                    },
-                    new
-                    {
-                        role = "user",
-                        content = prompt
+                            If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
+                            Return exactly one valid JSON object only. Do not return markdown, code fences, comments, explanation, or text outside JSON.
+                            """
+                        },
+                        new()
+                        {
+                            Role = "user",
+                            Content = prompt
+                        }
                     }
                 },
-                temperature = 0.2,
-                max_tokens = 900
-            };
-
-            using var requestMessage = new HttpRequestMessage(
-                HttpMethod.Post,
-                $"{baseUrl.TrimEnd('/')}/chat/completions"
-            );
-
-            requestMessage.Headers.Authorization =
-                new AuthenticationHeaderValue("Bearer", apiKey);
-
-            requestMessage.Content = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8,
-                "application/json"
-            );
-
-            using var response = await _httpClient.SendAsync(
-                requestMessage,
                 cancellationToken
             );
 
-            var responseText = await response.Content.ReadAsStringAsync(
-                cancellationToken
-            );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return NeedsCorrection(
-                    $"AI provider error: {(int)response.StatusCode}. Please update the profile or try again later."
-                );
-            }
-
-            var groqResponse = JsonSerializer.Deserialize<GroqChatCompletionResponse>(
-                responseText,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
-
-            var content = groqResponse?.Choices
-                ?.FirstOrDefault()
-                ?.Message
-                ?.Content;
-
-            if (string.IsNullOrWhiteSpace(content))
-            {
-                return NeedsCorrection(
-                    "AI provider returned empty response. Please update the profile with stronger evidence."
-                );
-            }
-
-            var result = ParseAiResult(content);
+            var result = ParseAiResult(aiResponse.Content);
 
             return NormalizeResult(result, request.YearsOfExperience);
         }

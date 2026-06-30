@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260630132242_AddAiManagementTables")]
+    partial class AddAiManagementTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -76,71 +79,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("AdminAuditLogs", (string)null);
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.AiAllowedModel", b =>
-                {
-                    b.Property<int>("AiAllowedModelId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AiAllowedModelId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("nvarchar(150)");
-
-                    b.Property<bool>("IsEnabled")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<int>("MaxOutputTokens")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(4096);
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
-                    b.Property<string>("Provider")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)")
-                        .HasDefaultValue("Groq");
-
-                    b.Property<bool>("SupportsJsonObjectResponse")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int?>("UpdatedByAdminId")
-                        .HasColumnType("int");
-
-                    b.HasKey("AiAllowedModelId");
-
-                    b.HasIndex("IsEnabled");
-
-                    b.HasIndex("UpdatedByAdminId");
-
-                    b.HasIndex("Provider", "Model")
-                        .IsUnique();
-
-                    b.ToTable("AiAllowedModels", (string)null);
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.AiSettings", b =>
                 {
                     b.Property<int>("AiSettingsId")
@@ -157,10 +95,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(50);
 
-                    b.Property<int>("ExpertSkillMaxTokens")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1500);
+                    b.Property<string>("FallbackModel")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -172,23 +109,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(true);
 
-                    b.Property<int>("JobAssistantMaxTokens")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(3000);
-
-                    b.Property<bool>("JsonObjectResponse")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
-
-                    b.Property<string>("Model")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)")
-                        .HasDefaultValue("openai/gpt-oss-120b");
-
                     b.Property<int>("MonthlyRequestLimit")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -199,10 +119,10 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1000000);
 
-                    b.Property<int>("ProfileReviewMaxTokens")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(2000);
+                    b.Property<string>("PrimaryModel")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Provider")
                         .IsRequired()
@@ -210,16 +130,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)")
                         .HasDefaultValue("Groq");
-
-                    b.Property<int>("SkillValidatorMaxTokens")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(1200);
-
-                    b.Property<double>("Temperature")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("float")
-                        .HasDefaultValue(0.10000000000000001);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -303,6 +213,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(0);
+
+                    b.Property<bool>("UsedFallback")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(false);
 
                     b.Property<int?>("UserId")
                         .HasColumnType("int");
@@ -3104,16 +3019,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Admin");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.AiAllowedModel", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
-                        .WithMany()
-                        .HasForeignKey("UpdatedByAdminId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.Navigation("UpdatedByAdmin");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.AiSettings", b =>
