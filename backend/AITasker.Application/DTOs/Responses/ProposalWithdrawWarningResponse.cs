@@ -4,11 +4,9 @@ public class ProposalWithdrawWarningResponse
 {
     public int ProposalId { get; set; }
 
-    public bool WillLoseReservedCredit { get; set; }
+    public bool WillLoseProposalCredit { get; set; }
 
-    public string ProposalCreditChargeType { get; set; } = string.Empty;
-
-    public string ProposalCreditChargeStatus { get; set; } = string.Empty;
+    public bool CanWithdraw { get; set; }
 
     public string Message { get; set; } = string.Empty;
 }

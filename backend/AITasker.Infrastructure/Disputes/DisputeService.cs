@@ -55,6 +55,8 @@ namespace AITasker.Infrastructure.Disputes
         private const string TransactionStatusSuccess = "SUCCESS";
         private const string TxEscrowFreeze = "ESCROW_FREEZE";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
+        private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
+        private const string TxExpertPendingEarningRelease = "EXPERT_PENDING_EARNING_RELEASE";
         private const string TxRefund = "REFUND";
 
         private readonly AITaskerDbContext _context;
@@ -553,7 +555,7 @@ namespace AITasker.Infrastructure.Disputes
 
                 if (expertAmount > 0)
                 {
-                    expertWallet.AvailableBalance += expertAmount;
+                    expertWallet.PendingEarningsBalance += expertAmount;
                     expertWallet.TotalEarning += expertAmount;
                     expertWallet.UpdatedAt = DateTime.UtcNow;
 
@@ -564,9 +566,9 @@ namespace AITasker.Infrastructure.Disputes
                         MilestoneId = dispute.MilestoneId,
                         EscrowId = escrow?.EscrowId,
                         Amount = expertAmount,
-                        Type = TxEscrowRelease,
+                        Type = TxExpertPendingEarningHold,
                         Status = TransactionStatusSuccess,
-                        Description = $"[Dispute Resolution] Expert release from Dispute ID {dispute.DisputeId}",
+                        Description = $"[Dispute Resolution] Expert earning held from Dispute ID {dispute.DisputeId} until project completion",
                         ReferenceId = referenceId,
                         CreatedAt = DateTime.UtcNow
                     });
@@ -630,6 +632,13 @@ namespace AITasker.Infrastructure.Disputes
                 await UpdateProjectStatusAfterResolutionAsync(
                     project,
                     dispute.DisputeId);
+
+                if (string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
+                {
+                    await ReleaseExpertPendingEarningsForProjectAsync(
+                        project,
+                        expertProfile);
+                }
 
                 await _context.SaveChangesAsync();
 
@@ -820,6 +829,57 @@ namespace AITasker.Infrastructure.Disputes
             }
         }
 
+        private async Task ReleaseExpertPendingEarningsForProjectAsync(
+            Project project,
+            ExpertProfile expertProfile)
+        {
+            var totalHeldForProject = await _context.Transactions
+                .Where(x =>
+                    x.UserId == expertProfile.UserId &&
+                    x.ProjectId == project.ProjectId &&
+                    x.Status == TransactionStatusSuccess &&
+                    x.Type == TxExpertPendingEarningHold)
+                .SumAsync(x => (decimal?)x.Amount) ?? 0m;
+
+            var alreadyReleasedForProject = await _context.Transactions
+                .Where(x =>
+                    x.UserId == expertProfile.UserId &&
+                    x.ProjectId == project.ProjectId &&
+                    x.Status == TransactionStatusSuccess &&
+                    x.Type == TxExpertPendingEarningRelease)
+                .SumAsync(x => (decimal?)x.Amount) ?? 0m;
+
+            var releaseAmount = totalHeldForProject - alreadyReleasedForProject;
+
+            if (releaseAmount <= 0)
+            {
+                return;
+            }
+
+            var expertWallet = await GetOrCreateWalletAsync(expertProfile.UserId);
+
+            if (expertWallet.PendingEarningsBalance < releaseAmount)
+            {
+                throw new InvalidOperationException("Expert pending earnings balance is insufficient for project completion release.");
+            }
+
+            expertWallet.PendingEarningsBalance -= releaseAmount;
+            expertWallet.AvailableBalance += releaseAmount;
+            expertWallet.UpdatedAt = DateTime.UtcNow;
+
+            _context.Transactions.Add(new Transaction
+            {
+                UserId = expertProfile.UserId,
+                ProjectId = project.ProjectId,
+                Amount = releaseAmount,
+                Type = TxExpertPendingEarningRelease,
+                Status = TransactionStatusSuccess,
+                Description = $"[Expert Pending Earning Release] Released held earnings for completed Project ID {project.ProjectId}",
+                ReferenceId = $"PROJECT_{project.ProjectId}",
+                CreatedAt = DateTime.UtcNow
+            });
+        }
+
         private static bool IsMilestoneFinished(Milestone milestone)
         {
             var status = milestone.Status?.Trim().ToUpperInvariant();
@@ -934,6 +994,7 @@ namespace AITasker.Infrastructure.Disputes
                 UserId = userId,
                 AvailableBalance = 0,
                 LockedBalance = 0,
+                PendingEarningsBalance = 0,
                 TotalEarning = 0,
                 UpdatedAt = DateTime.UtcNow
             };

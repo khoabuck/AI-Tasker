@@ -530,7 +530,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Proposal withdrawn successfully. The reserved proposal credit has been consumed because the proposal was withdrawn after submission.",
+                    message = "Proposal withdrawn successfully. The proposal submission credit used for this proposal is not refundable.",
                     data = result
                 });
             }

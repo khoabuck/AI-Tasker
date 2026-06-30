@@ -36,6 +36,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public decimal TotalUserLockedBalance { get; set; }
 
+        public decimal TotalExpertPendingEarningsBalance { get; set; }
+
         public decimal TotalExpertEarnings { get; set; }
 
         public decimal TotalEscrowLocked { get; set; }

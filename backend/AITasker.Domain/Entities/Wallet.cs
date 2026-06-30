@@ -11,6 +11,8 @@ namespace AITasker.Domain.Entities
         public decimal AvailableBalance { get; set; }
         
         public decimal LockedBalance { get; set; }
+
+        public decimal PendingEarningsBalance { get; set; }
         
         public decimal TotalEarning { get; set; }
         

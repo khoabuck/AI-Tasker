@@ -55,6 +55,7 @@ namespace AITasker.Infrastructure.Banking
         private const string TxEscrowLock = "ESCROW_LOCK";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxEscrowReceive = "ESCROW_RECEIVE";
+        private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
         private const string TxPlatformFee = "PLATFORM_FEE";
 
         private const string DepositProviderPayOs = "PAYOS";
@@ -833,7 +834,7 @@ namespace AITasker.Infrastructure.Banking
                 clientWallet.LockedBalance -= escrow.Amount;
                 clientWallet.UpdatedAt = DateTime.UtcNow;
 
-                expertWallet.AvailableBalance += escrow.Amount;
+                expertWallet.PendingEarningsBalance += escrow.Amount;
                 expertWallet.TotalEarning += escrow.Amount;
                 expertWallet.UpdatedAt = DateTime.UtcNow;
 
@@ -867,9 +868,9 @@ namespace AITasker.Infrastructure.Banking
                     MilestoneId = milestone.MilestoneId,
                     EscrowId = escrow.EscrowId,
                     Amount = escrow.Amount,
-                    Type = TxEscrowReceive,
+                    Type = TxExpertPendingEarningHold,
                     Status = TransactionStatusSuccess,
-                    Description = $"[Escrow Receive] Received funds for Milestone ID {milestone.MilestoneId}",
+                    Description = $"[Expert Pending Earning] Held funds for Milestone ID {milestone.MilestoneId} until project completion",
                     ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
                     CreatedAt = DateTime.UtcNow
                 });
@@ -879,8 +880,8 @@ namespace AITasker.Infrastructure.Banking
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Escrow released",
-                    $"Escrow for milestone '{milestone.Title}' has been released to your wallet.",
+                    "Milestone earning held",
+                    $"Milestone '{milestone.Title}' has been approved. The earning is held in pending earnings until the project is completed.",
                     "ESCROW_RELEASED",
                     relatedEntityType: "MILESTONE",
                     relatedEntityId: milestone.MilestoneId,
@@ -974,6 +975,7 @@ namespace AITasker.Infrastructure.Banking
                 UserId = userId,
                 AvailableBalance = 0m,
                 LockedBalance = 0m,
+                PendingEarningsBalance = 0m,
                 TotalEarning = 0m,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -1185,6 +1187,8 @@ namespace AITasker.Infrastructure.Banking
                 UserId = wallet.UserId,
                 AvailableBalance = wallet.AvailableBalance,
                 LockedBalance = wallet.LockedBalance,
+                PendingEarningsBalance = wallet.PendingEarningsBalance,
+                WithdrawableBalance = wallet.AvailableBalance,
                 TotalEarning = wallet.TotalEarning,
                 UpdatedAt = wallet.UpdatedAt
             };

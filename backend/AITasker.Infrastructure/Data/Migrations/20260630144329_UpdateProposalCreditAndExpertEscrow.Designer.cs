@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    [Migration("20260630042207_UpdateProposalCreditReservationFlow")]
-    partial class UpdateProposalCreditReservationFlow
+    [Migration("20260630144329_UpdateProposalCreditAndExpertEscrow")]
+    partial class UpdateProposalCreditAndExpertEscrow
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -2314,29 +2314,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<string>("PreliminaryMilestonePlan")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ProposalCreditChargeStatus")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("NONE");
-
-                    b.Property<string>("ProposalCreditChargeType")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("NONE");
-
-                    b.Property<DateTime?>("ProposalCreditConsumedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ProposalCreditRefundedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ProposalCreditReservedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<decimal>("ProposedPrice")
                         .HasColumnType("decimal(18,2)");
 
@@ -2368,10 +2345,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.ToTable("Proposals", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Proposals_CreditChargeStatus", "[ProposalCreditChargeStatus] IN ('NONE','RESERVED','CONSUMED','REFUNDED')");
-
-                            t.HasCheckConstraint("CK_Proposals_CreditChargeType", "[ProposalCreditChargeType] IN ('NONE','FREE','PAID')");
-
                             t.HasCheckConstraint("CK_Proposals_Price_Timeline", "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
                             t.HasCheckConstraint("CK_Proposals_Status", "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
@@ -2922,6 +2895,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("LockedBalance")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("PendingEarningsBalance")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("TotalEarning")
                         .HasColumnType("decimal(18,2)");
 
@@ -2938,7 +2914,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.ToTable("Wallets", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Wallets_Balances", "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
+                            t.HasCheckConstraint("CK_Wallets_Balances", "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [PendingEarningsBalance] >= 0 AND [TotalEarning] >= 0");
                         });
                 });
 

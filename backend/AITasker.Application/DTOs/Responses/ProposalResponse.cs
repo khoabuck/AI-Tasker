@@ -54,14 +54,5 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime CreatedAt { get; set; }
 
-        public string ProposalCreditChargeType { get; set; } = string.Empty;
-
-        public string ProposalCreditChargeStatus { get; set; } = string.Empty;
-
-        public DateTime? ProposalCreditReservedAt { get; set; }
-
-        public DateTime? ProposalCreditConsumedAt { get; set; }
-
-        public DateTime? ProposalCreditRefundedAt { get; set; }
     }
 }

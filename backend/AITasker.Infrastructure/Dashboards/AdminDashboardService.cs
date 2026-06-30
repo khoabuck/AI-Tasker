@@ -139,6 +139,7 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalWalletAvailableBalance = wallets.Sum(w => w.AvailableBalance),
                 TotalWalletLockedBalance = wallets.Sum(w => w.LockedBalance),
+                TotalExpertPendingEarningsBalance = wallets.Sum(w => w.PendingEarningsBalance),
                 TotalExpertEarnings = wallets.Sum(w => w.TotalEarning),
 
                 TotalContractValue = nonDraftContracts.Sum(c => c.FinalPrice),
@@ -445,6 +446,7 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalUserAvailableBalance = wallets.Sum(x => x.AvailableBalance),
                 TotalUserLockedBalance = wallets.Sum(x => x.LockedBalance),
+                TotalExpertPendingEarningsBalance = wallets.Sum(x => x.PendingEarningsBalance),
                 TotalExpertEarnings = wallets.Sum(x => x.TotalEarning),
 
                 TotalEscrowLocked = escrows
@@ -600,6 +602,8 @@ namespace AITasker.Infrastructure.Dashboards
                     UserStatus = x.User.Status,
                     AvailableBalance = x.Wallet.AvailableBalance,
                     LockedBalance = x.Wallet.LockedBalance,
+                    PendingEarningsBalance = x.Wallet.PendingEarningsBalance,
+                    WithdrawableBalance = x.Wallet.AvailableBalance,
                     TotalEarning = x.Wallet.TotalEarning,
                     UpdatedAt = x.Wallet.UpdatedAt
                 })

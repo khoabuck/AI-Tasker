@@ -25,16 +25,6 @@ namespace AITasker.Domain.Entities
 
         public string Status { get; set; } = "SUBMITTED";
 
-        public string ProposalCreditChargeType { get; set; } = "NONE";
-
-        public string ProposalCreditChargeStatus { get; set; } = "NONE";
-
-        public DateTime? ProposalCreditReservedAt { get; set; }
-
-        public DateTime? ProposalCreditConsumedAt { get; set; }
-
-        public DateTime? ProposalCreditRefundedAt { get; set; }
-
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public ProjectContract? ProjectContract { get; set; }

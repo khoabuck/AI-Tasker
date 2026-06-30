@@ -273,13 +273,11 @@ public class AITaskerDbContext : DbContext
             {
                 table.HasCheckConstraint(
                     "CK_AIModelPricingPolicies_Prices",
-                    "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0"
-                );
+                    "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0");
 
                 table.HasCheckConstraint(
                     "CK_AIModelPricingPolicies_ExchangeRate",
-                    "[ExchangeRateToVnd] > 0"
-                );
+                    "[ExchangeRateToVnd] > 0");
             });
 
             entity.HasKey(x => x.AIModelPricingPolicyId);
@@ -392,9 +390,13 @@ public class AITaskerDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(x => x.CreatedAt);
+
             entity.HasIndex(x => x.Provider);
+
             entity.HasIndex(x => x.ModuleName);
+
             entity.HasIndex(x => x.ModelName);
+
             entity.HasIndex(x => x.Status);
         });
 
@@ -1349,13 +1351,6 @@ public class AITaskerDbContext : DbContext
                     "CK_Proposals_Price_Timeline",
                     "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
-                t.HasCheckConstraint(
-                    "CK_Proposals_CreditChargeType",
-                    "[ProposalCreditChargeType] IN ('NONE','FREE','PAID')");
-
-                t.HasCheckConstraint(
-                    "CK_Proposals_CreditChargeStatus",
-                    "[ProposalCreditChargeStatus] IN ('NONE','RESERVED','CONSUMED','REFUNDED')");
             });
 
             entity.HasKey(e => e.ProposalId);
@@ -1373,21 +1368,6 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
-            entity.Property(e => e.ProposalCreditChargeType)
-                .HasMaxLength(20)
-                .HasDefaultValue("NONE")
-                .IsRequired();
-
-            entity.Property(e => e.ProposalCreditChargeStatus)
-                .HasMaxLength(20)
-                .HasDefaultValue("NONE")
-                .IsRequired();
-
-            entity.Property(e => e.ProposalCreditReservedAt);
-
-            entity.Property(e => e.ProposalCreditConsumedAt);
-
-            entity.Property(e => e.ProposalCreditRefundedAt);
 
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
@@ -2205,7 +2185,7 @@ public class AITaskerDbContext : DbContext
             {
                 t.HasCheckConstraint(
                 "CK_Wallets_Balances",
-                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
+                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [PendingEarningsBalance] >= 0 AND [TotalEarning] >= 0");
             });
 
             entity.HasKey(w => w.WalletId);
@@ -2214,6 +2194,9 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(w => w.LockedBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(w => w.PendingEarningsBalance)
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(w => w.TotalEarning)

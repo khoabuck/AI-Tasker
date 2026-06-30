@@ -6,11 +6,15 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class UpdateProposalCreditReservationFlow : Migration
+    public partial class UpdateProposalCreditAndExpertEscrow : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
 {
+    migrationBuilder.DropCheckConstraint(
+        name: "CK_Wallets_Balances",
+        table: "Wallets");
+
     migrationBuilder.AddColumn<int>(
         name: "FreeProposalSubmitUsedCount",
         table: "ExpertProfiles",
@@ -28,44 +32,17 @@ namespace AITasker.Infrastructure.Data.Migrations
         name: "FreeProposalSubmitUsed",
         table: "ExpertProfiles");
 
-    migrationBuilder.AddColumn<string>(
-        name: "ProposalCreditChargeStatus",
-        table: "Proposals",
-        type: "nvarchar(20)",
-        maxLength: 20,
+    migrationBuilder.AddColumn<decimal>(
+        name: "PendingEarningsBalance",
+        table: "Wallets",
+        type: "decimal(18,2)",
         nullable: false,
-        defaultValue: "NONE");
-
-    migrationBuilder.AddColumn<string>(
-        name: "ProposalCreditChargeType",
-        table: "Proposals",
-        type: "nvarchar(20)",
-        maxLength: 20,
-        nullable: false,
-        defaultValue: "NONE");
-
-    migrationBuilder.AddColumn<DateTime>(
-        name: "ProposalCreditConsumedAt",
-        table: "Proposals",
-        type: "datetime2",
-        nullable: true);
-
-    migrationBuilder.AddColumn<DateTime>(
-        name: "ProposalCreditRefundedAt",
-        table: "Proposals",
-        type: "datetime2",
-        nullable: true);
-
-    migrationBuilder.AddColumn<DateTime>(
-        name: "ProposalCreditReservedAt",
-        table: "Proposals",
-        type: "datetime2",
-        nullable: true);
+        defaultValue: 0m);
 
     migrationBuilder.Sql(@"
         UPDATE MarketplaceWorkflowPolicies
         SET FreeProposalSubmitCount = 5
-        WHERE FreeProposalSubmitCount < 5;
+        WHERE FreeProposalSubmitCount <> 5;
 
         UPDATE ProposalCreditPackages
         SET ProposalSubmitCredits = 20,
@@ -84,26 +61,17 @@ namespace AITasker.Infrastructure.Data.Migrations
     ");
 
     migrationBuilder.AddCheckConstraint(
-        name: "CK_Proposals_CreditChargeStatus",
-        table: "Proposals",
-        sql: "[ProposalCreditChargeStatus] IN ('NONE','RESERVED','CONSUMED','REFUNDED')");
-
-    migrationBuilder.AddCheckConstraint(
-        name: "CK_Proposals_CreditChargeType",
-        table: "Proposals",
-        sql: "[ProposalCreditChargeType] IN ('NONE','FREE','PAID')");
+        name: "CK_Wallets_Balances",
+        table: "Wallets",
+        sql: "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [PendingEarningsBalance] >= 0 AND [TotalEarning] >= 0");
 }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
 {
     migrationBuilder.DropCheckConstraint(
-        name: "CK_Proposals_CreditChargeStatus",
-        table: "Proposals");
-
-    migrationBuilder.DropCheckConstraint(
-        name: "CK_Proposals_CreditChargeType",
-        table: "Proposals");
+        name: "CK_Wallets_Balances",
+        table: "Wallets");
 
     migrationBuilder.AddColumn<bool>(
         name: "FreeProposalSubmitUsed",
@@ -123,24 +91,8 @@ namespace AITasker.Infrastructure.Data.Migrations
         table: "ExpertProfiles");
 
     migrationBuilder.DropColumn(
-        name: "ProposalCreditChargeStatus",
-        table: "Proposals");
-
-    migrationBuilder.DropColumn(
-        name: "ProposalCreditChargeType",
-        table: "Proposals");
-
-    migrationBuilder.DropColumn(
-        name: "ProposalCreditConsumedAt",
-        table: "Proposals");
-
-    migrationBuilder.DropColumn(
-        name: "ProposalCreditRefundedAt",
-        table: "Proposals");
-
-    migrationBuilder.DropColumn(
-        name: "ProposalCreditReservedAt",
-        table: "Proposals");
+        name: "PendingEarningsBalance",
+        table: "Wallets");
 
     migrationBuilder.Sql(@"
         UPDATE MarketplaceWorkflowPolicies
@@ -162,6 +114,11 @@ namespace AITasker.Infrastructure.Data.Migrations
             Description = '60 proposal submit credits.'
         WHERE PackageName = 'Business';
     ");
+
+    migrationBuilder.AddCheckConstraint(
+        name: "CK_Wallets_Balances",
+        table: "Wallets",
+        sql: "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
 }
     }
 }

@@ -146,55 +146,6 @@ public class AdminProposalCreditService : IAdminProposalCreditService
         return MapToResponse(expert, policy);
     }
 
-    public async Task<AdminProposalCreditResponse?> SetFreeProposalSubmitAsync(
-        int adminId,
-        int expertProfileId,
-        AdminSetFreeProposalSubmitRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-        {
-            throw new InvalidOperationException("Reason is required.");
-        }
-
-        var expert = await _context.ExpertProfiles
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.ExpertProfileId == expertProfileId);
-
-        if (expert == null)
-        {
-            return null;
-        }
-
-        var policy = await _workflowPolicyService.GetActivePolicyAsync();
-
-        var oldValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
-
-        if (request.FreeProposalSubmitUsedCount < 0 ||
-            request.FreeProposalSubmitUsedCount > policy.FreeProposalSubmitCount)
-        {
-            throw new InvalidOperationException($"Free proposal submit used count must be between 0 and {policy.FreeProposalSubmitCount}.");
-        }
-
-        expert.FreeProposalSubmitUsedCount = request.FreeProposalSubmitUsedCount;
-        expert.UpdatedAt = DateTime.UtcNow;
-
-        var newValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
-
-        await _context.SaveChangesAsync();
-
-        await _adminAuditLogService.LogAsync(
-            adminId,
-            "SET_FREE_PROPOSAL_SUBMIT",
-            nameof(ExpertProfile),
-            expert.ExpertProfileId,
-            oldValue,
-            newValue,
-            request.Reason
-        );
-
-        return MapToResponse(expert, policy);
-    }
-
     private static AdminProposalCreditResponse MapToResponse(ExpertProfile expert, MarketplaceWorkflowPolicyResponse policy)
     {
         var freeTotal = Math.Max(policy.FreeProposalSubmitCount, 0);

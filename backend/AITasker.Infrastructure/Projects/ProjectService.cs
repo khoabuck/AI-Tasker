@@ -29,6 +29,10 @@ namespace AITasker.Infrastructure.Projects
         private const string DisputeStatusOpen = "OPEN";
         private const string EscrowStatusLocked = "LOCKED";
         private const string EscrowStatusFrozen = "FROZEN";
+
+        private const string TransactionStatusSuccess = "SUCCESS";
+        private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
+        private const string TxExpertPendingEarningRelease = "EXPERT_PENDING_EARNING_RELEASE";
         
         private const string PaymentStatusPending = "PENDING";
 
@@ -516,6 +520,10 @@ namespace AITasker.Infrastructure.Projects
                     project,
                     JobStatusCompleted);
 
+                await ReleaseExpertPendingEarningsForProjectAsync(
+                    project,
+                    expertProfile);
+
                 await _context.SaveChangesAsync();
 
                 await _notificationService.CreateNotificationAsync(
@@ -647,6 +655,63 @@ namespace AITasker.Infrastructure.Projects
                 Amount = request.Amount,
                 OrderIndex = request.OrderIndex,
                 Deadline = request.Deadline
+            });
+        }
+
+        private async Task ReleaseExpertPendingEarningsForProjectAsync(
+            Project project,
+            ExpertProfile expertProfile)
+        {
+            var totalHeldForProject = await _context.Transactions
+                .Where(x =>
+                    x.UserId == expertProfile.UserId &&
+                    x.ProjectId == project.ProjectId &&
+                    x.Status == TransactionStatusSuccess &&
+                    x.Type == TxExpertPendingEarningHold)
+                .SumAsync(x => (decimal?)x.Amount) ?? 0m;
+
+            var alreadyReleasedForProject = await _context.Transactions
+                .Where(x =>
+                    x.UserId == expertProfile.UserId &&
+                    x.ProjectId == project.ProjectId &&
+                    x.Status == TransactionStatusSuccess &&
+                    x.Type == TxExpertPendingEarningRelease)
+                .SumAsync(x => (decimal?)x.Amount) ?? 0m;
+
+            var releaseAmount = totalHeldForProject - alreadyReleasedForProject;
+
+            if (releaseAmount <= 0)
+            {
+                return;
+            }
+
+            var expertWallet = await _context.Wallets
+                .FirstOrDefaultAsync(x => x.UserId == expertProfile.UserId);
+
+            if (expertWallet == null)
+            {
+                throw new InvalidOperationException("Expert wallet not found.");
+            }
+
+            if (expertWallet.PendingEarningsBalance < releaseAmount)
+            {
+                throw new InvalidOperationException("Expert pending earnings balance is insufficient for project completion release.");
+            }
+
+            expertWallet.PendingEarningsBalance -= releaseAmount;
+            expertWallet.AvailableBalance += releaseAmount;
+            expertWallet.UpdatedAt = DateTime.UtcNow;
+
+            _context.Transactions.Add(new Transaction
+            {
+                UserId = expertProfile.UserId,
+                ProjectId = project.ProjectId,
+                Amount = releaseAmount,
+                Type = TxExpertPendingEarningRelease,
+                Status = TransactionStatusSuccess,
+                Description = $"[Expert Pending Earning Release] Released held earnings for completed Project ID {project.ProjectId}",
+                ReferenceId = $"PROJECT_{project.ProjectId}",
+                CreatedAt = DateTime.UtcNow
             });
         }
 

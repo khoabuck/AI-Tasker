@@ -11,9 +11,6 @@ namespace AITasker.Domain.Constants
         public const string ProposalRejected = "PROPOSAL_REJECTED";
         public const string ProposalWithdrawn = "PROPOSAL_WITHDRAWN";
         public const string ProposalCreditPackagePurchased = "PROPOSAL_CREDIT_PACKAGE_PURCHASED";
-        public const string ProposalCreditReserved = "PROPOSAL_CREDIT_RESERVED";
-        public const string ProposalCreditConsumed = "PROPOSAL_CREDIT_CONSUMED";
-        public const string ProposalCreditRefunded = "PROPOSAL_CREDIT_REFUNDED";
         public const string ProposalCreditUsed = "PROPOSAL_CREDIT_USED";
         public const string ProposalCreditLow = "PROPOSAL_CREDIT_LOW";
 
