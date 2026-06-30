@@ -58,6 +58,8 @@ builder.Services.AddSwaggerGen(options =>
 // =========================
 // CORS
 // =========================
+const string CorsPolicyName = "FrontendPolicy";
+
 var configuredOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
     .Get<string[]>() ?? Array.Empty<string>();
@@ -79,10 +81,23 @@ Console.WriteLine("Allowed CORS origins: " + string.Join(", ", allowedOrigins));
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontendPolicy", policy =>
+    options.AddPolicy(CorsPolicyName, policy =>
     {
         policy
-            .WithOrigins(allowedOrigins)
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin))
+                {
+                    return false;
+                }
+
+                var normalizedOrigin = origin.Trim().TrimEnd('/');
+
+                return allowedOrigins.Contains(
+                    normalizedOrigin,
+                    StringComparer.OrdinalIgnoreCase
+                );
+            })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -392,18 +407,23 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 
-app.UseCors("FrontendPolicy");
+app.UseRouting();
+
+app.UseCors(CorsPolicyName);
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers().RequireCors(CorsPolicyName);
 
 // =======================================================
 // MAP SIGNALR REALTIME HUBS ENDPOINTS
 // =======================================================
-app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
-app.MapHub<ConversationHub>("/hubs/conversations");
+app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications")
+    .RequireCors(CorsPolicyName);
+
+app.MapHub<ConversationHub>("/hubs/conversations")
+    .RequireCors(CorsPolicyName);
 
 // =========================
 // Test endpoints
@@ -415,7 +435,7 @@ app.MapGet("/", () => Results.Ok(new
     health = "/api/health",
     databaseHealth = "/api/health/db",
     googleLogin = "/api/auth/google-login"
-}));
+})).RequireCors(CorsPolicyName);
 
 app.MapGet("/api/health", () => Results.Ok(new
 {
@@ -423,7 +443,7 @@ app.MapGet("/api/health", () => Results.Ok(new
     app = "AITasker.Api",
     environment = app.Environment.EnvironmentName,
     time = DateTime.UtcNow
-}));
+})).RequireCors(CorsPolicyName);
 
 app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
 {
@@ -446,6 +466,6 @@ app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
             detail: ex.InnerException?.Message ?? ex.Message
         );
     }
-});
+}).RequireCors(CorsPolicyName);
 
 app.Run();
