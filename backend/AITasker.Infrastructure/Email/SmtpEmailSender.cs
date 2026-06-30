@@ -48,11 +48,45 @@ public class SmtpEmailSender : IEmailSender
             HtmlBody = htmlBody
         }.ToMessageBody();
 
-        using var smtpClient = new SmtpClient();
+       using var smtpClient = new SmtpClient
+{
+    Timeout = 15000
+};
 
-        await smtpClient.ConnectAsync(host, port, SecureSocketOptions.StartTls);
-        await smtpClient.AuthenticateAsync(username, password);
-        await smtpClient.SendAsync(message);
-        await smtpClient.DisconnectAsync(true);
+using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+
+try
+{
+    await smtpClient.ConnectAsync(
+        host,
+        port,
+        SecureSocketOptions.StartTls,
+        cts.Token
+    );
+
+    await smtpClient.AuthenticateAsync(
+        username,
+        password,
+        cts.Token
+    );
+
+    await smtpClient.SendAsync(
+        message,
+        cts.Token
+    );
+
+    await smtpClient.DisconnectAsync(
+        true,
+        cts.Token
+    );
+}
+catch (OperationCanceledException)
+{
+    throw new InvalidOperationException("Sending email timed out.");
+}
+catch (Exception ex)
+{
+    throw new InvalidOperationException($"Cannot send email: {ex.Message}");
+}
     }
 }

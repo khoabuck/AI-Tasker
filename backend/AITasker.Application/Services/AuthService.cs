@@ -68,14 +68,23 @@ public class AuthService : IAuthService
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
-
-        await CreateAndSendVerificationEmailAsync(user);
-
+        try
+        {
+            await CreateAndSendVerificationEmailAsync(user);
+        }
+        catch
+        {
+            return new MessageResponse
+            {
+                Success = true,
+                Message = "Registration successful, but the verification email could not be sent. Please use resend verification email."
+            };
+        }
         return new MessageResponse
         {
             Success = true,
             Message = "Registration successful. Please check your email to verify your account."
-        };
+};
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
