@@ -264,7 +264,6 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.UpdatedByAdminId);
         });
 
-
         // =========================
         // AIModelPricingPolicies
         // =========================
@@ -393,13 +392,9 @@ public class AITaskerDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(x => x.CreatedAt);
-
             entity.HasIndex(x => x.Provider);
-
             entity.HasIndex(x => x.ModuleName);
-
             entity.HasIndex(x => x.ModelName);
-
             entity.HasIndex(x => x.Status);
         });
 
@@ -428,29 +423,6 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(500);
 
             entity.HasIndex(x => x.IsActive);
-
-            entity.HasData(new MarketplaceWorkflowPolicy
-            {
-                MarketplaceWorkflowPolicyId = 1,
-                ProposalDraftLimit = 10,
-                ProposalMilestoneLimit = 10,
-                FreeProposalSubmitCount = 1,
-                ResubmitNoteMaxLength = 1000,
-                EscrowLockWindowHours = 24,
-                ExpertMaxActiveProjects = 3,
-                DeliverableReviewWindowHours = 24,
-                DeliverableAutoApproveGraceHours = 6,
-                MinimumWithdrawalAmount = 1000m,
-                WithdrawalFeeRate = 0.10m,
-                MinimumDepositAmount = 1000m,
-                MaximumDepositAmount = 500000000m,
-                DisputeLostWarningThreshold = 3,
-                IsActive = true,
-                UpdatedByAdminId = null,
-                UpdateReason = "Default marketplace workflow policy.",
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
         });
 
 
@@ -1067,8 +1039,8 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerifiedAt);
 
-            entity.Property(x => x.FreeProposalSubmitUsed)
-                .HasDefaultValue(false)
+            entity.Property(x => x.FreeProposalSubmitUsedCount)
+                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(x => x.ProposalSubmitCredits)
@@ -1376,6 +1348,14 @@ public class AITaskerDbContext : DbContext
                 t.HasCheckConstraint(
                     "CK_Proposals_Price_Timeline",
                     "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
+
+                t.HasCheckConstraint(
+                    "CK_Proposals_CreditChargeType",
+                    "[ProposalCreditChargeType] IN ('NONE','FREE','PAID')");
+
+                t.HasCheckConstraint(
+                    "CK_Proposals_CreditChargeStatus",
+                    "[ProposalCreditChargeStatus] IN ('NONE','RESERVED','CONSUMED','REFUNDED')");
             });
 
             entity.HasKey(e => e.ProposalId);
@@ -1392,6 +1372,22 @@ public class AITaskerDbContext : DbContext
             entity.Property(e => e.Status)
                 .HasMaxLength(50)
                 .IsRequired();
+
+            entity.Property(e => e.ProposalCreditChargeType)
+                .HasMaxLength(20)
+                .HasDefaultValue("NONE")
+                .IsRequired();
+
+            entity.Property(e => e.ProposalCreditChargeStatus)
+                .HasMaxLength(20)
+                .HasDefaultValue("NONE")
+                .IsRequired();
+
+            entity.Property(e => e.ProposalCreditReservedAt);
+
+            entity.Property(e => e.ProposalCreditConsumedAt);
+
+            entity.Property(e => e.ProposalCreditRefundedAt);
 
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
@@ -1623,8 +1619,8 @@ public class AITaskerDbContext : DbContext
                 {
                     ProposalCreditPackageId = 1,
                     PackageName = "Basic",
-                    Description = "5 proposal submit credits.",
-                    ProposalSubmitCredits = 5,
+                    Description = "20 proposal submit credits.",
+                    ProposalSubmitCredits = 20,
                     Price = 49000m,
                     Currency = "VND",
                     IsActive = true,
@@ -1635,8 +1631,8 @@ public class AITaskerDbContext : DbContext
                 {
                     ProposalCreditPackageId = 2,
                     PackageName = "Pro",
-                    Description = "20 proposal submit credits.",
-                    ProposalSubmitCredits = 20,
+                    Description = "50 proposal submit credits.",
+                    ProposalSubmitCredits = 50,
                     Price = 149000m,
                     Currency = "VND",
                     IsActive = true,
@@ -1647,8 +1643,8 @@ public class AITaskerDbContext : DbContext
                 {
                     ProposalCreditPackageId = 3,
                     PackageName = "Business",
-                    Description = "60 proposal submit credits.",
-                    ProposalSubmitCredits = 60,
+                    Description = "100 proposal submit credits.",
+                    ProposalSubmitCredits = 100,
                     Price = 399000m,
                     Currency = "VND",
                     IsActive = true,

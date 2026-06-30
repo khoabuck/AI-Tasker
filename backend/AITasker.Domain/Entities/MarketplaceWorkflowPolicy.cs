@@ -8,7 +8,7 @@ public class MarketplaceWorkflowPolicy
 
     public int ProposalMilestoneLimit { get; set; } = 10;
 
-    public int FreeProposalSubmitCount { get; set; } = 1;
+    public int FreeProposalSubmitCount { get; set; } = 5;
 
     public int ResubmitNoteMaxLength { get; set; } = 1000;
 

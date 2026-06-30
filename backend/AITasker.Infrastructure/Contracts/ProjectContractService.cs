@@ -19,6 +19,7 @@ namespace AITasker.Infrastructure.Contracts
         private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusOpen = "OPEN";
+        private const string JobStatusActive = "ACTIVE";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
@@ -94,7 +95,7 @@ namespace AITasker.Infrastructure.Contracts
                 finalTimelineDays,
                 proposal.ExpectedOutputs,
                 "Acceptance criteria must be confirmed by Client and Expert before project starts.",
-                "Milestone-based escrow using internal wallet ledger.",
+                "Milestone-based escrow payment managed through AITasker escrow.",
                 ContractSourceProposal,
                 null);
 
@@ -269,6 +270,9 @@ namespace AITasker.Infrastructure.Contracts
                 contract.ExpertConfirmed = true;
                 contract.Status = ContractStatusConfirmed;
                 contract.ConfirmedAt = DateTime.UtcNow;
+
+                job.Status = JobStatusActive;
+                job.UpdatedAt = DateTime.UtcNow;
 
                 var project = await EnsurePendingEscrowProjectExistsAsync(
                     contract,
@@ -1227,7 +1231,8 @@ namespace AITasker.Infrastructure.Contracts
 
             if (activeProjectCount >= expertMaxActiveProjects)
             {
-                throw new InvalidOperationException($"Expert has reached the maximum limit of {expertMaxActiveProjects} active projects.");
+                throw new InvalidOperationException(
+                    $"Expert has reached the maximum limit of {expertMaxActiveProjects} active projects.");
             }
         }
 

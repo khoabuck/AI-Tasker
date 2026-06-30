@@ -6,7 +6,9 @@ public class ProposalCreditPackagePageResponse
 
     public string CurrentCreditTier { get; set; } = "Free";
 
-    public bool FreeProposalSubmitUsed { get; set; }
+    public int FreeProposalSubmitTotal { get; set; }
+
+    public int FreeProposalSubmitUsedCount { get; set; }
 
     public int FreeProposalSubmitRemaining { get; set; }
 

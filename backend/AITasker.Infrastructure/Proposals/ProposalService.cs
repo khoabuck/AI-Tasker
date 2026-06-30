@@ -20,10 +20,14 @@ namespace AITasker.Infrastructure.Proposals
 
         public const string ProposalResubmitted = "PROPOSAL_RESUBMITTED";
 
-        private const string ProposalCreditUsageFree = "FREE";
-        private const string ProposalCreditUsagePaid = "PAID";
+        private const string ProposalCreditChargeTypeNone = "NONE";
+        private const string ProposalCreditChargeTypeFree = "FREE";
+        private const string ProposalCreditChargeTypePaid = "PAID";
 
-        private const string JobStatusActive = "ACTIVE";
+        private const string ProposalCreditChargeStatusNone = "NONE";
+        private const string ProposalCreditChargeStatusReserved = "RESERVED";
+        private const string ProposalCreditChargeStatusConsumed = "CONSUMED";
+        private const string ProposalCreditChargeStatusRefunded = "REFUNDED";
 
         private const string ContractStatusDraft = "DRAFT";
         private const string ContractSourceProposal = "PROPOSAL";
@@ -101,8 +105,6 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("You already have a draft or submitted proposal for this job.");
             }
 
-            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
-
             var proposal = new Proposal
             {
                 JobId = request.JobId,
@@ -118,6 +120,11 @@ namespace AITasker.Infrastructure.Proposals
                 Status = StatusSubmitted,
                 CreatedAt = DateTime.UtcNow
             };
+
+            var proposalCreditUsageType = ReserveProposalSubmitCredit(
+                expert,
+                proposal,
+                policy);
 
             _context.Proposals.Add(proposal);
 
@@ -437,9 +444,12 @@ namespace AITasker.Infrastructure.Proposals
                 milestoneDrafts,
                 policy.ProposalMilestoneLimit);
 
-            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
-
             proposal.Status = StatusSubmitted;
+
+            var proposalCreditUsageType = ReserveProposalSubmitCredit(
+                expert,
+                proposal,
+                policy);
 
             await _context.SaveChangesAsync();
 
@@ -573,6 +583,12 @@ namespace AITasker.Infrastructure.Proposals
             {
                 proposal.Status = StatusRejected;
 
+                await RefundReservedProposalCreditAsync(
+                    proposal,
+                    job,
+                    "Proposal credit refunded",
+                    $"Your reserved proposal credit for job '{job.Title}' has been refunded because the client rejected the proposal.");
+
                 await _context.SaveChangesAsync();
 
                 var rejectedExpert = await GetExpertProfileByIdAsync(proposal.ExpertId);
@@ -594,8 +610,9 @@ namespace AITasker.Infrastructure.Proposals
             var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
 
             proposal.Status = StatusAccepted;
-            job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
+
+            ConsumeReservedProposalCredit(proposal);
 
             var competingProposals = await _context.Proposals
                 .Where(x =>
@@ -610,6 +627,12 @@ namespace AITasker.Infrastructure.Proposals
             foreach (var competingProposal in competingProposals)
             {
                 competingProposal.Status = StatusRejected;
+
+                await RefundReservedProposalCreditAsync(
+                    competingProposal,
+                    job,
+                    "Proposal credit refunded",
+                    $"Another proposal was accepted for job '{job.Title}', so your reserved proposal credit has been refunded.");
             }
 
             await _context.SaveChangesAsync();
@@ -638,6 +661,49 @@ namespace AITasker.Infrastructure.Proposals
                 relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
+        }
+
+        public async Task<ProposalWithdrawWarningResponse> GetWithdrawWarningAsync(
+            int userId,
+            int proposalId)
+        {
+            var proposal = await GetProposalByIdAsync(proposalId);
+
+            await EnsureExpertOwnsProposalAsync(userId, proposal);
+
+            if (proposal.Status == StatusDraft)
+            {
+                throw new InvalidOperationException("Draft proposal can be deleted without losing proposal credit.");
+            }
+
+            if (proposal.Status == StatusAccepted)
+            {
+                throw new InvalidOperationException("Accepted proposal cannot be withdrawn.");
+            }
+
+            if (proposal.Status == StatusRejected)
+            {
+                throw new InvalidOperationException("Rejected proposal cannot be withdrawn.");
+            }
+
+            if (proposal.Status == StatusWithdrawn)
+            {
+                throw new InvalidOperationException("Proposal already withdrawn.");
+            }
+
+            var willLoseCredit =
+                proposal.ProposalCreditChargeStatus == ProposalCreditChargeStatusReserved;
+
+            return new ProposalWithdrawWarningResponse
+            {
+                ProposalId = proposal.ProposalId,
+                WillLoseReservedCredit = willLoseCredit,
+                ProposalCreditChargeType = proposal.ProposalCreditChargeType,
+                ProposalCreditChargeStatus = proposal.ProposalCreditChargeStatus,
+                Message = willLoseCredit
+                    ? "If you withdraw this proposal, the reserved proposal credit will be consumed and will not be refunded."
+                    : "This proposal does not have a reserved proposal credit to consume."
+            };
         }
 
         public async Task<ProposalResponse> WithdrawProposalAsync(
@@ -672,6 +738,8 @@ namespace AITasker.Infrastructure.Proposals
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
             proposal.Status = StatusWithdrawn;
+
+            ConsumeReservedProposalCredit(proposal);
 
             await _context.SaveChangesAsync();
 
@@ -760,18 +828,30 @@ namespace AITasker.Infrastructure.Proposals
             }
         }
 
-        private static string ConsumeProposalSubmitCredit(
+        private static string ReserveProposalSubmitCredit(
             ExpertProfile expert,
+            Proposal proposal,
             MarketplaceWorkflowPolicyResponse policy)
         {
-            var hasFreeSubmitAvailable =
-                policy.FreeProposalSubmitCount > 0 &&
-                !expert.FreeProposalSubmitUsed;
-
-            if (hasFreeSubmitAvailable)
+            if (proposal.ProposalCreditChargeStatus == ProposalCreditChargeStatusReserved ||
+                proposal.ProposalCreditChargeStatus == ProposalCreditChargeStatusConsumed)
             {
-                expert.FreeProposalSubmitUsed = true;
-                return ProposalCreditUsageFree;
+                return proposal.ProposalCreditChargeType;
+            }
+
+            var freeSubmitRemaining = Math.Max(
+                policy.FreeProposalSubmitCount - expert.FreeProposalSubmitUsedCount,
+                0);
+
+            if (freeSubmitRemaining > 0)
+            {
+                expert.FreeProposalSubmitUsedCount += 1;
+
+                proposal.ProposalCreditChargeType = ProposalCreditChargeTypeFree;
+                proposal.ProposalCreditChargeStatus = ProposalCreditChargeStatusReserved;
+                proposal.ProposalCreditReservedAt = DateTime.UtcNow;
+
+                return ProposalCreditChargeTypeFree;
             }
 
             if (expert.ProposalSubmitCredits <= 0)
@@ -782,29 +862,88 @@ namespace AITasker.Infrastructure.Proposals
 
             expert.ProposalSubmitCredits -= 1;
 
-            return ProposalCreditUsagePaid;
+            proposal.ProposalCreditChargeType = ProposalCreditChargeTypePaid;
+            proposal.ProposalCreditChargeStatus = ProposalCreditChargeStatusReserved;
+            proposal.ProposalCreditReservedAt = DateTime.UtcNow;
+
+            return ProposalCreditChargeTypePaid;
+        }
+
+        private static void ConsumeReservedProposalCredit(Proposal proposal)
+        {
+            if (proposal.ProposalCreditChargeStatus != ProposalCreditChargeStatusReserved)
+            {
+                return;
+            }
+
+            proposal.ProposalCreditChargeStatus = ProposalCreditChargeStatusConsumed;
+            proposal.ProposalCreditConsumedAt = DateTime.UtcNow;
+        }
+
+        private async Task RefundReservedProposalCreditAsync(
+            Proposal proposal,
+            JobPosting job,
+            string notificationTitle,
+            string notificationMessage)
+        {
+            if (proposal.ProposalCreditChargeStatus != ProposalCreditChargeStatusReserved)
+            {
+                return;
+            }
+
+            var expert = await _context.ExpertProfiles
+                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+            if (expert == null)
+            {
+                return;
+            }
+
+            if (proposal.ProposalCreditChargeType == ProposalCreditChargeTypeFree)
+            {
+                expert.FreeProposalSubmitUsedCount = Math.Max(
+                    expert.FreeProposalSubmitUsedCount - 1,
+                    0);
+            }
+            else if (proposal.ProposalCreditChargeType == ProposalCreditChargeTypePaid)
+            {
+                expert.ProposalSubmitCredits += 1;
+            }
+
+            proposal.ProposalCreditChargeStatus = ProposalCreditChargeStatusRefunded;
+            proposal.ProposalCreditRefundedAt = DateTime.UtcNow;
+
+            await _notificationService.CreateNotificationAsync(
+                expert.UserId,
+                notificationTitle,
+                notificationMessage,
+                NotificationTypes.ProposalCreditRefunded,
+                relatedEntityType: "PROPOSAL",
+                relatedEntityId: proposal.ProposalId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: proposal.ProposalId);
         }
 
         private static ProposalCreditResponse BuildProposalCreditResponse(
             ExpertProfile expert,
             MarketplaceWorkflowPolicyResponse policy)
         {
-            var freeSubmitRemaining =
-                policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                    ? 1
-                    : 0;
+            var freeSubmitTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+            var usedCount = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeSubmitTotal);
+            var freeSubmitRemaining = Math.Max(freeSubmitTotal - usedCount, 0);
 
             var canSubmit = freeSubmitRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
             return new ProposalCreditResponse
             {
-                FreeSubmitUsed = expert.FreeProposalSubmitUsed,
+                FreeSubmitTotal = freeSubmitTotal,
+                FreeSubmitUsedCount = usedCount,
                 FreeSubmitRemaining = freeSubmitRemaining,
                 AvailableProposalSubmitCredits = expert.ProposalSubmitCredits,
                 CanSubmitNewProposal = canSubmit,
                 Reason = canSubmit
                     ? freeSubmitRemaining > 0
-                        ? "Free proposal submit is still available."
+                        ? $"You have {freeSubmitRemaining} free proposal submissions remaining."
                         : "Proposal submit credit is available."
                     : "You need ProposalSubmitCredit to submit a new proposal. Please buy a proposal credit package."
             };
@@ -1050,7 +1189,13 @@ namespace AITasker.Infrastructure.Proposals
                 RemainingResubmitsInWindow = int.MaxValue,
                 LatestVersion = latestVersion,
 
-                CreatedAt = proposal.CreatedAt
+                CreatedAt = proposal.CreatedAt,
+
+                ProposalCreditChargeType = proposal.ProposalCreditChargeType,
+                ProposalCreditChargeStatus = proposal.ProposalCreditChargeStatus,
+                ProposalCreditReservedAt = proposal.ProposalCreditReservedAt,
+                ProposalCreditConsumedAt = proposal.ProposalCreditConsumedAt,
+                ProposalCreditRefundedAt = proposal.ProposalCreditRefundedAt
             };
         }
 
@@ -1522,17 +1667,17 @@ namespace AITasker.Infrastructure.Proposals
         {
             try
             {
-                var isFreeUsage = proposalCreditUsageType == ProposalCreditUsageFree;
+                var isFreeUsage = proposalCreditUsageType == ProposalCreditChargeTypeFree;
 
                 await _notificationService.CreateNotificationAsync(
                     userId,
                     isFreeUsage
-                        ? "The free proposal submission attempt has been used."
-                        : "Used 1 ProposalSubmitCredit",
+                        ? "Free proposal submission reserved"
+                        : "ProposalSubmitCredit reserved",
                     isFreeUsage
-                        ? $"You have used your free proposal submission for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}."
-                        : $"You have used 1 ProposalSubmitCredit for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}.",
-                    NotificationTypes.ProposalCreditUsed,
+                        ? $"A free proposal submission has been reserved for job '{job.Title}'. Free submissions used: {expert.FreeProposalSubmitUsedCount}."
+                        : $"1 ProposalSubmitCredit has been reserved for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}.",
+                    NotificationTypes.ProposalCreditReserved,
                     relatedEntityType: "PROPOSAL",
                     relatedEntityId: proposal.ProposalId,
                     relatedJobId: job.JobPostingId,

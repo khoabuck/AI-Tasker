@@ -10,6 +10,20 @@ namespace AITasker.Infrastructure.Services;
 
 public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyService
 {
+    private const int DefaultProposalDraftLimit = 10;
+    private const int DefaultProposalMilestoneLimit = 10;
+    private const int DefaultFreeProposalSubmitCount = 5;
+    private const int DefaultResubmitNoteMaxLength = 1000;
+    private const int DefaultEscrowLockWindowHours = 24;
+    private const int DefaultExpertMaxActiveProjects = 3;
+    private const int DefaultDeliverableReviewWindowHours = 24;
+    private const int DefaultDeliverableAutoApproveGraceHours = 6;
+    private const decimal DefaultMinimumWithdrawalAmount = 1000m;
+    private const decimal DefaultWithdrawalFeeRate = 0.10m;
+    private const decimal DefaultMinimumDepositAmount = 1000m;
+    private const decimal DefaultMaximumDepositAmount = 500000000m;
+    private const int DefaultDisputeLostWarningThreshold = 3;
+
     private readonly AITaskerDbContext _context;
     private readonly IAdminAuditLogService _adminAuditLogService;
 
@@ -83,16 +97,35 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             return policy;
         }
 
-        policy = new MarketplaceWorkflowPolicy
-        {
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        policy = CreateDefaultPolicy();
 
         _context.MarketplaceWorkflowPolicies.Add(policy);
 
         return policy;
+    }
+
+    private static MarketplaceWorkflowPolicy CreateDefaultPolicy()
+    {
+        return new MarketplaceWorkflowPolicy
+        {
+            ProposalDraftLimit = DefaultProposalDraftLimit,
+            ProposalMilestoneLimit = DefaultProposalMilestoneLimit,
+            FreeProposalSubmitCount = DefaultFreeProposalSubmitCount,
+            ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength,
+            EscrowLockWindowHours = DefaultEscrowLockWindowHours,
+            ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
+            DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
+            DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours,
+            MinimumWithdrawalAmount = DefaultMinimumWithdrawalAmount,
+            WithdrawalFeeRate = DefaultWithdrawalFeeRate,
+            MinimumDepositAmount = DefaultMinimumDepositAmount,
+            MaximumDepositAmount = DefaultMaximumDepositAmount,
+            DisputeLostWarningThreshold = DefaultDisputeLostWarningThreshold,
+            IsActive = true,
+            UpdateReason = "Default marketplace workflow policy.",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
     }
 
     private static void ValidateRequest(UpdateMarketplaceWorkflowPolicyRequest request)
@@ -107,10 +140,9 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Proposal milestone limit must be between 1 and 50.");
         }
 
-        if (request.FreeProposalSubmitCount < 0 || request.FreeProposalSubmitCount > 1)
+        if (request.FreeProposalSubmitCount < 0 || request.FreeProposalSubmitCount > 100)
         {
-            throw new InvalidOperationException(
-                "Free proposal submit count must be 0 or 1 because the current expert profile stores free submit as a boolean flag.");
+            throw new InvalidOperationException("Free proposal submit count must be between 0 and 100.");
         }
 
         if (request.ResubmitNoteMaxLength < 100 || request.ResubmitNoteMaxLength > 5000)

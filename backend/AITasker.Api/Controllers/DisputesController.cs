@@ -13,10 +13,12 @@ namespace AITasker.Api.Controllers
     public class DisputesController : ControllerBase
     {
         private readonly IDisputeService _disputeService;
+        private readonly IImageUploadService _imageUploadService;
 
-        public DisputesController(IDisputeService disputeService)
+        public DisputesController(IDisputeService disputeService, IImageUploadService imageUploadService)
         {
             _disputeService = disputeService;
+            _imageUploadService = imageUploadService;
         }
 
         [HttpPost]
@@ -135,6 +137,71 @@ namespace AITasker.Api.Controllers
                 {
                     success = true,
                     message = "Dispute evidence submitted successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{disputeId:int}/evidences/image")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(5 * 1024 * 1024)]
+        public async Task<IActionResult> AddImageEvidence(
+            int disputeId,
+            [FromForm] string? evidenceText,
+            [FromForm] IFormFile image)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                if (image == null || image.Length == 0)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Evidence image is required."
+                    });
+                }
+
+                await using var stream = image.OpenReadStream();
+
+                var uploadResult = await _imageUploadService.UploadImageAsync(
+                    stream,
+                    image.FileName,
+                    image.ContentType,
+                    image.Length,
+                    $"dispute-evidences/{disputeId}");
+
+                var result = await _disputeService.AddEvidenceAsync(
+                    currentUserId,
+                    disputeId,
+                    new CreateDisputeEvidenceRequest
+                    {
+                        EvidenceText = evidenceText ?? string.Empty,
+                        FileUrl = uploadResult.Url
+                    });
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Dispute image evidence submitted successfully.",
+                    image = uploadResult,
                     data = result
                 });
             }

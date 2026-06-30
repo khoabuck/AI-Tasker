@@ -169,7 +169,13 @@ public class AdminProposalCreditService : IAdminProposalCreditService
 
         var oldValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
 
-        expert.FreeProposalSubmitUsed = request.FreeProposalSubmitUsed;
+        if (request.FreeProposalSubmitUsedCount < 0 ||
+            request.FreeProposalSubmitUsedCount > policy.FreeProposalSubmitCount)
+        {
+            throw new InvalidOperationException($"Free proposal submit used count must be between 0 and {policy.FreeProposalSubmitCount}.");
+        }
+
+        expert.FreeProposalSubmitUsedCount = request.FreeProposalSubmitUsedCount;
         expert.UpdatedAt = DateTime.UtcNow;
 
         var newValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
@@ -191,10 +197,9 @@ public class AdminProposalCreditService : IAdminProposalCreditService
 
     private static AdminProposalCreditResponse MapToResponse(ExpertProfile expert, MarketplaceWorkflowPolicyResponse policy)
     {
-        var freeRemaining =
-            policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                ? 1
-                : 0;
+        var freeTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+        var freeUsed = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeTotal);
+        var freeRemaining = Math.Max(freeTotal - freeUsed, 0);
 
         var canSubmit = freeRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
@@ -207,7 +212,8 @@ public class AdminProposalCreditService : IAdminProposalCreditService
             ProfessionalTitle = expert.ProfessionalTitle,
             ProfileReviewStatus = expert.ProfileReviewStatus,
             AvailableForWork = expert.AvailableForWork,
-            FreeProposalSubmitUsed = expert.FreeProposalSubmitUsed,
+            FreeProposalSubmitTotal = freeTotal,
+            FreeProposalSubmitUsedCount = freeUsed,
             FreeProposalSubmitRemaining = freeRemaining,
             ProposalSubmitCredits = expert.ProposalSubmitCredits,
             CanSubmitProposal = canSubmit,

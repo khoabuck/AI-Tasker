@@ -98,10 +98,9 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
         var latestPurchase = recentPurchases.FirstOrDefault();
         var currentTier = latestPurchase?.PackageNameSnapshot ?? "Free";
 
-        var freeRemaining =
-            policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                ? 1
-                : 0;
+        var freeTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+        var freeUsed = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeTotal);
+        var freeRemaining = Math.Max(freeTotal - freeUsed, 0);
 
         var canSubmitProposal = freeRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
@@ -111,7 +110,7 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
             {
                 ProposalCreditPackageId = null,
                 PackageName = "Free",
-                Description = "Free proposal submit granted to new experts.",
+                Description = "5 free proposal submissions granted to new experts.",
                 ProposalSubmitCredits = policy.FreeProposalSubmitCount,
                 Price = 0,
                 Currency = "VND",
@@ -121,7 +120,7 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
                 CanPurchase = false,
                 WalletAvailableBalance = walletBalance,
                 InsufficientAmount = 0,
-                PurchaseDisabledReason = "Free proposal submit is granted automatically."
+                PurchaseDisabledReason = "Free proposal submissions are granted automatically."
             }
         };
 
@@ -153,7 +152,8 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
         {
             WalletAvailableBalance = walletBalance,
             CurrentCreditTier = currentTier,
-            FreeProposalSubmitUsed = expert.FreeProposalSubmitUsed,
+            FreeProposalSubmitTotal = freeTotal,
+            FreeProposalSubmitUsedCount = freeUsed,
             FreeProposalSubmitRemaining = freeRemaining,
             ProposalSubmitCredits = expert.ProposalSubmitCredits,
             CanSubmitProposal = canSubmitProposal,
@@ -432,16 +432,16 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
 
             var policy = await _workflowPolicyService.GetActivePolicyAsync();
 
-            var freeRemaining =
-                policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                    ? 1
-                    : 0;
+            var freeTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+            var freeUsed = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeTotal);
+            var freeRemaining = Math.Max(freeTotal - freeUsed, 0);
 
             return new ProposalCreditPackagePurchaseResultResponse
             {
                 Purchase = MapPurchase(purchase),
                 RemainingWalletBalance = wallet.AvailableBalance,
-                FreeProposalSubmitUsed = expert.FreeProposalSubmitUsed,
+                FreeProposalSubmitTotal = freeTotal,
+                FreeProposalSubmitUsedCount = freeUsed,
                 FreeProposalSubmitRemaining = freeRemaining,
                 ProposalSubmitCredits = expert.ProposalSubmitCredits,
                 CanSubmitProposal = freeRemaining > 0 || expert.ProposalSubmitCredits > 0,
