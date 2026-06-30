@@ -3,6 +3,7 @@ using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
+using AITasker.Infrastructure.AI;
 using AITasker.Infrastructure.BusinessVerification;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
@@ -258,6 +259,15 @@ builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScor
 builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
 
 // =========================
+// Admin AI Management / Groq Runtime Config
+// =========================
+builder.Services.AddScoped<IAiManagementService, AiManagementService>();
+builder.Services.AddHttpClient<IGroqChatCompletionService, GroqChatCompletionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(45);
+});
+
+// =========================
 // Upload Images - Cloudinary
 // =========================
 builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
@@ -271,7 +281,7 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 // BE2 - Expert Skills API
 // =========================
 builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
-builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
+builder.Services.AddScoped<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
 
 // =========================
 // BE2 - Expert Directory / Recommendation
@@ -290,11 +300,8 @@ builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 // BE2 - AI Job Assistant
 // =========================
 builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
-builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
-builder.Services.AddHttpClient<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+builder.Services.AddScoped<IJobAssistantProvider, GroqJobAssistantProvider>();
+builder.Services.AddScoped<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>();
 
 // =========================
 // BE2 - Proposal / Contract / Project / Milestone Flow
@@ -365,7 +372,7 @@ builder.Services.AddHttpClient<
 // Expert Profile AI Review Provider
 // Groq AI
 // =========================
-builder.Services.AddHttpClient<
+builder.Services.AddScoped<
     IExpertProfileReviewProvider,
     GroqExpertProfileReviewProvider
 >();

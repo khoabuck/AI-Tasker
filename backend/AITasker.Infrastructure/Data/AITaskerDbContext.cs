@@ -20,6 +20,10 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
 
+    public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+
+    public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
+
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
@@ -392,6 +396,125 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.IsActive);
 
             entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        // =========================
+        // AI Management
+        // =========================
+        modelBuilder.Entity<AiSettings>(entity =>
+        {
+            entity.ToTable("AiSettings");
+
+            entity.HasKey(x => x.AiSettingsId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.PrimaryModel)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.FallbackModel)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.MonthlyTokenLimit)
+                .HasDefaultValue(1000000)
+                .IsRequired();
+
+            entity.Property(x => x.MonthlyRequestLimit)
+                .HasDefaultValue(50000)
+                .IsRequired();
+
+            entity.Property(x => x.DailyRequestLimitPerUser)
+                .HasDefaultValue(50)
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.Provider);
+            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        modelBuilder.Entity<AiUsageLog>(entity =>
+        {
+            entity.ToTable("AiUsageLogs");
+
+            entity.HasKey(x => x.AiUsageLogId);
+
+            entity.Property(x => x.Feature)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.EntityType)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.Model)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.UsedFallback)
+                .HasDefaultValue(false)
+                .IsRequired();
+
+            entity.Property(x => x.PromptTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CompletionTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.TotalTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.ErrorCode)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.Feature);
+            entity.HasIndex(x => x.Model);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CreatedAt);
         });
 
         // =========================
