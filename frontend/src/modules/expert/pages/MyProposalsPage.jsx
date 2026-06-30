@@ -460,11 +460,14 @@ function ProposalRow({
 
         <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
           <ActionButton label="Detail" tone="cyan" onClick={onDetail} />
-          <ActionButton label="Versions" tone="purple" onClick={onVersions} />
+
+          {statusGroup !== "REJECTED" && (
+            <ActionButton label="Versions" tone="purple" onClick={onVersions} />
+          )}
 
           {jobId && <ActionButton label="Job" tone="gray" onClick={onJob} />}
 
-          {shouldShowContract && (
+          {shouldShowContract && statusGroup !== "REJECTED" && (
             <ActionButton label="Contract" tone="green" onClick={onContract} />
           )}
 
@@ -721,7 +724,7 @@ function getProposalStatusGroup(status) {
 }
 
 function canResubmitProposal(statusGroup) {
-  return statusGroup === "SUBMITTED" || statusGroup === "REJECTED";
+  return statusGroup === "SUBMITTED";
 }
 
 function canCancelProposal(statusGroup) {

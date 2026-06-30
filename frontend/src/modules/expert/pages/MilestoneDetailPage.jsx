@@ -215,8 +215,13 @@ export default function MilestoneDetailPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading milestone...
+        <div className="flex min-h-[70vh] items-center justify-center">
+          <div className="rounded-2xl border border-white/10 bg-[#151a22] px-7 py-6 text-center">
+            <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+            <p className="text-sm font-semibold text-gray-300">
+              Loading milestone...
+            </p>
+          </div>
         </div>
       </ExpertLayout>
     );
@@ -225,7 +230,7 @@ export default function MilestoneDetailPage() {
   if (!milestone) {
     return (
       <ExpertLayout>
-        <div className="px-5 py-10 md:px-8">
+        <div className="px-5 py-8 md:px-8">
           <div className="mx-auto max-w-5xl">
             <Alert
               type="danger"
@@ -236,8 +241,11 @@ export default function MilestoneDetailPage() {
             <button
               type="button"
               onClick={() => navigate("/expert/projects")}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
             >
+              <span className="material-symbols-outlined text-[18px]">
+                arrow_back
+              </span>
               Back to Projects
             </button>
           </div>
@@ -278,53 +286,59 @@ export default function MilestoneDetailPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-6xl">
+      <div className="px-5 py-6 md:px-8">
+        <div className="mx-auto max-w-7xl">
           <button
             type="button"
             onClick={goBackToProject}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+            className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
           >
-            <span className="material-symbols-outlined text-sm">
+            <span className="material-symbols-outlined text-[18px]">
               arrow_back
             </span>
             Back to project
           </button>
 
-          <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-purple-400/10 to-transparent p-6 md:p-8">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+          <section className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_50px_rgba(0,0,0,0.28)]">
+            <div className="relative overflow-hidden border-b border-white/10 p-5 md:p-6">
+              <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" />
+              <div className="absolute bottom-0 right-28 h-36 w-36 rounded-full bg-purple-400/10 blur-3xl" />
+
+              <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-[#00F0FF]">
                     Milestone Workspace
                   </p>
 
-                  <h1 className="text-3xl font-black text-white md:text-4xl">
+                  <h1 className="max-w-4xl text-2xl font-black leading-tight text-white md:text-4xl">
                     {milestone.title || "Untitled Milestone"}
                   </h1>
 
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                    Review the milestone brief, submit your work, and resubmit
-                    here when the client asks for changes.
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
+                    Review the brief, submit your work, and manage revisions in
+                    one clear workspace.
                   </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <FriendlyStatusBadge ui={milestoneUi} />
+                  </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 lg:justify-end">
-                  <FriendlyStatusBadge ui={milestoneUi} />
-
-                  <button
-                    type="button"
-                    onClick={() => loadSubmissions(realMilestoneId)}
-                    disabled={submissionLoading}
-                    className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submissionLoading ? "Refreshing..." : "Refresh"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => loadSubmissions(realMilestoneId)}
+                  disabled={submissionLoading}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    refresh
+                  </span>
+                  {submissionLoading ? "Refreshing..." : "Refresh"}
+                </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-0 md:grid-cols-3">
+            <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
               <HeroInfo
                 icon="calendar_month"
                 label="Due Date"
@@ -353,24 +367,31 @@ export default function MilestoneDetailPage() {
             <Alert type="danger" title="Milestone error" message={error} />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-            <main className="space-y-6">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_330px]">
+            <main className="space-y-5">
               <Card
                 title="Work Brief"
-                subtitle="What the client expects from this milestone."
+                subtitle="Review what the client expects before submitting."
                 icon="task_alt"
               >
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {milestone.description || "No description provided."}
-                </p>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                    {milestone.description || "No description provided."}
+                  </p>
+                </div>
 
                 {milestone.acceptanceCriteria && (
-                  <div className="mt-5 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                      Acceptance Criteria
-                    </p>
+                  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-cyan-300">
+                      <span className="material-symbols-outlined text-[18px]">
+                        checklist
+                      </span>
+                      <p className="text-xs font-black uppercase tracking-[0.18em]">
+                        Acceptance Criteria
+                      </p>
+                    </div>
 
-                    <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                    <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
                       {milestone.acceptanceCriteria}
                     </p>
                   </div>
@@ -393,7 +414,7 @@ export default function MilestoneDetailPage() {
                 )}
 
                 {!canSubmitWorkForMilestone(milestoneStatus) && (
-                  <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-sm leading-6 text-yellow-100">
+                  <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     This milestone is currently closed for submission.
                   </div>
                 )}
@@ -406,7 +427,7 @@ export default function MilestoneDetailPage() {
                 )}
 
                 {needsResubmission && (
-                  <div className="mb-5 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-sm leading-6 text-yellow-100">
+                  <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     <div className="flex gap-3">
                       <span className="material-symbols-outlined text-yellow-300">
                         edit_note
@@ -439,8 +460,8 @@ export default function MilestoneDetailPage() {
                 )}
 
                 {canSubmit && (
-                  <form onSubmit={handleSubmitWork} className="space-y-6">
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                  <form onSubmit={handleSubmitWork} className="space-y-5">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                       <SubmitWorkInput
                         label="File URL"
                         value={submissionForm.fileUrl}
@@ -481,7 +502,7 @@ export default function MilestoneDetailPage() {
                         updateSubmissionField("description", value)
                       }
                       placeholder="Describe what you completed, what changed, and how the client can review it..."
-                      rows={5}
+                      rows={4}
                     />
 
                     <SubmitWorkTextArea
@@ -492,15 +513,15 @@ export default function MilestoneDetailPage() {
                         updateSubmissionField("handoverNotes", value)
                       }
                       placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
-                      rows={4}
+                      rows={3}
                     />
 
-                    <div className="flex flex-wrap justify-end gap-3 pt-2">
+                    <div className="flex flex-wrap justify-end gap-3 pt-1">
                       <button
                         type="button"
                         onClick={resetSubmissionForm}
                         disabled={submitting}
-                        className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         Clear
                       </button>
@@ -508,7 +529,7 @@ export default function MilestoneDetailPage() {
                       <button
                         type="submit"
                         disabled={submitting}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         <span className="material-symbols-outlined text-[20px]">
                           send
@@ -527,11 +548,11 @@ export default function MilestoneDetailPage() {
 
               <Card
                 title="Submission History"
-                subtitle="Previous submissions for this milestone."
+                subtitle="Track previous submissions and client review status."
                 icon="history"
               >
                 {submissionLoading ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-sm text-gray-400">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-gray-400">
                     Loading submissions...
                   </div>
                 ) : submissions.length === 0 ? (
@@ -541,7 +562,7 @@ export default function MilestoneDetailPage() {
                     description="Your submitted work will appear here after you send it to the client."
                   />
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {submissions.map((item, index) => (
                       <SubmissionCard
                         key={getSubmissionId(item) || index}
@@ -554,8 +575,8 @@ export default function MilestoneDetailPage() {
               </Card>
             </main>
 
-            <aside className="space-y-6">
-              <Card title="What happens next" icon="route">
+            <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+              <Card title="Review Flow" icon="route">
                 <Step
                   active={!hasSubmission}
                   done={hasSubmission}
@@ -582,11 +603,23 @@ export default function MilestoneDetailPage() {
               </Card>
 
               <Card title="Helpful Tips" icon="tips_and_updates">
-                <ul className="space-y-3 text-sm leading-6 text-gray-300">
-                  <li>Provide at least one working review link.</li>
-                  <li>Keep the description clear and client-friendly.</li>
-                  <li>Use notes for setup steps, test accounts, or caveats.</li>
-                  <li>When changes are requested, update the same form here.</li>
+                <ul className="space-y-2 text-sm leading-6 text-gray-300">
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Provide at least one working review link.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Keep the description clear and client-friendly.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Use notes for setup steps, test accounts, or caveats.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    When changes are requested, update the same form here.
+                  </li>
                 </ul>
               </Card>
             </aside>
@@ -597,16 +630,10 @@ export default function MilestoneDetailPage() {
   );
 }
 
-function SubmitWorkInput({
-  label,
-  value,
-  disabled,
-  onChange,
-  placeholder,
-}) {
+function SubmitWorkInput({ label, value, disabled, onChange, placeholder }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
         {label}
       </span>
 
@@ -616,7 +643,7 @@ function SubmitWorkInput({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-2xl border border-white/10 bg-[#0f141d] px-4 py-3.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
       />
     </label>
   );
@@ -633,7 +660,7 @@ function SubmitWorkTextArea({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-black uppercase tracking-[0.2em] text-gray-400">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
         {label} {required && <span className="text-red-300">*</span>}
       </span>
 
@@ -643,7 +670,7 @@ function SubmitWorkTextArea({
         onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-2xl border border-white/10 bg-[#0f141d] px-4 py-3.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
       />
     </label>
   );
@@ -653,12 +680,12 @@ function SubmittedNotice({ submission, onOpen }) {
   const ui = getSubmissionUiStatus(submission?.status);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <FriendlyStatusBadge ui={ui} small />
 
-          <h3 className="mt-4 text-lg font-bold text-white">
+          <h3 className="mt-3 text-base font-bold text-white">
             Work already submitted
           </h3>
 
@@ -684,7 +711,7 @@ function SubmissionCard({ submission, onDetail }) {
   const ui = getSubmissionUiStatus(submission.status);
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/40">
+    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/40 hover:bg-white/[0.05]">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -709,7 +736,7 @@ function SubmissionCard({ submission, onDetail }) {
             {submission.description || "No description provided."}
           </p>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <LinkPill label="File" url={submission.fileUrl} />
             <LinkPill label="Demo" url={submission.demoUrl} />
             <LinkPill label="Test" url={submission.testResultUrl} />
@@ -730,21 +757,21 @@ function SubmissionCard({ submission, onDetail }) {
 
 function Card({ title, subtitle, icon, children }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_16px_50px_rgba(0,0,0,0.22)]">
-      <div className="mb-5 flex items-start gap-3">
+    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_12px_35px_rgba(0,0,0,0.2)]">
+      <div className="mb-4 flex items-start gap-3">
         {icon && (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
-            <span className="material-symbols-outlined text-xl text-cyan-300">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+            <span className="material-symbols-outlined text-lg text-cyan-300">
               {icon}
             </span>
           </div>
         )}
 
         <div>
-          <h2 className="text-xl font-extrabold text-white">{title}</h2>
+          <h2 className="text-lg font-extrabold text-white">{title}</h2>
 
           {subtitle && (
-            <p className="mt-1 text-sm leading-6 text-gray-500">{subtitle}</p>
+            <p className="mt-1 text-sm leading-5 text-gray-500">{subtitle}</p>
           )}
         </div>
       </div>
@@ -756,16 +783,18 @@ function Card({ title, subtitle, icon, children }) {
 
 function HeroInfo({ icon, label, value }) {
   return (
-    <div className="border-t border-white/10 p-5 md:border-r md:border-t-0 md:last:border-r-0">
-      <div className="mb-2 flex items-center gap-2 text-gray-500">
+    <div className="p-4">
+      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
         <span className="material-symbols-outlined text-lg">{icon}</span>
-
-        <span className="text-xs font-bold uppercase tracking-wider">
-          {label}
-        </span>
       </div>
 
-      <p className="text-lg font-black text-white">{formatInfoValue(value)}</p>
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 text-base font-black text-white">
+        {formatInfoValue(value)}
+      </p>
     </div>
   );
 }
@@ -778,7 +807,7 @@ function Step({ number, title, description, active, done }) {
     : "border-white/10 bg-white/[0.04] text-gray-500";
 
   return (
-    <div className="mb-4 flex gap-3">
+    <div className="mb-4 flex gap-3 last:mb-0">
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-black ${style}`}
       >
@@ -792,7 +821,7 @@ function Step({ number, title, description, active, done }) {
       <div>
         <p className="font-bold text-white">{title}</p>
 
-        <p className="mt-1 text-sm leading-6 text-gray-400">{description}</p>
+        <p className="mt-1 text-sm leading-5 text-gray-400">{description}</p>
       </div>
     </div>
   );
@@ -802,7 +831,7 @@ function FriendlyStatusBadge({ ui, small = false }) {
   return (
     <span
       className={`inline-flex items-center gap-2 rounded-full border font-bold ${ui.className} ${
-        small ? "px-3 py-1 text-xs" : "px-4 py-2 text-xs"
+        small ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-xs"
       }`}
     >
       <span className="material-symbols-outlined text-sm">{ui.icon}</span>
@@ -819,7 +848,7 @@ function LinkPill({ label, url }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300 hover:bg-cyan-400 hover:text-black"
+      className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
     >
       {label}
     </a>
@@ -828,12 +857,12 @@ function LinkPill({ label, url }) {
 
 function EmptyState({ icon, title, description }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-center">
+      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
         {icon}
       </span>
 
-      <h2 className="text-lg font-bold text-white">{title}</h2>
+      <h2 className="text-base font-bold text-white">{title}</h2>
 
       <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-400">
         {description}

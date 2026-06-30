@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import notificationService from "../../../services/notification.service";
 
+const PAGE_SIZE = 10;
+
 export default function ExpertNotificationsPage() {
   const navigate = useNavigate();
 
   const [notifications, setNotifications] = useState([]);
   const [filter, setFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
@@ -20,6 +23,10 @@ export default function ExpertNotificationsPage() {
   useEffect(() => {
     loadNotifications();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter]);
 
   const unreadCount = useMemo(() => {
     return notifications.filter((item) => !item.isRead).length;
@@ -37,6 +44,18 @@ export default function ExpertNotificationsPage() {
     return notifications;
   }, [filter, notifications]);
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredNotifications.length / PAGE_SIZE)
+  );
+
+  const safePage = Math.min(currentPage, totalPages);
+
+  const paginatedNotifications = useMemo(() => {
+    const startIndex = (safePage - 1) * PAGE_SIZE;
+    return filteredNotifications.slice(startIndex, startIndex + PAGE_SIZE);
+  }, [filteredNotifications, safePage]);
+
   const loadNotifications = async () => {
     try {
       setLoading(true);
@@ -46,6 +65,7 @@ export default function ExpertNotificationsPage() {
       const data = await notificationService.getMyNotifications();
 
       setNotifications(Array.isArray(data) ? data : []);
+      setCurrentPage(1);
     } catch (err) {
       console.error("LOAD NOTIFICATIONS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load notifications."));
@@ -148,30 +168,30 @@ export default function ExpertNotificationsPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-5 py-6 md:px-7">
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-[#00F0FF]">
                 Notifications
               </p>
 
-              <h1 className="text-3xl font-extrabold text-white md:text-4xl">
+              <h1 className="text-2xl font-bold text-white md:text-3xl">
                 Your notifications
               </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
                 Open updates about proposals, contracts, projects, milestones,
                 submissions, wallet, reviews, and messages.
               </p>
             </div>
 
-            <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <button
                 type="button"
                 onClick={handleMarkAllAsRead}
                 disabled={markingAll || unreadCount <= 0}
-                className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {markingAll ? "Marking..." : "Mark all as read"}
               </button>
@@ -180,22 +200,18 @@ export default function ExpertNotificationsPage() {
                 type="button"
                 onClick={loadNotifications}
                 disabled={loading}
-                className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {loading ? "Refreshing..." : "Refresh"}
               </button>
             </div>
           </div>
 
-          {message && (
-            <Alert type="success" message={message} />
-          )}
+          {message && <Alert type="success" message={message} />}
 
-          {error && (
-            <Alert type="danger" message={error} />
-          )}
+          {error && <Alert type="danger" message={error} />}
 
-          <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
+          <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
             <SummaryCard
               label="Total"
               value={notifications.length}
@@ -218,19 +234,28 @@ export default function ExpertNotificationsPage() {
             />
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
-            <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 md:p-6">
+            <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-xl font-bold text-white">
+                <h2 className="text-lg font-bold text-white">
                   Notification Center
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  {filteredNotifications.length} notification(s)
+                  Showing{" "}
+                  {filteredNotifications.length === 0
+                    ? 0
+                    : (safePage - 1) * PAGE_SIZE + 1}
+                  -
+                  {Math.min(
+                    safePage * PAGE_SIZE,
+                    filteredNotifications.length
+                  )}{" "}
+                  of {filteredNotifications.length} notification(s)
                 </p>
               </div>
 
-              <div className="flex rounded-xl border border-white/10 bg-white/[0.04] p-1">
+              <div className="flex w-fit rounded-xl border border-white/10 bg-white/[0.04] p-1">
                 <FilterButton
                   label="All"
                   active={filter === "all"}
@@ -252,35 +277,45 @@ export default function ExpertNotificationsPage() {
             </div>
 
             {loading ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center text-gray-400">
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center text-gray-400">
                 Loading notifications...
               </div>
             ) : filteredNotifications.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
-              <div className="space-y-3">
-                {filteredNotifications.map((notification, index) => {
-                  const notificationId = getNotificationId(notification);
-                  const target =
-                    notification.target ||
-                    notificationService.getNotificationTarget(notification);
+              <>
+                <div className="space-y-3">
+                  {paginatedNotifications.map((notification, index) => {
+                    const notificationId = getNotificationId(notification);
+                    const target =
+                      notification.target ||
+                      notificationService.getNotificationTarget(notification);
 
-                  return (
-                    <NotificationItem
-                      key={notificationId || index}
-                      notification={notification}
-                      target={target}
-                      marking={String(markingId) === String(notificationId)}
-                      opening={
-                        String(openingId) === String(notificationId) ||
-                        String(openingId) === String(target?.path)
-                      }
-                      onMarkAsRead={handleMarkAsRead}
-                      onOpen={() => handleOpenNotification(notification)}
-                    />
-                  );
-                })}
-              </div>
+                    return (
+                      <NotificationItem
+                        key={notificationId || index}
+                        notification={notification}
+                        target={target}
+                        marking={String(markingId) === String(notificationId)}
+                        opening={
+                          String(openingId) === String(notificationId) ||
+                          String(openingId) === String(target?.path)
+                        }
+                        onMarkAsRead={handleMarkAsRead}
+                        onOpen={() => handleOpenNotification(notification)}
+                      />
+                    );
+                  })}
+                </div>
+
+                {totalPages > 1 && (
+                  <Pagination
+                    currentPage={safePage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                )}
+              </>
             )}
           </section>
         </div>
@@ -298,15 +333,15 @@ function SummaryCard({ label, value, icon, tone }) {
       : "border-cyan-400/20 bg-cyan-400/10 text-[#00F0FF]";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-xl border border-white/10 bg-[#151a22] p-5 shadow-[0_12px_35px_rgba(0,0,0,0.22)]">
       <div
-        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}
+        className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl border ${toneClass}`}
       >
-        <span className="material-symbols-outlined">{icon}</span>
+        <span className="material-symbols-outlined text-[20px]">{icon}</span>
       </div>
 
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-2 text-3xl font-bold text-white">{value}</p>
+      <p className="mt-1 text-2xl font-bold text-white">{value}</p>
     </div>
   );
 }
@@ -316,7 +351,7 @@ function FilterButton({ label, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
+      className={`rounded-lg px-3.5 py-2 text-xs font-bold uppercase tracking-wider transition ${
         active
           ? "bg-cyan-400 text-black"
           : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
@@ -324,6 +359,62 @@ function FilterButton({ label, active, onClick }) {
     >
       {label}
     </button>
+  );
+}
+
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  const pages = getVisiblePages(currentPage, totalPages);
+
+  return (
+    <div className="mt-4 flex flex-col gap-3 border-t border-white/10 pt-4 md:flex-row md:items-center md:justify-between">
+      <p className="text-xs text-gray-500">
+        Page {currentPage} of {totalPages}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          disabled={currentPage <= 1}
+          onClick={() => onPageChange(currentPage - 1)}
+          className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Prev
+        </button>
+
+        {pages.map((page, index) =>
+          page === "..." ? (
+            <span
+              key={`dots-${index}`}
+              className="px-1.5 text-sm font-bold text-gray-500"
+            >
+              ...
+            </span>
+          ) : (
+            <button
+              key={page}
+              type="button"
+              onClick={() => onPageChange(page)}
+              className={`h-8 min-w-8 rounded-lg border px-2.5 text-xs font-black transition ${
+                currentPage === page
+                  ? "border-cyan-400 bg-cyan-400 text-black"
+                  : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-cyan-400/50 hover:text-cyan-300"
+              }`}
+            >
+              {page}
+            </button>
+          )
+        )}
+
+        <button
+          type="button"
+          disabled={currentPage >= totalPages}
+          onClick={() => onPageChange(currentPage + 1)}
+          className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -342,7 +433,7 @@ function NotificationItem({
 
   return (
     <article
-      className={`rounded-2xl border p-5 transition ${
+      className={`rounded-xl border p-4 transition ${
         unread
           ? "border-cyan-400/40 bg-cyan-400/[0.06]"
           : "border-white/10 bg-white/[0.03]"
@@ -353,22 +444,24 @@ function NotificationItem({
         }
       }}
     >
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex min-w-0 gap-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="flex min-w-0 gap-3">
           <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border ${tone.className}`}
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${tone.className}`}
           >
-            <span className="material-symbols-outlined">{tone.icon}</span>
+            <span className="material-symbols-outlined text-[20px]">
+              {tone.icon}
+            </span>
           </div>
 
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase tracking-wider text-gray-400">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-gray-400">
                 {tone.label}
               </span>
 
               {unread && (
-                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
+                <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
                   New
                 </span>
               )}
@@ -378,20 +471,20 @@ function NotificationItem({
               </span>
             </div>
 
-            <h3 className="text-base font-bold text-white">
+            <h3 className="text-[15px] font-bold text-white">
               {notification.title || "Notification"}
             </h3>
 
-            <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
+            <p className="mt-1.5 line-clamp-2 text-sm leading-6 text-gray-400">
               {notification.message || notification.content || "No message."}
             </p>
 
             {target?.path ? (
-              <p className="mt-3 text-xs font-bold text-cyan-300">
+              <p className="mt-2 text-xs font-bold text-cyan-300">
                 Click to open: {target.label}
               </p>
             ) : (
-              <p className="mt-3 text-xs font-bold text-gray-500">
+              <p className="mt-2 text-xs font-bold text-gray-500">
                 No linked page available
               </p>
             )}
@@ -407,7 +500,7 @@ function NotificationItem({
               type="button"
               onClick={() => onMarkAsRead(notificationId)}
               disabled={marking}
-              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-3.5 py-2 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {marking ? "Marking..." : "Mark read"}
             </button>
@@ -417,7 +510,7 @@ function NotificationItem({
             type="button"
             onClick={onOpen}
             disabled={!target?.path || opening}
-            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-3.5 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {opening ? "Opening..." : target?.label || "Open"}
           </button>
@@ -436,12 +529,12 @@ function EmptyState({ filter }) {
       : "You do not have any notifications yet.";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
+      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
         notifications_off
       </span>
 
-      <h3 className="text-lg font-bold text-white">No notifications</h3>
+      <h3 className="text-base font-bold text-white">No notifications</h3>
 
       <p className="mt-2 text-sm text-gray-400">{text}</p>
     </div>
@@ -455,7 +548,7 @@ function Alert({ type, message }) {
       : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
-    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
+    <div className={`mb-5 rounded-xl border px-4 py-3 text-sm ${style}`}>
       {message}
     </div>
   );
@@ -473,6 +566,38 @@ function getNotificationId(notification) {
     notification?.raw?.Id ||
     ""
   );
+}
+
+function getVisiblePages(currentPage, totalPages) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  if (currentPage <= 4) {
+    return [1, 2, 3, 4, 5, "...", totalPages];
+  }
+
+  if (currentPage >= totalPages - 3) {
+    return [
+      1,
+      "...",
+      totalPages - 4,
+      totalPages - 3,
+      totalPages - 2,
+      totalPages - 1,
+      totalPages,
+    ];
+  }
+
+  return [
+    1,
+    "...",
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    "...",
+    totalPages,
+  ];
 }
 
 function getNotificationTone(type, kind) {
@@ -526,7 +651,11 @@ function getNotificationTone(type, kind) {
     };
   }
 
-  if (value.includes("CHAT") || value.includes("MESSAGE") || targetKind === "MESSAGE") {
+  if (
+    value.includes("CHAT") ||
+    value.includes("MESSAGE") ||
+    targetKind === "MESSAGE"
+  ) {
     return {
       label: "Message",
       icon: "chat",
@@ -534,7 +663,11 @@ function getNotificationTone(type, kind) {
     };
   }
 
-  if (value.includes("ESCROW") || value.includes("WALLET") || value.includes("PAYMENT")) {
+  if (
+    value.includes("ESCROW") ||
+    value.includes("WALLET") ||
+    value.includes("PAYMENT")
+  ) {
     return {
       label: "Wallet",
       icon: "account_balance_wallet",

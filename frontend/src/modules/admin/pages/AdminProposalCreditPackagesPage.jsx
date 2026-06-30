@@ -13,19 +13,32 @@ const EMPTY_FORM = {
   reason: "",
 };
 
+const EMPTY_ACTION = {
+  type: "",
+  packageItem: null,
+};
+
 export default function AdminProposalCreditPackagesPage() {
   const [packages, setPackages] = useState([]);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [editingItem, setEditingItem] = useState(null);
   const [keyword, setKeyword] = useState("");
-  const [status, setStatus] = useState("ALL");
+  const [activeFilter, setActiveFilter] = useState("ALL");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState("");
+
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  const [action, setAction] = useState(EMPTY_ACTION);
+  const [form, setForm] = useState(EMPTY_FORM);
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     loadPackages();
+  }, []);
+
+  useEffect(() => {
+    ensureHiddenScrollbarStyle();
   }, []);
 
   const filteredPackages = useMemo(() => {
@@ -34,72 +47,127 @@ export default function AdminProposalCreditPackagesPage() {
     return packages.filter((item) => {
       const matchSearch =
         !search ||
-        item.packageName.toLowerCase().includes(search) ||
-        item.description.toLowerCase().includes(search);
+        String(item.packageName || "").toLowerCase().includes(search) ||
+        String(item.description || "").toLowerCase().includes(search) ||
+        String(item.packageId || "").toLowerCase().includes(search);
 
-      const matchStatus =
-        status === "ALL" ||
-        (status === "ACTIVE" && item.isActive) ||
-        (status === "INACTIVE" && !item.isActive);
+      const matchActive =
+        activeFilter === "ALL" ||
+        (activeFilter === "ACTIVE" && item.isActive) ||
+        (activeFilter === "INACTIVE" && !item.isActive);
 
-      return matchSearch && matchStatus;
+      return matchSearch && matchActive;
     });
-  }, [packages, keyword, status]);
+  }, [packages, keyword, activeFilter]);
 
-  const loadPackages = async () => {
+  const stats = useMemo(() => {
+    return packages.reduce(
+      (result, item) => {
+        result.total += 1;
+        result.totalPrice += Number(item.price || 0);
+        result.totalCredits += Number(item.proposalSubmitCredits || 0);
+
+        if (item.isActive) result.active += 1;
+        if (!item.isActive) result.inactive += 1;
+
+        return result;
+      },
+      {
+        total: 0,
+        active: 0,
+        inactive: 0,
+        totalPrice: 0,
+        totalCredits: 0,
+      }
+    );
+  }, [packages]);
+
+  const loadPackages = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
       setError("");
+
+      if (!keepMessage) setSuccess("");
+
       const data = await adminProposalCreditPackageService.getPackages();
-      setPackages(data);
+      setPackages(Array.isArray(data) ? data : []);
     } catch (err) {
-      setError(err?.response?.data?.message || "Cannot load proposal credit packages.");
+      console.error(
+        "LOAD PROPOSAL CREDIT PACKAGES ERROR:",
+        err?.response?.data || err
+      );
+      setError(
+        getFriendlyError(err, "Cannot load proposal credit packages.")
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const resetForm = () => {
+  const openCreateModal = () => {
+    setAction({
+      type: "CREATE",
+      packageItem: null,
+    });
+
     setForm(EMPTY_FORM);
-    setEditingItem(null);
+    setError("");
+    setSuccess("");
   };
 
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
+  const openEditModal = (packageItem) => {
+    setAction({
+      type: "EDIT",
+      packageItem,
+    });
+
+    setForm({
+      packageName: packageItem.packageName || "",
+      description: packageItem.description || "",
+      proposalSubmitCredits: packageItem.proposalSubmitCredits ?? 1,
+      price: packageItem.price ?? 0,
+      currency: packageItem.currency || "VND",
+      isActive: Boolean(packageItem.isActive),
+      displayOrder: packageItem.displayOrder ?? 0,
+      reason: "",
+    });
+
+    setError("");
+    setSuccess("");
+  };
+
+  const openToggleModal = (type, packageItem) => {
+    setAction({
+      type,
+      packageItem,
+    });
+
+    setReason(
+      type === "ACTIVATE" ? "Activate package." : "Deactivate package."
+    );
+
+    setError("");
+    setSuccess("");
+  };
+
+  const closeModal = () => {
+    if (saving) return;
+
+    setAction(EMPTY_ACTION);
+    setForm(EMPTY_FORM);
+    setReason("");
+  };
+
+  const handleFormChange = (name, value) => {
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     }));
   };
 
-  const handleEdit = (item) => {
-    setEditingItem(item);
-    setForm({
-      packageName: item.packageName,
-      description: item.description,
-      proposalSubmitCredits: item.proposalSubmitCredits,
-      price: item.price,
-      currency: item.currency,
-      isActive: item.isActive,
-      displayOrder: item.displayOrder,
-      reason: "",
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
+  const handleCreateOrUpdate = async () => {
+    const validationError = validateForm(form, action.type === "EDIT");
 
-  const validate = () => {
-    if (!form.packageName.trim()) return "Package name is required.";
-    if (!form.description.trim()) return "Description is required.";
-    if (Number(form.proposalSubmitCredits) <= 0) return "Credits must be greater than 0.";
-    if (Number(form.price) < 0) return "Price cannot be negative.";
-    if (editingItem && !form.reason.trim()) return "Reason is required when updating.";
-    return "";
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const validationError = validate();
     if (validationError) {
       setError(validationError);
       return;
@@ -108,50 +176,73 @@ export default function AdminProposalCreditPackagesPage() {
     try {
       setSaving(true);
       setError("");
-      setMessage("");
+      setSuccess("");
 
-      if (editingItem) {
-        await adminProposalCreditPackageService.updatePackage(editingItem.packageId, form);
-        setMessage("Proposal credit package updated successfully.");
-      } else {
+      if (action.type === "CREATE") {
         await adminProposalCreditPackageService.createPackage(form);
-        setMessage("Proposal credit package created successfully.");
+        setSuccess("Proposal credit package has been created successfully.");
       }
 
-      resetForm();
-      await loadPackages();
+      if (action.type === "EDIT") {
+        await adminProposalCreditPackageService.updatePackage(
+          action.packageItem.packageId,
+          form
+        );
+        setSuccess("Proposal credit package has been updated successfully.");
+      }
+
+      closeModal();
+      await loadPackages({ keepMessage: true });
     } catch (err) {
-      setError(err?.response?.data?.message || "Cannot save package.");
+      console.error(
+        "SAVE PROPOSAL CREDIT PACKAGE ERROR:",
+        err?.response?.data || err
+      );
+      setError(
+        getFriendlyError(err, "Cannot save proposal credit package.")
+      );
     } finally {
       setSaving(false);
     }
   };
 
-  const handleToggle = async (item) => {
-    const reason = window.prompt(
-      item.isActive
-        ? "Reason for deactivating this package:"
-        : "Reason for activating this package:"
-    );
+  const handleToggleActive = async () => {
+    if (!action.packageItem?.packageId) return;
 
-    if (!reason?.trim()) return;
+    if (!reason.trim()) {
+      setError("Please enter reason.");
+      return;
+    }
 
     try {
       setSaving(true);
       setError("");
-      setMessage("");
+      setSuccess("");
 
-      if (item.isActive) {
-        await adminProposalCreditPackageService.deactivatePackage(item.packageId, reason);
-        setMessage("Package deactivated successfully.");
-      } else {
-        await adminProposalCreditPackageService.activatePackage(item.packageId, reason);
-        setMessage("Package activated successfully.");
+      if (action.type === "ACTIVATE") {
+        await adminProposalCreditPackageService.activatePackage(
+          action.packageItem.packageId,
+          reason
+        );
+        setSuccess("Package has been activated successfully.");
       }
 
-      await loadPackages();
+      if (action.type === "DEACTIVATE") {
+        await adminProposalCreditPackageService.deactivatePackage(
+          action.packageItem.packageId,
+          reason
+        );
+        setSuccess("Package has been deactivated successfully.");
+      }
+
+      closeModal();
+      await loadPackages({ keepMessage: true });
     } catch (err) {
-      setError(err?.response?.data?.message || "Cannot update package status.");
+      console.error(
+        "TOGGLE PROPOSAL PACKAGE STATUS ERROR:",
+        err?.response?.data || err
+      );
+      setError(getFriendlyError(err, "Cannot update package status."));
     } finally {
       setSaving(false);
     }
@@ -159,230 +250,728 @@ export default function AdminProposalCreditPackagesPage() {
 
   return (
     <AdminLayout>
-      <div className="space-y-6">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
-            Admin / Proposal Credits
-          </p>
-          <h1 className="mt-2 text-3xl font-black text-white">
-            Proposal Credit Packages
-          </h1>
-          <p className="mt-2 text-sm text-gray-400">
-            Quản lý các gói credit để Expert mua và dùng khi submit proposal.
-          </p>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+              Package Management
+            </p>
+
+            <h1 className="text-3xl font-bold text-white md:text-4xl">
+              Proposal credit packages
+            </h1>
+
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+              Manage proposal submit credit packages available for experts.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => loadPackages()}
+              disabled={loading || saving}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+
+            <button
+              type="button"
+              onClick={openCreateModal}
+              disabled={loading || saving}
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Create Package
+            </button>
+          </div>
         </div>
 
         {error && (
-          <div className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-200">
-            {error}
-          </div>
+          <Alert
+            type="danger"
+            title="Action failed"
+            message={error}
+            onClose={() => setError("")}
+          />
         )}
 
-        {message && (
-          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm font-semibold text-emerald-200">
-            {message}
-          </div>
+        {success && (
+          <Alert
+            type="success"
+            title="Success"
+            message={success}
+            onClose={() => setSuccess("")}
+          />
         )}
 
-        <form onSubmit={handleSubmit} className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
-          <h2 className="text-xl font-black text-white">
-            {editingItem ? "Edit Package" : "Create Package"}
-          </h2>
+        <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            icon="inventory_2"
+            label="Total Packages"
+            value={stats.total}
+            description="All proposal packages"
+            tone="cyan"
+          />
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <Input label="Package Name" name="packageName" value={form.packageName} onChange={handleChange} />
-            <Input label="Currency" name="currency" value={form.currency} onChange={handleChange} />
-            <Input label="Proposal Submit Credits" name="proposalSubmitCredits" type="number" value={form.proposalSubmitCredits} onChange={handleChange} />
-            <Input label="Price" name="price" type="number" value={form.price} onChange={handleChange} />
-            <Input label="Display Order" name="displayOrder" type="number" value={form.displayOrder} onChange={handleChange} />
+          <StatCard
+            icon="check_circle"
+            label="Active"
+            value={stats.active}
+            description="Available for purchase"
+            tone="green"
+          />
 
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
-                Status
-              </span>
-              <div className="flex h-[46px] items-center gap-3 rounded-2xl border border-white/10 bg-[#0d1117] px-4 text-sm font-semibold text-gray-300">
-                <input
-                  type="checkbox"
-                  name="isActive"
-                  checked={form.isActive}
-                  onChange={handleChange}
-                  className="h-4 w-4 accent-cyan-400"
-                />
-                Active package
-              </div>
-            </label>
-          </div>
+          <StatCard
+            icon="block"
+            label="Inactive"
+            value={stats.inactive}
+            description="Hidden packages"
+            tone="red"
+          />
 
-          <div className="mt-4">
-            <label className="block">
-              <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
-                Description
-              </span>
-              <textarea
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                rows={3}
-                className="w-full rounded-2xl border border-white/10 bg-[#0d1117] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
-              />
-            </label>
-          </div>
+          <StatCard
+            icon="payments"
+            label="Total Price"
+            value={formatMoney(stats.totalPrice, "VND")}
+            description={`${formatNumber(stats.totalCredits)} proposal credits`}
+            tone="purple"
+          />
+        </section>
 
-          {editingItem && (
-            <div className="mt-4">
-              <label className="block">
-                <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
-                  Reason
-                </span>
-                <textarea
-                  name="reason"
-                  value={form.reason}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full rounded-2xl border border-white/10 bg-[#0d1117] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
-                  placeholder="Reason for audit log"
-                />
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+                Search
               </label>
+
+              <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
+                <span className="material-symbols-outlined text-[20px] text-gray-500">
+                  search
+                </span>
+
+                <input
+                  value={keyword}
+                  onChange={(event) => setKeyword(event.target.value)}
+                  placeholder="Search by package name, description, or package id..."
+                  className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
+                />
+              </div>
             </div>
-          )}
 
-          <div className="mt-5 flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-slate-950 hover:bg-cyan-300 disabled:opacity-60"
-            >
-              {saving ? "Saving..." : editingItem ? "Save Changes" : "Create Package"}
-            </button>
-
-            {editingItem && (
-              <button
-                type="button"
-                onClick={resetForm}
-                className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-gray-300 hover:bg-white/10"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        </form>
-
-        <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <input
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value)}
-              placeholder="Search package..."
-              className="w-full rounded-2xl border border-white/10 bg-[#0d1117] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50 md:max-w-md"
+            <FilterSelect
+              label="Status"
+              value={activeFilter}
+              options={["ALL", "ACTIVE", "INACTIVE"]}
+              onChange={setActiveFilter}
             />
-
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="rounded-2xl border border-white/10 bg-[#0d1117] px-4 py-3 text-sm font-semibold text-white outline-none focus:border-cyan-400/50"
-            >
-              <option value="ALL">All</option>
-              <option value="ACTIVE">Active</option>
-              <option value="INACTIVE">Inactive</option>
-            </select>
           </div>
-        </div>
+        </section>
 
-        <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+          <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-white">Packages</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Showing {filteredPackages.length} of {packages.length} records.
+              </p>
+            </div>
+          </div>
+
           {loading ? (
-            <div className="p-8 text-center text-sm text-gray-400">Loading...</div>
+            <div className="p-12 text-center text-gray-400">
+              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
+                hourglass_empty
+              </span>
+              Loading proposal credit packages...
+            </div>
+          ) : filteredPackages.length === 0 ? (
+            <EmptyState />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-white/10">
-                <thead className="bg-white/[0.04]">
-                  <tr>
-                    <Th>Package</Th>
-                    <Th>Credits</Th>
-                    <Th>Price</Th>
-                    <Th>Status</Th>
-                    <Th>Order</Th>
-                    <Th>Updated By</Th>
-                    <Th>Actions</Th>
-                  </tr>
-                </thead>
-
-                <tbody className="divide-y divide-white/10">
-                  {filteredPackages.map((item) => (
-                    <tr key={item.packageId} className="hover:bg-white/[0.03]">
-                      <Td>
-                        <div>
-                          <p className="font-bold text-white">{item.packageName}</p>
-                          <p className="mt-1 max-w-md text-xs text-gray-500">{item.description}</p>
-                        </div>
-                      </Td>
-                      <Td>{item.proposalSubmitCredits}</Td>
-                      <Td>{Number(item.price).toLocaleString("vi-VN")} {item.currency}</Td>
-                      <Td>
-                        <span className={item.isActive ? "text-emerald-300" : "text-gray-400"}>
-                          {item.isActive ? "ACTIVE" : "INACTIVE"}
-                        </span>
-                      </Td>
-                      <Td>{item.displayOrder}</Td>
-                      <Td>{item.updatedByAdminFullName || item.updatedByAdminEmail || "-"}</Td>
-                      <Td>
-                        <div className="flex gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(item)}
-                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-gray-300 hover:bg-white/10"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleToggle(item)}
-                            className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-gray-300 hover:bg-white/10"
-                          >
-                            {item.isActive ? "Deactivate" : "Activate"}
-                          </button>
-                        </div>
-                      </Td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-
-              {filteredPackages.length === 0 && (
-                <div className="p-8 text-center text-sm text-gray-400">
-                  No proposal credit packages found.
-                </div>
-              )}
+            <div className="divide-y divide-white/10">
+              {filteredPackages.map((item) => (
+                <PackageRow
+                  key={item.packageId || item.id}
+                  packageItem={item}
+                  disabled={saving}
+                  onEdit={() => openEditModal(item)}
+                  onActivate={() => openToggleModal("ACTIVATE", item)}
+                  onDeactivate={() => openToggleModal("DEACTIVATE", item)}
+                />
+              ))}
             </div>
           )}
-        </div>
+        </section>
+
+        {(action.type === "CREATE" || action.type === "EDIT") && (
+          <PackageFormModal
+            title={action.type === "CREATE" ? "Create Package" : "Edit Package"}
+            form={form}
+            loading={saving}
+            isEdit={action.type === "EDIT"}
+            onClose={closeModal}
+            onConfirm={handleCreateOrUpdate}
+            onChange={handleFormChange}
+          />
+        )}
+
+        {(action.type === "ACTIVATE" || action.type === "DEACTIVATE") && (
+          <ReasonModal
+            title={
+              action.type === "ACTIVATE"
+                ? "Activate Package"
+                : "Deactivate Package"
+            }
+            subtitle={action.packageItem?.packageName}
+            confirmLabel={
+              action.type === "ACTIVATE" ? "Activate" : "Deactivate"
+            }
+            confirmTone={action.type === "ACTIVATE" ? "green" : "red"}
+            reason={reason}
+            loading={saving}
+            onReasonChange={setReason}
+            onClose={closeModal}
+            onConfirm={handleToggleActive}
+          />
+        )}
       </div>
     </AdminLayout>
   );
 }
 
-function Input({ label, ...props }) {
+
+function ensureHiddenScrollbarStyle() {
+  if (typeof document === "undefined") return;
+
+  const styleId = "admin-package-modal-scrollbar-hidden";
+
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement("style");
+  style.id = styleId;
+  style.innerHTML = `
+    .hide-modal-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .hide-modal-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
+function PackageRow({
+  packageItem,
+  disabled,
+  onEdit,
+  onActivate,
+  onDeactivate,
+}) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
+    <article className="p-5 transition hover:bg-white/[0.02]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_170px_170px_260px] xl:items-center">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <StatusBadge active={packageItem.isActive} />
+            <Badge label={`Package #${packageItem.packageId || "N/A"}`} />
+            <Badge label={`Order ${packageItem.displayOrder || 0}`} />
+          </div>
+
+          <h3 className="line-clamp-1 font-bold text-white">
+            {packageItem.packageName}
+          </h3>
+
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
+            {packageItem.description || "No description."}
+          </p>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Updated by:{" "}
+            {packageItem.updatedByAdminFullName ||
+              packageItem.updatedByAdminEmail ||
+              "-"}
+          </p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+            Credits
+          </p>
+          <p className="text-sm font-bold text-white">
+            Proposal: {formatNumber(packageItem.proposalSubmitCredits)}
+          </p>
+        </div>
+
+        <div>
+          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
+            Price
+          </p>
+          <p className="text-lg font-extrabold text-white">
+            {formatMoney(packageItem.price, packageItem.currency)}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row xl:justify-end">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={disabled}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Edit
+          </button>
+
+          {packageItem.isActive ? (
+            <button
+              type="button"
+              onClick={onDeactivate}
+              disabled={disabled}
+              className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Deactivate
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onActivate}
+              disabled={disabled}
+              className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Activate
+            </button>
+          )}
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function PackageFormModal({
+  title,
+  form,
+  loading,
+  isEdit,
+  onClose,
+  onConfirm,
+  onChange,
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
+      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-5 py-4">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <p className="mt-1 text-xs text-gray-400">
+            Fill package information and provide an admin reason when needed.
+          </p>
+        </div>
+
+        <div className="hide-modal-scrollbar max-h-[68vh] space-y-4 overflow-y-auto px-5 py-4">
+          <TextInput
+            label="Package Name"
+            value={form.packageName}
+            onChange={(value) => onChange("packageName", value)}
+            placeholder="Starter Package"
+          />
+
+          <TextArea
+            label="Description"
+            value={form.description}
+            onChange={(value) => onChange("description", value)}
+            placeholder="Describe what this package includes."
+            rows={3}
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <NumberInput
+              label="Proposal Submit Credits"
+              value={form.proposalSubmitCredits}
+              onChange={(value) => onChange("proposalSubmitCredits", value)}
+            />
+
+            <NumberInput
+              label="Price"
+              value={form.price}
+              onChange={(value) => onChange("price", value)}
+              step="1"
+            />
+
+            <TextInput
+              label="Currency"
+              value={form.currency}
+              onChange={(value) => onChange("currency", value)}
+              placeholder="VND"
+            />
+
+            <NumberInput
+              label="Display Order"
+              value={form.displayOrder}
+              onChange={(value) => onChange("displayOrder", value)}
+            />
+
+            <div>
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                Active
+              </label>
+
+              <select
+                value={form.isActive ? "true" : "false"}
+                onChange={(event) =>
+                  onChange("isActive", event.target.value === "true")
+                }
+                className="h-10 w-full rounded-xl border border-white/10 bg-[#0d1117] px-3 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+              >
+                <option value="true">Active</option>
+                <option value="false">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          {isEdit && (
+            <TextArea
+              label="Reason"
+              value={form.reason}
+              onChange={(value) => onChange("reason", value)}
+              placeholder="Example: Update package price for new policy."
+              rows={3}
+            />
+          )}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Saving..." : "Save Package"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReasonModal({
+  title,
+  subtitle,
+  confirmLabel,
+  confirmTone,
+  reason,
+  loading,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}) {
+  const confirmClass =
+    confirmTone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-5 py-4">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <p className="mt-1 text-xs text-gray-400">{subtitle}</p>
+        </div>
+
+        <div className="px-5 py-4">
+          <TextArea
+            label="Reason"
+            value={reason}
+            onChange={onReasonChange}
+            placeholder="Enter admin reason."
+            rows={3}
+          />
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value, description, tone = "cyan" }) {
+  const toneClass = {
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    green: "border-green-400/20 bg-green-400/10 text-green-300",
+    red: "border-red-400/20 bg-red-400/10 text-red-300",
+    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
+          toneClass[tone] || toneClass.cyan
+        }`}
+      >
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
+
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-2 text-3xl font-bold text-white">{value}</p>
+      <p className="mt-2 text-sm text-gray-400">{description}</p>
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, options, onChange }) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
-      </span>
-      <input
-        {...props}
-        className="w-full rounded-2xl border border-white/10 bg-[#0d1117] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
-      />
-    </label>
+      </label>
+
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+      >
+        {options.map((item) => (
+          <option key={item} value={item}>
+            {formatLabel(item)}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
-function Th({ children }) {
+function TextInput({ label, value, onChange, placeholder }) {
   return (
-    <th className="px-5 py-4 text-left text-xs font-black uppercase tracking-[0.16em] text-gray-500">
-      {children}
-    </th>
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </label>
+
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+      />
+    </div>
   );
 }
 
-function Td({ children }) {
-  return <td className="px-5 py-4 text-sm text-gray-300">{children}</td>;
+function NumberInput({ label, value, onChange, step = "1" }) {
+  return (
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </label>
+
+      <input
+        type="number"
+        min="0"
+        step={step}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-400/50"
+      />
+    </div>
+  );
+}
+
+function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
+  return (
+    <div>
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </label>
+
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+      />
+    </div>
+  );
+}
+
+function StatusBadge({ active }) {
+  const className = active
+    ? "border-green-400/30 bg-green-400/10 text-green-300"
+    : "border-red-400/30 bg-red-400/10 text-red-300";
+
+  return (
+    <span
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+    >
+      {active ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+function Badge({ label }) {
+  return (
+    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-gray-400">
+      {label}
+    </span>
+  );
+}
+
+function Alert({ type, title, message, onClose }) {
+  const className =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : "border-red-500/30 bg-red-500/10 text-red-200";
+
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 ${className}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-bold">{title}</p>
+          <p className="mt-1 text-sm opacity-90">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm font-bold opacity-70 hover:opacity-100"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="p-12 text-center">
+      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+        inventory_2
+      </span>
+
+      <h3 className="text-lg font-bold text-white">No packages found</h3>
+
+      <p className="mt-2 text-sm text-gray-400">
+        Try changing the search keyword or status filter.
+      </p>
+    </div>
+  );
+}
+
+function validateForm(form, isEdit = false) {
+  if (!String(form.packageName || "").trim()) {
+    return "Package name is required.";
+  }
+
+  if (!String(form.description || "").trim()) {
+    return "Description is required.";
+  }
+
+  if (Number(form.proposalSubmitCredits) <= 0) {
+    return "Proposal submit credits must be greater than 0.";
+  }
+
+  if (Number(form.price) < 0) {
+    return "Price must be greater than or equal to 0.";
+  }
+
+  if (!String(form.currency || "").trim()) {
+    return "Currency is required.";
+  }
+
+  if (isEdit && !String(form.reason || "").trim()) {
+    return "Reason is required when updating.";
+  }
+
+  return "";
+}
+
+function formatMoney(value, currency = "VND") {
+  const number = Number(value || 0);
+
+  return `${new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number)} ${
+    currency === "VND" ? "đ" : currency || ""
+  }`;
+}
+
+function formatNumber(value) {
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("vi-VN").format(
+    Number.isNaN(number) ? 0 : number
+  );
+}
+
+function formatLabel(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getFriendlyError(err, fallback = "Something went wrong.") {
+  const status = err?.response?.status;
+
+  if (status === 401) {
+    return "Your session has expired. Please login again.";
+  }
+
+  if (status === 403) {
+    return "Backend blocked this request because the current token does not have ADMIN permission.";
+  }
+
+  if (status === 404) {
+    return "Proposal credit packages API was not found. Please check backend route.";
+  }
+
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+  if (data?.detail) return data.detail;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || fallback;
 }

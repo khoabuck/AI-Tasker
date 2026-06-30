@@ -8,10 +8,10 @@ import { JobDetailModal } from "./JobDetailPage";
 const BUDGET_FILTERS = [
   { key: "ALL", label: "Any budget" },
   { key: "NEGOTIABLE", label: "Negotiable" },
-  { key: "UNDER_100", label: "Under $100" },
-  { key: "100_500", label: "$100 - $500" },
-  { key: "500_1000", label: "$500 - $1,000" },
-  { key: "OVER_1000", label: "Over $1,000" },
+  { key: "UNDER_100", label: "Under $100,000" },
+  { key: "100_500", label: "$100,000 - $500,000" },
+  { key: "500_1000", label: "$500,000 - $1,000,000" },
+  { key: "OVER_1000", label: "Over $1,000,000" },
 ];
 
 const DURATION_FILTERS = [
@@ -774,10 +774,10 @@ function getUniqueValues(values) {
 function matchesBudget(job, filter) {
   if (filter === "ALL") return true;
   if (filter === "NEGOTIABLE") return job.budgetMin === 0 && job.budgetMax === 0;
-  if (filter === "UNDER_100") return job.budgetMax > 0 && job.budgetMax < 100;
-  if (filter === "100_500") return job.budgetMax >= 100 && job.budgetMin <= 500;
-  if (filter === "500_1000") return job.budgetMax >= 500 && job.budgetMin <= 1000;
-  if (filter === "OVER_1000") return job.budgetMax > 1000;
+  if (filter === "UNDER_100") return job.budgetMax > 0 && job.budgetMax < 100000;
+  if (filter === "100_500") return job.budgetMax >= 100000 && job.budgetMin <= 500000;
+  if (filter === "500_1000") return job.budgetMax >= 500000 && job.budgetMin <= 1000000;
+  if (filter === "OVER_1000") return job.budgetMax > 1000000;
 
   return true;
 }

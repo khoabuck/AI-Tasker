@@ -33,7 +33,6 @@ export default function MyProjectsPage() {
       setError("");
 
       const data = await projectService.getMyProjects();
-
       setProjects(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD MY PROJECTS ERROR:", err?.response?.data || err);
@@ -66,7 +65,6 @@ export default function MyProjectsPage() {
 
     return projects.filter((project) => {
       const group = getProjectStatusGroup(project.status);
-
       const matchTab = activeTab === "ALL" || group === activeTab;
 
       const matchKeyword =
@@ -224,7 +222,6 @@ export default function MyProjectsPage() {
 
 function ProjectCard({ project, onOpen }) {
   const status = String(project.status || "ACTIVE").toUpperCase();
-  const group = getProjectStatusGroup(status);
 
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 transition hover:border-cyan-400/40">
@@ -262,7 +259,7 @@ function ProjectCard({ project, onOpen }) {
         {project.description || "No project description."}
       </p>
 
-      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+      <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
         <MiniInfo
           icon="payments"
           label="Budget"
@@ -274,15 +271,7 @@ function ProjectCard({ project, onOpen }) {
           label="Milestones"
           value={project.milestoneCount || project.milestones?.length || 0}
         />
-
-        <MiniInfo
-          icon="monitoring"
-          label="Progress"
-          value={`${Math.round(Number(project.progressPercent || 0))}%`}
-        />
       </div>
-
-      <ProgressBar value={project.progressPercent} group={group} />
 
       <div className="mt-5 flex flex-wrap gap-2 text-xs text-gray-500">
         {project.startDate && <span>Started {formatDate(project.startDate)}</span>}
@@ -317,33 +306,6 @@ function MiniInfo({ icon, label, value }) {
       </div>
 
       <p className="font-bold text-white">{formatInfoValue(value)}</p>
-    </div>
-  );
-}
-
-function ProgressBar({ value, group }) {
-  const percent = Math.max(0, Math.min(100, Number(value || 0)));
-
-  const color =
-    group === "COMPLETED"
-      ? "bg-green-400"
-      : group === "DISPUTED" || group === "CANCELLED"
-      ? "bg-red-400"
-      : "bg-cyan-400";
-
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between text-xs">
-        <span className="font-bold text-gray-400">Progress</span>
-        <span className="font-bold text-white">{Math.round(percent)}%</span>
-      </div>
-
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
     </div>
   );
 }
@@ -446,9 +408,11 @@ function getProjectStatusGroup(status) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
