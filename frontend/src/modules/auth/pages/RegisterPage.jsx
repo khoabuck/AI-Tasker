@@ -5,7 +5,7 @@ import { getErrorMessage } from "../../../utils/auth.utils";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const GOOGLE_LOGIN_URL = "http://localhost:5070/api/auth/google-login";
+const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
 
 const GoogleIcon = () => (
   <svg style={{ width: 20, height: 20 }} viewBox="0 0 24 24">

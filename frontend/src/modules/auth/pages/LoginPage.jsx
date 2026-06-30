@@ -28,19 +28,17 @@ export default function LoginPage() {
   };
 
   useEffect(() => {
-    clearAuthSession();
+  const savedLogins = localStorage.getItem("rememberLogins");
 
-    const savedLogins = localStorage.getItem("rememberLogins");
-
-      if (savedLogins) {
-        try {
-          const parsed = JSON.parse(savedLogins);
-          setRememberedLogins(Array.isArray(parsed) ? parsed : []);
-        } catch {
-          localStorage.removeItem("rememberLogins");
-        }
-      }
-    }, []);
+  if (savedLogins) {
+    try {
+      const parsed = JSON.parse(savedLogins);
+      setRememberedLogins(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      localStorage.removeItem("rememberLogins");
+    }
+  }
+}, []);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -284,9 +282,6 @@ export default function LoginPage() {
               </h1>
             </div>
 
-            <p className="text-center text-sm text-on-surface-variant">
-              Enter your credentials to access the grid.
-            </p>
           </header>
 
           <form onSubmit={handleSubmit} className="space-y-6">

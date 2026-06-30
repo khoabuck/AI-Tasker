@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import axiosInstance from "../../../api/axiosInstance";
 
 // ─── Component: Radio Card chọn loại Client ───────────
 function TypeCard({ value, icon, title, desc, selected, onChange }) {
@@ -75,70 +76,75 @@ function CompanyForm({ data, onChange }) {
     <section className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
         <span className="material-symbols-outlined text-blue-400">domain</span>
-        <h3 className="text-lg font-bold text-white">Company Profile</h3>
+        <h3 className="text-lg font-bold text-white">Business Profile</h3>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Field label="Official Company Name">
-          <input type="text" name="companyName" placeholder="e.g., Global Dynamics Corp"
-            value={data.companyName} onChange={onChange} className={inputClass} />
+        <Field label="Phone Number">
+          <input
+            type="tel"
+            name="phoneNumber"
+            placeholder="0901 234 567"
+            value={data.phoneNumber}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
         <Field label="Tax Code">
-          <input type="text" name="taxCode" placeholder="e.g., VAT-123456789"
-            value={data.taxCode} onChange={onChange} className={inputClass} />
+          <input
+            type="text"
+            name="taxCode"
+            placeholder="0101248149"
+            value={data.taxCode}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
         <Field label="Industry">
-          <div className="relative">
-            <select name="industry" value={data.industry} onChange={onChange}
-              className={inputClass + " appearance-none cursor-pointer"}>
-              <option value="">Select industry</option>
-              <option value="tech">Information Technology</option>
-              <option value="finance">Finance & Banking</option>
-              <option value="retail">Retail & Commerce</option>
-              <option value="manufacturing">Manufacturing</option>
-              <option value="healthcare">Healthcare</option>
-            </select>
-            <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2
-                             pointer-events-none text-gray-400">expand_more</span>
-          </div>
+          <input
+            type="text"
+            name="industry"
+            placeholder="Technology"
+            value={data.industry}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
-        <Field label="Company Size">
-          <div className="relative">
-            <select name="companySize" value={data.companySize} onChange={onChange}
-              className={inputClass + " appearance-none cursor-pointer"}>
-              <option value="">Select scale</option>
-              <option value="startup">Startup (&lt; 50 employees)</option>
-              <option value="smb">SMB (50-250 employees)</option>
-              <option value="enterprise">Enterprise (&gt; 250 employees)</option>
-            </select>
-            <span className="material-symbols-outlined absolute right-4 top-1/2 -translate-y-1/2
-                             pointer-events-none text-gray-400">expand_more</span>
-          </div>
+        <Field label="Business Email">
+          <input
+            type="email"
+            name="businessEmail"
+            placeholder="company@gmail.com"
+            value={data.businessEmail}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
-        <Field label="Website">
-          <input type="text" name="website" placeholder="https://www.company.com"
-            value={data.website} onChange={onChange} className={inputClass} />
-        </Field>
-
-        <Field label="Company Email">
-          <input type="email" name="companyEmail" placeholder="contact@company.com"
-            value={data.companyEmail} onChange={onChange} className={inputClass} />
-        </Field>
-
-        <Field label="Company Phone">
-          <input type="tel" name="companyPhone" placeholder="+1 (555) 000-0000"
-            value={data.companyPhone} onChange={onChange} className={inputClass} />
+        <Field label="Business Phone">
+          <input
+            type="tel"
+            name="businessPhone"
+            placeholder="0246255678"
+            value={data.businessPhone}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
         <div className="md:col-span-2">
           <Field label="Address">
-            <textarea name="address" placeholder="Enter full corporate address..."
-              value={data.address} onChange={onChange} rows={3}
-              className={inputClass + " resize-none"} />
+            <textarea
+              name="address"
+              placeholder="Enter address..."
+              value={data.address}
+              onChange={onChange}
+              rows={3}
+              className={inputClass + " resize-none"}
+            />
           </Field>
         </div>
       </div>
@@ -152,25 +158,30 @@ function IndividualForm({ data, onChange }) {
     <section className="space-y-6">
       <div className="flex items-center gap-3 mb-2">
         <span className="material-symbols-outlined text-blue-400">fingerprint</span>
-        <h3 className="text-lg font-bold text-white">Personal Identity</h3>
+        <h3 className="text-lg font-bold text-white">Individual Profile</h3>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="md:col-span-2">
-          <Field label="Full name">
-            <input type="text" name="fullName" placeholder="Full name..."
-              value={data.fullName} onChange={onChange} className={inputClass} />
-          </Field>
-        </div>
-
-        <Field label="Email">
-          <input type="email" name="email" placeholder="example@gmail.com"
-            value={data.email} onChange={onChange} className={inputClass} />
+        <Field label="Phone Number">
+          <input
+            type="tel"
+            name="phoneNumber"
+            placeholder="0901 234 567"
+            value={data.phoneNumber}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
 
-        <Field label="Phone number">
-          <input type="tel" name="phone" placeholder="0901 234 567"
-            value={data.phone} onChange={onChange} className={inputClass} />
+        <Field label="Address">
+          <input
+            type="text"
+            name="address"
+            placeholder="Enter your address..."
+            value={data.address}
+            onChange={onChange}
+            className={inputClass}
+          />
         </Field>
       </div>
     </section>
@@ -187,14 +198,18 @@ export default function ClientProfileSetupPage() {
 
   // State data company form
   const [companyData, setCompanyData] = useState({
-    companyName: "", taxCode: "", industry: "",
-    companySize: "", website: "", companyEmail: "",
-    companyPhone: "", address: "",
-  });
+  phoneNumber: "",
+  address: "",
+  taxCode: "",
+  industry: "",
+  businessEmail: "",
+  businessPhone: "",
+});
 
   // State data individual form
   const [individualData, setIndividualData] = useState({
-    fullName: "", email: "", phone: "",
+    phoneNumber: "",
+    address: "",
   });
 
   // Handler chung cho input — cập nhật đúng state theo clientType
@@ -209,22 +224,33 @@ export default function ClientProfileSetupPage() {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    const payload = {
-      clientType,
-      ...(clientType === "company" ? companyData : individualData),
-    };
+  try {
+    if (clientType === "individual") {
+      await axiosInstance.post("/client-profiles/individual", {
+        phoneNumber: individualData.phoneNumber.trim(),
+        address: individualData.address.trim(),
+      });
+    } else {
+      await axiosInstance.post("/client-profiles/business", {
+        phoneNumber: companyData.phoneNumber.trim(),
+        address: companyData.address.trim(),
+        taxCode: companyData.taxCode.trim(),
+        industry: companyData.industry.trim(),
+        businessEmail: companyData.businessEmail.trim(),
+        businessPhone: companyData.businessPhone.trim(),
+      });
+    }
 
-    console.log("Submit profile:", payload);
-    // TODO: gọi profile.api.js → save profile → navigate dashboard
-
-    // Giả lập delay
-    await new Promise((res) => setTimeout(res, 1500));
-    setLoading(false);
     navigate("/client/dashboard");
-  };
+  } catch (err) {
+    alert(err?.response?.data?.message || "Create profile failed.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-[#101319] text-white font-body"

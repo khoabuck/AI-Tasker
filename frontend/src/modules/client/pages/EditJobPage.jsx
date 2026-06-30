@@ -4,22 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const SKILL_OPTIONS = [
-  { id: 1,  name: "Chatbot" },
-  { id: 2,  name: "NLP" },
-  { id: 3,  name: "OpenAI API" },
-  { id: 4,  name: "Python" },
-  { id: 5,  name: "Computer Vision" },
-  { id: 6,  name: "OCR" },
-  { id: 7,  name: "Data Analytics" },
-  { id: 8,  name: "Automation" },
-  { id: 9,  name: "Prompt Engineering" },
-  { id: 10, name: "RAG" },
-  { id: 11, name: "SQL" },
-  { id: 12, name: "Power BI" },
-  { id: 13, name: "ASP.NET Core" },
-  { id: 14, name: "SignalR" },
-];
+
 
 const inputStyle = {
   background: "#1d2026",
@@ -77,6 +62,7 @@ export default function EditJobPage() {
   const [form, setForm] = useState(null);
   const [originalStatus, setOriginalStatus] = useState("");
   const [customSkill, setCustomSkill] = useState("");
+  const [skillOptions, setSkillOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -131,6 +117,35 @@ export default function EditJobPage() {
 
     return () => controller.abort();
   }, [id]);
+
+  useEffect(() => {
+  const controller = new AbortController();
+
+  axiosInstance
+    .get("/skills", {
+      params: { activeOnly: true },
+      signal: controller.signal,
+    })
+    .then((res) => {
+      const raw = res.data?.data ?? res.data;
+      const items = Array.isArray(raw) ? raw : raw?.items ?? [];
+
+      setSkillOptions(
+        items.map((s) => ({
+          id: s.skillId,
+          name: s.skillName,
+          category: s.category,
+        }))
+      );
+    })
+    .catch((err) => {
+      if (err?.code !== "ERR_CANCELED") {
+        console.error("Load skills failed:", err);
+      }
+    });
+
+  return () => controller.abort();
+}, []);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -397,12 +412,28 @@ export default function EditJobPage() {
             <p style={{ fontSize: 13, color: "#8c90a0", marginBottom: 16 }}>Toggle để thêm hoặc bỏ skill.</p>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-              {SKILL_OPTIONS.map((skill) => {
+              {skillOptions.map((skill) => {
                 const selected = !!form.skills.find((s) => s.id === skill.id);
                 return (
-                  <button key={skill.id} type="button" onClick={() => toggleSkill(skill)}
-                    style={{ padding: "7px 16px", borderRadius: 999, fontSize: 12, fontFamily: "JetBrains Mono, monospace", cursor: "pointer", transition: "all 0.15s", background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", color: selected ? "#00F0FF" : "#8c90a0", border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)", fontWeight: selected ? 700 : 400 }}>
-                    {selected ? "✓ " : ""}{skill.name}
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => toggleSkill(skill)}
+                    style={{
+                      padding: "7px 16px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, monospace",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                      background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)",
+                      color: selected ? "#00F0FF" : "#8c90a0",
+                      border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                      fontWeight: selected ? 700 : 400,
+                    }}
+                  >
+                    {selected ? "✓ " : ""}
+                    {skill.name}
                   </button>
                 );
               })}

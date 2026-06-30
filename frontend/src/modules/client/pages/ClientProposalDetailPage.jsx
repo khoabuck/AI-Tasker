@@ -235,16 +235,7 @@ export default function ClientProposalDetailPage() {
     try {
       const res = await axiosInstance.get("/wallets/balance");
 
-      const data = res.data?.data ?? res.data;
-
-      setWalletBalance(
-        Number(
-          data?.balance ??
-          data?.availableBalance ??
-          data?.walletBalance ??
-          0
-        )
-      );
+      setWalletBalance(Number(res.data?.balance ?? 0));
     } catch (err) {
       console.error(err);
       setWalletBalance(0);
@@ -589,7 +580,7 @@ const checkContractAndGoProject = async () => {
         <div style={{ ...cardStyle, marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
             {/* Expert avatar */}
-            <img src={proposal.expertAvatar || `https://i.pravatar.cc/100?u=${proposal.expertId}`} alt={expertName}
+            <img src={proposal.expertAvatarUrl || proposal.avatarUrl || "/default-avatar.png"}
               style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)", flexShrink: 0 }} />
 
             <div style={{ flex: 1 }}>

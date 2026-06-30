@@ -198,13 +198,11 @@ export default function EditProfilePage() {
       let res;
       if (clientType === "individual") {
         res = await axiosInstance.put("/client-profiles/individual/me", {
-          fullName: individual.fullName,
           phoneNumber: individual.phoneNumber,
           address: individual.address,
         });
       } else {
         res = await axiosInstance.put("/client-profiles/business/me", {
-          fullName: business.fullName,
           phoneNumber: business.phoneNumber,
           address: business.address,
           taxCode: business.taxCode,
@@ -333,14 +331,16 @@ export default function EditProfilePage() {
               <div>
                 <label style={labelStyle}>Full Name</label>
                 <input
-                  type="text"
-                  name="fullName"
-                  value={form.fullName || ""}
-                  onChange={handleChange}
-                  style={getInputStyle("fullName", fieldErrors)}
-                  onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
-                />
+                    type="text"
+                    name="fullName"
+                    value={form.fullName || ""}
+                    disabled
+                    style={{
+                      ...getInputStyle("fullName", fieldErrors),
+                      opacity: 0.65,
+                      cursor: "not-allowed",
+                    }}
+                  />
                 <FieldError name="fullName" errors={fieldErrors} />
               </div>
               {/* Phone + Address */}

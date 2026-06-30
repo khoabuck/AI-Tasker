@@ -112,7 +112,9 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
     try {
       const payload = {
         projectId: Number(project.projectId ?? project.id),
-        milestoneId: Number(milestone?.milestoneId ?? milestone?.id ?? 0),
+        milestoneId: milestone
+          ? Number(milestone.milestoneId ?? milestone.id)
+          : null,
         respondentUserId: Number(respondentUserId),
         disputedAmount: Number(disputedAmount) || 0,
         reason: reason.trim(),

@@ -13,6 +13,7 @@ import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
 import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
+import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
 import LandingPage from "../../modules/guest/pages/LandingPage";
@@ -96,7 +97,17 @@ import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformF
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
 
 const RequireAuth = ({ children }) => {
-  if (!authService.isAuthenticated()) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-surface-dark text-white">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user && !authService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 

@@ -17,7 +17,9 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        const freshUser = await getMeApi();
+        const res = await getMeApi();
+        const freshUser = res?.data?.data || res?.data || res;
+
         setUser(freshUser);
         saveAuth({ user: freshUser });
       } catch {

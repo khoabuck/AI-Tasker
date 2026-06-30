@@ -65,13 +65,15 @@ export default function ClientProfilePage() {
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>
               {profile?.fullName || user?.fullName}
             </h2>
-            <p style={{ color: "#8c90a0", fontSize: 14 }}>{user?.email}</p>
+            <p style={{ color: "#8c90a0", fontSize: 14 }}>
+              {profile?.email ?? user?.email ?? "—"}
+            </p>
             <div style={{ marginTop: 8, display: "flex", gap: 8 }}>
               <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", background: "rgba(0,240,255,0.1)", border: "1px solid rgba(0,240,255,0.3)", color: "#00F0FF" }}>
-                {user?.role || "CLIENT"}
+                {user?.role ?? "—"}
               </span>
               <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", background: "rgba(74,222,128,0.1)", border: "1px solid rgba(74,222,128,0.3)", color: "#4ade80" }}>
-                {user?.status || "ACTIVE"}
+                {profile?.userStatus ?? user?.status ?? "—"}
               </span>
             </div>
           </div>
@@ -100,7 +102,7 @@ export default function ClientProfilePage() {
               Basic information
             </h3>
 
-            {infoItem("person", "Full Name", profile.fullName || user?.fullName)}
+            {infoItem("person", "Full Name", profile?.fullName ?? user?.fullName ?? "—")}
             {infoItem("phone", "Personal Phone Number", profile.phoneNumber)}
             {infoItem("location_on", "Address", profile.address)}
             

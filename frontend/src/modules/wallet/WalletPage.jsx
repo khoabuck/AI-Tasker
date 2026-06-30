@@ -405,11 +405,14 @@ export default function WalletPage() {
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  const metrics = balance ? [
-    { label: "Available Balance", value: `${(balance.availableBalance ?? 0).toLocaleString()}₫`, icon: "account_balance_wallet", iconColor: "#00F0FF", iconBg: "rgba(0,240,255,0.1)" },
-    { label: "Escrow Balance",    value: `${(balance.escrowBalance ?? 0).toLocaleString()}₫`,    icon: "lock_clock",              iconColor: "#c0c1ff", iconBg: "rgba(98,101,240,0.1)" },
-    { label: "Total Deposited",   value: `${(balance.totalDeposited ?? 0).toLocaleString()}₫`,    icon: "input",                   iconColor: "#adc6ff", iconBg: "rgba(23,114,235,0.1)" },
-    { label: "Total Withdrawn",   value: `${(balance.totalWithdrawn ?? 0).toLocaleString()}₫`,    icon: "output",                  iconColor: "#ffb4ab", iconBg: "rgba(147,0,10,0.1)"  },
+  const metrics = balance !== null ? [
+    {
+      label: "Available Balance",
+      value: `${Number(balance ?? 0).toLocaleString()}₫`,
+      icon: "account_balance_wallet",
+      iconColor: "#00F0FF",
+      iconBg: "rgba(0,240,255,0.1)",
+    },
   ] : [];
 
   return (
@@ -470,7 +473,7 @@ export default function WalletPage() {
         {!loading && (
           <>
             {/* Balance Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 24, marginBottom: 32 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(1, minmax(0, 1fr))", gap: 24, marginBottom: 32 }}>
               {metrics.map((m) => (
                 <div key={m.label} style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 24 }}>
                   <div style={{ padding: 12, background: m.iconBg, borderRadius: 12, color: m.iconColor, display: "inline-flex", marginBottom: 16 }}>

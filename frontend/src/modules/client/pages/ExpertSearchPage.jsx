@@ -5,11 +5,10 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
 const SENIORITY_OPTIONS = [
-  { label: "Fresher", value: "fresher" },
-  { label: "Junior", value: "junior" },
-  { label: "Mid", value: "mid" },
-  { label: "Senior", value: "senior" },
-  { label: "Lead", value: "lead" },
+  { label: "Junior", value: "JUNIOR" },
+  { label: "Mid", value: "MID" },
+  { label: "Mid Level", value: "MID_LEVEL" },
+  { label: "Senior", value: "SENIOR" },
 ];
 
 // Khôi phục query + kết quả search khi quay lại trang này (vd: bấm Back từ
@@ -177,6 +176,7 @@ export default function ExpertSearchPage() {
       const res = await axiosInstance.get("/experts", {
         params: {
           keyword: query.trim() || undefined,
+          level: seniority || undefined,
           availableOnly: true,
           page: 1,
           pageSize: 100,
@@ -186,14 +186,7 @@ export default function ExpertSearchPage() {
       const data = res.data;
       const items = Array.isArray(data) ? data : (data?.items || data?.data || []);
 
-      const filteredItems = seniority
-        ? items.filter((expert) => {
-            const level = String(expert.level || "").toLowerCase();
-            return level === seniority.toLowerCase();
-          })
-        : items;
-
-      setExperts(filteredItems);
+      setExperts(items);
       setHasSearched(true);
     } catch (err) {
       setExperts([]);

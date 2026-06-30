@@ -10,7 +10,7 @@
 // 2. BE verify qua VietQR tax code lookup
 //    - VERIFIED → hiện companyName + companyAddress (readonly) do AI trả về
 //    - NEEDS_CORRECTION → hiện lỗi + tăng verificationSubmissionCount
-// 3. Đạt MAX_ATTEMPTS (5) lần sai → BE trả verificationLockedUntil → BAN 15s
+// 3. Khi BE xác định quá số lần sai → BE trả verificationLockedUntil
 //    - Trong lúc ban: ẨN nút Submit, hiện alert "Account is banned", hiện nút quay về dashboard
 //    - Hết 15s: tự động unlock, cho submit lại
 
@@ -21,7 +21,6 @@ import axiosInstance from "../../../api/axiosInstance";
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const MAX_ATTEMPTS = 5;
 
 function FieldError({ name, errors }) {
   if (!errors[name]) return null;
@@ -178,7 +177,6 @@ export default function SetupProfilePage() {
 
   const locked = clientType === "business" && lockSecondsLeft > 0;
   const attempts = business.verificationSubmissionCount || 0;
-  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - attempts);
 
   const inputClass = (name) =>
     `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -273,8 +271,9 @@ export default function SetupProfilePage() {
     }
 
     const count = bp.verificationSubmissionCount || 0;
-    const remaining = Math.max(0, MAX_ATTEMPTS - count);
-    const msg = bp.verificationNote || "Business verification failed. Please check your tax code.";
+    const msg =
+      bp.verificationNote ||
+      "Business verification failed. Please check your tax code.";
 
     if (bp.verificationLockedUntil) {
       const secondsLeft = Math.max(
@@ -290,7 +289,9 @@ export default function SetupProfilePage() {
         alert("Account is banned. Too many failed verification attempts. Please wait 15 seconds.");
       }
     } else {
-      setGlobalError(`${msg} Attempts left: ${remaining}/${MAX_ATTEMPTS}.`);
+      setGlobalError(
+        `Tax code verification failed. Attempt ${count}. Please check your tax code and try again.`
+      );
     }
 
     setFieldErrors({ taxCode: msg });
@@ -367,7 +368,6 @@ export default function SetupProfilePage() {
         const lockedUntilUtc = lockMatch[1].replace(" ", "T") + "Z";
         setBusiness((prev) => ({
           ...prev,
-          verificationSubmissionCount: MAX_ATTEMPTS,
           verificationLockedUntil: lockedUntilUtc,
         }));
         setGlobalError(message);
@@ -486,10 +486,10 @@ export default function SetupProfilePage() {
                   <span className="font-semibold">Failed verification attempts</span>
                 </div>
                 <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-sm font-bold text-yellow-200">
-                  {attempts}/{MAX_ATTEMPTS}
+                  {attempts}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-yellow-100/80">Attempts left: {remainingAttempts}/{MAX_ATTEMPTS}</p>
+              <p className="mt-2 text-sm text-yellow-100/80"> Failed attempts are counted by the server.</p>
             </div>
           )}
 
