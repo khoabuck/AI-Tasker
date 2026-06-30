@@ -1,17 +1,17 @@
+using System.Net.Http.Json;
 using AITasker.Application.Interfaces;
-using Mailtrap;
-using Mailtrap.Emails.Requests;
-using Mailtrap.Emails.Responses;
 using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Infrastructure.Email;
 
 public class MailtrapEmailSender : IEmailSender
 {
+    private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
 
-    public MailtrapEmailSender(IConfiguration configuration)
+    public MailtrapEmailSender(HttpClient httpClient, IConfiguration configuration)
     {
+        _httpClient = httpClient;
         _configuration = configuration;
     }
 
@@ -34,42 +34,43 @@ public class MailtrapEmailSender : IEmailSender
             throw new InvalidOperationException("Mailtrap FromEmail is missing.");
         }
 
-        try
+        var payload = new
         {
-            using var mailtrapClientFactory = new MailtrapClientFactory(apiToken);
+            from = new
+            {
+                email = fromEmail,
+                name = fromName
+            },
+            to = new[]
+            {
+                new
+                {
+                    email = toEmail
+                }
+            },
+            subject = subject,
+            html = htmlBody,
+            text = "Please open this email in an HTML-compatible email client.",
+            category = "AITasker Transactional"
+        };
 
-            IMailtrapClient mailtrapClient =
-                mailtrapClientFactory.CreateClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://send.api.mailtrap.io/api/send"
+        );
 
-            SendEmailRequest request = SendEmailRequest
-                .Create()
-                .From(fromEmail, fromName)
-                .To(toEmail)
-                .Subject(subject)
-                .Category("AITasker Transactional")
-                .Text("Please view this email in an HTML-compatible email client.")
-                .Html(htmlBody);
+        request.Headers.Add("Api-Token", apiToken);
+        request.Content = JsonContent.Create(payload);
 
-            SendEmailResponse? response = await mailtrapClient
-                .Email()
-                .Send(request);
-        }
-        catch (MailtrapException ex)
+        using var response = await _httpClient.SendAsync(request);
+        var responseText = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
         {
-            Console.WriteLine($"[MAILTRAP_ERROR] {ex}");
+            Console.WriteLine($"[MAILTRAP_ERROR] {(int)response.StatusCode} {responseText}");
 
             throw new InvalidOperationException(
-                $"Mailtrap email failed: {ex.Message}",
-                ex
-            );
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[EMAIL_ERROR] {ex}");
-
-            throw new InvalidOperationException(
-                $"Cannot send email: {ex.Message}",
-                ex
+                $"Mailtrap email failed: {(int)response.StatusCode} {responseText}"
             );
         }
     }
