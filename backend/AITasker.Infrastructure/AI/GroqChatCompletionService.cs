@@ -1,4 +1,3 @@
-using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -18,8 +17,7 @@ public class GroqChatCompletionService : IGroqChatCompletionService
     private const string FailedStatus = "FAILED";
     private const string BlockedStatus = "BLOCKED";
     private const string DefaultBaseUrl = "https://api.groq.com/openai/v1";
-    private const string DefaultPrimaryModel = "openai/gpt-oss-120b";
-    private const string DefaultFallbackModel = "qwen/qwen3.6-27b";
+    private const string DefaultModel = "openai/gpt-oss-120b";
 
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
@@ -49,13 +47,33 @@ public class GroqChatCompletionService : IGroqChatCompletionService
 
         var apiKey = GetApiKey();
         var baseUrl = GetBaseUrl();
+        var settings = await _aiManagementService.GetOrCreateActiveSettingsEntityAsync();
+        var model = FirstNonEmpty(settings.Model, GetConfiguredModel(), DefaultModel);
+        var allowedModels = await _aiManagementService.GetAllowedModelsAsync();
+        var enabledModel = allowedModels.FirstOrDefault(x =>
+            x.IsEnabled && x.Model.Equals(model, StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (enabledModel == null)
+        {
+            await LogUsageAsync(
+                request,
+                model,
+                status: FailedStatus,
+                statusCode: null,
+                errorCode: "model_not_enabled",
+                errorMessage: "Selected AI model is not enabled in AI model catalog.",
+                cancellationToken: cancellationToken
+            );
+
+            throw new InvalidOperationException("Selected AI model is not enabled in AI model catalog.");
+        }
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             await LogUsageAsync(
                 request,
-                model: string.Empty,
-                usedFallback: false,
+                model,
                 status: FailedStatus,
                 statusCode: null,
                 errorCode: "missing_api_key",
@@ -66,14 +84,11 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             throw new InvalidOperationException("Groq API key is missing.");
         }
 
-        var settings = await _aiManagementService.GetOrCreateActiveSettingsEntityAsync();
-
         if (!settings.IsEnabled)
         {
             await LogUsageAsync(
                 request,
-                settings.PrimaryModel,
-                usedFallback: false,
+                model,
                 status: BlockedStatus,
                 statusCode: null,
                 errorCode: "ai_disabled",
@@ -84,67 +99,45 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             throw new InvalidOperationException("AI feature is currently disabled.");
         }
 
-        await EnsureUsageLimitAsync(settings, request, cancellationToken);
+        await EnsureUsageLimitAsync(settings, request, model, cancellationToken);
 
-        var primaryModel = FirstNonEmpty(settings.PrimaryModel, GetConfiguredPrimaryModel(), DefaultPrimaryModel);
-        var fallbackModel = FirstNonEmpty(settings.FallbackModel, GetConfiguredFallbackModel(), DefaultFallbackModel);
+        var effectiveRequest = BuildEffectiveRequest(request, settings);
 
-        var primaryResult = await TrySendAsync(
-            request,
-            apiKey,
-            baseUrl,
-            primaryModel,
-            usedFallback: false,
-            cancellationToken: cancellationToken
-        );
-
-        if (primaryResult.IsSuccess && primaryResult.Result != null)
+        if (effectiveRequest.MaxTokens.HasValue && effectiveRequest.MaxTokens.Value > enabledModel.MaxOutputTokens)
         {
-            return primaryResult.Result;
+            await LogUsageAsync(
+                request,
+                model,
+                FailedStatus,
+                statusCode: null,
+                errorCode: "max_tokens_exceeded",
+                errorMessage: $"Requested max tokens exceed model max output tokens ({enabledModel.MaxOutputTokens}).",
+                cancellationToken: cancellationToken
+            );
+
+            throw new InvalidOperationException($"Requested max tokens exceed model max output tokens ({enabledModel.MaxOutputTokens}).");
         }
 
-        if (!ShouldFallback(primaryResult.StatusCode, primaryResult.ErrorCode, primaryResult.ResponseText))
+        if (effectiveRequest.JsonObjectResponse == true && !enabledModel.SupportsJsonObjectResponse)
         {
-            throw BuildProviderException(primaryResult, "Groq primary model failed.");
+            await LogUsageAsync(
+                request,
+                model,
+                FailedStatus,
+                statusCode: null,
+                errorCode: "json_mode_not_supported",
+                errorMessage: "Selected AI model does not support JSON object response mode.",
+                cancellationToken: cancellationToken
+            );
+
+            throw new InvalidOperationException("Selected AI model does not support JSON object response mode.");
         }
-
-        if (string.IsNullOrWhiteSpace(fallbackModel) ||
-            string.Equals(primaryModel, fallbackModel, StringComparison.OrdinalIgnoreCase))
-        {
-            throw BuildProviderException(primaryResult, "Groq primary model failed and no fallback model is configured.");
-        }
-
-        var fallbackResult = await TrySendAsync(
-            request,
-            apiKey,
-            baseUrl,
-            fallbackModel,
-            usedFallback: true,
-            cancellationToken: cancellationToken
-        );
-
-        if (fallbackResult.IsSuccess && fallbackResult.Result != null)
-        {
-            return fallbackResult.Result;
-        }
-
-        throw BuildProviderException(fallbackResult, "Groq fallback model failed.");
-    }
-
-    private async Task<ProviderAttemptResult> TrySendAsync(
-        GroqChatCompletionRequest request,
-        string apiKey,
-        string baseUrl,
-        string model,
-        bool usedFallback,
-        CancellationToken cancellationToken)
-    {
         var endpoint = $"{baseUrl.TrimEnd('/')}/chat/completions";
 
         using var httpRequest = new HttpRequestMessage(HttpMethod.Post, endpoint);
         httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var payload = BuildPayload(request, model);
+        var payload = BuildPayload(effectiveRequest, model);
         httpRequest.Content = new StringContent(
             JsonSerializer.Serialize(payload),
             Encoding.UTF8,
@@ -163,7 +156,6 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             await LogUsageAsync(
                 request,
                 model,
-                usedFallback,
                 FailedStatus,
                 statusCode,
                 errorCode,
@@ -171,22 +163,35 @@ public class GroqChatCompletionService : IGroqChatCompletionService
                 cancellationToken: cancellationToken
             );
 
-            return new ProviderAttemptResult
-            {
-                IsSuccess = false,
-                StatusCode = response.StatusCode,
-                ErrorCode = errorCode,
-                ErrorMessage = errorMessage,
-                ResponseText = responseText
-            };
+            throw new InvalidOperationException(
+                $"Groq AI request failed. {Truncate(errorMessage ?? responseText, 1000)}"
+            );
         }
 
-        var result = ParseSuccessResponse(responseText, model, usedFallback);
+        GroqChatCompletionResult result;
+
+        try
+        {
+            result = ParseSuccessResponse(responseText, model);
+        }
+        catch (Exception ex)
+        {
+            await LogUsageAsync(
+                request,
+                model,
+                FailedStatus,
+                statusCode,
+                errorCode: "invalid_groq_response",
+                errorMessage: Truncate(ex.Message, 1000),
+                cancellationToken: cancellationToken
+            );
+
+            throw new InvalidOperationException("Groq response is invalid or empty.");
+        }
 
         await LogUsageAsync(
             request,
             model,
-            usedFallback,
             SuccessStatus,
             statusCode,
             errorCode: null,
@@ -197,13 +202,7 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             cancellationToken: cancellationToken
         );
 
-        return new ProviderAttemptResult
-        {
-            IsSuccess = true,
-            Result = result,
-            StatusCode = response.StatusCode,
-            ResponseText = responseText
-        };
+        return result;
     }
 
     private static object BuildPayload(GroqChatCompletionRequest request, string model)
@@ -214,14 +213,16 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             content = message.Content
         }).ToArray();
 
-        if (request.JsonObjectResponse)
+        var maxTokens = request.MaxTokens;
+
+        if (request.JsonObjectResponse == true)
         {
             return new
             {
                 model,
                 messages,
                 temperature = request.Temperature,
-                max_tokens = request.MaxTokens,
+                max_tokens = maxTokens,
                 response_format = new
                 {
                     type = "json_object"
@@ -234,14 +235,13 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             model,
             messages,
             temperature = request.Temperature,
-            max_tokens = request.MaxTokens
+            max_tokens = maxTokens
         };
     }
 
     private static GroqChatCompletionResult ParseSuccessResponse(
         string responseText,
-        string model,
-        bool usedFallback)
+        string model)
     {
         using var document = JsonDocument.Parse(responseText);
         var root = document.RootElement;
@@ -272,7 +272,6 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         {
             Content = content,
             Model = model,
-            UsedFallback = usedFallback,
             PromptTokens = promptTokens,
             CompletionTokens = completionTokens,
             TotalTokens = totalTokens,
@@ -280,9 +279,39 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         };
     }
 
+    private GroqChatCompletionRequest BuildEffectiveRequest(
+        GroqChatCompletionRequest request,
+        AiSettings settings)
+    {
+        return new GroqChatCompletionRequest
+        {
+            UserId = request.UserId,
+            Feature = request.Feature,
+            EntityType = request.EntityType,
+            EntityId = request.EntityId,
+            Messages = request.Messages,
+            MaxTokens = request.MaxTokens ?? ResolveMaxTokens(settings, request.Feature),
+            Temperature = request.Temperature ?? settings.Temperature,
+            JsonObjectResponse = request.JsonObjectResponse ?? settings.JsonObjectResponse
+        };
+    }
+
+    private static int ResolveMaxTokens(AiSettings settings, string feature)
+    {
+        return feature switch
+        {
+            "JobAssistant" => settings.JobAssistantMaxTokens,
+            "ExpertSkillAnalysis" => settings.ExpertSkillMaxTokens,
+            "ExpertProfileReview" => settings.ProfileReviewMaxTokens,
+            "JobSkillRelevanceValidation" => settings.SkillValidatorMaxTokens,
+            _ => 1500
+        };
+    }
+
     private async Task EnsureUsageLimitAsync(
         AiSettings settings,
         GroqChatCompletionRequest request,
+        string model,
         CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
@@ -296,9 +325,8 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         {
             await LogUsageAsync(
                 request,
-                settings.PrimaryModel,
-                usedFallback: false,
-                status: BlockedStatus,
+                model,
+                BlockedStatus,
                 statusCode: null,
                 errorCode: "monthly_request_limit_exceeded",
                 errorMessage: "Monthly AI request limit has been reached.",
@@ -317,9 +345,8 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         {
             await LogUsageAsync(
                 request,
-                settings.PrimaryModel,
-                usedFallback: false,
-                status: BlockedStatus,
+                model,
+                BlockedStatus,
                 statusCode: null,
                 errorCode: "monthly_token_limit_exceeded",
                 errorMessage: "Monthly AI token limit has been reached.",
@@ -343,9 +370,8 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             {
                 await LogUsageAsync(
                     request,
-                    settings.PrimaryModel,
-                    usedFallback: false,
-                    status: BlockedStatus,
+                    model,
+                    BlockedStatus,
                     statusCode: null,
                     errorCode: "daily_user_request_limit_exceeded",
                     errorMessage: "Daily AI request limit per user has been reached.",
@@ -360,7 +386,6 @@ public class GroqChatCompletionService : IGroqChatCompletionService
     private async Task LogUsageAsync(
         GroqChatCompletionRequest request,
         string model,
-        bool usedFallback,
         string status,
         int? statusCode,
         string? errorCode,
@@ -382,7 +407,6 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             EntityId = request.EntityId,
             Provider = ProviderName,
             Model = model,
-            UsedFallback = usedFallback,
             PromptTokens = promptTokens,
             CompletionTokens = completionTokens,
             TotalTokens = totalTokens,
@@ -411,20 +435,11 @@ public class GroqChatCompletionService : IGroqChatCompletionService
             ?? DefaultBaseUrl;
     }
 
-    private string GetConfiguredPrimaryModel()
+    private string GetConfiguredModel()
     {
-        return NormalizeConfiguredModel(_configuration["Groq:PrimaryModel"])
-            ?? NormalizeConfiguredModel(_configuration["Groq:Model"])
-            ?? NormalizeConfiguredModel(_configuration["BusinessVerification:Groq:PrimaryModel"])
+        return NormalizeConfiguredModel(_configuration["Groq:Model"])
             ?? NormalizeConfiguredModel(_configuration["BusinessVerification:Groq:Model"])
-            ?? DefaultPrimaryModel;
-    }
-
-    private string? GetConfiguredFallbackModel()
-    {
-        return NormalizeConfiguredModel(_configuration["Groq:FallbackModel"])
-            ?? NormalizeConfiguredModel(_configuration["BusinessVerification:Groq:FallbackModel"])
-            ?? DefaultFallbackModel;
+            ?? DefaultModel;
     }
 
     private static string? NormalizeConfiguredModel(string? model)
@@ -439,53 +454,6 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         return normalized.StartsWith("llama-3.3-", StringComparison.OrdinalIgnoreCase)
             ? null
             : normalized;
-    }
-
-    private static bool ShouldFallback(HttpStatusCode? statusCode, string? errorCode, string? responseText)
-    {
-        if (statusCode == null)
-        {
-            return false;
-        }
-
-        if (statusCode == HttpStatusCode.Unauthorized ||
-            statusCode == HttpStatusCode.BadRequest)
-        {
-            return false;
-        }
-
-        if (statusCode == HttpStatusCode.Forbidden ||
-            statusCode == HttpStatusCode.NotFound ||
-            statusCode == (HttpStatusCode)429 ||
-            statusCode == HttpStatusCode.InternalServerError ||
-            statusCode == HttpStatusCode.BadGateway ||
-            statusCode == HttpStatusCode.ServiceUnavailable ||
-            statusCode == HttpStatusCode.GatewayTimeout)
-        {
-            return true;
-        }
-
-        var text = $"{errorCode} {responseText}".ToLowerInvariant();
-
-        return text.Contains("model") &&
-            (text.Contains("deprecated") ||
-             text.Contains("decommission") ||
-             text.Contains("not found") ||
-             text.Contains("permission") ||
-             text.Contains("unavailable"));
-    }
-
-    private static InvalidOperationException BuildProviderException(
-        ProviderAttemptResult attemptResult,
-        string fallbackMessage)
-    {
-        var detail = attemptResult.ErrorMessage
-            ?? attemptResult.ResponseText
-            ?? fallbackMessage;
-
-        return new InvalidOperationException(
-            $"{fallbackMessage} {Truncate(detail, 1000)}"
-        );
     }
 
     private static string FirstNonEmpty(params string?[] values)
@@ -553,20 +521,5 @@ public class GroqChatCompletionService : IGroqChatCompletionService
         return value.Length <= maxLength
             ? value
             : value[..maxLength];
-    }
-
-    private class ProviderAttemptResult
-    {
-        public bool IsSuccess { get; set; }
-
-        public GroqChatCompletionResult? Result { get; set; }
-
-        public HttpStatusCode? StatusCode { get; set; }
-
-        public string? ErrorCode { get; set; }
-
-        public string? ErrorMessage { get; set; }
-
-        public string? ResponseText { get; set; }
     }
 }

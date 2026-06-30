@@ -15,7 +15,23 @@ public interface IAiManagementService
 
     Task<AiSettings> GetOrCreateActiveSettingsEntityAsync();
 
-    Task<IReadOnlyList<string>> GetAllowedModelsAsync();
+    Task<IReadOnlyList<AiAllowedModelResponse>> GetAllowedModelsAsync();
+
+    Task<AiAllowedModelResponse> CreateAllowedModelAsync(
+        int adminId,
+        CreateAiAllowedModelRequest request
+    );
+
+    Task<AiAllowedModelResponse> UpdateAllowedModelAsync(
+        int adminId,
+        int aiAllowedModelId,
+        UpdateAiAllowedModelRequest request
+    );
+
+    Task<TestAiModelResponse> TestModelAsync(
+        int adminId,
+        TestAiModelRequest request
+    );
 
     Task<AiUsageSummaryResponse> GetUsageSummaryAsync(int days = 30);
 

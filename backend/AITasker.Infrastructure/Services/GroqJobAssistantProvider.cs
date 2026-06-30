@@ -26,14 +26,12 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
             new GroqChatCompletionRequest
             {
                 Feature = "JobAssistant",
-                Temperature = 0.2,
-                MaxTokens = 1400,
                 Messages = new List<GroqChatMessage>
                 {
                     new()
                     {
                         Role = "system",
-                        Content = "You are an AI job requirement analyst for an AI freelance marketplace. Return JSON only. Do not return markdown."
+                        Content = "You are an AI job requirement analyst for an AI freelance marketplace. Return exactly one valid JSON object only. Do not return markdown, code fences, comments, or explanation."
                     },
                     new()
                     {

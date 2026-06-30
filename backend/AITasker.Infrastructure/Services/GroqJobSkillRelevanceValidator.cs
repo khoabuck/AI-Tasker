@@ -25,14 +25,12 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
             new GroqChatCompletionRequest
             {
                 Feature = "JobSkillRelevanceValidation",
-                Temperature = 0.0,
-                MaxTokens = 900,
                 Messages = new List<GroqChatMessage>
                 {
                     new()
                     {
                         Role = "system",
-                        Content = "You are an AI quality-control validator for an AI freelance marketplace. Return JSON only. Do not return markdown."
+                        Content = "You are an AI quality-control validator for an AI freelance marketplace. Return exactly one valid JSON object only. Do not return markdown, code fences, comments, or explanation."
                     },
                     new()
                     {

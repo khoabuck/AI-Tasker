@@ -32,8 +32,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                 new GroqChatCompletionRequest
                 {
                     Feature = "ExpertProfileReview",
-                    Temperature = 0.2,
-                    MaxTokens = 900,
                     Messages = new List<GroqChatMessage>
                     {
                         new()
@@ -63,7 +61,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                             LOCKED is not an AI status. LOCKED is handled only by the backend after too many failed submissions or violations.
 
                             If evidence is weak, unclear, unrelated, or not AI-related, return NEEDS_CORRECTION.
-                            Return JSON only. Do not return markdown. Do not add text outside JSON.
+                            Return exactly one valid JSON object only. Do not return markdown, code fences, comments, explanation, or text outside JSON.
                             """
                         },
                         new()
@@ -405,4 +403,18 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         };
     }
 
+    private class GroqChatCompletionResponse
+    {
+        public List<GroqChoice>? Choices { get; set; }
+    }
+
+    private class GroqChoice
+    {
+        public GroqMessage? Message { get; set; }
+    }
+
+    private class GroqMessage
+    {
+        public string? Content { get; set; }
+    }
 }

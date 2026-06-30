@@ -16,11 +16,9 @@ public class AiUsageLogResponse
 
     public int? EntityId { get; set; }
 
-    public string Provider { get; set; } = "Groq";
+    public string Provider { get; set; } = string.Empty;
 
     public string Model { get; set; } = string.Empty;
-
-    public bool UsedFallback { get; set; }
 
     public int PromptTokens { get; set; }
 

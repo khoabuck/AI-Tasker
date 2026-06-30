@@ -6,11 +6,21 @@ public class AiSettings
 
     public string Provider { get; set; } = "Groq";
 
-    public string PrimaryModel { get; set; } = "openai/gpt-oss-120b";
-
-    public string? FallbackModel { get; set; } = "qwen/qwen3.6-27b";
+    public string Model { get; set; } = "openai/gpt-oss-120b";
 
     public bool IsEnabled { get; set; } = true;
+
+    public int JobAssistantMaxTokens { get; set; } = 3000;
+
+    public int ExpertSkillMaxTokens { get; set; } = 1500;
+
+    public int ProfileReviewMaxTokens { get; set; } = 2000;
+
+    public int SkillValidatorMaxTokens { get; set; } = 1200;
+
+    public double Temperature { get; set; } = 0.1;
+
+    public bool JsonObjectResponse { get; set; } = true;
 
     public int MonthlyTokenLimit { get; set; } = 1_000_000;
 

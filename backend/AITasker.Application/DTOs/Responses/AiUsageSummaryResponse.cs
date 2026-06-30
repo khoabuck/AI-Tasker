@@ -12,8 +12,6 @@ public class AiUsageSummaryResponse
 
     public int FailedRequests { get; set; }
 
-    public int FallbackRequests { get; set; }
-
     public int TotalPromptTokens { get; set; }
 
     public int TotalCompletionTokens { get; set; }
@@ -21,4 +19,12 @@ public class AiUsageSummaryResponse
     public int TotalTokens { get; set; }
 
     public decimal EstimatedCostUsd { get; set; }
+
+    public int MonthlyTokenLimit { get; set; }
+
+    public int MonthlyRequestLimit { get; set; }
+
+    public decimal TokenUsagePercent { get; set; }
+
+    public decimal RequestUsagePercent { get; set; }
 }

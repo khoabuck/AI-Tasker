@@ -4,13 +4,23 @@ public class AiSettingsResponse
 {
     public int AiSettingsId { get; set; }
 
-    public string Provider { get; set; } = "Groq";
+    public string Provider { get; set; } = string.Empty;
 
-    public string PrimaryModel { get; set; } = string.Empty;
-
-    public string? FallbackModel { get; set; }
+    public string Model { get; set; } = string.Empty;
 
     public bool IsEnabled { get; set; }
+
+    public int JobAssistantMaxTokens { get; set; }
+
+    public int ExpertSkillMaxTokens { get; set; }
+
+    public int ProfileReviewMaxTokens { get; set; }
+
+    public int SkillValidatorMaxTokens { get; set; }
+
+    public double Temperature { get; set; }
+
+    public bool JsonObjectResponse { get; set; }
 
     public int MonthlyTokenLimit { get; set; }
 
@@ -18,7 +28,7 @@ public class AiSettingsResponse
 
     public int DailyRequestLimitPerUser { get; set; }
 
-    public IReadOnlyList<string> AllowedModels { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<AiAllowedModelResponse> AllowedModels { get; set; } = Array.Empty<AiAllowedModelResponse>();
 
     public bool IsActive { get; set; }
 

@@ -22,6 +22,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
 
+    public DbSet<AiAllowedModel> AiAllowedModels => Set<AiAllowedModel>();
+
     public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
 
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
@@ -412,14 +414,36 @@ public class AITaskerDbContext : DbContext
                 .HasDefaultValue("Groq")
                 .IsRequired();
 
-            entity.Property(x => x.PrimaryModel)
+            entity.Property(x => x.Model)
                 .HasMaxLength(100)
+                .HasDefaultValue("openai/gpt-oss-120b")
                 .IsRequired();
 
-            entity.Property(x => x.FallbackModel)
-                .HasMaxLength(100);
-
             entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.JobAssistantMaxTokens)
+                .HasDefaultValue(3000)
+                .IsRequired();
+
+            entity.Property(x => x.ExpertSkillMaxTokens)
+                .HasDefaultValue(1500)
+                .IsRequired();
+
+            entity.Property(x => x.ProfileReviewMaxTokens)
+                .HasDefaultValue(2000)
+                .IsRequired();
+
+            entity.Property(x => x.SkillValidatorMaxTokens)
+                .HasDefaultValue(1200)
+                .IsRequired();
+
+            entity.Property(x => x.Temperature)
+                .HasDefaultValue(0.1)
+                .IsRequired();
+
+            entity.Property(x => x.JsonObjectResponse)
                 .HasDefaultValue(true)
                 .IsRequired();
 
@@ -454,6 +478,59 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.UpdatedByAdminId);
         });
 
+
+
+        modelBuilder.Entity<AiAllowedModel>(entity =>
+        {
+            entity.ToTable("AiAllowedModels");
+
+            entity.HasKey(x => x.AiAllowedModelId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.Model)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.DisplayName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.SupportsJsonObjectResponse)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.MaxOutputTokens)
+                .HasDefaultValue(4096)
+                .IsRequired();
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.Provider, x.Model })
+                .IsUnique();
+
+            entity.HasIndex(x => x.IsEnabled);
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
         modelBuilder.Entity<AiUsageLog>(entity =>
         {
             entity.ToTable("AiUsageLogs");
@@ -474,10 +551,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.Model)
                 .HasMaxLength(100)
-                .IsRequired();
-
-            entity.Property(x => x.UsedFallback)
-                .HasDefaultValue(false)
                 .IsRequired();
 
             entity.Property(x => x.PromptTokens)

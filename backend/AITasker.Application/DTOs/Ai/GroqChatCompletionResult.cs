@@ -6,8 +6,6 @@ public class GroqChatCompletionResult
 
     public string Model { get; set; } = string.Empty;
 
-    public bool UsedFallback { get; set; }
-
     public int PromptTokens { get; set; }
 
     public int CompletionTokens { get; set; }

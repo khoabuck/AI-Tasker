@@ -12,9 +12,9 @@ public class GroqChatCompletionRequest
 
     public List<GroqChatMessage> Messages { get; set; } = new();
 
-    public double Temperature { get; set; } = 0.2;
+    public double? Temperature { get; set; }
 
     public int? MaxTokens { get; set; }
 
-    public bool JsonObjectResponse { get; set; }
+    public bool? JsonObjectResponse { get; set; }
 }

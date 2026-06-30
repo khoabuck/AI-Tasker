@@ -37,9 +37,6 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
             new GroqChatCompletionRequest
             {
                 Feature = "ExpertSkillAnalysis",
-                Temperature = 0.1,
-                MaxTokens = 1000,
-                JsonObjectResponse = true,
                 Messages = new List<GroqChatMessage>
                 {
                     new()

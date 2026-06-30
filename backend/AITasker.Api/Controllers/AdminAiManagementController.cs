@@ -48,6 +48,76 @@ public class AdminAiManagementController : ControllerBase
         }
     }
 
+    [HttpGet("models")]
+    public async Task<IActionResult> GetAllowedModels()
+    {
+        var models = await _aiManagementService.GetAllowedModelsAsync();
+        return Ok(models);
+    }
+
+    [HttpPost("models")]
+    public async Task<IActionResult> CreateAllowedModel(
+        [FromBody] CreateAiAllowedModelRequest request)
+    {
+        try
+        {
+            var adminId = GetCurrentAdminId();
+            var model = await _aiManagementService.CreateAllowedModelAsync(adminId, request);
+            return Ok(model);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPut("models/{aiAllowedModelId:int}")]
+    public async Task<IActionResult> UpdateAllowedModel(
+        [FromRoute] int aiAllowedModelId,
+        [FromBody] UpdateAiAllowedModelRequest request)
+    {
+        try
+        {
+            var adminId = GetCurrentAdminId();
+            var model = await _aiManagementService.UpdateAllowedModelAsync(
+                adminId,
+                aiAllowedModelId,
+                request
+            );
+
+            return Ok(model);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
+
+    [HttpPost("test")]
+    public async Task<IActionResult> TestModel(
+        [FromBody] TestAiModelRequest request)
+    {
+        try
+        {
+            var adminId = GetCurrentAdminId();
+            var result = await _aiManagementService.TestModelAsync(adminId, request);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                message = ex.Message
+            });
+        }
+    }
+
     [HttpGet("usage/summary")]
     public async Task<IActionResult> GetUsageSummary([FromQuery] int days = 30)
     {
