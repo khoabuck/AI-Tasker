@@ -58,9 +58,24 @@ builder.Services.AddSwaggerGen(options =>
 // =========================
 // CORS
 // =========================
-var allowedOrigins = builder.Configuration
+var configuredOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? new[] { "http://localhost:5173", "http://localhost:5174" };
+    .Get<string[]>() ?? Array.Empty<string>();
+
+var allowedOrigins = configuredOrigins
+    .Concat(new[]
+    {
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://ai-tasker-beta.vercel.app",
+        "https://ai-tasker-git-develop-ait-asker.vercel.app"
+    })
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+Console.WriteLine("Allowed CORS origins: " + string.Join(", ", allowedOrigins));
 
 builder.Services.AddCors(options =>
 {
