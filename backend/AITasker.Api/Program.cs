@@ -235,7 +235,7 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IEmailSender, MailtrapEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================
