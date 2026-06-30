@@ -339,6 +339,7 @@ const isExpenseTx = (tx) => {
     "PLATFORM_FEE",
     "WITHDRAWAL",
     "WITHDRAW",
+    "JOB_CREDIT_PACKAGE_PURCHASE",
   ].includes(getTxType(tx));
 };
 

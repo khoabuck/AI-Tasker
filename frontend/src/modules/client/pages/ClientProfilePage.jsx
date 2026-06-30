@@ -101,7 +101,7 @@ export default function ClientProfilePage() {
             </h3>
 
             {infoItem("person", "Full Name", profile.fullName || user?.fullName)}
-            {infoItem("phone", "Phone number", profile.phoneNumber)}
+            {infoItem("phone", "Personal Phone Number", profile.phoneNumber)}
             {infoItem("location_on", "Address", profile.address)}
             
 
@@ -115,7 +115,7 @@ export default function ClientProfilePage() {
                   {infoItem("corporate_fare", "Company Name", profile.businessProfile.companyName)}
                   {infoItem("category", "Industry", profile.businessProfile.industry)}
                   {infoItem("mail", "Business Email", profile.businessProfile.businessEmail)}
-                  {infoItem("call", "Business Phone", profile.businessProfile.businessPhone)}
+                  {infoItem("call", "Company Phone Number", profile.businessProfile.businessPhone)}
                   {infoItem("location_city", "Company Address", profile.businessProfile.companyAddress || profile.address)}
                 </>
               )}

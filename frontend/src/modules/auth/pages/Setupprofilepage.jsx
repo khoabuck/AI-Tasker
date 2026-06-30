@@ -212,14 +212,11 @@ export default function SetupProfilePage() {
     const f = clientType === "individual" ? individual : business;
 
     const phoneClean = f.phoneNumber.replace(/[\s-.]/g, "");
+
     if (!f.phoneNumber.trim()) {
-      errors.phoneNumber = "Phone number is required.";
-    } else if (
-      !/^(0[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(\+84[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(84[3-9]\d{8})$/.test(phoneClean)
-    ) {
-      errors.phoneNumber = "Invalid VN phone number. Example: 0912345678.";
+      errors.phoneNumber = "Personal phone number is required.";
+    } else if (!/^(0|84|\+84)(3|5|7|8|9)\d{8}$/.test(phoneClean)) {
+      errors.phoneNumber = "Invalid VN mobile number. Example: 0912345678.";
     }
 
     if (!f.address.trim()) errors.address = "Address is required.";
@@ -241,14 +238,12 @@ export default function SetupProfilePage() {
       }
 
       const bizPhoneClean = business.businessPhone.replace(/[\s-.]/g, "");
+
       if (!business.businessPhone.trim()) {
-        errors.businessPhone = "Business phone is required.";
-      } else if (
-        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
-      ) {
-        errors.businessPhone = "Invalid business phone.";
+        errors.businessPhone = "Company phone number is required.";
+      } else if (!/^(0\d{9,10}|84\d{9,10}|\+84\d{9,10})$/.test(bizPhoneClean)) {
+        errors.businessPhone =
+          "Invalid company phone number. Example: 02812345678 or 0912345678.";
       }
     }
 
@@ -388,23 +383,33 @@ export default function SetupProfilePage() {
 
       if (Object.keys(beErrors).length > 0) {
         setFieldErrors(beErrors);
-      } else {
-        const mappedErrors = {};
+      }  else {
+      const mappedErrors = {};
 
-        if (message === "Phone number already exists.") {
-          mappedErrors.phoneNumber = "This phone number is already in use.";
-        }
+      if (message === "Phone number already exists.") {
+        mappedErrors.phoneNumber = "This phone number is already in use.";
+      }
 
-        if (message === "Business email already exists.") {
-          mappedErrors.businessEmail = "This business email is already in use.";
-        }
+      if (message === "Business email already exists.") {
+        mappedErrors.businessEmail = "This business email is already in use.";
+      }
 
-        if (Object.keys(mappedErrors).length > 0) {
-          setFieldErrors(mappedErrors);
-        } else if (clientType === "business") {
+      if (Object.keys(mappedErrors).length > 0) {
+        setFieldErrors(mappedErrors);
+      } else if (clientType === "business") {
+
+        if (message?.toLowerCase().includes("business phone")) {
+          setFieldErrors({ businessPhone: message });
+        } else if (message?.toLowerCase().includes("business email")) {
+          setFieldErrors({ businessEmail: message });
+        } else if (message?.toLowerCase().includes("tax")) {
+          setFieldErrors({ taxCode: message });
+        } else {
           setFieldErrors({ taxCode: message });
         }
+
       }
+    }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
@@ -524,14 +529,14 @@ export default function SetupProfilePage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Phone Number</label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Phone Number</label>
                   <input name="phoneNumber" value={form.phoneNumber} onChange={handleChange} placeholder="0912345678"
                     disabled={Boolean(verifiedBusiness) || locked} className={inputClass("phoneNumber")} />
                   <FieldError name="phoneNumber" errors={fieldErrors} />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Address</label>
-                  <input name="address" value={form.address} onChange={handleChange} placeholder="Đà Nẵng"
+                  <input name="address" value={form.address} onChange={handleChange} placeholder="Da Nang"
                     disabled={Boolean(verifiedBusiness) || locked} className={inputClass("address")} />
                   <FieldError name="address" errors={fieldErrors} />
                 </div>
@@ -567,7 +572,7 @@ export default function SetupProfilePage() {
                         <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Business Phone</label>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Company Phone Number</label>
                         <input name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange} placeholder="0243768900"
                           disabled={locked || Boolean(verifiedBusiness)} className={inputClass("businessPhone")} />
                         <FieldError name="businessPhone" errors={fieldErrors} />

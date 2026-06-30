@@ -129,14 +129,11 @@ export default function EditProfilePage() {
     }
 
     const phoneClean = f.phoneNumber.replace(/[\s\-\.]/g, "");
+
     if (!f.phoneNumber.trim()) {
-      errors.phoneNumber = "Phone number cannot be empty.";
-    } else if (
-      !/^(0[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(\+84[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(84[3-9]\d{8})$/.test(phoneClean)
-    ) {
-      errors.phoneNumber = "Invalid phone number (e.g. 0912345678).";
+      errors.phoneNumber = "Personal phone number cannot be empty.";
+    } else if (!/^(0|84|\+84)(3|5|7|8|9)\d{8}$/.test(phoneClean)) {
+      errors.phoneNumber = "Invalid VN mobile number. Example: 0912345678.";
     }
 
     if (!f.address.trim()) {
@@ -162,14 +159,12 @@ export default function EditProfilePage() {
       }
 
       const bizPhoneClean = business.businessPhone.replace(/[\s\-\.]/g, "");
+
       if (!business.businessPhone.trim()) {
-        errors.businessPhone = "Business phone number cannot be empty.";
-      } else if (
-        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
-      ) {
-        errors.businessPhone = "Invalid business phone number.";
+        errors.businessPhone = "Company phone number cannot be empty.";
+      } else if (!/^(0\d{9,10}|84\d{9,10}|\+84\d{9,10})$/.test(bizPhoneClean)) {
+        errors.businessPhone =
+          "Invalid company phone number. Example: 02812345678 or 0912345678.";
       }
     }
 
@@ -351,7 +346,7 @@ export default function EditProfilePage() {
               {/* Phone + Address */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <label style={{ ...labelStyle, color: fieldErrors.phoneNumber ? "#f87171" : "#8c90a0" }}>Phone Number</label>
+                  <label style={{ ...labelStyle, color: fieldErrors.phoneNumber ? "#f87171" : "#8c90a0" }}>Personal Phone Number</label>
                   <input type="text" name="phoneNumber" value={form.phoneNumber} onChange={handleChange}
                     placeholder="0912345678"
                     style={getInputStyle("phoneNumber", fieldErrors)}
@@ -446,7 +441,7 @@ export default function EditProfilePage() {
                         <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
                       <div>
-                        <label style={{ ...labelStyle, color: fieldErrors.businessPhone ? "#f87171" : "#8c90a0" }}>Business Phone</label>
+                        <label style={{ ...labelStyle, color: fieldErrors.businessPhone ? "#f87171" : "#8c90a0" }}>Company Phone Number</label>
                         <input type="text" name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange}
                           style={getInputStyle("businessPhone", fieldErrors)}
                           onFocus={(e) => (e.target.style.borderColor = fieldErrors.businessPhone ? "#ef4444" : "#00F0FF")}
