@@ -33,7 +33,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         var baseUrl = _configuration["BusinessVerification:Groq:BaseUrl"]
             ?? "https://api.groq.com/openai/v1";
         var model = _configuration["BusinessVerification:Groq:Model"]
-            ?? "llama-3.3-70b-versatile";
+            ?? "openai/gpt-oss-120b";
 
         if (string.IsNullOrWhiteSpace(apiKey))
         {
