@@ -38,17 +38,20 @@ namespace AITasker.Infrastructure.Deliverables
         private readonly IWalletService _walletService;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IExpertEarningEscrowService _expertEarningEscrowService;
 
         public DeliverableService(
             AITaskerDbContext context,
             IWalletService walletService,
             INotificationService notificationService,
-            IMarketplaceWorkflowPolicyService workflowPolicyService)
+            IMarketplaceWorkflowPolicyService workflowPolicyService,
+            IExpertEarningEscrowService expertEarningEscrowService)
         {
             _context = context;
             _walletService = walletService;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
+            _expertEarningEscrowService = expertEarningEscrowService;
         }
 
         public async Task<DeliverableResponse> SubmitDeliverableAsync(
@@ -437,6 +440,10 @@ namespace AITasker.Infrastructure.Deliverables
             await UpdateJobStatusByProjectAsync(
                 project,
                 JobStatusCompleted);
+
+            await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(
+                project,
+                expertProfile);
 
             await _context.SaveChangesAsync();
 

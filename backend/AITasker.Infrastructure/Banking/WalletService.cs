@@ -440,57 +440,6 @@ namespace AITasker.Infrastructure.Banking
             }
         }
 
-        public async Task<bool> WithdrawAsync(
-            int userId,
-            decimal amount,
-            string description)
-        {
-            if (amount <= 0)
-            {
-                return false;
-            }
-
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var wallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.UserId == userId);
-
-                if (wallet == null || wallet.AvailableBalance < amount)
-                {
-                    return false;
-                }
-
-                wallet.AvailableBalance -= amount;
-                wallet.UpdatedAt = DateTime.UtcNow;
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = userId,
-                    ProjectId = null,
-                    MilestoneId = null,
-                    EscrowId = null,
-                    Amount = -amount,
-                    Type = TxWithdraw,
-                    Status = TransactionStatusSuccess,
-                    Description = description,
-                    ReferenceId = "INTERNAL",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                return true;
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
-                return false;
-            }
-        }
-
         public async Task<EscrowOperationResponse> LockProjectEscrowAsync(
             int currentUserId,
             int projectId)
@@ -552,9 +501,6 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException(
                         "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
                 }
-
-                var proposal = await GetProposalAsync(contract.ProposalId);
-                var job = await GetJobAsync(proposal.JobId);
 
                 var milestones = await _context.Milestones
                     .Where(m => m.ProjectId == project.ProjectId)
@@ -668,24 +614,6 @@ namespace AITasker.Infrastructure.Banking
                 project.Status = ProjectStatusActive;
                 project.StartDate = now;
                 project.EscrowLockedAt = now;
-
-                proposal.Status = ProposalStatusAccepted;
-
-                job.Status = JobStatusActive;
-                job.UpdatedAt = now;
-
-                var competingProposals = await _context.Proposals
-                    .Where(p =>
-                        p.JobId == job.JobPostingId &&
-                        p.ProposalId != proposal.ProposalId &&
-                        p.Status != ProposalStatusRejected &&
-                        p.Status != ProposalStatusWithdrawn)
-                    .ToListAsync();
-
-                foreach (var competingProposal in competingProposals)
-                {
-                    competingProposal.Status = ProposalStatusRejected;
-                }
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -910,22 +838,6 @@ namespace AITasker.Infrastructure.Banking
             }
         }
 
-        public Task<EscrowOperationResponse> RefundEscrowAsync(
-            int currentUserId,
-            int milestoneId)
-        {
-            throw new InvalidOperationException(
-                "Direct escrow refund is disabled. Use the Admin dispute resolution flow so dispute records, escrow status, and project status stay consistent.");
-        }
-
-        public Task<EscrowOperationResponse> FreezeEscrowAsync(
-            int currentUserId,
-            int milestoneId)
-        {
-            throw new InvalidOperationException(
-                "Direct escrow freeze is disabled. Open a dispute so the dispute record and escrow freeze are created together.");
-        }
-
         public async Task<bool> ReleaseEscrowAsync(int milestoneId)
         {
             try
@@ -945,11 +857,6 @@ namespace AITasker.Infrastructure.Banking
             {
                 return false;
             }
-        }
-
-        public Task<bool> RefundEscrowAsync(int milestoneId)
-        {
-            return Task.FromResult(false);
         }
 
         private async Task<Wallet> GetOrCreateWalletAsync(int userId)

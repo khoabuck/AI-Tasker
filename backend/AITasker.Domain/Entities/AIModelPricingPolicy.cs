@@ -27,4 +27,6 @@ public class AIModelPricingPolicy
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public User? UpdatedByAdmin { get; set; }
 }

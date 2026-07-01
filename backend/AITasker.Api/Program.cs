@@ -274,6 +274,7 @@ builder.Services.AddScoped<IMarketplaceWorkflowPolicyService, MarketplaceWorkflo
 builder.Services.AddScoped<IAdminProposalCreditService, AdminProposalCreditService>();
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProposalCreditPackageService, ProposalCreditPackageService>();
+builder.Services.AddScoped<IExpertEarningEscrowService, ExpertEarningEscrowService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
@@ -294,7 +295,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
-builder.Services.AddHttpClient<IBankAccountVerificationService, MockBankAccountVerificationService>();
+builder.Services.AddScoped<IBankAccountVerificationService, MockBankAccountVerificationService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
 

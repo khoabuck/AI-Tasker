@@ -56,6 +56,7 @@ public class AIUsageCostService : IAIUsageCostService
         var log = new AIUsageLog
         {
             UserId = request.UserId,
+            AIModelPricingPolicyId = pricing.AIModelPricingPolicyId,
             ModuleName = moduleName,
             Provider = provider,
             ModelName = modelName,
@@ -337,6 +338,7 @@ public class AIUsageCostService : IAIUsageCostService
         {
             return new PricingSnapshot
             {
+                AIModelPricingPolicyId = null,
                 InputPricePerMillionTokensUsd = 0m,
                 OutputPricePerMillionTokensUsd = 0m,
                 ExchangeRateToVnd = DefaultExchangeRateToVnd,
@@ -346,6 +348,7 @@ public class AIUsageCostService : IAIUsageCostService
 
         return new PricingSnapshot
         {
+            AIModelPricingPolicyId = policy.AIModelPricingPolicyId,
             InputPricePerMillionTokensUsd = policy.InputPricePerMillionTokensUsd,
             OutputPricePerMillionTokensUsd = policy.OutputPricePerMillionTokensUsd,
             ExchangeRateToVnd = policy.ExchangeRateToVnd,
@@ -566,6 +569,8 @@ public class AIUsageCostService : IAIUsageCostService
 
     private class PricingSnapshot
     {
+        public int? AIModelPricingPolicyId { get; set; }
+
         public decimal InputPricePerMillionTokensUsd { get; set; }
 
         public decimal OutputPricePerMillionTokensUsd { get; set; }

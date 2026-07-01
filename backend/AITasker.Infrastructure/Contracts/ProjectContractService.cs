@@ -118,27 +118,6 @@ namespace AITasker.Infrastructure.Contracts
             return await MapToContractResponseAsync(contract);
         }
 
-        public async Task<ProjectContractResponse> CreateDraftContractAsync(
-            int userId,
-            CreateContractRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Manual contract creation is disabled. A contract can only be generated from an accepted proposal.");
-        }
-
-        public async Task<ProjectContractResponse> UpdateContractDraftAsync(
-            int userId,
-            int contractId,
-            UpdateContractDraftRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Contract editing is disabled. The generated contract can only be signed or cancelled.");
-        }
-
         public async Task<ProjectContractResponse> GetContractByIdAsync(
             int userId,
             int contractId)
@@ -884,104 +863,6 @@ namespace AITasker.Infrastructure.Contracts
                 .ToListAsync();
 
             return MapContractMilestoneDraftResponses(drafts);
-        }
-
-        public async Task<IReadOnlyList<ContractMilestoneDraftResponse>> ReplaceContractMilestoneDraftsAsync(
-            int userId,
-            int contractId,
-            ReplaceContractMilestoneDraftsRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Contract milestone editing is disabled. Milestones are generated from the accepted proposal.");
-        }
-
-        private static void ValidateReplaceMilestoneDraftsRequest(
-            ReplaceContractMilestoneDraftsRequest request,
-            decimal contractFinalPrice,
-            int contractFinalTimelineDays)
-        {
-            if (request == null)
-            {
-                throw new InvalidOperationException("Milestone draft request is required.");
-            }
-
-            if (request.Milestones == null || request.Milestones.Count == 0)
-            {
-                throw new InvalidOperationException("At least one milestone draft is required.");
-            }
-
-            if (request.Milestones.Count > 10)
-            {
-                throw new InvalidOperationException("A contract cannot have more than 10 milestone drafts.");
-            }
-
-            var orderIndexes = request.Milestones
-                .Select(x => x.OrderIndex)
-                .ToList();
-
-            if (orderIndexes.Any(x => x <= 0))
-            {
-                throw new InvalidOperationException("Milestone order index must be greater than 0.");
-            }
-
-            if (orderIndexes.Distinct().Count() != orderIndexes.Count)
-            {
-                throw new InvalidOperationException("Milestone order indexes must be unique.");
-            }
-
-            var expectedOrderIndexes = Enumerable.Range(1, request.Milestones.Count).ToList();
-
-            if (!orderIndexes.OrderBy(x => x).SequenceEqual(expectedOrderIndexes))
-            {
-                throw new InvalidOperationException("Milestone order indexes must be sequential starting from 1.");
-            }
-
-            foreach (var milestone in request.Milestones)
-            {
-                if (string.IsNullOrWhiteSpace(milestone.Title))
-                {
-                    throw new InvalidOperationException("Milestone title is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.Description))
-                {
-                    throw new InvalidOperationException("Milestone description is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.ExpectedDeliverable))
-                {
-                    throw new InvalidOperationException("Milestone expected deliverable is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria))
-                {
-                    throw new InvalidOperationException("Milestone acceptance criteria is required.");
-                }
-
-                if (milestone.Amount <= 0)
-                {
-                    throw new InvalidOperationException("Milestone amount must be greater than 0.");
-                }
-
-                if (milestone.DeadlineOffsetDays <= 0)
-                {
-                    throw new InvalidOperationException("Milestone deadline offset days must be greater than 0.");
-                }
-
-                if (milestone.DeadlineOffsetDays > contractFinalTimelineDays)
-                {
-                    throw new InvalidOperationException("Milestone deadline cannot exceed contract final timeline days.");
-                }
-            }
-
-            var totalMilestoneAmount = request.Milestones.Sum(x => x.Amount);
-
-            if (totalMilestoneAmount != contractFinalPrice)
-            {
-                throw new InvalidOperationException("Total milestone amount must equal contract final price.");
-            }
         }
 
         private static List<ContractMilestoneDraftResponse> MapContractMilestoneDraftResponses(

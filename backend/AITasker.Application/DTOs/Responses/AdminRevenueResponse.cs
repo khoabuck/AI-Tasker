@@ -26,7 +26,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public decimal PendingWithdrawalAmount { get; set; }
 
-        public decimal ApprovedWithdrawalAmount { get; set; }
+        public decimal PaidWithdrawalAmount { get; set; }
 
         public List<AdminRevenueTransactionItemResponse> RecentTransactions { get; set; } = new();
     }

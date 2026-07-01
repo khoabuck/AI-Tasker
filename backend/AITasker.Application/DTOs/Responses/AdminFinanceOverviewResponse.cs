@@ -52,12 +52,16 @@ namespace AITasker.Application.DTOs.Responses
 
         public int PendingWithdrawalCount { get; set; }
 
-        public decimal ApprovedWithdrawalAmount { get; set; }
+        public decimal PaidWithdrawalAmount { get; set; }
 
-        public int ApprovedWithdrawalCount { get; set; }
+        public int PaidWithdrawalCount { get; set; }
 
-        public decimal PaidSimulatedWithdrawalAmount { get; set; }
+        public decimal RejectedWithdrawalAmount { get; set; }
 
-        public int PaidSimulatedWithdrawalCount { get; set; }
+        public int RejectedWithdrawalCount { get; set; }
+
+        public decimal FailedWithdrawalAmount { get; set; }
+
+        public int FailedWithdrawalCount { get; set; }
     }
 }

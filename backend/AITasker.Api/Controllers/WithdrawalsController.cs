@@ -37,21 +37,28 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateWithdrawalRequest([FromBody] CreateWithdrawalRequest request)
+        public async Task<IActionResult> CreateWithdrawalRequest(
+            [FromBody] CreateWithdrawalRequest request)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _withdrawalService.CreateWithdrawalRequestAsync(userId, request);
-                var success = !string.Equals(result.Status, "FAILED", StringComparison.OrdinalIgnoreCase);
+                var result = await _withdrawalService.CreateWithdrawalRequestAsync(
+                    userId,
+                    request);
+
+                var success = !string.Equals(
+                    result.Status,
+                    "FAILED",
+                    StringComparison.OrdinalIgnoreCase);
 
                 return Ok(new
                 {
                     success,
                     message = success
-                        ? "Withdrawal processed in simulated mode."
-                        : result.BankVerificationMessage ?? "Withdrawal failed.",
+                        ? "Withdrawal request submitted successfully. The withdrawal amount is now held until admin completes the bank transfer."
+                        : result.BankVerificationMessage ?? "Withdrawal request failed.",
                     data = result
                 });
             }
@@ -110,7 +117,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Withdrawal request approved successfully.",
+                    message = "Withdrawal marked as paid successfully.",
                     data = result
                 });
             }
@@ -142,7 +149,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Withdrawal request rejected successfully.",
+                    message = "Withdrawal request rejected and held funds returned successfully.",
                     data = result
                 });
             }
@@ -164,7 +171,9 @@ namespace AITasker.Api.Controllers
                 ?? User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
+            {
                 throw new InvalidOperationException("Invalid user token.");
+            }
 
             return userId;
         }

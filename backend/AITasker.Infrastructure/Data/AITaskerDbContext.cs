@@ -302,6 +302,13 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.UpdateReason)
                 .HasMaxLength(500);
 
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
+
             entity.HasIndex(x => new
             {
                 x.Provider,
@@ -389,6 +396,13 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
 
+            entity.HasOne(x => x.AIModelPricingPolicy)
+                .WithMany()
+                .HasForeignKey(x => x.AIModelPricingPolicyId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(x => x.AIModelPricingPolicyId);
+
             entity.HasIndex(x => x.CreatedAt);
 
             entity.HasIndex(x => x.Provider);
@@ -423,6 +437,13 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.UpdateReason)
                 .HasMaxLength(500);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
 
             entity.HasIndex(x => x.IsActive);
         });
@@ -772,47 +793,7 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.DisplayOrder);
 
-            entity.HasData(
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 1,
-                    PackageName = "Basic",
-                    Description = "3 job posting credits and 10 AI generation credits.",
-                    JobPostCredits = 3,
-                    AiGenerationCredits = 10,
-                    Price = 49000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 1,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 2,
-                    PackageName = "Pro",
-                    Description = "10 job posting credits and 35 AI generation credits.",
-                    JobPostCredits = 10,
-                    AiGenerationCredits = 35,
-                    Price = 149000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 2,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 3,
-                    PackageName = "Business",
-                    Description = "30 job posting credits and 120 AI generation credits.",
-                    JobPostCredits = 30,
-                    AiGenerationCredits = 120,
-                    Price = 399000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 3,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                }
-            );
+
         });
 
         // =========================
@@ -1594,44 +1575,7 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.DisplayOrder);
 
-            entity.HasData(
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 1,
-                    PackageName = "Basic",
-                    Description = "20 proposal submit credits.",
-                    ProposalSubmitCredits = 20,
-                    Price = 49000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 1,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 2,
-                    PackageName = "Pro",
-                    Description = "50 proposal submit credits.",
-                    ProposalSubmitCredits = 50,
-                    Price = 149000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 2,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 3,
-                    PackageName = "Business",
-                    Description = "100 proposal submit credits.",
-                    ProposalSubmitCredits = 100,
-                    Price = 399000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 3,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                }
-            );
+
         });
 
         // =========================
@@ -2336,18 +2280,7 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.AdjustmentBalance)
                 .HasColumnType("decimal(18,2)");
 
-            entity.HasData(new PlatformWallet
-            {
-                PlatformWalletId = 1,
-                WalletCode = "MAIN",
-                AvailableBalance = 0,
-                TotalRevenue = 0,
-                PlatformFeeRevenue = 0,
-                WithdrawalFeeRevenue = 0,
-                AdjustmentBalance = 0,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+
         });
 
         // =========================
@@ -2398,6 +2331,26 @@ public class AITaskerDbContext : DbContext
                 .WithMany(x => x.Transactions)
                 .HasForeignKey(x => x.PlatformWalletId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Contract)
+                .WithMany()
+                .HasForeignKey(x => x.ContractId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.WithdrawalRequest)
+                .WithMany()
+                .HasForeignKey(x => x.WithdrawalRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // =========================

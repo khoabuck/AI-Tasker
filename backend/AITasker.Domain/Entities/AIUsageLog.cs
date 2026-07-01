@@ -6,6 +6,8 @@ public class AIUsageLog
 
     public int? UserId { get; set; }
 
+    public int? AIModelPricingPolicyId { get; set; }
+
     public string ModuleName { get; set; } = string.Empty;
 
     public string Provider { get; set; } = string.Empty;
@@ -61,4 +63,6 @@ public class AIUsageLog
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public User? User { get; set; }
+
+    public AIModelPricingPolicy? AIModelPricingPolicy { get; set; }
 }

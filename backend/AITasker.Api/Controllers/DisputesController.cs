@@ -163,14 +163,13 @@ namespace AITasker.Api.Controllers
         [RequestSizeLimit(5 * 1024 * 1024)]
         public async Task<IActionResult> AddImageEvidence(
             int disputeId,
-            [FromForm] string? evidenceText,
-            [FromForm] IFormFile image)
+            [FromForm] AddDisputeEvidenceImageFormRequest request)
         {
             try
             {
                 var currentUserId = GetCurrentUserId();
 
-                if (image == null || image.Length == 0)
+                if (request.Image == null || request.Image.Length == 0)
                 {
                     return BadRequest(new
                     {
@@ -179,13 +178,13 @@ namespace AITasker.Api.Controllers
                     });
                 }
 
-                await using var stream = image.OpenReadStream();
+                await using var stream = request.Image.OpenReadStream();
 
                 var uploadResult = await _imageUploadService.UploadImageAsync(
                     stream,
-                    image.FileName,
-                    image.ContentType,
-                    image.Length,
+                    request.Image.FileName,
+                    request.Image.ContentType,
+                    request.Image.Length,
                     $"dispute-evidences/{disputeId}");
 
                 var result = await _disputeService.AddEvidenceAsync(
@@ -193,7 +192,7 @@ namespace AITasker.Api.Controllers
                     disputeId,
                     new CreateDisputeEvidenceRequest
                     {
-                        EvidenceText = evidenceText ?? string.Empty,
+                        EvidenceText = request.EvidenceText ?? string.Empty,
                         FileUrl = uploadResult.Url
                     });
 
@@ -236,6 +235,13 @@ namespace AITasker.Api.Controllers
             }
 
             return userId;
+        }
+
+        public class AddDisputeEvidenceImageFormRequest
+        {
+            public string? EvidenceText { get; set; }
+
+            public IFormFile Image { get; set; } = null!;
         }
     }
 }

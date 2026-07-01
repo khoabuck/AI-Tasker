@@ -43,11 +43,6 @@ namespace AITasker.Application.Interfaces
             string description,
             string referenceId);
 
-        Task<bool> WithdrawAsync(
-            int userId,
-            decimal amount,
-            string description);
-
         Task<EscrowOperationResponse> LockProjectEscrowAsync(
             int currentUserId,
             int projectId);
@@ -56,18 +51,7 @@ namespace AITasker.Application.Interfaces
             int currentUserId,
             int milestoneId);
 
-        Task<EscrowOperationResponse> RefundEscrowAsync(
-            int currentUserId,
-            int milestoneId);
-
-        Task<EscrowOperationResponse> FreezeEscrowAsync(
-            int currentUserId,
-            int milestoneId);
-
         Task<bool> ReleaseEscrowAsync(
-            int milestoneId);
-
-        Task<bool> RefundEscrowAsync(
             int milestoneId);
     }
 }

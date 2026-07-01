@@ -241,10 +241,8 @@ namespace AITasker.Infrastructure.Dashboards
                     .Where(w => IsStatus(w.Status, "PENDING"))
                     .Sum(w => w.Amount),
 
-                ApprovedWithdrawalAmount = withdrawalRequests
-                    .Where(w =>
-                        IsStatus(w.Status, "APPROVED") ||
-                        IsStatus(w.Status, "COMPLETED"))
+                PaidWithdrawalAmount = withdrawalRequests
+                    .Where(w => IsStatus(w.Status, "PAID"))
                     .Sum(w => w.Amount),
 
                 RecentTransactions = transactions
@@ -472,18 +470,25 @@ namespace AITasker.Infrastructure.Dashboards
                     .Where(x => IsStatus(x.Status, "PENDING"))
                     .Sum(x => x.Amount),
 
-                ApprovedWithdrawalCount = withdrawalRequests
-                    .Count(x => IsStatus(x.Status, "APPROVED")),
+                PaidWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "PAID")),
 
-                ApprovedWithdrawalAmount = withdrawalRequests
-                    .Where(x => IsStatus(x.Status, "APPROVED"))
+                PaidWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "PAID"))
                     .Sum(x => x.Amount),
 
-                PaidSimulatedWithdrawalCount = withdrawalRequests
-                    .Count(x => IsStatus(x.Status, "PAID_SIMULATED")),
+                RejectedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "REJECTED")),
 
-                PaidSimulatedWithdrawalAmount = withdrawalRequests
-                    .Where(x => IsStatus(x.Status, "PAID_SIMULATED"))
+                RejectedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "REJECTED"))
+                    .Sum(x => x.Amount),
+
+                FailedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "FAILED")),
+
+                FailedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "FAILED"))
                     .Sum(x => x.Amount)
             };
         }

@@ -19,83 +19,6 @@ namespace AITasker.Api.Controllers
             _projectService = projectService;
         }
 
-        [HttpPost("from-contract/{contractId:int}")]
-        [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> CreateFromContract(int contractId)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _projectService.CreateProjectFromContractAsync(
-                    currentUserId,
-                    contractId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Project created or loaded successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPost("initialize/{contractId:int}")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> InitializeProject(
-            int contractId,
-            [FromBody] List<CreateMilestoneRequest> milestones)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _projectService.InitializeProjectWithMilestonesAsync(
-                    currentUserId,
-                    contractId,
-                    milestones);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Project and milestones initialized successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
         [HttpGet("me")]
         [Authorize(Roles = "CLIENT,EXPERT")]
         public async Task<IActionResult> GetMyProjects()
@@ -192,46 +115,6 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("{projectId:int}/milestones")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> CreateMilestone(
-            int projectId,
-            [FromBody] CreateMilestoneRequest request)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _projectService.CreateMilestoneAsync(
-                    currentUserId,
-                    projectId,
-                    request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Milestone created successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
         [HttpPost("{projectId:int}/complete-check")]
         public async Task<IActionResult> CompleteProjectCheck(int projectId)
         {
@@ -296,46 +179,6 @@ namespace AITasker.Api.Controllers
             catch (InvalidOperationException ex)
             {
                 return NotFound(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
-        [HttpPatch("/api/milestones/{milestoneId:int}")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> UpdateMilestone(
-            int milestoneId,
-            [FromBody] UpdateMilestoneRequest request)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _projectService.UpdateMilestoneAsync(
-                    currentUserId,
-                    milestoneId,
-                    request);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Milestone updated successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
                 {
                     success = false,
                     message = ex.Message
