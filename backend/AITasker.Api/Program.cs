@@ -19,6 +19,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
@@ -57,6 +58,24 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // =========================
+// Forwarded Headers
+// Fix HTTPS behind Render / Cloudflare / reverse proxy
+// =========================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto |
+        ForwardedHeaders.XForwardedHost;
+
+    // Required for cloud proxies like Render/Cloudflare.
+    // Without this, ASP.NET Core may ignore forwarded headers
+    // and generate http:// redirect_uri instead of https://.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// =========================
 // CORS
 // =========================
 const string CorsPolicyName = "FrontendPolicy";
@@ -69,9 +88,7 @@ var allowedOrigins = configuredOrigins
     .Concat(new[]
     {
         "http://localhost:5173",
-        "http://localhost:5174",
-        "https://ai-tasker-beta.vercel.app",
-        "https://ai-tasker-git-develop-ait-asker.vercel.app"
+        "http://localhost:5174"
     })
     .Where(origin => !string.IsNullOrWhiteSpace(origin))
     .Select(origin => origin.Trim().TrimEnd('/'))
@@ -402,6 +419,12 @@ builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(clie
 // App pipeline
 // =========================
 var app = builder.Build();
+
+// IMPORTANT:
+// This must run before HTTPS redirection, routing, CORS, authentication.
+// It fixes Google OAuth redirect_uri from http://... to https://...
+// when the app is deployed behind Render / Cloudflare.
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {
