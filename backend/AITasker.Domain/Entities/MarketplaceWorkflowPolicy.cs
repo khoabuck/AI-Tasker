@@ -8,9 +8,11 @@ public class MarketplaceWorkflowPolicy
 
     public int ProposalMilestoneLimit { get; set; } = 10;
 
-    public int FreeProposalSubmitCount { get; set; } = 1;
+    public int FreeProposalSubmitCount { get; set; } = 5;
 
     public int ResubmitNoteMaxLength { get; set; } = 1000;
+
+    public int ContractSignWindowHours { get; set; } = 24;
 
     public int EscrowLockWindowHours { get; set; } = 24;
 
@@ -39,4 +41,6 @@ public class MarketplaceWorkflowPolicy
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+
+    public User? UpdatedByAdmin { get; set; }
 }

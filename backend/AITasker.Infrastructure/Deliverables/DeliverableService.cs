@@ -34,20 +34,24 @@ namespace AITasker.Infrastructure.Deliverables
         private const string DeliverableStatusAutoApproved = "AUTO_APPROVED";
         private const string DeliverableStatusRevisionRequested = "REVISION_REQUESTED";
 
-        private const int ClientReviewWindowHours = 24;
-
         private readonly AITaskerDbContext _context;
         private readonly IWalletService _walletService;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IProjectCompletionService _projectCompletionService;
 
         public DeliverableService(
             AITaskerDbContext context,
             IWalletService walletService,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService,
+            IProjectCompletionService projectCompletionService)
         {
             _context = context;
             _walletService = walletService;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
+            _projectCompletionService = projectCompletionService;
         }
 
         public async Task<DeliverableResponse> SubmitDeliverableAsync(
@@ -89,6 +93,7 @@ namespace AITasker.Infrastructure.Deliverables
                 .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
 
             var now = DateTime.UtcNow;
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
 
             var deliverable = new Deliverable
             {
@@ -111,7 +116,7 @@ namespace AITasker.Infrastructure.Deliverables
                 VersionNumber = latestVersion + 1,
                 Status = DeliverableStatusSubmitted,
                 SubmittedAt = now,
-                ReviewDeadlineAt = now.AddHours(ClientReviewWindowHours),
+                ReviewDeadlineAt = now.AddHours(workflowPolicy.DeliverableReviewWindowHours),
                 ReviewedAt = null,
                 OverdueNotifiedAt = null
             };
@@ -402,59 +407,7 @@ namespace AITasker.Infrastructure.Deliverables
 
         private async Task TryCompleteProjectAfterApprovalAsync(int projectId)
         {
-            var project = await GetProjectAsync(projectId);
-
-            if (string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var milestones = await _context.Milestones
-                .Where(m => m.ProjectId == projectId)
-                .ToListAsync();
-
-            if (!milestones.Any())
-            {
-                return;
-            }
-
-            var allFinished = milestones.All(IsFinishedMilestone);
-
-            if (!allFinished)
-            {
-                return;
-            }
-
-            var contract = await GetContractAsync(project.ContractId);
-            var clientProfile = await GetClientProfileAsync(contract.ClientId);
-            var expertProfile = await GetExpertProfileAsync(contract.ExpertId);
-
-            project.Status = ProjectStatusCompleted;
-            project.EndDate = DateTime.UtcNow;
-
-            await UpdateJobStatusByProjectAsync(
-                project,
-                JobStatusCompleted);
-
-            await _context.SaveChangesAsync();
-
-            await _notificationService.CreateNotificationAsync(
-                clientProfile.UserId,
-                "Project completed",
-                $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED",
-                relatedEntityType: "PROJECT",
-                relatedEntityId: project.ProjectId,
-                relatedProjectId: project.ProjectId);
-
-            await _notificationService.CreateNotificationAsync(
-                expertProfile.UserId,
-                "Project completed",
-                $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED",
-                relatedEntityType: "PROJECT",
-                relatedEntityId: project.ProjectId,
-                relatedProjectId: project.ProjectId);
+            await _projectCompletionService.TryCompleteProjectAsync(projectId);
         }
 
         private async Task EnsureUserCanAccessDeliverableContextAsync(

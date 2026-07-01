@@ -12,6 +12,7 @@ namespace AITasker.Infrastructure.Contracts
     {
         private const string ProposalStatusAccepted = "ACCEPTED";
         private const string ProposalStatusRejected = "REJECTED";
+        private const string ProposalStatusSubmitted = "SUBMITTED";
         private const string ProposalStatusWithdrawn = "WITHDRAWN";
 
         private const string ContractStatusDraft = "DRAFT";
@@ -19,22 +20,27 @@ namespace AITasker.Infrastructure.Contracts
         private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusOpen = "OPEN";
+        private const string JobStatusActive = "ACTIVE";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
 
-        private const int EscrowLockWindowHours = 24;
-
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IContractFailureRollbackService _contractFailureRollbackService;
 
         public ProjectContractService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService,
+            IContractFailureRollbackService contractFailureRollbackService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
+            _contractFailureRollbackService = contractFailureRollbackService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -58,20 +64,56 @@ namespace AITasker.Infrastructure.Contracts
 
             ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
 
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
 
             if (existingContract != null)
             {
+                if (string.Equals(existingContract.Status, ContractStatusCancelled, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingContract.Status = ContractStatusDraft;
+                    existingContract.ClientConfirmed = false;
+                    existingContract.ExpertConfirmed = false;
+                    existingContract.ConfirmedAt = null;
+                    existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
+                    existingContract.SignExpiredAt = null;
+                    existingContract.CreatedAt = DateTime.UtcNow;
+                }
+
+                if (string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
+                {
+                    await EnsureProposalBaseVersionExistsAsync(proposal);
+                    existingContract.SourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
+                    existingContract.ProjectScope = proposal.WorkingApproach;
+                    existingContract.FinalPrice = proposal.ProposedPrice;
+                    existingContract.FinalTimelineDays = proposal.ProposedTimelineDays;
+                    existingContract.Deliverables = proposal.ExpectedOutputs;
+                    existingContract.AcceptanceCriteria = "Acceptance criteria must be confirmed by Client and Expert before project starts.";
+                    existingContract.PaymentTerms = "Milestone-based escrow payment managed through AITasker escrow.";
+                    existingContract.PlatformFeeRate = ResolvePlatformFeeRate(clientProfile);
+                    existingContract.PlatformFeeAmount = existingContract.FinalPrice * existingContract.PlatformFeeRate / 100m;
+                    existingContract.TotalClientPayment = existingContract.FinalPrice + existingContract.PlatformFeeAmount;
+                }
+
                 var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
                     .AnyAsync(x => x.ContractId == existingContract.ContractId);
 
-                if (!hasMilestoneDrafts)
+                if (!hasMilestoneDrafts ||
+                    string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
                 {
                     await CopyLatestProposalMilestonesToContractDraftAsync(
                         proposal.ProposalId,
                         existingContract.ContractId);
                 }
+
+                await NotifyContractDraftCreatedAsync(
+                    userId,
+                    existingContract,
+                    job,
+                    clientProfile,
+                    expertProfile);
 
                 return await MapToContractResponseAsync(existingContract);
             }
@@ -82,8 +124,6 @@ namespace AITasker.Infrastructure.Contracts
             var finalPrice = proposal.ProposedPrice;
             var finalTimelineDays = proposal.ProposedTimelineDays;
 
-
-
             var contract = BuildContract(
                 proposal,
                 job,
@@ -93,9 +133,10 @@ namespace AITasker.Infrastructure.Contracts
                 finalTimelineDays,
                 proposal.ExpectedOutputs,
                 "Acceptance criteria must be confirmed by Client and Expert before project starts.",
-                "Milestone based escrow simulation.",
+                "Milestone-based escrow payment managed through AITasker escrow.",
                 ContractSourceProposal,
-                null);
+                null,
+                workflowPolicy.ContractSignWindowHours);
 
             contract.SourceProposalVersionNumber = sourceProposalVersionNumber;
 
@@ -114,27 +155,6 @@ namespace AITasker.Infrastructure.Contracts
                 expertProfile);
 
             return await MapToContractResponseAsync(contract);
-        }
-
-        public async Task<ProjectContractResponse> CreateDraftContractAsync(
-            int userId,
-            CreateContractRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Manual contract creation is disabled. A contract can only be generated from an accepted proposal.");
-        }
-
-        public async Task<ProjectContractResponse> UpdateContractDraftAsync(
-            int userId,
-            int contractId,
-            UpdateContractDraftRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Contract editing is disabled. The generated contract can only be signed or cancelled.");
         }
 
         public async Task<ProjectContractResponse> GetContractByIdAsync(
@@ -201,6 +221,11 @@ namespace AITasker.Infrastructure.Contracts
             var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
             var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
 
+            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Contract signing deadline has expired. The contract will be cancelled by the deadline job and the job will be reopened.");
+            }
+
             var userIsClient = clientProfile.UserId == userId;
             var userIsExpert = expertProfile.UserId == userId;
 
@@ -257,7 +282,11 @@ namespace AITasker.Infrastructure.Contracts
                     throw new InvalidOperationException("Expert has already signed this contract.");
                 }
 
-                await EnsureExpertCanAcceptNewProjectAsync(contract.ExpertId);
+                var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
+                await EnsureExpertCanAcceptNewProjectAsync(
+                    contract.ExpertId,
+                    workflowPolicy.ExpertMaxActiveProjects);
 
                 await EnsureContractMilestoneDraftsReadyAsync(contract);
 
@@ -265,9 +294,13 @@ namespace AITasker.Infrastructure.Contracts
                 contract.Status = ContractStatusConfirmed;
                 contract.ConfirmedAt = DateTime.UtcNow;
 
+                job.Status = JobStatusActive;
+                job.UpdatedAt = DateTime.UtcNow;
+
                 var project = await EnsurePendingEscrowProjectExistsAsync(
                     contract,
-                    job);
+                    job,
+                    workflowPolicy.EscrowLockWindowHours);
 
                 await EnsureProjectMilestonesCreatedFromDraftsAsync(
                     contract,
@@ -278,7 +311,7 @@ namespace AITasker.Infrastructure.Contracts
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
                     "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {EscrowLockWindowHours} hours to start the project.",
+                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {workflowPolicy.EscrowLockWindowHours} hours to start the project.",
                     "CONTRACT_CONFIRMED_PENDING_ESCROW",
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
@@ -338,28 +371,12 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Cannot cancel contract after the project has started. Please use dispute or project cancellation flow.");
             }
 
-            contract.Status = ContractStatusCancelled;
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
+            var now = DateTime.UtcNow;
 
-            if (userIsClient)
-            {
-                proposal.Status = ProposalStatusRejected;
-            }
-            else
-            {
-                proposal.Status = ProposalStatusWithdrawn;
-            }
-
-            job.Status = JobStatusOpen;
-            job.UpdatedAt = DateTime.UtcNow;
-
-            if (project != null)
-            {
-                project.Status = ProjectStatusCancelled;
-                project.EndDate = DateTime.UtcNow;
-            }
+            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
+                contract,
+                userIsClient ? "CLIENT_CANCELLED" : "EXPERT_CANCELLED",
+                now);
 
             await _context.SaveChangesAsync();
 
@@ -417,7 +434,8 @@ namespace AITasker.Infrastructure.Contracts
             string acceptanceCriteria,
             string paymentTerms,
             string contractSource,
-            string? chatSummary)
+            string? chatSummary,
+            int contractSignWindowHours)
         {
             if (finalPrice <= 0)
             {
@@ -455,19 +473,22 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = false,
                 ExpertConfirmed = false,
                 Status = ContractStatusDraft,
+                SignDeadlineAt = DateTime.UtcNow.AddHours(contractSignWindowHours),
+                SignExpiredAt = null,
                 CreatedAt = DateTime.UtcNow
             };
         }
 
         private async Task<Project> EnsurePendingEscrowProjectExistsAsync(
             ProjectContract contract,
-            JobPosting job)
+            JobPosting job,
+            int escrowLockWindowHours)
         {
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
             var now = DateTime.UtcNow;
-            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(EscrowLockWindowHours);
+            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(escrowLockWindowHours);
 
             if (existingProject != null)
             {
@@ -841,6 +862,8 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = contract.ClientConfirmed,
                 ExpertConfirmed = contract.ExpertConfirmed,
                 Status = contract.Status,
+                SignDeadlineAt = contract.SignDeadlineAt,
+                SignExpiredAt = contract.SignExpiredAt,
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,
@@ -873,104 +896,6 @@ namespace AITasker.Infrastructure.Contracts
                 .ToListAsync();
 
             return MapContractMilestoneDraftResponses(drafts);
-        }
-
-        public async Task<IReadOnlyList<ContractMilestoneDraftResponse>> ReplaceContractMilestoneDraftsAsync(
-            int userId,
-            int contractId,
-            ReplaceContractMilestoneDraftsRequest request)
-        {
-            await Task.CompletedTask;
-
-            throw new InvalidOperationException(
-                "Contract milestone editing is disabled. Milestones are generated from the accepted proposal.");
-        }
-
-        private static void ValidateReplaceMilestoneDraftsRequest(
-            ReplaceContractMilestoneDraftsRequest request,
-            decimal contractFinalPrice,
-            int contractFinalTimelineDays)
-        {
-            if (request == null)
-            {
-                throw new InvalidOperationException("Milestone draft request is required.");
-            }
-
-            if (request.Milestones == null || request.Milestones.Count == 0)
-            {
-                throw new InvalidOperationException("At least one milestone draft is required.");
-            }
-
-            if (request.Milestones.Count > 10)
-            {
-                throw new InvalidOperationException("A contract cannot have more than 10 milestone drafts.");
-            }
-
-            var orderIndexes = request.Milestones
-                .Select(x => x.OrderIndex)
-                .ToList();
-
-            if (orderIndexes.Any(x => x <= 0))
-            {
-                throw new InvalidOperationException("Milestone order index must be greater than 0.");
-            }
-
-            if (orderIndexes.Distinct().Count() != orderIndexes.Count)
-            {
-                throw new InvalidOperationException("Milestone order indexes must be unique.");
-            }
-
-            var expectedOrderIndexes = Enumerable.Range(1, request.Milestones.Count).ToList();
-
-            if (!orderIndexes.OrderBy(x => x).SequenceEqual(expectedOrderIndexes))
-            {
-                throw new InvalidOperationException("Milestone order indexes must be sequential starting from 1.");
-            }
-
-            foreach (var milestone in request.Milestones)
-            {
-                if (string.IsNullOrWhiteSpace(milestone.Title))
-                {
-                    throw new InvalidOperationException("Milestone title is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.Description))
-                {
-                    throw new InvalidOperationException("Milestone description is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.ExpectedDeliverable))
-                {
-                    throw new InvalidOperationException("Milestone expected deliverable is required.");
-                }
-
-                if (string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria))
-                {
-                    throw new InvalidOperationException("Milestone acceptance criteria is required.");
-                }
-
-                if (milestone.Amount <= 0)
-                {
-                    throw new InvalidOperationException("Milestone amount must be greater than 0.");
-                }
-
-                if (milestone.DeadlineOffsetDays <= 0)
-                {
-                    throw new InvalidOperationException("Milestone deadline offset days must be greater than 0.");
-                }
-
-                if (milestone.DeadlineOffsetDays > contractFinalTimelineDays)
-                {
-                    throw new InvalidOperationException("Milestone deadline cannot exceed contract final timeline days.");
-                }
-            }
-
-            var totalMilestoneAmount = request.Milestones.Sum(x => x.Amount);
-
-            if (totalMilestoneAmount != contractFinalPrice)
-            {
-                throw new InvalidOperationException("Total milestone amount must equal contract final price.");
-            }
         }
 
         private static List<ContractMilestoneDraftResponse> MapContractMilestoneDraftResponses(
@@ -1204,7 +1129,9 @@ namespace AITasker.Infrastructure.Contracts
                 contractId);
         }
 
-        private async Task EnsureExpertCanAcceptNewProjectAsync(int expertId)
+        private async Task EnsureExpertCanAcceptNewProjectAsync(
+            int expertId,
+            int expertMaxActiveProjects)
         {
             var activeProjectCount = await _context.Projects
                 .CountAsync(project =>
@@ -1216,9 +1143,10 @@ namespace AITasker.Infrastructure.Contracts
                         project.Status == "DISPUTED"
                     ));
 
-            if (activeProjectCount >= 3)
+            if (activeProjectCount >= expertMaxActiveProjects)
             {
-                throw new InvalidOperationException("Expert has reached the maximum limit of 3 active projects.");
+                throw new InvalidOperationException(
+                    $"Expert has reached the maximum limit of {expertMaxActiveProjects} active projects.");
             }
         }
 

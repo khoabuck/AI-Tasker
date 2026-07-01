@@ -27,5 +27,13 @@ namespace AITasker.Domain.Entities
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public PlatformWallet PlatformWallet { get; set; } = null!;
+
+        public User? User { get; set; }
+
+        public Project? Project { get; set; }
+
+        public ProjectContract? Contract { get; set; }
+
+        public WithdrawalRequest? WithdrawalRequest { get; set; }
     }
 }

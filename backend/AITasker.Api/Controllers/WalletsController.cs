@@ -186,43 +186,6 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("deposit-orders/{depositOrderId:int}/simulate-paid")]
-        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public async Task<IActionResult> SimulateDepositPaid(int depositOrderId)
-        {
-            try
-            {
-                var userId = GetCurrentUserId();
-
-                var result = await _walletService.SimulateDepositPaidAsync(
-                    userId,
-                    depositOrderId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = "Deposit order paid successfully.",
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
         private int GetCurrentUserId()
         {
             var userIdValue =

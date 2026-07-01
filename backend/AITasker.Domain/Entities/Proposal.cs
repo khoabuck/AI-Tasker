@@ -25,6 +25,7 @@ namespace AITasker.Domain.Entities
 
         public string Status { get; set; } = "SUBMITTED";
 
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public ProjectContract? ProjectContract { get; set; }

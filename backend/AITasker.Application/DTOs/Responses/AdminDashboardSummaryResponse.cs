@@ -88,6 +88,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public decimal TotalWalletLockedBalance { get; set; }
 
+        public decimal TotalExpertPendingEarningsBalance { get; set; }
+
         public decimal TotalExpertEarnings { get; set; }
 
         public decimal TotalContractValue { get; set; }

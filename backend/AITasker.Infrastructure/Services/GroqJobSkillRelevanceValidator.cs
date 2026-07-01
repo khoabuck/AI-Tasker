@@ -8,12 +8,18 @@ namespace AITasker.Infrastructure.Services;
 
 public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
 {
-    private readonly IGroqChatCompletionService _groqChatCompletionService;
+    private readonly HttpClient _httpClient;
+    private readonly IConfiguration _configuration;
+    private readonly IAIUsageCostService _aiUsageCostService;
 
     public GroqJobSkillRelevanceValidator(
-        IGroqChatCompletionService groqChatCompletionService)
+        HttpClient httpClient,
+        IConfiguration configuration,
+        IAIUsageCostService aiUsageCostService)
     {
-        _groqChatCompletionService = groqChatCompletionService;
+        _httpClient = httpClient;
+        _configuration = configuration;
+        _aiUsageCostService = aiUsageCostService;
     }
 
     public async Task<JobSkillRelevanceValidationResult> ValidateAsync(
@@ -46,6 +52,57 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
             request.SelectedSkillNames,
             request.AvailableSkillNames
         );
+
+        using var response = await _httpClient.SendAsync(httpRequest);
+        var responseContent = await response.Content.ReadAsStringAsync();
+
+        await TryRecordAIUsageAsync(
+            model,
+            jsonBody,
+            responseContent,
+            response.IsSuccessStatusCode ? "SUCCESS" : "FAILED",
+            response.IsSuccessStatusCode ? null : responseContent
+        );
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"Groq skill relevance validation failed: {responseContent}"
+            );
+        }
+
+        var aiText = ExtractAssistantText(responseContent);
+        return ParseResult(aiText, request.SelectedSkillNames, request.AvailableSkillNames);
+    }
+
+    private async Task TryRecordAIUsageAsync(
+        string model,
+        string requestPayload,
+        string responsePayload,
+        string status,
+        string? errorMessage)
+    {
+        try
+        {
+            await _aiUsageCostService.RecordFromOpenAICompatibleResponseAsync(
+                new RecordAIUsageRequest
+                {
+                    ModuleName = "JOB_SKILL_RELEVANCE_VALIDATOR",
+                    Provider = "GROQ",
+                    ModelName = model,
+                    RequestPayload = requestPayload,
+                    ResponsePayload = responsePayload,
+                    Status = status,
+                    ErrorMessage = errorMessage,
+                    IsChargedToPlatform = true,
+                    IsChargedToUser = false
+                }
+            );
+        }
+        catch
+        {
+            // AI usage logging must not block the user-facing AI feature.
+        }
     }
 
     private static string BuildPrompt(JobSkillRelevanceValidationRequest request)

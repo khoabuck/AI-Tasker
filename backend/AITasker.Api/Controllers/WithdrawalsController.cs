@@ -12,46 +12,39 @@ namespace AITasker.Api.Controllers
     public class WithdrawalsController : ControllerBase
     {
         private readonly IWithdrawalService _withdrawalService;
-        private readonly IBankAccountVerificationService _bankAccountVerificationService;
+        private readonly IPayOsPayoutService _payOsPayoutService;
 
         public WithdrawalsController(
             IWithdrawalService withdrawalService,
-            IBankAccountVerificationService bankAccountVerificationService)
+            IPayOsPayoutService payOsPayoutService)
         {
             _withdrawalService = withdrawalService;
-            _bankAccountVerificationService = bankAccountVerificationService;
-        }
-
-        [HttpPost("bank-account/verify")]
-        public async Task<IActionResult> VerifyBankAccount(
-            [FromBody] BankAccountVerificationRequest request)
-        {
-            var result = await _bankAccountVerificationService.VerifyAsync(request);
-
-            return Ok(new
-            {
-                success = result.IsValid,
-                message = result.Message,
-                data = result
-            });
+            _payOsPayoutService = payOsPayoutService;
         }
 
         [HttpPost]
-        public async Task<IActionResult> CreateWithdrawalRequest([FromBody] CreateWithdrawalRequest request)
+        public async Task<IActionResult> CreateWithdrawalRequest(
+            [FromBody] CreateWithdrawalRequest request)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _withdrawalService.CreateWithdrawalRequestAsync(userId, request);
-                var success = !string.Equals(result.Status, "FAILED", StringComparison.OrdinalIgnoreCase);
+                var result = await _withdrawalService.CreateWithdrawalRequestAsync(
+                    userId,
+                    request);
+
+                var success = !string.Equals(
+                    result.Status,
+                    "FAILED",
+                    StringComparison.OrdinalIgnoreCase);
 
                 return Ok(new
                 {
                     success,
                     message = success
-                        ? "Withdrawal processed in simulated mode."
-                        : result.BankVerificationMessage ?? "Withdrawal failed.",
+                        ? "Withdrawal request submitted successfully. The withdrawal amount is now held until admin processes the payout."
+                        : result.BankVerificationMessage ?? "Withdrawal request failed.",
                     data = result
                 });
             }
@@ -92,6 +85,30 @@ namespace AITasker.Api.Controllers
             });
         }
 
+        [HttpGet("admin/payos/balance")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> GetPayOsPayoutBalance()
+        {
+            try
+            {
+                var result = await _payOsPayoutService.GetPayoutAccountBalanceAsync();
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpPost("admin/{withdrawalRequestId:int}/approve")]
         [Authorize(Roles = "ADMIN")]
         public async Task<IActionResult> ApproveWithdrawal(
@@ -110,7 +127,68 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Withdrawal request approved successfully.",
+                    message = "Withdrawal marked as paid manually.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("admin/{withdrawalRequestId:int}/approve-payos")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> ApproveWithdrawalWithPayOs(
+            int withdrawalRequestId,
+            [FromBody] ProcessWithdrawalRequest request)
+        {
+            try
+            {
+                var adminId = GetCurrentUserId();
+
+                var result = await _withdrawalService.ApproveWithdrawalWithPayOsAsync(
+                    withdrawalRequestId,
+                    adminId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Withdrawal payout has been sent to PayOS and is now processing.",
+                    data = result
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("admin/{withdrawalRequestId:int}/sync-payos")]
+        [Authorize(Roles = "ADMIN")]
+        public async Task<IActionResult> SyncPayOsWithdrawal(int withdrawalRequestId)
+        {
+            try
+            {
+                var adminId = GetCurrentUserId();
+
+                var result = await _withdrawalService.SyncPayOsWithdrawalAsync(
+                    withdrawalRequestId,
+                    adminId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "PayOS withdrawal status synchronized successfully.",
                     data = result
                 });
             }
@@ -142,7 +220,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Withdrawal request rejected successfully.",
+                    message = "Withdrawal request rejected and held funds returned successfully.",
                     data = result
                 });
             }
@@ -164,7 +242,9 @@ namespace AITasker.Api.Controllers
                 ?? User.FindFirstValue("sub");
 
             if (!int.TryParse(userIdValue, out var userId))
+            {
                 throw new InvalidOperationException("Invalid user token.");
+            }
 
             return userId;
         }

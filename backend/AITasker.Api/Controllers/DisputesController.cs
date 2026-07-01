@@ -13,10 +13,12 @@ namespace AITasker.Api.Controllers
     public class DisputesController : ControllerBase
     {
         private readonly IDisputeService _disputeService;
+        private readonly IImageUploadService _imageUploadService;
 
-        public DisputesController(IDisputeService disputeService)
+        public DisputesController(IDisputeService disputeService, IImageUploadService imageUploadService)
         {
             _disputeService = disputeService;
+            _imageUploadService = imageUploadService;
         }
 
         [HttpPost]
@@ -156,6 +158,70 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpPost("{disputeId:int}/evidences/image")]
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(5 * 1024 * 1024)]
+        public async Task<IActionResult> AddImageEvidence(
+            int disputeId,
+            [FromForm] AddDisputeEvidenceImageFormRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                if (request.Image == null || request.Image.Length == 0)
+                {
+                    return BadRequest(new
+                    {
+                        success = false,
+                        message = "Evidence image is required."
+                    });
+                }
+
+                await using var stream = request.Image.OpenReadStream();
+
+                var uploadResult = await _imageUploadService.UploadImageAsync(
+                    stream,
+                    request.Image.FileName,
+                    request.Image.ContentType,
+                    request.Image.Length,
+                    $"dispute-evidences/{disputeId}");
+
+                var result = await _disputeService.AddEvidenceAsync(
+                    currentUserId,
+                    disputeId,
+                    new CreateDisputeEvidenceRequest
+                    {
+                        EvidenceText = request.EvidenceText ?? string.Empty,
+                        FileUrl = uploadResult.Url
+                    });
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Dispute image evidence submitted successfully.",
+                    image = uploadResult,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         private int GetCurrentUserId()
         {
             var userIdValue =
@@ -169,6 +235,13 @@ namespace AITasker.Api.Controllers
             }
 
             return userId;
+        }
+
+        public class AddDisputeEvidenceImageFormRequest
+        {
+            public string? EvidenceText { get; set; }
+
+            public IFormFile Image { get; set; } = null!;
         }
     }
 }
