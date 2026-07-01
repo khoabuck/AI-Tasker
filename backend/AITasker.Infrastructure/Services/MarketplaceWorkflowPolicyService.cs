@@ -96,6 +96,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
 
         if (policy != null)
         {
+            NormalizeLegacyDefaultPolicy(policy);
             return policy;
         }
 
@@ -104,6 +105,19 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         _context.MarketplaceWorkflowPolicies.Add(policy);
 
         return policy;
+    }
+
+    private static void NormalizeLegacyDefaultPolicy(MarketplaceWorkflowPolicy policy)
+    {
+        // Older seed data used 1 free proposal submit while current service/entity defaults use 5.
+        // Only normalize untouched default rows so an admin setting of 1 is never overwritten.
+        if (policy.UpdatedByAdminId == null &&
+            policy.FreeProposalSubmitCount == 1 &&
+            string.Equals(policy.UpdateReason, "Default marketplace workflow policy.", StringComparison.OrdinalIgnoreCase))
+        {
+            policy.FreeProposalSubmitCount = DefaultFreeProposalSubmitCount;
+            policy.UpdatedAt = DateTime.UtcNow;
+        }
     }
 
     private static MarketplaceWorkflowPolicy CreateDefaultPolicy()

@@ -14,14 +14,12 @@ namespace AITasker.Infrastructure.Disputes
 
         private const string ProjectStatusActive = "ACTIVE";
         private const string ProjectStatusDisputed = "DISPUTED";
-        private const string ProjectStatusCompleted = "COMPLETED";
         private const string ProjectStatusCancelled = "CANCELLED";
 
         private const string ContractStatusConfirmed = "CONFIRMED";
 
         private const string JobStatusActive = "ACTIVE";
         private const string JobStatusDisputed = "DISPUTED";
-        private const string JobStatusCompleted = "COMPLETED";
 
         private const string MilestoneStatusApproved = "APPROVED";
         private const string MilestoneStatusResolved = "RESOLVED";
@@ -51,6 +49,9 @@ namespace AITasker.Infrastructure.Disputes
 
         private const string UserStatusSuspended = "SUSPENDED";
         private const string UserStatusBanned = "BANNED";
+        private const string UserStatusActive = "ACTIVE";
+
+        private const string AutoDisputeSuspensionReason = "Auto suspended due to repeated lost disputes.";
 
         private const string TransactionStatusSuccess = "SUCCESS";
         private const string TxEscrowFreeze = "ESCROW_FREEZE";
@@ -901,22 +902,9 @@ namespace AITasker.Infrastructure.Disputes
                 return;
             }
 
-            var milestones = await _context.Milestones
-                .Where(m => m.ProjectId == project.ProjectId)
-                .ToListAsync();
-
-            if (milestones.Any() && milestones.All(IsMilestoneFinished))
-            {
-                project.Status = ProjectStatusCompleted;
-                project.EndDate ??= DateTime.UtcNow;
-
-                await UpdateJobStatusByProjectAsync(
-                    project,
-                    JobStatusCompleted);
-
-                return;
-            }
-
+            // Do not mark the project/job as COMPLETED here.
+            // The centralized ProjectCompletionService must be the only place that completes
+            // projects, releases pending earnings and sends project-completed notifications.
             project.Status = ProjectStatusActive;
             project.EndDate = null;
 
@@ -1292,23 +1280,43 @@ namespace AITasker.Infrastructure.Disputes
 
             if (lostCountAfterCurrent >= warningThreshold + 2)
             {
+                var now = DateTime.UtcNow;
+
                 if (!string.Equals(loser.Status, UserStatusBanned, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))
                 {
+                    loser.StatusBeforeSuspension = string.IsNullOrWhiteSpace(loser.Status)
+                        ? UserStatusActive
+                        : loser.Status;
                     loser.Status = UserStatusSuspended;
-                    loser.UpdatedAt = DateTime.UtcNow;
+                    loser.LockoutCount += 1;
+                    loser.LastLockedAt = now;
+                    loser.LockoutEnd = null;
+                    loser.LockReason = $"{AutoDisputeSuspensionReason} Lost disputes: {lostCountAfterCurrent}. Threshold: {warningThreshold}.";
+                    loser.UpdatedAt = now;
+                }
+                else if (string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))
+                {
+                    loser.StatusBeforeSuspension = string.IsNullOrWhiteSpace(loser.StatusBeforeSuspension)
+                        ? UserStatusActive
+                        : loser.StatusBeforeSuspension;
+                    loser.LockReason = string.IsNullOrWhiteSpace(loser.LockReason)
+                        ? $"{AutoDisputeSuspensionReason} Lost disputes: {lostCountAfterCurrent}. Threshold: {warningThreshold}."
+                        : loser.LockReason;
+                    loser.LastLockedAt ??= now;
+                    loser.UpdatedAt = now;
                 }
 
                 await _notificationService.CreateNotificationAsync(
                     loser.UserId,
                     "Account suspended",
-                    $"Your account has been automatically suspended because you lost {warningThreshold + 2} disputes. Please contact support or wait for Admin review.",
+                    $"Your account has been automatically suspended because you lost {lostCountAfterCurrent} disputes. Please contact support or wait for Admin review.",
                     NotificationTypes.AccountAutoSuspended);
 
                 await NotifyAdminsUserDisputeRiskAsync(
                     loser,
                     lostCountAfterCurrent,
-                    $"User has lost {warningThreshold + 2} disputes and was automatically suspended by the system.");
+                    $"User has lost {lostCountAfterCurrent} disputes and was automatically suspended by the system.");
             }
         }
 

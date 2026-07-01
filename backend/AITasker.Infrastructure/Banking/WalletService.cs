@@ -276,6 +276,7 @@ namespace AITasker.Infrastructure.Banking
             var reference = GetStringFromJson(request.Data, "reference");
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -310,6 +311,7 @@ namespace AITasker.Infrastructure.Banking
                     order.Status = DepositOrderExpired;
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
 
                     throw new InvalidOperationException("Deposit order expired.");
                 }
@@ -350,6 +352,7 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     order.UserId,
@@ -361,7 +364,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -409,6 +416,7 @@ namespace AITasker.Infrastructure.Banking
             }
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -433,12 +441,17 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 return true;
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 return false;
             }
         }
@@ -448,6 +461,7 @@ namespace AITasker.Infrastructure.Banking
             int projectId)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -500,6 +514,7 @@ namespace AITasker.Infrastructure.Banking
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
 
                     throw new InvalidOperationException(
                         "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
@@ -661,6 +676,7 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
@@ -687,7 +703,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -697,6 +717,7 @@ namespace AITasker.Infrastructure.Banking
             int milestoneId)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -808,6 +829,7 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
@@ -836,7 +858,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -1530,27 +1556,34 @@ namespace AITasker.Infrastructure.Banking
 
         private string GetPayOsClientId()
         {
-            return _configuration["Payment:PayOs:ClientId"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ClientId");
         }
 
         private string GetPayOsApiKey()
         {
-            return _configuration["Payment:PayOs:ApiKey"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ApiKey");
         }
 
         private string GetPayOsChecksumKey()
         {
-            return _configuration["Payment:PayOs:ChecksumKey"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ChecksumKey");
         }
 
         private string GetPayOsReturnUrl()
         {
-            return _configuration["Payment:PayOs:ReturnUrl"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ReturnUrl");
         }
 
         private string GetPayOsCancelUrl()
         {
-            return _configuration["Payment:PayOs:CancelUrl"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("CancelUrl");
+        }
+
+        private string GetPayOsDepositValue(string key)
+        {
+            return _configuration[$"Payment:PayOs:Deposit:{key}"]?.Trim()
+                ?? _configuration[$"Payment:PayOs:{key}"]?.Trim()
+                ?? string.Empty;
         }
 
         private sealed class PayOsCreatePaymentResult

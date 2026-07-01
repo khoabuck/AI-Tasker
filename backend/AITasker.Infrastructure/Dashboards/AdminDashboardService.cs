@@ -227,6 +227,7 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalExpertPayout = SumAbsTransactionsByType(
                     transactions,
+                    "EXPERT_PENDING_EARNING_RELEASE",
                     "ESCROW_RECEIVE",
                     "ESCROW_RECEIVED",
                     "DISPUTE_ESCROW_RECEIVED"),
@@ -234,6 +235,7 @@ namespace AITasker.Infrastructure.Dashboards
                 TotalClientRefund = SumAbsTransactionsByType(
                     transactions,
                     "REFUND",
+                    "EXPERT_PENDING_EARNING_REFUND",
                     "ESCROW_REFUNDED",
                     "DISPUTE_REFUND"),
 

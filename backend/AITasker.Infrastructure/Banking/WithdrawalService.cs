@@ -64,6 +64,7 @@ namespace AITasker.Infrastructure.Banking
                 workflowPolicy.MinimumWithdrawalAmount);
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -147,6 +148,8 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
 
                 await _notificationService.CreateNotificationAsync(
                     userId,
@@ -158,7 +161,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -196,6 +203,7 @@ namespace AITasker.Infrastructure.Banking
             ValidateApproveWithdrawalRequest(request);
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -220,6 +228,8 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
 
                 await _notificationService.CreateNotificationAsync(
                     withdrawalRequest.UserId,
@@ -231,7 +241,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -241,7 +255,70 @@ namespace AITasker.Infrastructure.Banking
             int adminId,
             ProcessWithdrawalRequest request)
         {
+            string referenceId;
+            string idempotencyKey;
+            long payoutAmount;
+            string payoutDescription;
+            string bankBin;
+            string bankAccountNumber;
+            string? adminNote;
+
+            await using (var prepareTransaction = await _context.Database.BeginTransactionAsync())
+            {
+                var prepareTransactionCompleted = false;
+
+                try
+                {
+                    var withdrawalRequest = await GetWithdrawalForUpdateAsync(withdrawalRequestId);
+
+                    EnsurePending(withdrawalRequest, "Only pending withdrawal requests can be sent to PayOS payout.");
+
+                    var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
+                    EnsureHeldBalance(wallet, withdrawalRequest);
+                    EnsurePayOsBankFieldsReady(withdrawalRequest);
+
+                    referenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
+                    idempotencyKey = string.IsNullOrWhiteSpace(withdrawalRequest.PayOsIdempotencyKey)
+                        ? Guid.NewGuid().ToString("N")
+                        : withdrawalRequest.PayOsIdempotencyKey!;
+                    payoutAmount = DecimalToVndLong(withdrawalRequest.NetAmount);
+                    payoutDescription = BuildPayOsPayoutDescription(withdrawalRequest.WithdrawalRequestId);
+                    bankBin = withdrawalRequest.BankBin;
+                    bankAccountNumber = withdrawalRequest.BankAccountNumber;
+                    adminNote = NormalizeOptionalText(request?.AdminNote);
+
+                    withdrawalRequest.PayOsIdempotencyKey = idempotencyKey;
+                    withdrawalRequest.AdminNote = adminNote;
+
+                    await _context.SaveChangesAsync();
+                    await prepareTransaction.CommitAsync();
+                    prepareTransactionCompleted = true;
+                }
+                catch
+                {
+                    if (!prepareTransactionCompleted)
+                    {
+                        await prepareTransaction.RollbackAsync();
+                    }
+
+                    throw;
+                }
+            }
+
+            var payout = await _payOsPayoutService.CreateSinglePayoutAsync(
+                new PayOsPayoutCreateRequest
+                {
+                    ReferenceId = referenceId,
+                    Amount = payoutAmount,
+                    Description = payoutDescription,
+                    ToBin = bankBin,
+                    ToAccountNumber = bankAccountNumber,
+                    Category = new[] { "withdrawal" },
+                    IdempotencyKey = idempotencyKey
+                });
+
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -251,25 +328,8 @@ namespace AITasker.Infrastructure.Banking
 
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
-                EnsurePayOsBankFieldsReady(withdrawalRequest);
 
                 var now = DateTime.UtcNow;
-                var referenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
-                var idempotencyKey = string.IsNullOrWhiteSpace(withdrawalRequest.PayOsIdempotencyKey)
-                    ? Guid.NewGuid().ToString("N")
-                    : withdrawalRequest.PayOsIdempotencyKey!;
-
-                var payout = await _payOsPayoutService.CreateSinglePayoutAsync(
-                    new PayOsPayoutCreateRequest
-                    {
-                        ReferenceId = referenceId,
-                        Amount = DecimalToVndLong(withdrawalRequest.NetAmount),
-                        Description = BuildPayOsPayoutDescription(withdrawalRequest.WithdrawalRequestId),
-                        ToBin = withdrawalRequest.BankBin,
-                        ToAccountNumber = withdrawalRequest.BankAccountNumber,
-                        Category = new[] { "withdrawal" },
-                        IdempotencyKey = idempotencyKey
-                    });
 
                 withdrawalRequest.Status = WithdrawalStatusProcessing;
                 withdrawalRequest.PayoutProvider = PayoutProviderPayOs;
@@ -285,38 +345,54 @@ namespace AITasker.Infrastructure.Banking
                 withdrawalRequest.PayOsTransactionState = payout.FirstTransaction?.State;
                 withdrawalRequest.PayoutRequestedAt = now;
                 withdrawalRequest.ProcessedByAdminId = adminId;
-                withdrawalRequest.AdminNote = NormalizeOptionalText(request?.AdminNote);
+                withdrawalRequest.AdminNote = adminNote;
 
-                _context.Transactions.Add(new Transaction
+                var transactionReferenceId = withdrawalRequest.PayOsPayoutId ?? referenceId;
+                var hasProcessingTransaction = await _context.Transactions.AnyAsync(x =>
+                    x.UserId == withdrawalRequest.UserId &&
+                    x.Type == TransactionTypeWithdrawalPayoutProcessing &&
+                    x.ReferenceId == transactionReferenceId);
+
+                if (!hasProcessingTransaction)
                 {
-                    UserId = withdrawalRequest.UserId,
-                    ProjectId = null,
-                    MilestoneId = null,
-                    EscrowId = null,
-                    Amount = 0,
-                    Type = TransactionTypeWithdrawalPayoutProcessing,
-                    Status = TransactionStatusSuccess,
-                    Description = $"[PayOS Payout Processing] PayOS payout created for Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}. Payout ID: {withdrawalRequest.PayOsPayoutId}.",
-                    ReferenceId = withdrawalRequest.PayOsPayoutId ?? referenceId,
-                    CreatedAt = now
-                });
+                    _context.Transactions.Add(new Transaction
+                    {
+                        UserId = withdrawalRequest.UserId,
+                        ProjectId = null,
+                        MilestoneId = null,
+                        EscrowId = null,
+                        Amount = 0,
+                        Type = TransactionTypeWithdrawalPayoutProcessing,
+                        Status = TransactionStatusSuccess,
+                        Description = $"[PayOS Payout Processing] PayOS payout created for Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}. Payout ID: {withdrawalRequest.PayOsPayoutId}.",
+                        ReferenceId = transactionReferenceId,
+                        CreatedAt = now
+                    });
+                }
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    withdrawalRequest.UserId,
-                    "Withdrawal payout processing",
-                    $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND is being processed by PayOS. Net payout: {withdrawalRequest.NetAmount:N0} VND.",
-                    "WITHDRAWAL_PROCESSING");
-
-                return await BuildResponseAsync(withdrawalRequestId);
+                dbTransactionCompleted = true;
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
+
+            var response = await BuildResponseAsync(withdrawalRequestId);
+
+            await _notificationService.CreateNotificationAsync(
+                response.UserId,
+                "Withdrawal payout processing",
+                $"Your withdrawal request of {response.Amount:N0} VND is being processed by PayOS. Net payout: {response.NetAmount:N0} VND.",
+                "WITHDRAWAL_PROCESSING");
+
+            return response;
         }
 
         public async Task<WithdrawalResponse> SyncPayOsWithdrawalAsync(
@@ -324,6 +400,7 @@ namespace AITasker.Infrastructure.Banking
             int adminId)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -382,6 +459,8 @@ namespace AITasker.Infrastructure.Banking
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
 
                     await _notificationService.CreateNotificationAsync(
                         withdrawalRequest.UserId,
@@ -422,6 +501,8 @@ namespace AITasker.Infrastructure.Banking
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
 
                     await _notificationService.CreateNotificationAsync(
                         withdrawalRequest.UserId,
@@ -433,13 +514,19 @@ namespace AITasker.Infrastructure.Banking
                 {
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
                 }
 
                 return await BuildResponseAsync(withdrawalRequestId);
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -450,6 +537,7 @@ namespace AITasker.Infrastructure.Banking
             ProcessWithdrawalRequest request)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -488,6 +576,8 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
+                await dbTransaction.DisposeAsync();
 
                 await _notificationService.CreateNotificationAsync(
                     withdrawalRequest.UserId,
@@ -501,7 +591,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -811,7 +905,9 @@ namespace AITasker.Infrastructure.Banking
 
         private IQueryable<WithdrawalRequest> BuildWithdrawalQuery()
         {
-            return _context.WithdrawalRequests.AsNoTracking();
+            return _context.WithdrawalRequests
+                .AsNoTracking()
+                .Include(w => w.User);
         }
 
         private async Task<WithdrawalResponse> BuildResponseAsync(int withdrawalRequestId)
@@ -828,8 +924,8 @@ namespace AITasker.Infrastructure.Banking
             {
                 WithdrawalRequestId = w.WithdrawalRequestId,
                 UserId = w.UserId,
-                UserFullName = w.User.FullName,
-                UserEmail = w.User.Email,
+                UserFullName = w.User == null ? string.Empty : w.User.FullName,
+                UserEmail = w.User == null ? string.Empty : w.User.Email,
                 Amount = w.Amount,
                 FeeAmount = w.FeeAmount,
                 NetAmount = w.NetAmount,

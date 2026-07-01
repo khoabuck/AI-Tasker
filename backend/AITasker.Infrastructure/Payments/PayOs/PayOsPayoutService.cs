@@ -157,7 +157,7 @@ namespace AITasker.Infrastructure.Payments.PayOs
         {
             if (!IsPayOsEnabled())
             {
-                throw new InvalidOperationException("PayOS payout is disabled. Enable Payment:PayOs:Enabled or Payment:PayOs:PayoutEnabled first.");
+                throw new InvalidOperationException("PayOS payout is disabled. Enable Payment:PayOs:Payout:Enabled or Payment:PayOs:PayoutEnabled first.");
             }
 
             if (string.IsNullOrWhiteSpace(GetClientId()))
@@ -178,6 +178,11 @@ namespace AITasker.Infrastructure.Payments.PayOs
 
         private bool IsPayOsEnabled()
         {
+            if (_configuration.GetSection("Payment:PayOs:Payout:Enabled").Exists())
+            {
+                return _configuration.GetValue<bool>("Payment:PayOs:Payout:Enabled");
+            }
+
             if (_configuration.GetSection("Payment:PayOs:PayoutEnabled").Exists())
             {
                 return _configuration.GetValue<bool>("Payment:PayOs:PayoutEnabled");
@@ -400,17 +405,24 @@ namespace AITasker.Infrastructure.Payments.PayOs
 
         private string GetClientId()
         {
-            return _configuration["Payment:PayOs:ClientId"]?.Trim() ?? string.Empty;
+            return GetPayOsPayoutValue("ClientId");
         }
 
         private string GetApiKey()
         {
-            return _configuration["Payment:PayOs:ApiKey"]?.Trim() ?? string.Empty;
+            return GetPayOsPayoutValue("ApiKey");
         }
 
         private string GetChecksumKey()
         {
-            return _configuration["Payment:PayOs:ChecksumKey"]?.Trim() ?? string.Empty;
+            return GetPayOsPayoutValue("ChecksumKey");
+        }
+
+        private string GetPayOsPayoutValue(string key)
+        {
+            return _configuration[$"Payment:PayOs:Payout:{key}"]?.Trim()
+                ?? _configuration[$"Payment:PayOs:{key}"]?.Trim()
+                ?? string.Empty;
         }
     }
 }
