@@ -57,6 +57,7 @@ export default function ExpertDashboard() {
   };
 
   const reviewStatus = getReviewStatus(profile);
+
   const userStatus = String(
     profile?.userStatus || profile?.UserStatus || user?.status || ""
   ).toUpperCase();
@@ -92,23 +93,80 @@ export default function ExpertDashboard() {
         title: getJobTitle(job),
         description: getJobDescription(job),
         skills: normalizeSkills(job?.skills || job?.Skills),
+        budgetMin:
+          job?.budgetMin ??
+          job?.BudgetMin ??
+          job?.minBudget ??
+          job?.MinBudget ??
+          job?.budgetFrom ??
+          job?.BudgetFrom,
+        budgetMax:
+          job?.budgetMax ??
+          job?.BudgetMax ??
+          job?.maxBudget ??
+          job?.MaxBudget ??
+          job?.budgetTo ??
+          job?.BudgetTo,
+        category: job?.category || job?.Category || job?.jobCategory,
         matchScore: calculateMatchScore(job, profile, expertSkills),
       }))
       .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 3);
+      .slice(0, 4);
   }, [openJobs, profile, expertSkills]);
 
   const profileReadiness = useMemo(() => {
     return calculateProfileReadiness(profile);
   }, [profile]);
 
-  const budgetRange = formatBudget(
+  const budgetRange = formatBudgetVnd(
     profile?.expectedProjectBudgetMin ?? profile?.ExpectedProjectBudgetMin,
     profile?.expectedProjectBudgetMax ?? profile?.ExpectedProjectBudgetMax
   );
 
   const availableForWork =
     profile?.availableForWork ?? profile?.AvailableForWork ?? false;
+
+  const actionItems = useMemo(() => {
+    const items = [];
+
+    if (profileReadiness < 80) {
+      items.push({
+        icon: "manage_accounts",
+        title: "Your expert profile is not fully optimized",
+        description:
+          "Add skills, portfolio, experience, and expected budget to improve your matching quality.",
+        to: "/expert/profile/update",
+        action: "Improve profile",
+        tone: "cyan",
+      });
+    }
+
+    if (!availableForWork) {
+      items.push({
+        icon: "work_alert",
+        title: "You are currently not available for work",
+        description:
+          "Turn on your availability if you want clients to know you are ready for new projects.",
+        to: "/expert/profile/update",
+        action: "Update availability",
+        tone: "yellow",
+      });
+    }
+
+    if (recommendedJobs.length > 0) {
+      items.push({
+        icon: "auto_awesome",
+        title: "You have jobs that match your skills",
+        description:
+          "Review recommended opportunities and submit proposals early to improve your chance of being selected.",
+        to: "/expert/recommended-jobs",
+        action: "View matches",
+        tone: "purple",
+      });
+    }
+
+    return items.slice(0, 3);
+  }, [profileReadiness, availableForWork, recommendedJobs.length]);
 
   if (loading) {
     return (
@@ -207,19 +265,14 @@ export default function ExpertDashboard() {
                   </p>
 
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400">
-                    Manage your opportunities, proposals, active projects, and
-                    profile readiness from one workspace.
+                    Manage opportunities, proposals, projects, earnings, and
+                    profile readiness from one expert workspace.
                   </p>
 
-                  <div className="mt-5 flex flex-wrap gap-3">
+                  <div className="mt-5 flex flex-wrap items-center gap-2">
                     <StatusBadge status={userStatus || "ACTIVE"} />
                     <StatusBadge status={reviewStatus || "APPROVED"} />
-
-                    {availableForWork ? (
-                      <StatusBadge status="AVAILABLE" />
-                    ) : (
-                      <StatusBadge status="NOT AVAILABLE" tone="yellow" />
-                    )}
+                    <AvailabilityBadge available={availableForWork} />
                   </div>
 
                   <div className="mt-7 flex flex-wrap gap-3">
@@ -240,7 +293,7 @@ export default function ExpertDashboard() {
                       <span className="material-symbols-outlined text-[18px]">
                         auto_awesome
                       </span>
-                      AI Recommended Jobs
+                      Recommended Jobs
                     </Link>
 
                     <Link
@@ -328,10 +381,10 @@ export default function ExpertDashboard() {
             />
 
             <StatCard
-              icon="psychology"
-              label="Skill Tags"
-              value={expertSkills.length}
-              description="Skills shown on profile"
+              icon="description"
+              label="Proposal Workspace"
+              value="Ready"
+              description="Track and manage proposals"
               tone="green"
             />
 
@@ -343,6 +396,28 @@ export default function ExpertDashboard() {
               tone="yellow"
             />
           </section>
+
+          {actionItems.length > 0 && (
+            <section className="mb-8 rounded-3xl border border-white/10 bg-[#151a22] p-6">
+              <div className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-xl font-extrabold text-white">
+                    Action Required
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-500">
+                    Important items that can improve your expert workflow.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                {actionItems.map((item) => (
+                  <ActionItemCard key={item.title} item={item} />
+                ))}
+              </div>
+            </section>
+          )}
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
             <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6">
@@ -391,7 +466,7 @@ export default function ExpertDashboard() {
                     to="/expert/proposals"
                     icon="description"
                     title="My Proposals"
-                    description="Track submitted and accepted proposals"
+                    description="Track submitted, draft, and accepted proposals"
                   />
 
                   <QuickAction
@@ -424,14 +499,12 @@ export default function ExpertDashboard() {
                   </span>
                 </div>
 
-                <h2 className="text-lg font-extrabold text-white">
-                  Pro tip
-                </h2>
+                <h2 className="text-lg font-extrabold text-white">Pro tip</h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Keep your skills, portfolio, and certificates updated. A
-                  complete profile improves your chance of matching with better
-                  projects.
+                  Keep your skills, portfolio, certificates, and availability up
+                  to date. A complete profile improves your chance of matching
+                  with better projects.
                 </p>
 
                 <Link
@@ -495,6 +568,25 @@ function StatusBadge({ status, tone }) {
   );
 }
 
+function AvailabilityBadge({ available }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide ${
+        available
+          ? "border-green-400/30 bg-green-400/10 text-green-300"
+          : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+      }`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${
+          available ? "bg-green-300" : "bg-yellow-300"
+        }`}
+      />
+      {available ? "Available for work" : "Not available"}
+    </span>
+  );
+}
+
 function ProgressBar({ value }) {
   const safeValue = Math.max(0, Math.min(100, Number(value || 0)));
 
@@ -522,6 +614,38 @@ function QuickProfileInfo({ icon, label, value }) {
         <p className="truncate text-sm font-bold text-white">{value || "N/A"}</p>
       </div>
     </div>
+  );
+}
+
+function ActionItemCard({ item }) {
+  const toneClass =
+    item.tone === "yellow"
+      ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+      : item.tone === "purple"
+      ? "border-purple-400/20 bg-purple-400/10 text-purple-300"
+      : "border-cyan-400/20 bg-cyan-400/10 text-cyan-300";
+
+  return (
+    <Link
+      to={item.to}
+      className="group rounded-2xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/40 hover:bg-white/[0.05]"
+    >
+      <div
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}
+      >
+        <span className="material-symbols-outlined">{item.icon}</span>
+      </div>
+
+      <h3 className="font-extrabold text-white group-hover:text-cyan-200">
+        {item.title}
+      </h3>
+
+      <p className="mt-2 text-sm leading-6 text-gray-500">
+        {item.description}
+      </p>
+
+      <p className="mt-4 text-sm font-bold text-cyan-300">{item.action}</p>
+    </Link>
   );
 }
 
@@ -560,7 +684,7 @@ function RecommendedJobCard({ job }) {
           </p>
 
           <p className="mt-1 font-bold text-white">
-            {formatBudget(job.budgetMin, job.budgetMax)}
+            {formatBudgetVnd(job.budgetMin, job.budgetMax)}
           </p>
         </div>
       </div>
@@ -653,10 +777,14 @@ function calculateProfileReadiness(profile) {
     profile.skills || profile.Skills,
     profile.yearsOfExperience ?? profile.YearsOfExperience,
     profile.portfolioUrl || profile.PortfolioUrl,
-    profile.linkedInUrl || profile.LinkedInUrl || profile.gitHubUrl || profile.GitHubUrl,
+    profile.linkedInUrl ||
+      profile.LinkedInUrl ||
+      profile.gitHubUrl ||
+      profile.GitHubUrl,
     profile.expectedProjectBudgetMin ?? profile.ExpectedProjectBudgetMin,
     profile.expectedProjectBudgetMax ?? profile.ExpectedProjectBudgetMax,
-    profile.preferredProjectDurationDays ?? profile.PreferredProjectDurationDays,
+    profile.preferredProjectDurationDays ??
+      profile.PreferredProjectDurationDays,
   ];
 
   const completed = checks.filter((item) => {
@@ -686,7 +814,9 @@ function toArray(value) {
 }
 
 function normalizeSkills(value) {
-  return toArray(value).map((skill) => String(skill).trim()).filter(Boolean);
+  return toArray(value)
+    .map((skill) => String(skill).trim())
+    .filter(Boolean);
 }
 
 function getJobId(job) {
@@ -694,7 +824,9 @@ function getJobId(job) {
 }
 
 function getJobTitle(job) {
-  return job?.title || job?.Title || job?.jobTitle || job?.JobTitle || "Untitled Job";
+  return (
+    job?.title || job?.Title || job?.jobTitle || job?.JobTitle || "Untitled Job"
+  );
 }
 
 function getJobDescription(job) {
@@ -721,13 +853,25 @@ function calculateMatchScore(job, profile, expertSkills) {
   return Math.min(100, Math.round((matched.length / jobSkills.length) * 100));
 }
 
-function formatBudget(min, max) {
+function formatBudgetVnd(min, max) {
   const minValue = Number(min || 0);
   const maxValue = Number(max || 0);
 
   if (!minValue && !maxValue) return "Negotiable";
-  if (minValue && !maxValue) return `From $${minValue}`;
-  if (!minValue && maxValue) return `Up to $${maxValue}`;
+  if (minValue && !maxValue) return `From ${formatVnd(minValue)}`;
+  if (!minValue && maxValue) return `Up to ${formatVnd(maxValue)}`;
 
-  return `$${minValue} - $${maxValue}`;
+  return `${formatVnd(minValue)} - ${formatVnd(maxValue)}`;
+}
+
+function formatVnd(value) {
+  const number = Number(value || 0);
+
+  if (!number) return "0 ₫";
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(number);
 }

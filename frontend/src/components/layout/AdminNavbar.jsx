@@ -95,9 +95,20 @@ export default function AdminNavbar() {
           Job AI Policy
         </NavLink>
 
+        <NavLink to="/admin/ai-management" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">hub</span>
+          AI Management
+        </NavLink>
+
         <NavLink to="/admin/job-credit-packages" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">inventory_2</span>
           Credit Packages
+        </NavLink>
+        <NavLink to="/admin/proposal-credit-packages" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            workspace_premium
+          </span>
+          Proposal Packages
         </NavLink>
 
         <NavLink to="/admin/platform-fee-policy" className={navLinkClass}>
@@ -112,6 +123,13 @@ export default function AdminNavbar() {
         <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-600">
           Operations
         </p>
+
+        <NavLink to="/admin/proposal-credits" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">
+            account_balance_wallet
+          </span>
+          Proposal Credits
+        </NavLink>
 
         <NavLink to="/admin/jobs" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">work</span>

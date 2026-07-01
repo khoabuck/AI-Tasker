@@ -1,745 +1,1312 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertWalletService from "../../../services/expertWallet.service";
 
-const initialWithdrawForm = {
-  amount: "",
-  bankName: "",
-  bankAccountNumber: "",
-  bankAccountHolder: "",
-};
+const quickAmounts = [50000, 100000, 200000, 500000];
+const PAYMENT_CHECK_INTERVAL_MS = 5000;
+const DEPOSIT_EXPIRE_SECONDS = 120;
 
 export default function ExpertWalletPage() {
-  const [wallet, setWallet] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [withdrawals, setWithdrawals] = useState([]);
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [withdrawForm, setWithdrawForm] = useState(initialWithdrawForm);
+  const returnTo = location.state?.returnTo || "/expert/proposal-credit-packages";
+  const returnReason = location.state?.reason || "";
+  const returnPackageId = location.state?.packageId || "";
+
+  const shouldShowCreditReturn =
+    returnReason === "BUY_PROPOSAL_CREDITS" ||
+    returnTo === "/expert/proposal-credit-packages";
+
+  const [wallet, setWallet] = useState(null);
+  const [balance, setBalance] = useState(null);
+  const [transactions, setTransactions] = useState([]);
+  const [depositOrders, setDepositOrders] = useState([]);
+
+  const [depositAmount, setDepositAmount] = useState("");
+  const [activeDepositOrder, setActiveDepositOrder] = useState(null);
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [depositCountdown, setDepositCountdown] = useState(0);
+  const [depositMinimized, setDepositMinimized] = useState(false);
 
   const [loading, setLoading] = useState(true);
-  const [submittingWithdraw, setSubmittingWithdraw] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [creatingDeposit, setCreatingDeposit] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
 
-  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [withdrawError, setWithdrawError] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadWalletData();
+    loadWallet();
   }, []);
 
-  const availableBalance = Number(wallet?.availableBalance || wallet?.balance || 0);
-  const lockedBalance = Number(wallet?.lockedBalance || 0);
-  const totalEarning = Number(wallet?.totalEarning || wallet?.totalEarned || 0);
+  useEffect(() => {
+    const orderId = activeDepositOrder?.depositOrderId;
 
-  const pendingWithdrawalAmount = useMemo(() => {
-    return withdrawals
-      .filter((item) => isPendingStatus(item.status))
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  }, [withdrawals]);
+    if (!showDepositModal || !orderId) return;
+    if (isFinalDepositStatus(activeDepositOrder.status)) return;
 
-  const approvedWithdrawalAmount = useMemo(() => {
-    return withdrawals
-      .filter((item) => isApprovedStatus(item.status))
-      .reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  }, [withdrawals]);
+    const intervalId = window.setInterval(() => {
+      checkDepositStatus(orderId, { silent: true });
+    }, PAYMENT_CHECK_INTERVAL_MS);
 
-  const latestTransactions = useMemo(() => {
-    return [...transactions].slice(0, 8);
+    return () => {
+      window.clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showDepositModal,
+    activeDepositOrder?.depositOrderId,
+    activeDepositOrder?.status,
+  ]);
+
+  useEffect(() => {
+    if (!activeDepositOrder?.depositOrderId) return;
+
+    if (isFinalDepositStatus(activeDepositOrder.status)) {
+      setDepositMinimized(false);
+      return;
+    }
+
+    if (depositCountdown <= 0) {
+      setDepositMinimized(false);
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDepositCountdown((prev) => Math.max(prev - 1, 0));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    activeDepositOrder?.depositOrderId,
+    activeDepositOrder?.status,
+    depositCountdown,
+  ]);
+
+  const normalizedTransactions = useMemo(() => {
+    return transactions.map((transaction) => ({
+      ...transaction,
+      ui: getTransactionPresentation(transaction),
+    }));
   }, [transactions]);
 
-  const latestWithdrawals = useMemo(() => {
-    return [...withdrawals].slice(0, 6);
-  }, [withdrawals]);
+  const totalDeposited = useMemo(() => {
+    const depositFromTransactions = normalizedTransactions
+      .filter((item) => item.ui.group === "DEPOSIT")
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
 
-  const loadWalletData = async () => {
+    if (depositFromTransactions > 0) return depositFromTransactions;
+
+    return depositOrders
+      .filter((item) => isPaidDepositStatus(item.status))
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
+  }, [normalizedTransactions, depositOrders]);
+
+  const totalWithdrawn = useMemo(() => {
+    return normalizedTransactions
+      .filter((item) => item.ui.group === "WITHDRAW")
+      .reduce((total, item) => total + Number(item.amount || 0), 0);
+  }, [normalizedTransactions]);
+
+  const latestDepositOrders = useMemo(() => {
+    return depositOrders.slice(0, 6);
+  }, [depositOrders]);
+
+  const goToProposalCredits = () => {
+    navigate(returnTo || "/expert/proposal-credit-packages", {
+      state: {
+        packageId: returnPackageId,
+      },
+    });
+  };
+
+  const updateDepositOrderInList = (order) => {
+    if (!order?.depositOrderId) return;
+
+    setDepositOrders((prev) => {
+      const exists = prev.some(
+        (item) => String(item.depositOrderId) === String(order.depositOrderId)
+      );
+
+      if (!exists) return [order, ...prev];
+
+      return prev.map((item) =>
+        String(item.depositOrderId) === String(order.depositOrderId)
+          ? order
+          : item
+      );
+    });
+  };
+
+  const loadWallet = async () => {
     try {
       setLoading(true);
       setError("");
       setMessage("");
 
-      const overview = await expertWalletService.getWalletOverview();
+      const data = await expertWalletService.getWalletOverview();
 
-      setWallet(overview.wallet);
-      setTransactions(Array.isArray(overview.transactions) ? overview.transactions : []);
-      setWithdrawals(Array.isArray(overview.withdrawals) ? overview.withdrawals : []);
+      setWallet(data.wallet);
+      setBalance(data.balance);
+      setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+      setDepositOrders(
+        Array.isArray(data.depositOrders) ? data.depositOrders : []
+      );
     } catch (err) {
       console.error("LOAD EXPERT WALLET ERROR:", err?.response?.data || err);
-
-      setError(getFriendlyError(err, "Cannot load wallet data."));
+      setError(getFriendlyError(err, "Cannot load wallet."));
       setWallet(null);
+      setBalance(null);
       setTransactions([]);
-      setWithdrawals([]);
+      setDepositOrders([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const openWithdrawModal = () => {
-    setWithdrawForm(initialWithdrawForm);
-    setWithdrawError("");
+  const refreshWallet = async ({ keepMessage = false } = {}) => {
+    try {
+      setRefreshing(true);
+      setError("");
+
+      if (!keepMessage) setMessage("");
+
+      const data = await expertWalletService.getWalletOverview();
+
+      setWallet(data.wallet);
+      setBalance(data.balance);
+      setTransactions(Array.isArray(data.transactions) ? data.transactions : []);
+      setDepositOrders(
+        Array.isArray(data.depositOrders) ? data.depositOrders : []
+      );
+    } catch (err) {
+      console.error("REFRESH EXPERT WALLET ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot refresh wallet."));
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const openDepositModal = () => {
     setError("");
     setMessage("");
-    setShowWithdrawModal(true);
+    setActiveDepositOrder(null);
+    setDepositAmount("");
+    setDepositCountdown(0);
+    setDepositMinimized(false);
+    setShowDepositModal(true);
   };
 
-  const closeWithdrawModal = () => {
-    if (submittingWithdraw) return;
+  const closeDepositModal = () => {
+    if (creatingDeposit || checkingPayment) return;
 
-    setShowWithdrawModal(false);
-    setWithdrawForm(initialWithdrawForm);
-    setWithdrawError("");
+    setShowDepositModal(false);
+
+    if (
+      activeDepositOrder &&
+      !isFinalDepositStatus(activeDepositOrder.status) &&
+      depositCountdown > 0
+    ) {
+      setDepositMinimized(true);
+      return;
+    }
+
+    setActiveDepositOrder(null);
+    setDepositAmount("");
+    setDepositCountdown(0);
+    setDepositMinimized(false);
   };
 
-  const updateWithdrawField = (name, value) => {
-    setWithdrawError("");
-
-    setWithdrawForm((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmitWithdraw = async (event) => {
+  const handleCreateDepositOrder = async (event) => {
     event.preventDefault();
 
-    setWithdrawError("");
-    setError("");
-    setMessage("");
+    const amount = Number(depositAmount);
 
-    const validationError = validateWithdrawForm(withdrawForm, availableBalance);
-
-    if (validationError) {
-      setWithdrawError(validationError);
+    if (!amount || amount <= 0) {
+      setError("Please enter a valid deposit amount.");
       return;
     }
 
     try {
-      setSubmittingWithdraw(true);
+      setCreatingDeposit(true);
+      setError("");
+      setMessage("");
 
-      await expertWalletService.requestWithdraw(withdrawForm);
+      const order = await expertWalletService.createDepositOrder({ amount });
 
-      setWithdrawForm(initialWithdrawForm);
-      setShowWithdrawModal(false);
-      setMessage(
-        "Payout request submitted successfully. You will be notified after review."
-      );
+      if (order) {
+        setActiveDepositOrder(order);
+        setDepositCountdown(getDepositRemainingSeconds(order.createdAt));
+        setDepositMinimized(false);
+        updateDepositOrderInList(order);
+      }
 
-      const overview = await expertWalletService.getWalletOverview();
-
-      setWallet(overview.wallet);
-      setTransactions(Array.isArray(overview.transactions) ? overview.transactions : []);
-      setWithdrawals(Array.isArray(overview.withdrawals) ? overview.withdrawals : []);
+      setMessage("Payment QR created. Please transfer the exact amount.");
     } catch (err) {
-      console.error("CREATE WITHDRAWAL ERROR:", err?.response?.data || err);
-
-      setWithdrawError(getFriendlyError(err, "Cannot submit payout request."));
+      console.error("CREATE DEPOSIT ORDER ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot create deposit order."));
     } finally {
-      setSubmittingWithdraw(false);
+      setCreatingDeposit(false);
     }
   };
 
+  const checkDepositStatus = async (
+    depositOrderId,
+    options = { silent: false }
+  ) => {
+    if (!depositOrderId) return;
+
+    try {
+      if (!options.silent) setCheckingPayment(true);
+
+      setError("");
+
+      const previousStatus = String(
+        activeDepositOrder?.status || ""
+      ).toUpperCase();
+
+      const detail = await expertWalletService.getDepositOrderById(
+        depositOrderId
+      );
+
+      if (detail) {
+        setActiveDepositOrder(detail);
+        updateDepositOrderInList(detail);
+
+        const currentStatus = String(detail.status || "").toUpperCase();
+
+        if (isPaidDepositStatus(currentStatus)) {
+          setDepositMinimized(false);
+          setDepositCountdown(0);
+
+          await refreshWallet({ keepMessage: true });
+
+          if (!isPaidDepositStatus(previousStatus)) {
+            setMessage(
+              shouldShowCreditReturn
+                ? "Payment confirmed. Your wallet balance has been updated. You can continue buying proposal credits now."
+                : "Payment confirmed. Your wallet balance has been updated."
+            );
+          }
+        } else if (!options.silent) {
+          setMessage(
+            "Payment is still pending. Your wallet will update after the provider confirms the transfer."
+          );
+        }
+      }
+    } catch (err) {
+      if (!options.silent) {
+        console.error("CHECK DEPOSIT STATUS ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot check payment status."));
+      }
+    } finally {
+      if (!options.silent) setCheckingPayment(false);
+    }
+  };
+
+  const openDepositOrder = async (order) => {
+    if (!order?.depositOrderId) return;
+
+    try {
+      setError("");
+      setMessage("");
+
+      const detail = await expertWalletService.getDepositOrderById(
+        order.depositOrderId
+      );
+
+      const selectedOrder = detail || order;
+
+      setActiveDepositOrder(selectedOrder);
+      setDepositCountdown(getDepositRemainingSeconds(selectedOrder?.createdAt));
+      setDepositMinimized(false);
+      setShowDepositModal(true);
+    } catch (err) {
+      console.error(
+        "LOAD DEPOSIT ORDER DETAIL ERROR:",
+        err?.response?.data || err
+      );
+
+      setActiveDepositOrder(order);
+      setDepositCountdown(getDepositRemainingSeconds(order?.createdAt));
+      setDepositMinimized(false);
+      setShowDepositModal(true);
+    }
+  };
+
+  const copyToClipboard = async (text) => {
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setMessage("Copied to clipboard.");
+    } catch {
+      setError("Cannot copy to clipboard.");
+    }
+  };
+
+  const handleWithdraw = () => {
+    setMessage("");
+    setError("Withdrawal is not available yet.");
+  };
+
+  const openMilestone = (milestoneId) => {
+    if (!milestoneId) return;
+    navigate(`/expert/milestones/${milestoneId}`);
+  };
+
+  if (loading) {
+    return (
+      <ExpertLayout>
+        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
+          Loading wallet...
+        </div>
+      </ExpertLayout>
+    );
+  }
+
   return (
     <ExpertLayout>
+      <style>
+        {`
+          .wallet-scrollbar-hide {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+          }
+
+          .wallet-scrollbar-hide::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
+
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <section className="mb-8 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="relative p-6 md:p-8">
-              <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-green-400/10 blur-3xl" />
-              <div className="absolute bottom-0 right-28 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
+          <section className="mb-10 flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-4xl font-black text-white">Wallet</h1>
 
-              <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                    Expert Wallet
-                  </p>
+              <p className="mt-3 text-base text-gray-400">
+                Manage your balance, deposits, and transaction history.
+              </p>
+            </div>
 
-                  <h1 className="max-w-3xl text-3xl font-extrabold leading-tight text-white md:text-5xl">
-                    Manage your earnings and payouts
-                  </h1>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={openDepositModal}
+                className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 text-sm font-black text-white shadow-[0_18px_45px_rgba(0,240,255,0.2)] transition hover:scale-[1.01]"
+              >
+                <span className="material-symbols-outlined text-[22px]">
+                  add_card
+                </span>
+                Deposit
+              </button>
 
-                  <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400">
-                    Track released project earnings, pending payouts, and wallet
-                    activity in one secure workspace.
-                  </p>
-                </div>
+              <button
+                type="button"
+                onClick={goToProposalCredits}
+                className="flex items-center gap-2 rounded-2xl border border-purple-400/50 bg-purple-400/10 px-6 py-4 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
+              >
+                <span className="material-symbols-outlined text-[22px]">
+                  workspace_premium
+                </span>
+                Buy Proposal Credits
+              </button>
 
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={openWithdrawModal}
-                    disabled={loading || availableBalance <= 0}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      payments
-                    </span>
-                    Request Payout
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={loadWalletData}
-                    disabled={loading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      refresh
-                    </span>
-                    {loading ? "Refreshing..." : "Refresh"}
-                  </button>
-                </div>
-              </div>
+              <button
+                type="button"
+                onClick={handleWithdraw}
+                className="flex items-center gap-2 rounded-2xl border border-cyan-400/60 bg-transparent px-6 py-4 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                <span className="material-symbols-outlined text-[22px]">
+                  account_balance_wallet
+                </span>
+                Withdraw
+              </button>
             </div>
           </section>
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <Alert type="success" message={message} />}
+          {error && <Alert type="danger" message={error} />}
 
-          {error && (
-            <Alert type="danger" title="Wallet error" message={error} />
-          )}
+          <section className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <BalanceCard
+              label="Available Balance"
+              value={formatMoney(balance?.availableBalance)}
+              icon="account_balance_wallet"
+              tone="cyan"
+            />
 
-          {loading ? (
-            <div className="rounded-3xl border border-white/10 bg-[#151a22] p-12 text-center text-gray-400">
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading wallet data...
-            </div>
-          ) : (
-            <>
-              <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-                <SummaryCard
-                  icon="account_balance_wallet"
-                  label="Available Balance"
-                  value={formatMoney(availableBalance)}
-                  description="Ready for payout"
-                  tone="green"
-                />
+            <BalanceCard
+              label="Escrow Balance"
+              value={formatMoney(balance?.lockedBalance)}
+              icon="lock_clock"
+              tone="purple"
+            />
 
-                <SummaryCard
-                  icon="lock"
-                  label="Locked Balance"
-                  value={formatMoney(lockedBalance)}
-                  description="Held for ongoing work"
-                  tone="yellow"
-                />
+            <BalanceCard
+              label="Total Deposited"
+              value={formatMoney(totalDeposited)}
+              icon="login"
+              tone="blue"
+            />
 
-                <SummaryCard
-                  icon="schedule"
-                  label="Pending Payout"
-                  value={formatMoney(pendingWithdrawalAmount)}
-                  description="Waiting for review"
-                  tone="cyan"
-                />
+            <BalanceCard
+              label="Total Withdrawn"
+              value={formatMoney(totalWithdrawn)}
+              icon="logout"
+              tone="red"
+            />
+          </section>
 
-                <SummaryCard
-                  icon="trending_up"
-                  label="Total Earnings"
-                  value={formatMoney(totalEarning)}
-                  description="Lifetime released earnings"
-                  tone="purple"
-                />
-              </section>
+          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
+            <div className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
+              <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
+                <div>
+                  <h2 className="text-xl font-black text-white">
+                    Transaction History
+                  </h2>
 
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_390px]">
-                <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
-                  <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <h2 className="text-xl font-extrabold text-white">
-                        Wallet Activity
-                      </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    {normalizedTransactions.length} transaction(s)
+                  </p>
+                </div>
 
-                      <p className="mt-1 text-sm text-gray-500">
-                        Recent wallet movements from project payments and payouts.
-                      </p>
-                    </div>
+                <button
+                  type="button"
+                  onClick={() => refreshWallet()}
+                  disabled={refreshing}
+                  className="text-xs font-black uppercase tracking-wider text-cyan-300 transition hover:text-cyan-200 disabled:opacity-50"
+                >
+                  {refreshing ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
 
-                    <span className="w-fit rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                      {transactions.length} item(s)
-                    </span>
-                  </div>
+              {normalizedTransactions.length === 0 ? (
+                <EmptyState />
+              ) : (
+                <div className="wallet-scrollbar-hide overflow-x-auto">
+                  <table className="w-full min-w-[850px] text-left">
+                    <thead className="border-b border-white/10 bg-white/[0.03]">
+                      <tr>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                      </tr>
+                    </thead>
 
-                  {latestTransactions.length === 0 ? (
-                    <EmptyState
-                      icon="receipt_long"
-                      title="No wallet activity yet"
-                      description="Payments from released milestones and payout records will appear here."
-                    />
-                  ) : (
-                    <div className="space-y-3">
-                      {latestTransactions.map((transaction, index) => (
-                        <TransactionItem
-                          key={transaction.transactionId || transaction.id || index}
+                    <tbody>
+                      {normalizedTransactions.map((transaction, index) => (
+                        <TransactionRow
+                          key={transaction.transactionId || index}
                           transaction={transaction}
+                          onOpenMilestone={openMilestone}
                         />
                       ))}
-                    </div>
-                  )}
-                </section>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
 
-                <aside>
-                  <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6">
-                    <div className="mb-6 flex items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-lg font-extrabold text-white">
-                          Payout Requests
-                        </h2>
+            <aside className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
+              <div className="border-b border-white/10 px-6 py-5">
+                <h2 className="text-xl font-black text-white">
+                  Deposit History
+                </h2>
 
-                        <p className="mt-1 text-sm text-gray-500">
-                          Recent payout request status.
-                        </p>
-                      </div>
-
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                        {withdrawals.length}
-                      </span>
-                    </div>
-
-                    {latestWithdrawals.length === 0 ? (
-                      <EmptyState
-                        icon="payments"
-                        title="No payout requests"
-                        description="Your payout requests will appear here."
-                        compact
-                      />
-                    ) : (
-                      <div className="space-y-3">
-                        {latestWithdrawals.map((withdrawal, index) => (
-                          <WithdrawalItem
-                            key={withdrawal.withdrawalRequestId || withdrawal.id || index}
-                            withdrawal={withdrawal}
-                          />
-                        ))}
-                      </div>
-                    )}
-
-                    {approvedWithdrawalAmount > 0 && (
-                      <div className="mt-5 rounded-2xl border border-green-400/20 bg-green-400/10 p-4">
-                        <p className="text-xs uppercase tracking-wider text-green-300">
-                          Approved payouts
-                        </p>
-
-                        <p className="mt-1 text-xl font-bold text-white">
-                          {formatMoney(approvedWithdrawalAmount)}
-                        </p>
-                      </div>
-                    )}
-                  </section>
-                </aside>
+                <p className="mt-1 text-sm text-gray-500">
+                  Recent QR payment orders
+                </p>
               </div>
-            </>
-          )}
+
+              {latestDepositOrders.length === 0 ? (
+                <div className="p-6 text-sm text-gray-400">
+                  No deposit orders yet.
+                </div>
+              ) : (
+                <div className="divide-y divide-white/10">
+                  {latestDepositOrders.map((order, index) => (
+                    <DepositHistoryItem
+                      key={order.depositOrderId || index}
+                      order={order}
+                      checking={checkingPayment}
+                      onOpen={() => openDepositOrder(order)}
+                      onCheck={() => checkDepositStatus(order.depositOrderId)}
+                    />
+                  ))}
+                </div>
+              )}
+            </aside>
+          </section>
         </div>
       </div>
 
-      {showWithdrawModal && (
-        <WithdrawModal
-          formData={withdrawForm}
-          availableBalance={availableBalance}
-          submitting={submittingWithdraw}
-          error={withdrawError}
-          onChange={updateWithdrawField}
-          onSubmit={handleSubmitWithdraw}
-          onClose={closeWithdrawModal}
+      {showDepositModal && (
+        <DepositModal
+          amount={depositAmount}
+          setAmount={setDepositAmount}
+          order={activeDepositOrder}
+          remainingSeconds={depositCountdown}
+          creating={creatingDeposit}
+          checking={checkingPayment}
+          onClose={closeDepositModal}
+          onSubmit={handleCreateDepositOrder}
+          onCheckStatus={() =>
+            checkDepositStatus(activeDepositOrder?.depositOrderId)
+          }
+          onCopy={copyToClipboard}
+          onGenerateNew={() => {
+            setActiveDepositOrder(null);
+            setDepositAmount("");
+            setDepositCountdown(0);
+            setDepositMinimized(false);
+          }}
+          onContinueCredits={shouldShowCreditReturn ? goToProposalCredits : null}
         />
       )}
+
+      {depositMinimized &&
+        !showDepositModal &&
+        activeDepositOrder &&
+        !isFinalDepositStatus(activeDepositOrder.status) &&
+        depositCountdown > 0 && (
+          <FloatingDepositButton
+            order={activeDepositOrder}
+            remainingSeconds={depositCountdown}
+            onOpen={() => {
+              setDepositMinimized(false);
+              setShowDepositModal(true);
+            }}
+          />
+        )}
     </ExpertLayout>
   );
 }
 
-function WithdrawModal({
-  formData,
-  availableBalance,
-  submitting,
-  error,
-  onChange,
-  onSubmit,
+function DepositModal({
+  amount,
+  setAmount,
+  order,
+  remainingSeconds,
+  creating,
+  checking,
   onClose,
+  onSubmit,
+  onCheckStatus,
+  onCopy,
+  onGenerateNew,
+  onContinueCredits,
 }) {
+  const isPaid = isPaidDepositStatus(order?.status);
+  const isFailed = isFailedDepositStatus(order?.status);
+  const isExpired = order && !isPaid && !isFailed && remainingSeconds <= 0;
+  const qrSource = getQrSource(order);
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 py-5">
-      <div
-        className="absolute inset-0 bg-black/70 backdrop-blur-sm"
-        onClick={onClose}
-      />
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
+      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-[1.4rem] border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+        <div className="flex items-start justify-between gap-4 px-6 pt-6">
+          <div>
+            <h2 className="text-xl font-black text-white">Scan QR to pay</h2>
 
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-[#11161f] shadow-[0_24px_80px_rgba(0,0,0,0.65)]">
-        <div className="border-b border-white/10 bg-white/[0.03] px-5 py-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-green-300">
-                Payout Request
-              </p>
-
-              <h2 className="text-xl font-extrabold text-white">
-                Request a payout
-              </h2>
-
-              <p className="mt-1 text-xs leading-5 text-gray-400">
-                Enter your bank details to request a transfer.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-lg border border-white/10 bg-white/[0.04] p-1.5 text-gray-400 transition hover:text-white disabled:opacity-50"
-            >
-              <span className="material-symbols-outlined text-xl">close</span>
-            </button>
+            <p className="mt-1.5 text-xs leading-5 text-gray-500">
+              Complete this payment within 2 minutes.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating || checking}
+            className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              close
+            </span>
+          </button>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-3 px-5 py-4">
-          <div className="rounded-xl border border-green-400/20 bg-green-400/10 p-3">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-green-300">
-              Available Balance
-            </p>
+        <div className="px-6 pb-6 pt-5">
+          {!order ? (
+            <form onSubmit={onSubmit} className="space-y-4">
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-gray-400">
+                  Amount
+                </span>
 
-            <p className="mt-1 text-xl font-bold text-white">
-              {formatMoney(availableBalance)}
-            </p>
-          </div>
+                <input
+                  type="number"
+                  min="1000"
+                  step="1000"
+                  value={amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                  placeholder="Enter amount in VND"
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-base font-bold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400"
+                />
+              </label>
 
-          {error && (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-              {error}
-            </div>
+              <div className="grid grid-cols-4 gap-2">
+                {quickAmounts.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setAmount(String(item))}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-2 py-2 text-xs font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+                  >
+                    {formatCompactMoney(item)}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                disabled={creating}
+                className="w-full rounded-2xl bg-cyan-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {creating ? "Creating payment..." : "Generate Payment QR"}
+              </button>
+            </form>
+          ) : (
+            <>
+              <div className="mb-4 flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                <div>
+                  <p className="text-xs text-gray-500">Payment time left</p>
+
+                  <p className="mt-1 text-lg font-black text-cyan-300">
+                    {formatRemainingTime(remainingSeconds)}
+                  </p>
+                </div>
+
+                <StatusBadge status={order.status} />
+              </div>
+
+              <div className="mx-auto mb-4 flex h-[220px] w-[220px] items-center justify-center rounded-xl bg-white p-3">
+                {qrSource ? (
+                  <img
+                    src={qrSource}
+                    alt="Payment QR Code"
+                    className="h-full w-full object-contain"
+                  />
+                ) : (
+                  <div className="text-center text-gray-700">
+                    <span className="material-symbols-outlined mb-2 block text-4xl">
+                      qr_code_2
+                    </span>
+                    <p className="text-sm font-bold">QR is not available</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="mb-4 text-center">
+                <p className="text-xs text-gray-500">Amount</p>
+
+                <p className="mt-1 text-2xl font-black text-cyan-300">
+                  {formatMoney(order.amount)}
+                </p>
+              </div>
+
+              <PaymentInformation order={order} onCopy={onCopy} />
+
+              {order.paymentUrl && !isExpired && (
+                <a
+                  href={order.paymentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-4 flex w-full items-center justify-center rounded-2xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                >
+                  Open PayOS Payment Page
+                </a>
+              )}
+
+              {!isPaid && !isFailed && !isExpired && (
+                <button
+                  type="button"
+                  onClick={onCheckStatus}
+                  disabled={checking}
+                  className="mt-4 w-full rounded-2xl border border-yellow-400/40 bg-yellow-400/10 px-4 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {checking ? "Checking payment..." : "Check Payment Status"}
+                </button>
+              )}
+
+              {!isPaid && !isFailed && !isExpired && (
+                <div className="mt-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-3">
+                  <p className="text-sm font-bold text-yellow-200">
+                    Waiting for payment confirmation
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-yellow-100/80">
+                    You can go back to the wallet. The payment button will stay
+                    available until this QR expires.
+                  </p>
+                </div>
+              )}
+
+              {isExpired && (
+                <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-3">
+                  <p className="text-sm font-bold text-red-300">
+                    Payment QR expired
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-red-100/80">
+                    Please generate a new QR code to continue.
+                  </p>
+                </div>
+              )}
+
+              {isPaid && (
+                <div className="mt-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-3 text-sm font-bold text-green-300">
+                  Payment confirmed. Your wallet balance has been updated.
+                </div>
+              )}
+
+              {isFailed && (
+                <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-3 text-sm font-bold text-red-300">
+                  This payment order failed or expired.
+                </div>
+              )}
+
+              {isPaid && onContinueCredits && (
+                <button
+                  type="button"
+                  onClick={onContinueCredits}
+                  className="mt-4 w-full rounded-2xl bg-purple-400 px-4 py-3 text-sm font-black text-black transition hover:bg-purple-300"
+                >
+                  Continue Buying Credits
+                </button>
+              )}
+
+              {isExpired ? (
+                <button
+                  type="button"
+                  onClick={onGenerateNew}
+                  className="mt-4 w-full rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
+                >
+                  Generate New QR
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  disabled={creating || checking}
+                  className="mt-4 w-full rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Back to Wallet
+                </button>
+              )}
+            </>
           )}
-
-          <Input
-            label="Amount"
-            type="number"
-            min="1"
-            value={formData.amount}
-            onChange={(value) => onChange("amount", value)}
-            placeholder="Enter amount"
-            autoFocus
-          />
-
-          <Input
-            label="Bank Name"
-            value={formData.bankName}
-            onChange={(value) => onChange("bankName", value)}
-            placeholder="Vietcombank"
-          />
-
-          <Input
-            label="Bank Account Number"
-            value={formData.bankAccountNumber}
-            onChange={(value) => onChange("bankAccountNumber", value)}
-            placeholder="0123456789"
-          />
-
-          <Input
-            label="Account Holder"
-            value={formData.bankAccountHolder}
-            onChange={(value) => onChange("bankAccountHolder", value)}
-            placeholder="NGUYEN VAN A"
-          />
-
-          <p className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-[11px] leading-5 text-yellow-100">
-            Please double-check your bank account before submitting. Incorrect
-            information may delay your payout.
-          </p>
-
-          <div className="flex gap-3 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Cancel
-            </button>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="flex-1 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {submitting ? "Submitting..." : "Submit Request"}
-            </button>
-          </div>
-        </form>
+        </div>
       </div>
     </div>
   );
 }
 
-function SummaryCard({ icon, label, value, description, tone }) {
+function FloatingDepositButton({ order, remainingSeconds, onOpen }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="fixed bottom-6 right-6 z-[900] flex items-center gap-3 rounded-2xl border border-cyan-400/40 bg-[#111823] px-5 py-4 text-left shadow-[0_18px_60px_rgba(0,0,0,0.45)] transition hover:-translate-y-0.5 hover:border-cyan-300"
+    >
+      <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+        <span className="material-symbols-outlined">qr_code_2</span>
+      </div>
+
+      <div>
+        <p className="text-sm font-black text-white">Payment Pending</p>
+
+        <p className="mt-0.5 text-xs font-bold text-cyan-300">
+          {formatMoney(order?.amount)} • {formatRemainingTime(remainingSeconds)}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+function PaymentInformation({ order, onCopy }) {
+  const accountName = order?.accountName || "";
+  const accountNumber = order?.accountNumber || "";
+  const transferContent = order?.transferContent || "";
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      {accountName && (
+        <PaymentInfoRow
+          label="Account holder"
+          value={accountName}
+          copyable={false}
+          onCopy={onCopy}
+        />
+      )}
+
+      {accountNumber && (
+        <PaymentInfoRow
+          label="Account number"
+          value={accountNumber}
+          copyable
+          onCopy={onCopy}
+        />
+      )}
+
+      <PaymentInfoRow
+        label="Amount"
+        value={formatMoney(order?.amount)}
+        copyable
+        onCopy={onCopy}
+      />
+
+      {transferContent && (
+        <PaymentInfoRow
+          label="Transfer content"
+          value={transferContent}
+          copyable
+          onCopy={onCopy}
+          last
+        />
+      )}
+    </div>
+  );
+}
+
+function PaymentInfoRow({ label, value, copyable, onCopy, last = false }) {
+  return (
+    <div
+      className={`flex items-start justify-between gap-4 ${
+        last ? "" : "mb-3"
+      }`}
+    >
+      <div className="min-w-0">
+        <p className="text-xs text-gray-400">{label}:</p>
+
+        <p className="mt-1 break-words text-sm font-black text-white">
+          {value}
+        </p>
+      </div>
+
+      {copyable && (
+        <button
+          type="button"
+          onClick={() => onCopy(value)}
+          className="shrink-0 rounded-xl bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+        >
+          Copy
+        </button>
+      )}
+    </div>
+  );
+}
+
+function BalanceCard({ label, value, icon, tone }) {
   const toneClass =
-    tone === "green"
-      ? "border-green-400/20 bg-green-400/10 text-green-300"
-      : tone === "yellow"
-      ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+    tone === "cyan"
+      ? "border-cyan-400/20 bg-cyan-400/10 text-cyan-300"
       : tone === "purple"
       ? "border-purple-400/20 bg-purple-400/10 text-purple-300"
-      : "border-cyan-400/20 bg-cyan-400/10 text-[#00F0FF]";
+      : tone === "blue"
+      ? "border-blue-400/20 bg-blue-400/10 text-blue-300"
+      : "border-red-400/20 bg-red-400/10 text-red-300";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <article className="rounded-[1.5rem] border border-white/10 bg-[#151a22] p-7 shadow-[0_15px_45px_rgba(0,0,0,0.22)]">
       <div
-        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}
+        className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border ${toneClass}`}
       >
-        <span className="material-symbols-outlined">{icon}</span>
+        <span className="material-symbols-outlined text-[28px]">{icon}</span>
       </div>
 
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-2 text-2xl font-black text-white">{value}</p>
-      <p className="mt-2 text-xs leading-5 text-gray-500">{description}</p>
-    </div>
+      <p className="text-xs font-black uppercase tracking-[0.28em] text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-4 text-3xl font-black text-white">{value}</p>
+    </article>
   );
 }
 
-function TransactionItem({ transaction }) {
-  const amount = Number(transaction.amount || 0);
-  const positive = amount >= 0;
+function TableHead({ children }) {
+  return (
+    <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.22em] text-gray-500">
+      {children}
+    </th>
+  );
+}
+
+function TransactionRow({ transaction, onOpenMilestone }) {
+  const ui = transaction.ui;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 transition hover:border-cyan-400/30">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-3">
+    <tr className="border-b border-white/10 transition hover:bg-white/[0.025]">
+      <td className="px-6 py-5">
+        <div className="flex items-center gap-3">
           <div
-            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border ${
-              positive
-                ? "border-green-400/20 bg-green-400/10 text-green-300"
-                : "border-red-400/20 bg-red-400/10 text-red-300"
-            }`}
+            className={`flex h-10 w-10 items-center justify-center rounded-xl border ${ui.iconClass}`}
           >
-            <span className="material-symbols-outlined">
-              {positive ? "south_west" : "north_east"}
+            <span className="material-symbols-outlined text-[20px]">
+              {ui.icon}
             </span>
           </div>
 
-          <div>
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <StatusBadge status={transaction.status} />
-
-              {transaction.type && (
-                <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase text-cyan-300">
-                  {formatTransactionType(transaction.type)}
-                </span>
-              )}
-            </div>
-
-            <h3 className="text-sm font-bold text-white">
-              {transaction.description ||
-                formatTransactionType(transaction.type) ||
-                "Wallet activity"}
-            </h3>
-
-            <p className="mt-1 text-xs text-gray-500">
-              {formatDate(transaction.createdAt)}
-            </p>
-          </div>
+          <span className="font-bold text-gray-300">{ui.typeLabel}</span>
         </div>
+      </td>
 
-        <p
-          className={`text-lg font-black ${
-            positive ? "text-green-300" : "text-red-300"
-          }`}
-        >
-          {positive ? "+" : ""}
-          {formatMoney(amount)}
+      <td className="px-6 py-5">
+        <p className="max-w-[360px] truncate font-semibold text-white">
+          {ui.description}
         </p>
-      </div>
-    </div>
+
+        {transaction.milestoneId && (
+          <button
+            type="button"
+            onClick={() => onOpenMilestone(transaction.milestoneId)}
+            className="mt-2 text-xs font-bold text-cyan-300 transition hover:text-cyan-200"
+          >
+            View milestone
+          </button>
+        )}
+      </td>
+
+      <td className="px-6 py-5 text-gray-400">
+        {formatShortDate(transaction.createdAt)}
+      </td>
+
+      <td className="px-6 py-5">
+        <span className={`font-black ${ui.amountClass}`}>
+          {ui.sign}
+          {formatMoney(transaction.amount)}
+        </span>
+      </td>
+
+      <td className="px-6 py-5">
+        <StatusBadge status={transaction.status} />
+      </td>
+    </tr>
   );
 }
 
-function WithdrawalItem({ withdrawal }) {
+function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
+  const isPaid = isPaidDepositStatus(order.status);
+  const isFinal = isFinalDepositStatus(order.status);
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <StatusBadge status={withdrawal.status} />
-
-        <span className="text-xs text-gray-500">
-          {formatDate(withdrawal.createdAt)}
-        </span>
-      </div>
-
-      <div className="flex items-start justify-between gap-4">
+    <article className="p-6">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex w-full items-start justify-between gap-4 text-left"
+      >
         <div>
-          <h3 className="text-sm font-bold text-white">
-            {withdrawal.bankName || "Bank account"}
-          </h3>
-
-          <p className="mt-1 text-xs text-gray-400">
-            {maskBankAccount(withdrawal.bankAccountNumber)}
+          <p className="text-lg font-black text-white">
+            {formatMoney(order.amount)}
           </p>
 
-          <p className="mt-1 text-xs text-gray-400">
-            {withdrawal.bankAccountHolder || "Account holder"}
+          <p className="mt-2 text-sm text-gray-500">
+            PayOS • {formatShortDate(order.createdAt)}
           </p>
 
-          {withdrawal.adminNote && (
-            <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-xs text-gray-300">
-              Review note: {withdrawal.adminNote}
+          {order.transferContent && (
+            <p className="mt-2 max-w-[260px] truncate text-xs text-gray-600">
+              {order.transferContent}
             </p>
           )}
         </div>
 
-        <p className="shrink-0 text-base font-black text-white">
-          {formatMoney(withdrawal.amount)}
-        </p>
-      </div>
-    </div>
-  );
-}
+        <StatusBadge status={order.status} />
+      </button>
 
-function Input({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  min,
-  autoFocus = false,
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.12em] text-gray-400">
-        {label}
-      </span>
-
-      <input
-        type={type}
-        min={min}
-        value={value}
-        autoFocus={autoFocus}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF]"
-      />
-    </label>
-  );
-}
-
-function EmptyState({ icon, title, description, compact = false }) {
-  return (
-    <div
-      className={`rounded-2xl border border-white/10 bg-white/[0.03] text-center ${
-        compact ? "p-6" : "p-8"
-      }`}
-    >
-      <span
-        className={`material-symbols-outlined mb-3 block text-gray-500 ${
-          compact ? "text-4xl" : "text-5xl"
-        }`}
-      >
-        {icon}
-      </span>
-
-      <h3 className="font-bold text-white">{title}</h3>
-
-      <p className="mt-2 text-sm text-gray-500">{description}</p>
-    </div>
+      {!isPaid && !isFinal && order.depositOrderId && (
+        <button
+          type="button"
+          onClick={onCheck}
+          disabled={checking}
+          className="mt-4 w-full rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {checking ? "Checking..." : "Check Status"}
+        </button>
+      )}
+    </article>
   );
 }
 
 function StatusBadge({ status }) {
-  const value = String(status || "PENDING").toUpperCase();
-  const label = getStatusLabel(value);
+  const value = String(status || "").toUpperCase();
 
-  const className =
+  const style =
+    isPaidDepositStatus(value) ||
     value === "SUCCESS" ||
     value === "COMPLETED" ||
     value === "PAID" ||
-    value === "APPROVED"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : value === "PENDING" || value === "LOCKED" || value === "HELD"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : value === "REJECTED" ||
-        value === "FAILED" ||
-        value === "CANCELLED" ||
-        value === "REFUNDED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : "border-gray-400/30 bg-gray-400/10 text-gray-300";
+    value === "RELEASED"
+      ? "border-green-400/20 bg-green-400/10 text-green-300"
+      : value === "PENDING" || value === "PROCESSING" || value === "WAITING"
+      ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+      : "border-red-400/20 bg-red-400/10 text-red-300";
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+      className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${style}`}
     >
-      {label}
+      {formatStatusForUser(value)}
     </span>
   );
 }
 
-function validateWithdrawForm(formData, availableBalance) {
-  const amount = Number(formData.amount);
+function EmptyState() {
+  return (
+    <div className="p-12 text-center">
+      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-600">
+        receipt_long
+      </span>
 
-  if (!formData.amount || Number.isNaN(amount)) {
-    return "Amount is required.";
-  }
+      <h3 className="text-lg font-bold text-white">No transactions yet</h3>
 
-  if (amount <= 0) {
-    return "Amount must be greater than 0.";
-  }
-
-  if (availableBalance > 0 && amount > availableBalance) {
-    return "Payout amount cannot be greater than available balance.";
-  }
-
-  if (!String(formData.bankName || "").trim()) {
-    return "Bank name is required.";
-  }
-
-  if (!String(formData.bankAccountNumber || "").trim()) {
-    return "Bank account number is required.";
-  }
-
-  if (!String(formData.bankAccountHolder || "").trim()) {
-    return "Account holder is required.";
-  }
-
-  return "";
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-400">
+        Your wallet activity will appear here when deposits, payments, or
+        withdrawals are completed.
+      </p>
+    </div>
+  );
 }
 
-function isPendingStatus(status) {
-  return String(status || "").toUpperCase() === "PENDING";
+function Alert({ type, message }) {
+  const style =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-300"
+      : "border-red-500/30 bg-red-500/10 text-red-300";
+
+  return (
+    <div className={`mb-5 rounded-2xl border px-5 py-4 text-sm ${style}`}>
+      {message}
+    </div>
+  );
 }
 
-function isApprovedStatus(status) {
-  return String(status || "").toUpperCase() === "APPROVED";
+function getTransactionPresentation(transaction) {
+  const type = String(transaction.type || "").toUpperCase();
+  const signedAmount = Number(
+    transaction.signedAmount || transaction.amount || 0
+  );
+
+  if (type.includes("DEPOSIT") || type.includes("TOP_UP")) {
+    return {
+      group: "DEPOSIT",
+      typeLabel: "Deposit",
+      description: "Wallet deposit confirmed",
+      icon: "add_card",
+      iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      sign: "+",
+      amountClass: "text-cyan-300",
+    };
+  }
+
+  if (
+    type.includes("PACKAGE") ||
+    type.includes("PROPOSAL_PACKAGE") ||
+    type.includes("SUBSCRIPTION") ||
+    type.includes("PURCHASE")
+  ) {
+    return {
+      group: "PAYMENT",
+      typeLabel: "Package Purchase",
+      description: cleanDescription(
+        transaction.description,
+        "Proposal package purchase"
+      ),
+      icon: "shopping_bag",
+      iconClass: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type.includes("PLATFORM_FEE") || type.includes("FEE")) {
+    return {
+      group: "FEE",
+      typeLabel: "Platform Fee",
+      description: cleanDescription(
+        transaction.description,
+        "Platform service fee"
+      ),
+      icon: "percent",
+      iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type.includes("WITHDRAW")) {
+    return {
+      group: "WITHDRAW",
+      typeLabel: "Withdrawal",
+      description: cleanDescription(
+        transaction.description,
+        "Wallet withdrawal"
+      ),
+      icon: "account_balance",
+      iconClass: "border-orange-400/20 bg-orange-400/10 text-orange-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (
+    type.includes("ESCROW_RECEIVE") ||
+    type.includes("ESCROW_RELEASE") ||
+    type.includes("MILESTONE")
+  ) {
+    const isOutgoing = signedAmount < 0 || transaction.direction === "OUT";
+
+    return {
+      group: isOutgoing ? "PAYMENT" : "INCOME",
+      typeLabel: isOutgoing ? "Escrow Payment" : "Milestone Payment",
+      description: cleanDescription(
+        transaction.description,
+        isOutgoing
+          ? "Escrow payment released"
+          : transaction.milestoneId
+          ? `Payment received for Milestone ${transaction.milestoneId}`
+          : "Milestone payment received"
+      ),
+      icon: isOutgoing ? "logout" : "paid",
+      iconClass: isOutgoing
+        ? "border-red-400/20 bg-red-400/10 text-red-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: isOutgoing ? "-" : "+",
+      amountClass: isOutgoing ? "text-red-300" : "text-green-300",
+    };
+  }
+
+  if (type.includes("REFUND")) {
+    return {
+      group: "INCOME",
+      typeLabel: "Refund",
+      description: cleanDescription(transaction.description, "Wallet refund"),
+      icon: "undo",
+      iconClass: "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: "+",
+      amountClass: "text-green-300",
+    };
+  }
+
+  const isOut = transaction.direction === "OUT" || signedAmount < 0;
+
+  return {
+    group: isOut ? "PAYMENT" : "INCOME",
+    typeLabel: isOut ? "Payment" : "Income",
+    description: cleanDescription(transaction.description, "Wallet transaction"),
+    icon: isOut ? "north_east" : "south_west",
+    iconClass: isOut
+      ? "border-red-400/20 bg-red-400/10 text-red-300"
+      : "border-green-400/20 bg-green-400/10 text-green-300",
+    sign: isOut ? "-" : "+",
+    amountClass: isOut ? "text-red-300" : "text-green-300",
+  };
 }
 
-function getStatusLabel(status) {
+function cleanDescription(description, fallback) {
+  if (!description) return fallback;
+
+  return String(description)
+    .replace(/\[.*?\]\s*/g, "")
+    .replace(/_/g, " ")
+    .trim();
+}
+
+function getQrSource(order) {
+  if (!order) return "";
+
+  const image = order.qrImageUrl || "";
+
+  if (image) return image;
+
+  const qrCode = order.qrCode || "";
+
+  if (!qrCode) return "";
+
+  if (qrCode.startsWith("data:image")) return qrCode;
+
+  if (qrCode.startsWith("http://") || qrCode.startsWith("https://")) {
+    return qrCode;
+  }
+
+  return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
+    qrCode
+  )}`;
+}
+
+function isPaidDepositStatus(status) {
   const value = String(status || "").toUpperCase();
 
-  if (value === "PENDING") return "Pending";
-  if (value === "APPROVED") return "Approved";
-  if (value === "REJECTED") return "Rejected";
-  if (value === "SUCCESS") return "Success";
-  if (value === "COMPLETED") return "Completed";
-  if (value === "PAID") return "Paid";
-  if (value === "FAILED") return "Failed";
-  if (value === "LOCKED") return "Locked";
-  if (value === "HELD") return "Held";
-  if (value === "REFUNDED") return "Refunded";
-
-  return value || "Pending";
+  return ["SUCCESS", "COMPLETED", "PAID", "RELEASED", "CONFIRMED"].includes(
+    value
+  );
 }
 
-function formatTransactionType(type) {
-  const value = String(type || "").replaceAll("_", " ").toLowerCase();
+function isFailedDepositStatus(status) {
+  const value = String(status || "").toUpperCase();
 
-  if (!value) return "";
-
-  return value.replace(/\b\w/g, (char) => char.toUpperCase());
+  return ["FAILED", "CANCELLED", "CANCELED", "EXPIRED", "REJECTED"].includes(
+    value
+  );
 }
 
-function maskBankAccount(value) {
-  const text = String(value || "").trim();
+function isFinalDepositStatus(status) {
+  return isPaidDepositStatus(status) || isFailedDepositStatus(status);
+}
 
-  if (!text) return "Account information unavailable";
-  if (text.length <= 4) return text;
+function formatStatusForUser(status) {
+  const value = String(status || "").toUpperCase();
 
-  return `•••• ${text.slice(-4)}`;
+  if (["SUCCESS", "COMPLETED", "PAID", "RELEASED", "CONFIRMED"].includes(value)) {
+    return "Success";
+  }
+
+  if (["PENDING", "PROCESSING", "WAITING"].includes(value)) {
+    return "Pending";
+  }
+
+  if (["FAILED", "CANCELLED", "CANCELED", "EXPIRED", "REJECTED"].includes(value)) {
+    return "Failed";
+  }
+
+  return formatFriendlyStatus(value);
+}
+
+function formatFriendlyStatus(status) {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getDepositRemainingSeconds(createdAt) {
+  if (!createdAt) return DEPOSIT_EXPIRE_SECONDS;
+
+  const createdTime = new Date(createdAt).getTime();
+
+  if (Number.isNaN(createdTime)) return DEPOSIT_EXPIRE_SECONDS;
+
+  const elapsedSeconds = Math.floor((Date.now() - createdTime) / 1000);
+
+  return Math.max(DEPOSIT_EXPIRE_SECONDS - elapsedSeconds, 0);
+}
+
+function formatRemainingTime(seconds) {
+  const safeSeconds = Math.max(Number(seconds || 0), 0);
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainingSeconds = safeSeconds % 60;
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function formatMoney(value) {
@@ -752,32 +1319,28 @@ function formatMoney(value) {
   }).format(number);
 }
 
-function formatDate(value) {
-  if (!value) return "No date";
+function formatCompactMoney(value) {
+  const number = Number(value || 0);
+
+  if (number >= 1000000) {
+    return `${number / 1000000}M`;
+  }
+
+  if (number >= 1000) {
+    return `${number / 1000}K`;
+  }
+
+  return formatMoney(number);
+}
+
+function formatShortDate(value) {
+  if (!value) return "N/A";
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "No date";
+  if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("vi-VN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-}
-
-function Alert({ type, title, message }) {
-  const style =
-    type === "success"
-      ? "border-green-500/30 bg-green-500/10 text-green-300"
-      : "border-red-500/30 bg-red-500/10 text-red-300";
-
-  return (
-    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
-      <p className="font-bold">{title}</p>
-      <p className="mt-1">{message}</p>
-    </div>
-  );
+  return date.toLocaleDateString("vi-VN");
 }
 
 function getFriendlyError(err, fallback) {

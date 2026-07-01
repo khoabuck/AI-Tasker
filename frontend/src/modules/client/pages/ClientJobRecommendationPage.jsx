@@ -67,7 +67,7 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
   } catch (err) {
     setSendError(
       err?.response?.data?.message ||
-      "Gửi tin nhắn thất bại. Vui lòng thử lại."
+      "Message sending failed. Please try again."
     );
   } finally {
     setSending(false);
@@ -204,10 +204,10 @@ export default function ClientJobRecommendationPage() {
         if (err?.code === "ERR_CANCELED") return; // unmount, bỏ qua
         const msg =
           err?.response?.status === 404
-            ? "Không tìm thấy dữ liệu gợi ý cho job này."
+            ? "No data was found suggesting this job."
             : err?.response?.status === 403
-            ? "Bạn không có quyền xem trang này."
-            : err?.response?.data?.message || "Đã có lỗi xảy ra. Vui lòng thử lại.";
+            ? "You do not have permission to view this page."
+            : err?.response?.data?.message || "An error occurred. Please try again.";
         setError(msg);
       } finally {
         setLoading(false);

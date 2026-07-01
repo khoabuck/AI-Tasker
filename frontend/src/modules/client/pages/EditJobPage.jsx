@@ -4,22 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const SKILL_OPTIONS = [
-  { id: 1,  name: "Chatbot" },
-  { id: 2,  name: "NLP" },
-  { id: 3,  name: "OpenAI API" },
-  { id: 4,  name: "Python" },
-  { id: 5,  name: "Computer Vision" },
-  { id: 6,  name: "OCR" },
-  { id: 7,  name: "Data Analytics" },
-  { id: 8,  name: "Automation" },
-  { id: 9,  name: "Prompt Engineering" },
-  { id: 10, name: "RAG" },
-  { id: 11, name: "SQL" },
-  { id: 12, name: "Power BI" },
-  { id: 13, name: "ASP.NET Core" },
-  { id: 14, name: "SignalR" },
-];
+
 
 const inputStyle = {
   background: "#1d2026",
@@ -77,6 +62,7 @@ export default function EditJobPage() {
   const [form, setForm] = useState(null);
   const [originalStatus, setOriginalStatus] = useState("");
   const [customSkill, setCustomSkill] = useState("");
+  const [skillOptions, setSkillOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -122,15 +108,44 @@ export default function EditJobPage() {
       .catch((err) => {
         if (err?.code === "ERR_CANCELED") return;
         const msg =
-          err?.response?.status === 404 ? "Không tìm thấy job này." :
-          err?.response?.status === 403 ? "Bạn không có quyền chỉnh sửa job này." :
-          "Không thể tải dữ liệu. Vui lòng thử lại.";
+          err?.response?.status === 404 ? "Job not found." :
+          err?.response?.status === 403 ? "You do not have permission to edit this job." :
+          "Unable to load data. Please try again.";
         setFetchError(msg);
       })
       .finally(() => setLoading(false));
 
     return () => controller.abort();
   }, [id]);
+
+  useEffect(() => {
+  const controller = new AbortController();
+
+  axiosInstance
+    .get("/skills", {
+      params: { activeOnly: true },
+      signal: controller.signal,
+    })
+    .then((res) => {
+      const raw = res.data?.data ?? res.data;
+      const items = Array.isArray(raw) ? raw : raw?.items ?? [];
+
+      setSkillOptions(
+        items.map((s) => ({
+          id: s.skillId,
+          name: s.skillName,
+          category: s.category,
+        }))
+      );
+    })
+    .catch((err) => {
+      if (err?.code !== "ERR_CANCELED") {
+        console.error("Load skills failed:", err);
+      }
+    });
+
+  return () => controller.abort();
+}, []);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -164,7 +179,7 @@ export default function EditJobPage() {
   // ── PUT /api/jobs/{id} — lưu thay đổi ─────────────────────────────
   const handleSave = async () => {
     if (!form.title.trim()) {
-      setSaveError("Job title không được để trống.");
+      setSaveError("Job title cannot be empty.");
       return;
     }
     setSaving(true);
@@ -174,7 +189,7 @@ export default function EditJobPage() {
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       navigate("/client/projects");
     } catch (err) {
-      setSaveError(err?.response?.data?.message || "Lưu thất bại. Vui lòng thử lại.");
+      setSaveError(err?.response?.data?.message || "Save failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -183,19 +198,19 @@ export default function EditJobPage() {
   // ── PUT /api/jobs/{id}/submit — submit draft lên OPEN ──────────────
   const handleSubmit = async () => {
     if (!form.title.trim()) {
-      setSaveError("Job title không được để trống.");
+      setSaveError("Job title cannot be empty.");
       return;
     }
-    if (!confirm("Lưu thay đổi và submit job này?")) return;
+    if (!confirm("Save changes and submit this job?")) return;
     setSubmitting(true);
     setSaveError("");
     try {
-      // Lưu thay đổi trước, sau đó submit
+      // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       await axiosInstance.put(`/jobs/${id}/submit`);
       navigate("/client/projects");
     } catch (err) {
-      setSaveError(err?.response?.data?.message || "Submit thất bại. Vui lòng thử lại.");
+      setSaveError(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -397,12 +412,28 @@ export default function EditJobPage() {
             <p style={{ fontSize: 13, color: "#8c90a0", marginBottom: 16 }}>Toggle để thêm hoặc bỏ skill.</p>
 
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-              {SKILL_OPTIONS.map((skill) => {
+              {skillOptions.map((skill) => {
                 const selected = !!form.skills.find((s) => s.id === skill.id);
                 return (
-                  <button key={skill.id} type="button" onClick={() => toggleSkill(skill)}
-                    style={{ padding: "7px 16px", borderRadius: 999, fontSize: 12, fontFamily: "JetBrains Mono, monospace", cursor: "pointer", transition: "all 0.15s", background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", color: selected ? "#00F0FF" : "#8c90a0", border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)", fontWeight: selected ? 700 : 400 }}>
-                    {selected ? "✓ " : ""}{skill.name}
+                  <button
+                    key={skill.id}
+                    type="button"
+                    onClick={() => toggleSkill(skill)}
+                    style={{
+                      padding: "7px 16px",
+                      borderRadius: 999,
+                      fontSize: 12,
+                      fontFamily: "JetBrains Mono, monospace",
+                      cursor: "pointer",
+                      transition: "all 0.15s",
+                      background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)",
+                      color: selected ? "#00F0FF" : "#8c90a0",
+                      border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                      fontWeight: selected ? 700 : 400,
+                    }}
+                  >
+                    {selected ? "✓ " : ""}
+                    {skill.name}
                   </button>
                 );
               })}

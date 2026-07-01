@@ -344,8 +344,9 @@ export default function ContractDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Please review the contract details carefully before accepting.
-                  You may decline if the contract terms are not acceptable.
+                  Please review the contract details carefully. You can accept
+                  or decline only after the client sends the contract for your
+                  confirmation.
                 </p>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -367,8 +368,11 @@ export default function ContractDetailPage() {
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-cyan-100/80">
-                  Once you accept, the contract can move forward to the project
-                  stage based on the platform workflow.
+                  {canRespond
+                    ? "The client has sent this contract for your confirmation. Review it carefully before accepting or declining."
+                    : isDraftContract(status)
+                    ? "This is still a draft contract. You can review the details, but you cannot accept or decline it until the client sends it to you."
+                    : "This contract is no longer waiting for your response."}
                 </p>
 
                 {canRespond && (
@@ -413,7 +417,7 @@ export default function ContractDetailPage() {
             />
           )}
 
-          {showDeclineBox && (
+          {showDeclineBox && canDeclineContract(status) && (
             <section className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-red-200">
                 Reason for declining
@@ -730,6 +734,8 @@ function StatusBadge({ status }) {
     ? "border-green-400/30 bg-green-400/10 text-green-300"
     : isContractDeclined(normalized)
     ? "border-red-400/30 bg-red-400/10 text-red-300"
+    : isDraftContract(normalized)
+    ? "border-white/10 bg-white/[0.04] text-gray-300"
     : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
@@ -1057,6 +1063,26 @@ function normalizeStatus(status) {
   return String(status || "DRAFT").trim().toUpperCase();
 }
 
+function isDraftContract(status) {
+  return ["DRAFT", "CREATED", "PREVIEW"].includes(normalizeStatus(status));
+}
+
+function isContractSentToExpert(status) {
+  return [
+    "PENDING",
+    "PENDING_EXPERT",
+    "PENDING_EXPERT_APPROVAL",
+    "WAITING_EXPERT",
+    "WAITING_EXPERT_CONFIRMATION",
+    "CLIENT_CONFIRMED",
+    "CLIENT_SENT",
+    "SENT",
+    "SENT_TO_EXPERT",
+    "AWAITING_EXPERT",
+    "AWAITING_EXPERT_CONFIRMATION",
+  ].includes(normalizeStatus(status));
+}
+
 function isContractAccepted(status) {
   return ["ACCEPTED", "CONFIRMED", "ACTIVE", "SIGNED"].includes(
     normalizeStatus(status)
@@ -1070,15 +1096,11 @@ function isContractDeclined(status) {
 }
 
 function canAcceptContract(status) {
-  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
-    normalizeStatus(status)
-  );
+  return isContractSentToExpert(status);
 }
 
 function canDeclineContract(status) {
-  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
-    normalizeStatus(status)
-  );
+  return isContractSentToExpert(status);
 }
 
 function getContractStatusLabel(status) {
@@ -1086,9 +1108,19 @@ function getContractStatusLabel(status) {
 
   const map = {
     DRAFT: "Draft",
-    PENDING: "Pending",
+    CREATED: "Draft",
+    PREVIEW: "Draft",
+    PENDING: "Waiting Expert",
+    PENDING_EXPERT: "Waiting Expert",
+    PENDING_EXPERT_APPROVAL: "Waiting Expert",
     WAITING_EXPERT: "Waiting Expert",
+    WAITING_EXPERT_CONFIRMATION: "Waiting Expert",
     CLIENT_CONFIRMED: "Waiting Expert",
+    CLIENT_SENT: "Waiting Expert",
+    SENT: "Waiting Expert",
+    SENT_TO_EXPERT: "Waiting Expert",
+    AWAITING_EXPERT: "Waiting Expert",
+    AWAITING_EXPERT_CONFIRMATION: "Waiting Expert",
     ACCEPTED: "Accepted",
     CONFIRMED: "Confirmed",
     ACTIVE: "Active",
@@ -1105,10 +1137,10 @@ function getContractStatusLabel(status) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 

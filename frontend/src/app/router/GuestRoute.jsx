@@ -4,7 +4,13 @@ import { useAuth } from "../../context/AuthContext";
 export default function GuestRoute({ children }) {
   const { isAuthenticated, loading, user } = useAuth();
 
-  if (loading) return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0f1116] text-gray-400 text-sm">
+        Đang tải...
+      </div>
+    );
+  }
 
   // Logic của Minh: nếu chưa login hoặc chưa có user thì cho vào guest page
   if (!isAuthenticated || !user) {

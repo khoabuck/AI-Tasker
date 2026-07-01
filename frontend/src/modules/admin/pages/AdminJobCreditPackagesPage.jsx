@@ -38,6 +38,10 @@ export default function AdminJobCreditPackagesPage() {
     loadPackages();
   }, []);
 
+  useEffect(() => {
+    ensureHiddenScrollbarStyle();
+  }, []);
+
   const filteredPackages = useMemo(() => {
     const search = keyword.trim().toLowerCase();
 
@@ -423,6 +427,30 @@ export default function AdminJobCreditPackagesPage() {
   );
 }
 
+
+function ensureHiddenScrollbarStyle() {
+  if (typeof document === "undefined") return;
+
+  const styleId = "admin-package-modal-scrollbar-hidden";
+
+  if (document.getElementById(styleId)) return;
+
+  const style = document.createElement("style");
+  style.id = styleId;
+  style.innerHTML = `
+    .hide-modal-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+
+    .hide-modal-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+  `;
+
+  document.head.appendChild(style);
+}
+
 function PackageRow({
   packageItem,
   disabled,
@@ -514,16 +542,16 @@ function PackageFormModal({
   onChange,
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-3xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
-        <div className="border-b border-white/10 px-6 py-5">
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-gray-400">
+    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
+      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-5 py-4">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <p className="mt-1 text-xs text-gray-400">
             Fill package information and provide an admin reason.
           </p>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
+        <div className="hide-modal-scrollbar max-h-[68vh] space-y-4 overflow-y-auto px-5 py-4">
           <TextInput
             label="Package Name"
             value={form.packageName}
@@ -536,9 +564,10 @@ function PackageFormModal({
             value={form.description}
             onChange={(value) => onChange("description", value)}
             placeholder="Describe what this package includes."
+            rows={3}
           />
 
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <NumberInput
               label="Job Post Credits"
               value={form.jobPostCredits}
@@ -572,7 +601,7 @@ function PackageFormModal({
             />
 
             <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+              <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
                 Active
               </label>
 
@@ -581,7 +610,7 @@ function PackageFormModal({
                 onChange={(event) =>
                   onChange("isActive", event.target.value === "true")
                 }
-                className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+                className="h-10 w-full rounded-xl border border-white/10 bg-[#0d1117] px-3 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
               >
                 <option value="true">Active</option>
                 <option value="false">Inactive</option>
@@ -594,15 +623,16 @@ function PackageFormModal({
             value={form.reason}
             onChange={(value) => onChange("reason", value)}
             placeholder="Example: Create new client package."
+            rows={3}
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -611,7 +641,7 @@ function PackageFormModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Saving..." : "Save Package"}
           </button>
@@ -638,28 +668,29 @@ function ReasonModal({
       : "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-8">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
-        <div className="border-b border-white/10 px-6 py-5">
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-5 py-4">
+          <h2 className="text-lg font-bold text-white">{title}</h2>
+          <p className="mt-1 text-xs text-gray-400">{subtitle}</p>
         </div>
 
-        <div className="px-6 py-5">
+        <div className="px-5 py-4">
           <TextArea
             label="Reason"
             value={reason}
             onChange={onReasonChange}
             placeholder="Enter admin reason."
+            rows={3}
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-5 py-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Cancel
           </button>
@@ -668,7 +699,7 @@ function ReasonModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className={`rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -728,7 +759,7 @@ function FilterSelect({ label, value, options, onChange }) {
 function TextInput({ label, value, onChange, placeholder }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
       </label>
 
@@ -736,7 +767,7 @@ function TextInput({ label, value, onChange, placeholder }) {
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
       />
     </div>
   );
@@ -745,7 +776,7 @@ function TextInput({ label, value, onChange, placeholder }) {
 function NumberInput({ label, value, onChange, step = "1" }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
       </label>
 
@@ -755,25 +786,25 @@ function NumberInput({ label, value, onChange, step = "1" }) {
         step={step}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none focus:border-cyan-400/50"
+        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-400/50"
       />
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+      <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
       </label>
 
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={4}
+        rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
       />
     </div>
   );
@@ -878,21 +909,17 @@ function validateForm(form) {
 function formatMoney(value, currency = "VND") {
   const number = Number(value || 0);
 
-  try {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: currency || "VND",
-      maximumFractionDigits: 2,
-    }).format(Number.isNaN(number) ? 0 : number);
-  } catch {
-    return `${formatNumber(number)} ${currency || ""}`;
-  }
+  return `${new Intl.NumberFormat("vi-VN", {
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number)} ${
+    currency === "VND" ? "đ" : currency || ""
+  }`;
 }
 
 function formatNumber(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US").format(
+  return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
 }

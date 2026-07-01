@@ -6,23 +6,24 @@ const getValue = (...values) => {
   );
 };
 
-const trim = (value) => String(value || "").trim();
-
 const toNumber = (value, fallback = 0) => {
   const number = Number(value);
   return Number.isNaN(number) ? fallback : number;
 };
 
-const toInteger = (value, fallback = 0) => {
-  const number = Number(value);
-
-  if (Number.isNaN(number)) return fallback;
-
-  return Math.trunc(number);
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
 };
 
-const isInvalidId = (value) => {
-  return !value || value === "undefined" || value === "null";
+const trimOrNull = (value) => {
+  const nextValue = String(value ?? "").trim();
+  return nextValue ? nextValue : null;
 };
 
 const unwrapData = (response) => {
@@ -31,11 +32,13 @@ const unwrapData = (response) => {
   if (!data) return null;
 
   if (data?.data?.proposal) return data.data.proposal;
+  if (data?.data?.draft) return data.data.draft;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
   if (data?.data) return data.data;
 
   if (data?.proposal) return data.proposal;
+  if (data?.draft) return data.draft;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
 
@@ -51,86 +54,61 @@ const unwrapListData = (response) => {
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.proposals)) return data.proposals;
-  if (Array.isArray(data?.versions)) return data.versions;
+  if (Array.isArray(data?.drafts)) return data.drafts;
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
   if (Array.isArray(data?.data?.proposals)) return data.data.proposals;
-  if (Array.isArray(data?.data?.versions)) return data.data.versions;
+  if (Array.isArray(data?.data?.drafts)) return data.data.drafts;
 
   return [];
 };
 
-const hasAnyMilestoneValue = (milestone = {}) => {
-  return (
-    trim(milestone.title) ||
-    trim(milestone.amount) ||
-    trim(milestone.durationDays) ||
-    trim(milestone.deadlineOffsetDays)
-  );
-};
-
-export const normalizeProposalMilestone = (milestone, index = 0) => {
+const normalizeMilestone = (milestone) => {
   if (!milestone) return null;
 
-  const durationDays = getValue(
-    milestone.durationDays,
-    milestone.DurationDays,
-    milestone.deadlineOffsetDays,
-    milestone.DeadlineOffsetDays,
-    0
-  );
+  const raw = milestone.raw || milestone.Raw || milestone;
 
   return {
-    proposalMilestoneId: getValue(
-      milestone.proposalMilestoneId,
-      milestone.ProposalMilestoneId,
-      milestone.proposalMilestoneDraftId,
-      milestone.ProposalMilestoneDraftId,
-      milestone.id,
-      milestone.Id,
-      index
-    ),
-
-    id: getValue(
-      milestone.proposalMilestoneId,
-      milestone.ProposalMilestoneId,
-      milestone.proposalMilestoneDraftId,
-      milestone.ProposalMilestoneDraftId,
-      milestone.id,
-      milestone.Id,
-      index
-    ),
-
-    title: getValue(milestone.title, milestone.Title, `Milestone ${index + 1}`),
-
-    amount: toNumber(getValue(milestone.amount, milestone.Amount, 0)),
-
-    durationDays: toInteger(durationDays, 0),
-
-    description: getValue(milestone.description, milestone.Description, ""),
-
-    expectedDeliverable: getValue(
-      milestone.expectedDeliverable,
-      milestone.ExpectedDeliverable,
+    title: getValue(
+      milestone.title,
+      milestone.Title,
+      milestone.milestoneTitle,
+      milestone.MilestoneTitle,
+      raw.title,
+      raw.Title,
+      raw.milestoneTitle,
+      raw.MilestoneTitle,
       ""
     ),
 
-    acceptanceCriteria: getValue(
-      milestone.acceptanceCriteria,
-      milestone.AcceptanceCriteria,
-      ""
+    amount: toNumber(
+      getValue(
+        milestone.amount,
+        milestone.Amount,
+        milestone.proposedAmount,
+        milestone.ProposedAmount,
+        raw.amount,
+        raw.Amount,
+        raw.proposedAmount,
+        raw.ProposedAmount,
+        0
+      ),
+      0
     ),
 
-    orderIndex: toInteger(
-      getValue(milestone.orderIndex, milestone.OrderIndex, index + 1),
-      index + 1
-    ),
-
-    deadlineOffsetDays: toInteger(durationDays, 0),
-
-    revisionLimit: toInteger(
-      getValue(milestone.revisionLimit, milestone.RevisionLimit, 0),
+    durationDays: toNumber(
+      getValue(
+        milestone.durationDays,
+        milestone.DurationDays,
+        milestone.estimatedDays,
+        milestone.EstimatedDays,
+        raw.durationDays,
+        raw.DurationDays,
+        raw.estimatedDays,
+        raw.EstimatedDays,
+        0
+      ),
       0
     ),
 
@@ -138,121 +116,93 @@ export const normalizeProposalMilestone = (milestone, index = 0) => {
   };
 };
 
-const normalizeMilestones = (milestones = []) => {
-  if (!Array.isArray(milestones)) return [];
-
-  return milestones
-    .map((milestone, index) => normalizeProposalMilestone(milestone, index))
-    .filter(Boolean);
-};
-
-const parseMilestonePlanJson = (value) => {
-  if (!value) return [];
-
-  if (Array.isArray(value)) return normalizeMilestones(value);
-
-  if (typeof value === "object") {
-    return normalizeMilestones(extractMilestoneArray(value));
-  }
-
-  try {
-    const parsed = JSON.parse(String(value));
-
-    if (typeof parsed === "string") {
-      return parseMilestonePlanJson(parsed);
-    }
-
-    return normalizeMilestones(extractMilestoneArray(parsed));
-  } catch {
-    return [];
-  }
-};
-
-const extractMilestoneArray = (value) => {
-  if (Array.isArray(value)) return value;
-
-  if (!value || typeof value !== "object") return [];
-
-  if (Array.isArray(value.milestones)) return value.milestones;
-  if (Array.isArray(value.Milestones)) return value.Milestones;
-
-  if (Array.isArray(value.milestoneDrafts)) return value.milestoneDrafts;
-  if (Array.isArray(value.MilestoneDrafts)) return value.MilestoneDrafts;
-
-  if (Array.isArray(value.proposalMilestones)) return value.proposalMilestones;
-  if (Array.isArray(value.ProposalMilestones)) return value.ProposalMilestones;
-
-  if (Array.isArray(value.items)) return value.items;
-  if (Array.isArray(value.Items)) return value.Items;
-
-  if (Array.isArray(value.data)) return value.data;
-  if (Array.isArray(value.Data)) return value.Data;
-
-  return [];
-};
-
 export const normalizeProposal = (proposal) => {
   if (!proposal) return null;
+
+  const raw = proposal.raw || proposal.Raw || proposal;
 
   const proposalId = getValue(
     proposal.proposalId,
     proposal.ProposalId,
     proposal.id,
-    proposal.Id
+    proposal.Id,
+    raw.proposalId,
+    raw.ProposalId,
+    raw.id,
+    raw.Id,
+    ""
   );
 
   const jobId = getValue(
     proposal.jobId,
     proposal.JobId,
+    proposal.jobPostingId,
+    proposal.JobPostingId,
+    proposal.relatedJobId,
+    proposal.RelatedJobId,
     proposal.job?.jobId,
+    proposal.job?.id,
     proposal.Job?.JobId,
-    proposal.projectId,
-    proposal.ProjectId
-  );
-
-  const status = String(getValue(proposal.status, proposal.Status, "PENDING"))
-    .trim()
-    .toUpperCase();
-
-  const milestonePlanJson = getValue(
-    proposal.milestonePlanJson,
-    proposal.MilestonePlanJson,
-    proposal.milestonesJson,
-    proposal.MilestonesJson,
-    proposal.milestoneDraftsJson,
-    proposal.MilestoneDraftsJson,
+    proposal.Job?.Id,
+    raw.jobId,
+    raw.JobId,
+    raw.jobPostingId,
+    raw.JobPostingId,
+    raw.relatedJobId,
+    raw.RelatedJobId,
+    raw.job?.jobId,
+    raw.job?.id,
+    raw.Job?.JobId,
+    raw.Job?.Id,
     ""
   );
 
-  const directMilestones = getValue(
+  const jobTitle = getValue(
+    proposal.jobTitle,
+    proposal.JobTitle,
+    proposal.title,
+    proposal.Title,
+    proposal.job?.title,
+    proposal.job?.jobTitle,
+    proposal.Job?.Title,
+    proposal.Job?.JobTitle,
+    raw.jobTitle,
+    raw.JobTitle,
+    raw.title,
+    raw.Title,
+    raw.job?.title,
+    raw.job?.jobTitle,
+    raw.Job?.Title,
+    raw.Job?.JobTitle,
+    "Untitled Job"
+  );
+
+  const milestonesRaw = getValue(
     proposal.milestones,
     proposal.Milestones,
     proposal.proposalMilestones,
     proposal.ProposalMilestones,
-    proposal.milestoneDrafts,
-    proposal.MilestoneDrafts,
+    raw.milestones,
+    raw.Milestones,
+    raw.proposalMilestones,
+    raw.ProposalMilestones,
     []
   );
-
-  const milestones =
-    Array.isArray(directMilestones) && directMilestones.length > 0
-      ? normalizeMilestones(directMilestones)
-      : parseMilestonePlanJson(milestonePlanJson);
 
   return {
     proposalId,
     id: proposalId,
 
     jobId,
+    jobPostingId: jobId,
+    jobTitle,
 
-    jobTitle: getValue(
-      proposal.jobTitle,
-      proposal.JobTitle,
-      proposal.job?.title,
-      proposal.Job?.Title,
-      proposal.projectTitle,
-      proposal.ProjectTitle,
-      "Untitled Job"
+    expertProfileId: getValue(
+      proposal.expertProfileId,
+      proposal.ExpertProfileId,
+      raw.expertProfileId,
+      raw.ExpertProfileId,
+      ""
     ),
 
     clientName: getValue(
@@ -260,423 +210,327 @@ export const normalizeProposal = (proposal) => {
       proposal.ClientName,
       proposal.client?.fullName,
       proposal.Client?.FullName,
-      proposal.job?.clientName,
+      raw.clientName,
+      raw.ClientName,
+      raw.client?.fullName,
+      raw.Client?.FullName,
       "Client"
     ),
 
-    expertName: getValue(
-      proposal.expertName,
-      proposal.ExpertName,
-      proposal.expert?.fullName,
-      proposal.Expert?.FullName,
-      "Expert"
+    coverLetter: getValue(
+      proposal.coverLetter,
+      proposal.CoverLetter,
+      raw.coverLetter,
+      raw.CoverLetter,
+      ""
     ),
-
-    coverLetter: getValue(proposal.coverLetter, proposal.CoverLetter, ""),
 
     proposedPrice: toNumber(
       getValue(
         proposal.proposedPrice,
         proposal.ProposedPrice,
-        proposal.proposedBudget,
-        proposal.ProposedBudget,
-        proposal.bidAmount,
-        proposal.BidAmount,
+        proposal.price,
+        proposal.Price,
+        raw.proposedPrice,
+        raw.ProposedPrice,
+        raw.price,
+        raw.Price,
         0
-      )
+      ),
+      0
     ),
 
-    proposedTimelineDays: toInteger(
+    proposedTimelineDays: toNumber(
       getValue(
         proposal.proposedTimelineDays,
         proposal.ProposedTimelineDays,
-        proposal.estimatedDurationDays,
-        proposal.EstimatedDurationDays,
+        proposal.timelineDays,
+        proposal.TimelineDays,
+        raw.proposedTimelineDays,
+        raw.ProposedTimelineDays,
+        raw.timelineDays,
+        raw.TimelineDays,
         0
-      )
+      ),
+      0
     ),
 
     expectedOutputs: getValue(
       proposal.expectedOutputs,
       proposal.ExpectedOutputs,
+      raw.expectedOutputs,
+      raw.ExpectedOutputs,
       ""
     ),
 
     workingApproach: getValue(
       proposal.workingApproach,
       proposal.WorkingApproach,
-      proposal.workPlan,
-      proposal.WorkPlan,
+      raw.workingApproach,
+      raw.WorkingApproach,
       ""
     ),
 
     preliminaryMilestonePlan: getValue(
       proposal.preliminaryMilestonePlan,
       proposal.PreliminaryMilestonePlan,
-      proposal.milestonePlan,
-      proposal.MilestonePlan,
+      raw.preliminaryMilestonePlan,
+      raw.PreliminaryMilestonePlan,
       ""
     ),
 
-    milestonePlanJson,
+    milestones: Array.isArray(milestonesRaw)
+      ? milestonesRaw.map(normalizeMilestone).filter(Boolean)
+      : [],
 
-    milestones,
+    status: String(
+      getValue(proposal.status, proposal.Status, raw.status, raw.Status, "DRAFT")
+    ).toUpperCase(),
 
-    status,
-
-    rejectionReason: getValue(
-      proposal.rejectionReason,
-      proposal.RejectionReason,
-      proposal.rejectReason,
-      proposal.RejectReason,
+    createdAt: getValue(
+      proposal.createdAt,
+      proposal.CreatedAt,
+      raw.createdAt,
+      raw.CreatedAt,
       ""
     ),
 
-    decisionNote: getValue(
-      proposal.decisionNote,
-      proposal.DecisionNote,
-      proposal.note,
-      proposal.Note,
+    updatedAt: getValue(
+      proposal.updatedAt,
+      proposal.UpdatedAt,
+      raw.updatedAt,
+      raw.UpdatedAt,
       ""
     ),
 
-    counterMessage: getValue(
-      proposal.counterMessage,
-      proposal.CounterMessage,
-      proposal.clientMessage,
-      proposal.ClientMessage,
+    submittedAt: getValue(
+      proposal.submittedAt,
+      proposal.SubmittedAt,
+      raw.submittedAt,
+      raw.SubmittedAt,
       ""
     ),
-
-    resubmitNote: getValue(proposal.resubmitNote, proposal.ResubmitNote, ""),
-
-    version: getValue(
-      proposal.version,
-      proposal.Version,
-      proposal.versionNumber,
-      proposal.VersionNumber,
-      null
-    ),
-
-    latestVersion: getValue(
-      proposal.latestVersion,
-      proposal.LatestVersion,
-      null
-    ),
-
-    latestVersionNumber: getValue(
-      proposal.latestVersionNumber,
-      proposal.LatestVersionNumber,
-      null
-    ),
-
-    totalVersions: getValue(proposal.totalVersions, proposal.TotalVersions, 0),
-
-    contractId: getValue(
-      proposal.contractId,
-      proposal.ContractId,
-      proposal.contract?.contractId,
-      proposal.Contract?.ContractId,
-      null
-    ),
-
-    projectId: getValue(
-      proposal.projectId,
-      proposal.ProjectId,
-      proposal.project?.projectId,
-      proposal.Project?.ProjectId,
-      null
-    ),
-
-    lastResubmittedAt: getValue(
-      proposal.lastResubmittedAt,
-      proposal.LastResubmittedAt,
-      ""
-    ),
-
-    remainingResubmitsInWindow: getValue(
-      proposal.remainingResubmitsInWindow,
-      proposal.RemainingResubmitsInWindow,
-      null
-    ),
-
-    resubmitLimit: getValue(proposal.resubmitLimit, proposal.ResubmitLimit, null),
-
-    resubmitWindowHours: getValue(
-      proposal.resubmitWindowHours,
-      proposal.ResubmitWindowHours,
-      null
-    ),
-
-    createdAt: getValue(proposal.createdAt, proposal.CreatedAt, ""),
-    updatedAt: getValue(proposal.updatedAt, proposal.UpdatedAt, ""),
-    submittedAt: getValue(proposal.submittedAt, proposal.SubmittedAt, ""),
-    decidedAt: getValue(proposal.decidedAt, proposal.DecidedAt, ""),
 
     raw: proposal,
   };
 };
 
-export const normalizeProposalVersion = (version) => {
-  if (!version) return null;
-
-  const milestonePlanJson = getValue(
-    version.milestonePlanJson,
-    version.MilestonePlanJson,
-    version.milestonesJson,
-    version.MilestonesJson,
-    version.milestoneDraftsJson,
-    version.MilestoneDraftsJson,
-    ""
-  );
-
-  const directMilestones = getValue(
-    version.milestones,
-    version.Milestones,
-    version.proposalMilestones,
-    version.ProposalMilestones,
-    version.milestoneDrafts,
-    version.MilestoneDrafts,
-    []
-  );
-
-  const milestones =
-    Array.isArray(directMilestones) && directMilestones.length > 0
-      ? normalizeMilestones(directMilestones)
-      : parseMilestonePlanJson(milestonePlanJson);
-
-  const versionNumber = getValue(
-    version.versionNumber,
-    version.VersionNumber,
-    version.version,
-    version.Version,
-    null
-  );
+const buildMilestonePayload = (milestone, options = {}) => {
+  const isDraft = options.draft === true;
 
   return {
-    proposalVersionId: getValue(
-      version.proposalVersionId,
-      version.ProposalVersionId,
-      version.versionId,
-      version.VersionId,
-      version.id,
-      version.Id,
-      null
-    ),
-
-    proposalId: getValue(version.proposalId, version.ProposalId, null),
-
-    versionNumber,
-
-    version: versionNumber,
-
-    coverLetter: getValue(version.coverLetter, version.CoverLetter, ""),
-
-    proposedPrice: toNumber(
-      getValue(
-        version.proposedPrice,
-        version.ProposedPrice,
-        version.proposedBudget,
-        version.ProposedBudget,
-        version.bidAmount,
-        version.BidAmount,
-        0
-      )
-    ),
-
-    proposedTimelineDays: toInteger(
-      getValue(
-        version.proposedTimelineDays,
-        version.ProposedTimelineDays,
-        version.estimatedDurationDays,
-        version.EstimatedDurationDays,
-        0
-      )
-    ),
-
-    expectedOutputs: getValue(
-      version.expectedOutputs,
-      version.ExpectedOutputs,
-      ""
-    ),
-
-    workingApproach: getValue(
-      version.workingApproach,
-      version.WorkingApproach,
-      ""
-    ),
-
-    preliminaryMilestonePlan: getValue(
-      version.preliminaryMilestonePlan,
-      version.PreliminaryMilestonePlan,
-      ""
-    ),
-
-    milestonePlanJson,
-
-    milestones,
-
-    resubmitNote: getValue(
-      version.resubmitNote,
-      version.ResubmitNote,
-      version.changeNote,
-      version.ChangeNote,
-      version.note,
-      version.Note,
-      ""
-    ),
-
-    changeNote: getValue(
-      version.changeNote,
-      version.ChangeNote,
-      version.resubmitNote,
-      version.ResubmitNote,
-      version.note,
-      version.Note,
-      ""
-    ),
-
-    createdByUserId: getValue(
-      version.createdByUserId,
-      version.CreatedByUserId,
-      null
-    ),
-
-    createdByName: getValue(
-      version.createdByName,
-      version.CreatedByName,
-      version.expertName,
-      version.ExpertName,
-      "Expert"
-    ),
-
-    createdAt: getValue(version.createdAt, version.CreatedAt, ""),
-
-    raw: version,
+    title: trimOrNull(milestone.title),
+    amount:
+      isDraft && String(milestone.amount ?? "").trim() === ""
+        ? null
+        : toNumber(milestone.amount, 0),
+    durationDays:
+      isDraft && String(milestone.durationDays ?? "").trim() === ""
+        ? null
+        : toNumber(milestone.durationDays, 0),
   };
 };
 
-const buildMilestonePayload = (milestone = {}) => {
-  return {
-    title: trim(milestone.title),
-    amount: toNumber(milestone.amount, 0),
-    durationDays: toInteger(
-      getValue(milestone.durationDays, milestone.deadlineOffsetDays, 0),
-      0
-    ),
-  };
-};
+export const buildProposalPayload = (jobId, formData, options = {}) => {
+  const isDraft = options.draft === true;
 
-export const buildProposalPayload = (formData = {}, options = {}) => {
-  const milestones = Array.isArray(formData.milestones)
+  const normalizedJobId = toNumber(jobId, 0);
+
+  const milestones = Array.isArray(formData?.milestones)
     ? formData.milestones
-        .filter(hasAnyMilestoneValue)
-        .map((milestone) => buildMilestonePayload(milestone))
+        .map((milestone) => buildMilestonePayload(milestone, options))
+        .filter((milestone) => {
+          if (!isDraft) return true;
+
+          return (
+            milestone.title ||
+            milestone.amount !== null ||
+            milestone.durationDays !== null
+          );
+        })
     : [];
 
-  const payload = {
-    jobId: toInteger(formData.jobId, 0),
-    coverLetter: trim(formData.coverLetter),
-    proposedPrice: toNumber(formData.proposedPrice, 0),
-    proposedTimelineDays: toInteger(formData.proposedTimelineDays, 0),
-    expectedOutputs: trim(formData.expectedOutputs),
-    workingApproach: trim(formData.workingApproach),
-    preliminaryMilestonePlan: trim(formData.preliminaryMilestonePlan),
+  return {
+    jobId: normalizedJobId,
+    jobPostingId: normalizedJobId,
+
+    coverLetter: isDraft
+      ? trimOrNull(formData?.coverLetter)
+      : String(formData?.coverLetter || "").trim(),
+
+    proposedPrice:
+      isDraft && String(formData?.proposedPrice ?? "").trim() === ""
+        ? null
+        : toNumber(formData?.proposedPrice, 0),
+
+    proposedTimelineDays:
+      isDraft && String(formData?.proposedTimelineDays ?? "").trim() === ""
+        ? null
+        : toNumber(formData?.proposedTimelineDays, 0),
+
+    expectedOutputs: isDraft
+      ? trimOrNull(formData?.expectedOutputs)
+      : String(formData?.expectedOutputs || "").trim(),
+
+    workingApproach: isDraft
+      ? trimOrNull(formData?.workingApproach)
+      : String(formData?.workingApproach || "").trim(),
+
+    preliminaryMilestonePlan: isDraft
+      ? trimOrNull(formData?.preliminaryMilestonePlan)
+      : String(formData?.preliminaryMilestonePlan || "").trim(),
+
     milestones,
   };
+};
 
-  if (options.isResubmit) {
+export const mapProposalToForm = (proposal) => {
+  const normalized = normalizeProposal(proposal);
+
+  if (!normalized) {
     return {
-      coverLetter: payload.coverLetter,
-      proposedPrice: payload.proposedPrice,
-      proposedTimelineDays: payload.proposedTimelineDays,
-      expectedOutputs: payload.expectedOutputs,
-      workingApproach: payload.workingApproach,
-      preliminaryMilestonePlan: payload.preliminaryMilestonePlan,
-      milestones: payload.milestones,
-      resubmitNote: trim(formData.resubmitNote),
+      coverLetter: "",
+      proposedPrice: "",
+      proposedTimelineDays: "",
+      expectedOutputs: "",
+      workingApproach: "",
+      preliminaryMilestonePlan: "",
+      milestones: [{ title: "", amount: "", durationDays: "" }],
     };
   }
 
-  return payload;
+  return {
+    coverLetter: normalized.coverLetter || "",
+    proposedPrice:
+      normalized.proposedPrice || normalized.proposedPrice === 0
+        ? String(normalized.proposedPrice)
+        : "",
+    proposedTimelineDays:
+      normalized.proposedTimelineDays || normalized.proposedTimelineDays === 0
+        ? String(normalized.proposedTimelineDays)
+        : "",
+    expectedOutputs: normalized.expectedOutputs || "",
+    workingApproach: normalized.workingApproach || "",
+    preliminaryMilestonePlan: normalized.preliminaryMilestonePlan || "",
+    milestones:
+      normalized.milestones.length > 0
+        ? normalized.milestones.map((milestone) => ({
+            title: milestone.title || "",
+            amount:
+              milestone.amount || milestone.amount === 0
+                ? String(milestone.amount)
+                : "",
+            durationDays:
+              milestone.durationDays || milestone.durationDays === 0
+                ? String(milestone.durationDays)
+                : "",
+          }))
+        : [{ title: "", amount: "", durationDays: "" }],
+  };
 };
 
-export const getFriendlyProposalError = (
-  error,
-  fallback = "Something went wrong."
-) => {
-  const payload =
-    error?.originalError?.response?.data ||
-    error?.response?.data ||
-    error?.data ||
-    error;
+const sortNewestFirst = (items) => {
+  return [...items].sort((a, b) => {
+    const dateA = new Date(
+      a.updatedAt || a.submittedAt || a.createdAt || 0
+    ).getTime();
+    const dateB = new Date(
+      b.updatedAt || b.submittedAt || b.createdAt || 0
+    ).getTime();
 
-  const message =
-    typeof payload === "string"
-      ? payload
-      : payload?.message ||
-        payload?.title ||
-        payload?.detail ||
-        payload?.error ||
-        error?.message ||
-        "";
-
-  if (message.includes("already submitted")) {
-    return "You have already submitted a proposal for this job.";
-  }
-
-  if (message.includes("not found")) {
-    return "This proposal or job could not be found.";
-  }
-
-  if (message.includes("Total milestone amount")) {
-    return "Total milestone amount must match the proposed price.";
-  }
-
-  if (message.includes("Total milestone duration")) {
-    return "Total milestone duration cannot exceed the proposed timeline.";
-  }
-
-  if (message.includes("Milestone") || message.includes("milestone")) {
-    return "Please check your milestone title, amount, and duration.";
-  }
-
-  if (message.includes("RevisionLimit")) {
-    return "Backend database still requires an old milestone field. Please ask BE to set a default RevisionLimit.";
-  }
-
-  if (message.includes("not open")) {
-    return "This job is not open for proposal submission.";
-  }
-
-  if (message.includes("withdraw") || message.includes("cancel")) {
-    return "This proposal cannot be cancelled right now.";
-  }
-
-  return message || fallback;
+    return dateB - dateA;
+  });
 };
 
 const proposalService = {
-  async submitProposal(formDataOrJobId, maybeFormData) {
-    const formData =
-      typeof formDataOrJobId === "object"
-        ? formDataOrJobId
-        : {
-            ...(maybeFormData || {}),
-            jobId: formDataOrJobId,
-          };
+  async submitProposal(jobId, formData) {
+    if (isInvalidId(jobId)) {
+      throw new Error("Invalid job id.");
+    }
 
-    const payload = buildProposalPayload(formData);
-
-    const response = await proposalApi.submitProposal(payload);
+    const response = await proposalApi.submitProposal(
+      buildProposalPayload(jobId, formData, { draft: false })
+    );
 
     return normalizeProposal(unwrapData(response));
   },
 
-  async getMyProposals(params = {}) {
-    const response = await proposalApi.getMyProposals(params);
+  async getMyProposals() {
+    const response = await proposalApi.getMyProposals();
 
-    return unwrapListData(response).map(normalizeProposal).filter(Boolean);
+    return sortNewestFirst(
+      unwrapListData(response).map(normalizeProposal).filter(Boolean)
+    );
+  },
+
+  async getMyDraftProposals() {
+    const response = await proposalApi.getMyDraftProposals();
+
+    return sortNewestFirst(
+      unwrapListData(response).map(normalizeProposal).filter(Boolean)
+    );
+  },
+
+  async createDraftProposal(jobId, formData) {
+    if (isInvalidId(jobId)) {
+      throw new Error("Invalid job id.");
+    }
+
+    const response = await proposalApi.createDraftProposal(
+      buildProposalPayload(jobId, formData, { draft: true })
+    );
+
+    return normalizeProposal(unwrapData(response));
+  },
+
+  async updateDraftProposal(proposalId, jobId, formData) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid draft id.");
+    }
+
+    const response = await proposalApi.updateDraftProposal(
+      proposalId,
+      buildProposalPayload(jobId, formData, { draft: true })
+    );
+
+    return normalizeProposal(unwrapData(response));
+  },
+
+  async deleteDraftProposal(proposalId) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid draft id.");
+    }
+
+    const response = await proposalApi.deleteDraftProposal(proposalId);
+    return unwrapData(response);
+  },
+
+  async submitDraftProposal(proposalId) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid draft id.");
+    }
+
+    const response = await proposalApi.submitDraftProposal(proposalId);
+    return normalizeProposal(unwrapData(response));
+  },
+
+  async getDraftProposalById(proposalId) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid draft id.");
+    }
+
+    try {
+      const response = await proposalApi.getProposalById(proposalId);
+      return normalizeProposal(unwrapData(response));
+    } catch {
+      const drafts = await this.getMyDraftProposals();
+
+      return (
+        drafts.find(
+          (draft) => String(draft.proposalId) === String(proposalId)
+        ) || null
+      );
+    }
   },
 
   async getProposalById(proposalId) {
@@ -685,7 +539,6 @@ const proposalService = {
     }
 
     const response = await proposalApi.getProposalById(proposalId);
-
     return normalizeProposal(unwrapData(response));
   },
 
@@ -696,74 +549,52 @@ const proposalService = {
 
     const response = await proposalApi.getProposalVersions(proposalId);
 
-    return unwrapListData(response)
-      .map(normalizeProposalVersion)
-      .filter(Boolean);
-  },
-
-  async resubmitProposal(proposalId, formData = {}) {
-    if (isInvalidId(proposalId)) {
-      throw new Error("Invalid proposal id.");
-    }
-
-    const payload = buildProposalPayload(formData, {
-      isResubmit: true,
-    });
-
-    const response = await proposalApi.resubmitProposal(proposalId, payload);
-
-    return normalizeProposal(unwrapData(response));
-  },
-
-  async withdrawProposal(proposalId) {
-    if (isInvalidId(proposalId)) {
-      throw new Error("Invalid proposal id.");
-    }
-
-    const response = await proposalApi.withdrawProposal(proposalId);
-
-    return normalizeProposal(unwrapData(response));
-  },
-
-  async decideProposal(proposalId, payload = {}) {
-    if (isInvalidId(proposalId)) {
-      throw new Error("Invalid proposal id.");
-    }
-
-    const response = await proposalApi.decideProposal(proposalId, payload);
-
-    return normalizeProposal(unwrapData(response));
-  },
-
-  async getJobProposals(jobId) {
-    if (isInvalidId(jobId)) {
-      throw new Error("Invalid job id.");
-    }
-
-    const response = await proposalApi.getJobProposals(jobId);
-
     return unwrapListData(response).map(normalizeProposal).filter(Boolean);
   },
 
-  async getProposal(proposalId) {
-    return this.getProposalById(proposalId);
+  async resubmitProposal(proposalId, formData) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
+    }
+
+    const currentProposal = await this.getProposalById(proposalId);
+    const jobId = currentProposal?.jobId || formData?.jobId || formData?.jobPostingId;
+
+    const response = await proposalApi.resubmitProposal(
+      proposalId,
+      buildProposalPayload(jobId, formData, { draft: false })
+    );
+
+    return normalizeProposal(unwrapData(response));
   },
 
-  async getMySubmittedProposals(params = {}) {
-    return this.getMyProposals(params);
-  },
+  async withdrawProposal(proposalId, reason = "") {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
+    }
 
-  async cancelProposal(proposalId) {
-    return this.withdrawProposal(proposalId);
-  },
-
-  async submit(formData) {
-    return this.submitProposal(formData);
-  },
-
-  async resubmit(proposalId, formData) {
-    return this.resubmitProposal(proposalId, formData);
+    const response = await proposalApi.withdrawProposal(proposalId, { reason });
+    return unwrapData(response);
   },
 };
 
 export default proposalService;
+
+export function getFriendlyProposalError(err, fallback = "Proposal error.") {
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  if (data?.message) return data.message;
+  if (data?.title) return data.title;
+
+  if (data?.errors) {
+    const allErrors = Object.values(data.errors).flat();
+
+    if (allErrors.length > 0) {
+      return allErrors.join(" ");
+    }
+  }
+
+  return err?.message || fallback;
+}

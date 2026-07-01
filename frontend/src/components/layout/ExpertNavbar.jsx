@@ -16,6 +16,7 @@ export default function ExpertNavbar() {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState(null);
+  const [openingId, setOpeningId] = useState(null);
 
   useEffect(() => {
     loadUnreadCount();
@@ -66,9 +67,10 @@ export default function ExpertNavbar() {
       setLoadingNotifications(true);
 
       const notifications = await notificationService.getMyNotifications();
+      const list = Array.isArray(notifications) ? notifications : [];
 
-      setNotificationList(notifications.slice(0, 6));
-      setUnreadCount(notifications.filter((item) => !item.isRead).length);
+      setNotificationList(list.slice(0, 6));
+      setUnreadCount(list.filter((item) => !item.isRead).length);
     } catch (error) {
       console.error("LOAD NOTIFICATION PREVIEW ERROR:", error);
       setNotificationList([]);
@@ -87,6 +89,22 @@ export default function ExpertNavbar() {
     }
   };
 
+  const updateNotificationReadState = (notificationId) => {
+    setNotificationList((prev) =>
+      prev.map((item) =>
+        String(getNotificationId(item)) === String(notificationId)
+          ? {
+              ...item,
+              isRead: true,
+              readAt: item.readAt || new Date().toISOString(),
+            }
+          : item
+      )
+    );
+
+    setUnreadCount((prev) => Math.max(Number(prev || 0) - 1, 0));
+  };
+
   const handleMarkAsRead = async (notificationId) => {
     if (!notificationId) return;
 
@@ -94,19 +112,7 @@ export default function ExpertNavbar() {
       setMarkingId(notificationId);
 
       await notificationService.markAsRead(notificationId);
-
-      setNotificationList((prev) =>
-        prev.map((item) =>
-          item.notificationId === notificationId
-            ? {
-                ...item,
-                isRead: true,
-              }
-            : item
-        )
-      );
-
-      setUnreadCount((prev) => Math.max(Number(prev || 0) - 1, 0));
+      updateNotificationReadState(notificationId);
     } catch (error) {
       console.error("MARK NOTIFICATION READ ERROR:", error);
     } finally {
@@ -126,6 +132,7 @@ export default function ExpertNavbar() {
         prev.map((item) => ({
           ...item,
           isRead: true,
+          readAt: item.readAt || new Date().toISOString(),
         }))
       );
 
@@ -134,6 +141,35 @@ export default function ExpertNavbar() {
       console.error("MARK ALL NOTIFICATIONS READ ERROR:", error);
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleOpenNotification = async (notification) => {
+    const notificationId = getNotificationId(notification);
+    const target =
+      notification.target ||
+      notificationService.getNotificationTarget(notification);
+
+    if (!target?.path) {
+      setShowNotifications(false);
+      navigate("/expert/notifications");
+      return;
+    }
+
+    try {
+      setOpeningId(notificationId || target.path);
+
+      if (notificationId && !notification.isRead) {
+        await notificationService.markAsRead(notificationId);
+        updateNotificationReadState(notificationId);
+      }
+
+      setShowNotifications(false);
+      navigate(target.path);
+    } catch (error) {
+      console.error("OPEN NAVBAR NOTIFICATION ERROR:", error);
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -299,6 +335,8 @@ export default function ExpertNavbar() {
                 loading={loadingNotifications}
                 markingAll={markingAll}
                 markingId={markingId}
+                openingId={openingId}
+                onOpenNotification={handleOpenNotification}
                 onMarkAsRead={handleMarkAsRead}
                 onMarkAllAsRead={handleMarkAllAsRead}
                 onViewAll={handleGoToNotifications}
@@ -413,130 +451,199 @@ function NotificationPopup({
   loading,
   markingAll,
   markingId,
+  openingId,
+  onOpenNotification,
   onMarkAsRead,
   onMarkAllAsRead,
   onViewAll,
 }) {
   return (
-    <div className="absolute right-0 top-full z-[999] mt-3 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_24px_90px_rgba(0,0,0,0.7)]">
-      <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-extrabold text-white">Notifications</p>
+    <>
+      <style>
+        {`
+          .notification-scrollbar-hidden::-webkit-scrollbar {
+            display: none;
+          }
+        `}
+      </style>
 
-            <p className="mt-1 text-xs text-gray-500">
-              {unreadCount > 0
-                ? `${unreadCount} unread notification(s)`
-                : "No unread notifications"}
-            </p>
+      <div className="absolute right-0 top-full z-[999] mt-3 w-[380px] overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_24px_90px_rgba(0,0,0,0.7)]">
+        <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-extrabold text-white">
+                Notifications
+              </p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                {unreadCount > 0
+                  ? `${unreadCount} unread notification(s)`
+                  : "No unread notifications"}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onMarkAllAsRead}
+              disabled={markingAll || unreadCount <= 0}
+              className="rounded-lg border border-green-400/40 bg-green-400/10 px-3 py-1.5 text-[11px] font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {markingAll ? "..." : "Read all"}
+            </button>
           </div>
+        </div>
 
+        <div
+          className="notification-scrollbar-hidden max-h-[390px] overflow-y-auto p-2"
+          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+        >
+          {loading ? (
+            <div className="px-4 py-10 text-center text-sm text-gray-400">
+              Loading notifications...
+            </div>
+          ) : notifications.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
+                notifications_off
+              </span>
+
+              <p className="text-sm font-bold text-white">No notifications</p>
+
+              <p className="mt-1 text-xs text-gray-500">
+                New updates will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map((notification, index) => {
+                const notificationId = getNotificationId(notification);
+                const target =
+                  notification.target ||
+                  notificationService.getNotificationTarget(notification);
+
+                const opening =
+                  String(openingId) === String(notificationId) ||
+                  String(openingId) === String(target?.path);
+
+                return (
+                  <NotificationItem
+                    key={notificationId || index}
+                    notification={notification}
+                    target={target}
+                    opening={opening}
+                    markingId={markingId}
+                    onOpen={() => onOpenNotification(notification)}
+                    onMarkAsRead={onMarkAsRead}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="border-t border-white/10 bg-white/[0.03] p-2">
           <button
             type="button"
-            onClick={onMarkAllAsRead}
-            disabled={markingAll || unreadCount <= 0}
-            className="rounded-lg border border-green-400/40 bg-green-400/10 px-3 py-1.5 text-[11px] font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+            onClick={onViewAll}
+            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
           >
-            {markingAll ? "..." : "Read all"}
+            View all notifications
+            <span className="material-symbols-outlined text-[18px]">
+              arrow_forward
+            </span>
           </button>
         </div>
       </div>
+    </>
+  );
+}
 
-      <div className="max-h-[360px] overflow-y-auto p-2">
-        {loading ? (
-          <div className="px-4 py-10 text-center text-sm text-gray-400">
-            Loading notifications...
+function NotificationItem({
+  notification,
+  target,
+  opening,
+  markingId,
+  onOpen,
+  onMarkAsRead,
+}) {
+  const notificationId = getNotificationId(notification);
+  const tone = getNotificationTone(notification.type, target?.kind);
+  const isRead = Boolean(notification.isRead);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          onOpen();
+        }
+      }}
+      className={`cursor-pointer rounded-xl border px-3 py-3 transition ${
+        isRead
+          ? "border-transparent bg-transparent hover:bg-white/[0.04]"
+          : "border-cyan-400/20 bg-cyan-400/10 hover:border-cyan-400/40"
+      }`}
+    >
+      <div className="flex gap-3">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.className}`}
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            {tone.icon}
+          </span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="line-clamp-1 text-sm font-bold text-white">
+                {notification.title || "Notification"}
+              </p>
+
+              <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-400">
+                {notification.message ||
+                  notification.content ||
+                  "No message content."}
+              </p>
+            </div>
+
+            {!isRead && (
+              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
+            )}
           </div>
-        ) : notifications.length === 0 ? (
-          <div className="px-4 py-10 text-center">
-            <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
-              notifications_off
+
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="text-[11px] text-gray-600">
+              {formatDateTime(notification.createdAt || notification.createdAtUtc)}
             </span>
 
-            <p className="text-sm font-bold text-white">No notifications</p>
-
-            <p className="mt-1 text-xs text-gray-500">
-              New updates will appear here.
-            </p>
+            <span className="shrink-0 text-[11px] font-bold text-cyan-300">
+              {opening ? "Opening..." : target?.label || "Open"}
+            </span>
           </div>
-        ) : (
-          <div className="space-y-1">
-            {notifications.map((notification, index) => (
-              <div
-                key={notification.notificationId || index}
-                className={`rounded-xl border px-3 py-3 transition ${
-                  notification.isRead
-                    ? "border-transparent bg-transparent hover:bg-white/[0.04]"
-                    : "border-cyan-400/20 bg-cyan-400/10"
-                }`}
+
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              {tone.label}
+            </span>
+
+            {!isRead && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onMarkAsRead(notificationId);
+                }}
+                disabled={markingId === notificationId}
+                className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200 disabled:opacity-50"
               >
-                <div className="flex gap-3">
-                  <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
-                      notification.isRead
-                        ? "border-white/10 bg-white/[0.04] text-gray-400"
-                        : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {getNotificationIcon(notification.type)}
-                    </span>
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-1 text-sm font-bold text-white">
-                        {notification.title || "Notification"}
-                      </p>
-
-                      {!notification.isRead && (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
-                      )}
-                    </div>
-
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-400">
-                      {notification.message || "No message content."}
-                    </p>
-
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-gray-600">
-                        {formatDateTime(notification.createdAt)}
-                      </span>
-
-                      {!notification.isRead && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onMarkAsRead(notification.notificationId)
-                          }
-                          disabled={markingId === notification.notificationId}
-                          className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200 disabled:opacity-50"
-                        >
-                          {markingId === notification.notificationId
-                            ? "..."
-                            : "Read"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+                {markingId === notificationId ? "..." : "Read"}
+              </button>
+            )}
           </div>
-        )}
-      </div>
-
-      <div className="border-t border-white/10 bg-white/[0.03] p-2">
-        <button
-          type="button"
-          onClick={onViewAll}
-          className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-        >
-          View all notifications
-          <span className="material-symbols-outlined text-[18px]">
-            arrow_forward
-          </span>
-        </button>
+        </div>
       </div>
     </div>
   );
@@ -597,23 +704,118 @@ function DropdownLink({ to, icon, label }) {
   );
 }
 
-function getNotificationIcon(type) {
+function getNotificationId(notification) {
+  return (
+    notification?.notificationId ||
+    notification?.NotificationId ||
+    notification?.id ||
+    notification?.Id ||
+    notification?.raw?.notificationId ||
+    notification?.raw?.NotificationId ||
+    notification?.raw?.id ||
+    notification?.raw?.Id ||
+    ""
+  );
+}
+
+function getNotificationTone(type, kind) {
   const value = String(type || "").toUpperCase();
+  const targetKind = String(kind || "").toUpperCase();
 
-  if (value.includes("PROPOSAL")) return "description";
-  if (value.includes("CONTRACT")) return "contract";
-  if (value.includes("PROJECT")) return "folder_managed";
-  if (value.includes("MILESTONE")) return "flag";
-  if (value.includes("DELIVERABLE")) return "inventory_2";
-  if (value.includes("DISPUTE")) return "gavel";
-
-  if (value.includes("WALLET") || value.includes("WITHDRAW")) {
-    return "account_balance_wallet";
+  if (value.includes("PROPOSAL") || targetKind === "PROPOSAL") {
+    return {
+      label: "Proposal",
+      icon: "description",
+      className: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+    };
   }
 
-  if (value.includes("REVIEW")) return "reviews";
+  if (value.includes("CONTRACT") || targetKind === "CONTRACT") {
+    return {
+      label: "Agreement",
+      icon: "contract",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
 
-  return "notifications";
+  if (value.includes("PROJECT") || targetKind === "PROJECT") {
+    return {
+      label: "Project",
+      icon: "folder_managed",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
+
+  if (value.includes("MILESTONE") || targetKind === "MILESTONE") {
+    return {
+      label: "Milestone",
+      icon: "flag",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (
+    value.includes("DELIVERABLE") ||
+    value.includes("SUBMISSION") ||
+    value.includes("REVISION") ||
+    targetKind === "SUBMISSION"
+  ) {
+    return {
+      label: value.includes("REVISION") ? "Changes Requested" : "Submission",
+      icon: value.includes("REVISION") ? "edit_note" : "assignment",
+      className: value.includes("REVISION")
+        ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
+    };
+  }
+
+  if (
+    value.includes("CHAT") ||
+    value.includes("MESSAGE") ||
+    targetKind === "MESSAGE"
+  ) {
+    return {
+      label: "Message",
+      icon: "chat",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
+
+  if (
+    value.includes("WALLET") ||
+    value.includes("WITHDRAW") ||
+    value.includes("ESCROW") ||
+    value.includes("PAYMENT") ||
+    targetKind === "WALLET"
+  ) {
+    return {
+      label: "Wallet",
+      icon: "account_balance_wallet",
+      className: "border-green-400/20 bg-green-400/10 text-green-300",
+    };
+  }
+
+  if (value.includes("REVIEW") || targetKind === "REVIEW") {
+    return {
+      label: "Review",
+      icon: "reviews",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (value.includes("DISPUTE") || targetKind === "DISPUTE") {
+    return {
+      label: "Dispute",
+      icon: "gavel",
+      className: "border-red-400/20 bg-red-400/10 text-red-300",
+    };
+  }
+
+  return {
+    label: "Notification",
+    icon: "notifications",
+    className: "border-white/10 bg-white/[0.04] text-gray-300",
+  };
 }
 
 function formatDateTime(value) {
