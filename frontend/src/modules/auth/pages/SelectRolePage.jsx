@@ -166,7 +166,7 @@ export default function SelectRolePage() {
         responseData.data ||
         responseData;
 
-      const selectedUser = normalizeUser(
+      const selectedUser = authService.normalizeUser(
         {
           ...oldUser,
           ...userFromResponse,
