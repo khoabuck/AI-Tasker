@@ -62,17 +62,20 @@ namespace AITasker.Infrastructure.Disputes
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
         private readonly IExpertEarningEscrowService _expertEarningEscrowService;
+        private readonly IProjectCompletionService _projectCompletionService;
 
         public DisputeService(
             AITaskerDbContext context,
             INotificationService notificationService,
             IMarketplaceWorkflowPolicyService workflowPolicyService,
-            IExpertEarningEscrowService expertEarningEscrowService)
+            IExpertEarningEscrowService expertEarningEscrowService,
+            IProjectCompletionService projectCompletionService)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
             _expertEarningEscrowService = expertEarningEscrowService;
+            _projectCompletionService = projectCompletionService;
         }
 
         public async Task<DisputeResponse> OpenDisputeAsync(
@@ -672,14 +675,10 @@ namespace AITasker.Infrastructure.Disputes
                     project,
                     dispute.DisputeId);
 
-                if (string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
-                {
-                    await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(
-                        project,
-                        expertProfile);
-                }
-
                 await _context.SaveChangesAsync();
+
+                await _projectCompletionService.TryCompleteProjectAsync(project.ProjectId);
+
 
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,

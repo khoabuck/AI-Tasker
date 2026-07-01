@@ -70,6 +70,7 @@ namespace AITasker.Infrastructure.Banking
         private readonly HttpClient _httpClient;
         private readonly IPlatformWalletService _platformWalletService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IContractFailureRollbackService _contractFailureRollbackService;
 
         public WalletService(
                 AITaskerDbContext context,
@@ -77,7 +78,8 @@ namespace AITasker.Infrastructure.Banking
                 IConfiguration configuration,
                 HttpClient httpClient,
                 IPlatformWalletService platformWalletService,
-                IMarketplaceWorkflowPolicyService workflowPolicyService)
+                IMarketplaceWorkflowPolicyService workflowPolicyService,
+                IContractFailureRollbackService contractFailureRollbackService)
         {
             _context = context;
             _notificationService = notificationService;
@@ -85,6 +87,7 @@ namespace AITasker.Infrastructure.Banking
             _httpClient = httpClient;
             _platformWalletService = platformWalletService;
             _workflowPolicyService = workflowPolicyService;
+            _contractFailureRollbackService = contractFailureRollbackService;
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)
@@ -1203,19 +1206,10 @@ namespace AITasker.Infrastructure.Banking
             var proposal = await GetProposalAsync(contract.ProposalId);
             var job = await GetJobAsync(proposal.JobId);
 
-            contract.Status = ContractStatusCancelled;
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
-
-            project.Status = ProjectStatusCancelled;
-            project.EndDate = now;
-            project.EscrowExpiredAt = now;
-
-            proposal.Status = ProposalStatusRejected;
-
-            job.Status = JobStatusOpen;
-            job.UpdatedAt = now;
+            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
+                contract,
+                "ESCROW_TIMEOUT",
+                now);
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(

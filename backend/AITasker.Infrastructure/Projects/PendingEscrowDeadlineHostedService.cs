@@ -51,6 +51,7 @@ namespace AITasker.Infrastructure.Projects
 
             var context = scope.ServiceProvider.GetRequiredService<AITaskerDbContext>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
+            var rollbackService = scope.ServiceProvider.GetRequiredService<IContractFailureRollbackService>();
 
             var now = DateTime.UtcNow;
 
@@ -69,6 +70,7 @@ namespace AITasker.Infrastructure.Projects
                 await ProcessOneAsync(
                     context,
                     notificationService,
+                    rollbackService,
                     project,
                     now,
                     cancellationToken);
@@ -78,6 +80,7 @@ namespace AITasker.Infrastructure.Projects
         private async Task ProcessOneAsync(
             AITaskerDbContext context,
             INotificationService notificationService,
+            IContractFailureRollbackService rollbackService,
             Domain.Entities.Project project,
             DateTime now,
             CancellationToken cancellationToken)
@@ -112,31 +115,11 @@ namespace AITasker.Infrastructure.Projects
                 return;
             }
 
-            contract.Status = ContractStatusCancelled;
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
-
-            project.Status = ProjectStatusCancelled;
-            project.EndDate = now;
-            project.EscrowExpiredAt = now;
-
-            proposal.Status = ProposalStatusRejected;
-
-            job.Status = JobStatusOpen;
-            job.UpdatedAt = now;
-
-            var milestones = await context.Milestones
-                .Where(x => x.ProjectId == project.ProjectId)
-                .ToListAsync(cancellationToken);
-
-            foreach (var milestone in milestones)
-            {
-                if (milestone.PaymentStatus == PaymentStatusPending)
-                {
-                    milestone.Status = MilestoneStatusResolved;
-                }
-            }
+            await rollbackService.ReopenJobAfterContractFailureAsync(
+                contract,
+                "ESCROW_TIMEOUT",
+                now,
+                cancellationToken);
 
             await context.SaveChangesAsync(cancellationToken);
 

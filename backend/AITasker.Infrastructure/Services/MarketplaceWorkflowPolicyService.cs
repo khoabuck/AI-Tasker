@@ -14,6 +14,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
     private const int DefaultProposalMilestoneLimit = 10;
     private const int DefaultFreeProposalSubmitCount = 5;
     private const int DefaultResubmitNoteMaxLength = 1000;
+    private const int DefaultContractSignWindowHours = 24;
     private const int DefaultEscrowLockWindowHours = 24;
     private const int DefaultExpertMaxActiveProjects = 3;
     private const int DefaultDeliverableReviewWindowHours = 24;
@@ -57,6 +58,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.ProposalMilestoneLimit = request.ProposalMilestoneLimit;
         policy.FreeProposalSubmitCount = request.FreeProposalSubmitCount;
         policy.ResubmitNoteMaxLength = request.ResubmitNoteMaxLength;
+        policy.ContractSignWindowHours = request.ContractSignWindowHours;
         policy.EscrowLockWindowHours = request.EscrowLockWindowHours;
         policy.ExpertMaxActiveProjects = request.ExpertMaxActiveProjects;
         policy.DeliverableReviewWindowHours = request.DeliverableReviewWindowHours;
@@ -112,6 +114,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalMilestoneLimit = DefaultProposalMilestoneLimit,
             FreeProposalSubmitCount = DefaultFreeProposalSubmitCount,
             ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength,
+            ContractSignWindowHours = DefaultContractSignWindowHours,
             EscrowLockWindowHours = DefaultEscrowLockWindowHours,
             ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
             DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
@@ -148,6 +151,11 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         if (request.ResubmitNoteMaxLength < 100 || request.ResubmitNoteMaxLength > 5000)
         {
             throw new InvalidOperationException("Resubmit note max length must be between 100 and 5000.");
+        }
+
+        if (request.ContractSignWindowHours <= 0 || request.ContractSignWindowHours > 720)
+        {
+            throw new InvalidOperationException("Contract sign window hours must be between 1 and 720.");
         }
 
         if (request.EscrowLockWindowHours <= 0 || request.EscrowLockWindowHours > 720)
@@ -206,6 +214,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalMilestoneLimit = policy.ProposalMilestoneLimit,
             FreeProposalSubmitCount = policy.FreeProposalSubmitCount,
             ResubmitNoteMaxLength = policy.ResubmitNoteMaxLength,
+            ContractSignWindowHours = policy.ContractSignWindowHours,
             EscrowLockWindowHours = policy.EscrowLockWindowHours,
             ExpertMaxActiveProjects = policy.ExpertMaxActiveProjects,
             DeliverableReviewWindowHours = policy.DeliverableReviewWindowHours,

@@ -574,7 +574,6 @@ namespace AITasker.Infrastructure.Proposals
             if (normalizedDecision == "REJECT")
             {
                 proposal.Status = StatusRejected;
-
                 await _context.SaveChangesAsync();
 
                 var rejectedExpert = await GetExpertProfileByIdAsync(proposal.ExpertId);
@@ -612,7 +611,6 @@ namespace AITasker.Infrastructure.Proposals
             foreach (var competingProposal in competingProposals)
             {
                 competingProposal.Status = StatusRejected;
-
                 var competingExpert = await GetExpertProfileByIdAsync(competingProposal.ExpertId);
 
                 await _notificationService.CreateNotificationAsync(
@@ -723,7 +721,6 @@ namespace AITasker.Infrastructure.Proposals
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
             proposal.Status = StatusWithdrawn;
-
 
             await _context.SaveChangesAsync();
 

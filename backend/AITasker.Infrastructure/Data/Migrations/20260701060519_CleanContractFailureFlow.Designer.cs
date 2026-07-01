@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260701060519_CleanContractFailureFlow")]
+    partial class CleanContractFailureFlow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2869,13 +2872,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("BankBin")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)")
-                        .HasDefaultValue("");
-
                     b.Property<string>("BankCode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2902,10 +2898,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("FailureReason")
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
-
                     b.Property<decimal>("FeeAmount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(18,2)")
@@ -2916,46 +2908,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
-                    b.Property<string>("PayOsApprovalState")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("PayOsIdempotencyKey")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PayOsPayoutId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PayOsRawResponse")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("PayOsReferenceId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PayOsTransactionId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("PayOsTransactionState")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<DateTime?>("PayoutConfirmedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("PayoutProvider")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
                     b.Property<string>("PayoutReferenceCode")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("PayoutRequestedAt")
-                        .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("ProcessedAt")
                         .HasColumnType("datetime2");
@@ -2976,20 +2931,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("BankVerificationStatus");
 
                     b.HasIndex("CreatedAt");
-
-                    b.HasIndex("PayOsIdempotencyKey")
-                        .IsUnique()
-                        .HasFilter("[PayOsIdempotencyKey] IS NOT NULL");
-
-                    b.HasIndex("PayOsPayoutId")
-                        .IsUnique()
-                        .HasFilter("[PayOsPayoutId] IS NOT NULL");
-
-                    b.HasIndex("PayOsReferenceId")
-                        .IsUnique()
-                        .HasFilter("[PayOsReferenceId] IS NOT NULL");
-
-                    b.HasIndex("PayoutProvider");
 
                     b.HasIndex("PayoutReferenceCode");
 

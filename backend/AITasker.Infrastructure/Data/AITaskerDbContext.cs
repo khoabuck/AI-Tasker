@@ -423,6 +423,9 @@ public class AITaskerDbContext : DbContext
 
             entity.HasKey(x => x.MarketplaceWorkflowPolicyId);
 
+            entity.Property(x => x.ContractSignWindowHours)
+                .IsRequired();
+
             entity.Property(x => x.MinimumWithdrawalAmount)
                 .HasColumnType("decimal(18,2)");
 
@@ -1349,7 +1352,6 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
-
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
@@ -1886,6 +1888,10 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.SignDeadlineAt);
+
+            entity.Property(e => e.SignExpiredAt);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -1894,6 +1900,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.ExpertId);
 
             entity.HasIndex(e => e.Status);
+
+            entity.HasIndex(e => e.SignDeadlineAt);
 
             entity.HasOne(e => e.Proposal)
                 .WithOne(p => p.ProjectContract)
@@ -2830,6 +2838,11 @@ public class AITaskerDbContext : DbContext
                 .HasDefaultValue(string.Empty)
                 .IsRequired();
 
+            entity.Property(w => w.BankBin)
+                .HasMaxLength(20)
+                .HasDefaultValue(string.Empty)
+                .IsRequired();
+
             entity.Property(w => w.BankName)
                 .HasMaxLength(100)
                 .IsRequired();
@@ -2853,6 +2866,37 @@ public class AITaskerDbContext : DbContext
             entity.Property(w => w.PayoutReferenceCode)
                 .HasMaxLength(100);
 
+            entity.Property(w => w.PayoutProvider)
+                .HasMaxLength(30);
+
+            entity.Property(w => w.PayOsPayoutId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsTransactionId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsReferenceId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsIdempotencyKey)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsApprovalState)
+                .HasMaxLength(50);
+
+            entity.Property(w => w.PayOsTransactionState)
+                .HasMaxLength(50);
+
+            entity.Property(w => w.PayOsRawResponse)
+                .HasColumnType("nvarchar(max)");
+
+            entity.Property(w => w.FailureReason)
+                .HasMaxLength(1000);
+
+            entity.Property(w => w.PayoutRequestedAt);
+
+            entity.Property(w => w.PayoutConfirmedAt);
+
             entity.Property(w => w.Status)
                 .HasMaxLength(30)
                 .IsRequired();
@@ -2870,6 +2914,20 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(w => w.BankVerificationStatus);
 
             entity.HasIndex(w => w.PayoutReferenceCode);
+
+            entity.HasIndex(w => w.PayoutProvider);
+
+            entity.HasIndex(w => w.PayOsPayoutId)
+                .IsUnique()
+                .HasFilter("[PayOsPayoutId] IS NOT NULL");
+
+            entity.HasIndex(w => w.PayOsReferenceId)
+                .IsUnique()
+                .HasFilter("[PayOsReferenceId] IS NOT NULL");
+
+            entity.HasIndex(w => w.PayOsIdempotencyKey)
+                .IsUnique()
+                .HasFilter("[PayOsIdempotencyKey] IS NOT NULL");
 
             entity.HasIndex(w => w.CreatedAt);
 

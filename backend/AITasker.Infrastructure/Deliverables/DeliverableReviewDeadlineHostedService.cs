@@ -66,6 +66,7 @@ namespace AITasker.Infrastructure.Deliverables
             var walletService = scope.ServiceProvider.GetRequiredService<IWalletService>();
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
             var workflowPolicyService = scope.ServiceProvider.GetRequiredService<IMarketplaceWorkflowPolicyService>();
+            var projectCompletionService = scope.ServiceProvider.GetRequiredService<IProjectCompletionService>();
             var workflowPolicy = await workflowPolicyService.GetActivePolicyAsync();
 
             var now = DateTime.UtcNow;
@@ -86,6 +87,7 @@ namespace AITasker.Infrastructure.Deliverables
                     context,
                     walletService,
                     notificationService,
+                    projectCompletionService,
                     deliverable,
                     now,
                     workflowPolicy.DeliverableAutoApproveGraceHours,
@@ -97,6 +99,7 @@ namespace AITasker.Infrastructure.Deliverables
             AITaskerDbContext context,
             IWalletService walletService,
             INotificationService notificationService,
+            IProjectCompletionService projectCompletionService,
             Domain.Entities.Deliverable deliverable,
             DateTime now,
             int gracePeriodHours,
@@ -222,11 +225,7 @@ namespace AITasker.Infrastructure.Deliverables
 
             deliverable.Status = DeliverableStatusAutoApproved;
 
-            await TryCompleteProjectAfterAutoApprovalAsync(
-                context,
-                notificationService,
-                project.ProjectId,
-                cancellationToken);
+            await projectCompletionService.TryCompleteProjectAsync(project.ProjectId);
 
             await context.SaveChangesAsync(cancellationToken);
 
@@ -253,141 +252,5 @@ namespace AITasker.Infrastructure.Deliverables
                 relatedDeliverableId: deliverable.DeliverableId);
         }
 
-        private static async Task TryCompleteProjectAfterAutoApprovalAsync(
-            AITaskerDbContext context,
-            INotificationService notificationService,
-            int projectId,
-            CancellationToken cancellationToken)
-        {
-            var project = await context.Projects
-                .FirstOrDefaultAsync(p => p.ProjectId == projectId, cancellationToken);
-
-            if (project == null)
-            {
-                return;
-            }
-
-            if (string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            var milestones = await context.Milestones
-                .Where(m => m.ProjectId == projectId)
-                .ToListAsync(cancellationToken);
-
-            if (milestones.Count == 0)
-            {
-                return;
-            }
-
-            var allFinished = milestones.All(IsFinishedMilestone);
-
-            if (!allFinished)
-            {
-                return;
-            }
-
-            var contract = await context.ProjectContracts
-                .FirstOrDefaultAsync(c => c.ContractId == project.ContractId, cancellationToken);
-
-            if (contract == null)
-            {
-                return;
-            }
-
-            var clientProfile = await context.ClientProfiles
-                .FirstOrDefaultAsync(c => c.ClientProfileId == contract.ClientId, cancellationToken);
-
-            var expertProfile = await context.ExpertProfiles
-                .FirstOrDefaultAsync(e => e.ExpertProfileId == contract.ExpertId, cancellationToken);
-
-            project.Status = ProjectStatusCompleted;
-            project.EndDate = DateTime.UtcNow;
-
-            await UpdateJobStatusByProjectAsync(
-                context,
-                project,
-                JobStatusCompleted,
-                cancellationToken);
-
-            await context.SaveChangesAsync(cancellationToken);
-
-            if (clientProfile != null)
-            {
-                await notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Project completed",
-                    $"Project '{project.Title}' has been completed. You can now review the expert.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedContractId: contract.ContractId,
-                    relatedProjectId: project.ProjectId);
-            }
-
-            if (expertProfile != null)
-            {
-                await notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project completed",
-                    $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedContractId: contract.ContractId,
-                    relatedProjectId: project.ProjectId);
-            }
-        }
-
-        private static bool IsFinishedMilestone(Domain.Entities.Milestone milestone)
-        {
-            var status = milestone.Status?.Trim().ToUpperInvariant();
-            var paymentStatus = milestone.PaymentStatus?.Trim().ToUpperInvariant();
-
-            return status == MilestoneStatusApproved ||
-                status == MilestoneStatusResolved ||
-                status == MilestoneStatusDisputeResolved ||
-                status == MilestoneStatusReleased ||
-                status == MilestoneStatusRefunded ||
-                paymentStatus == PaymentStatusReleased ||
-                paymentStatus == PaymentStatusRefunded;
-        }
-
-        private static async Task UpdateJobStatusByProjectAsync(
-            AITaskerDbContext context,
-            Domain.Entities.Project project,
-            string jobStatus,
-            CancellationToken cancellationToken)
-        {
-            var contract = await context.ProjectContracts
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.ContractId == project.ContractId, cancellationToken);
-
-            if (contract == null)
-            {
-                return;
-            }
-
-            var proposal = await context.Proposals
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.ProposalId == contract.ProposalId, cancellationToken);
-
-            if (proposal == null)
-            {
-                return;
-            }
-
-            var job = await context.JobPostings
-                .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId, cancellationToken);
-
-            if (job == null)
-            {
-                return;
-            }
-
-            job.Status = jobStatus;
-            job.UpdatedAt = DateTime.UtcNow;
-        }
     }
 }

@@ -12,6 +12,8 @@ public class MarketplaceWorkflowPolicy
 
     public int ResubmitNoteMaxLength { get; set; } = 1000;
 
+    public int ContractSignWindowHours { get; set; } = 24;
+
     public int EscrowLockWindowHours { get; set; } = 24;
 
     public int ExpertMaxActiveProjects { get; set; } = 3;

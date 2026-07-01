@@ -18,6 +18,15 @@ namespace AITasker.Application.Interfaces
             int adminId,
             ProcessWithdrawalRequest request);
 
+        Task<WithdrawalResponse> ApproveWithdrawalWithPayOsAsync(
+            int withdrawalRequestId,
+            int adminId,
+            ProcessWithdrawalRequest request);
+
+        Task<WithdrawalResponse> SyncPayOsWithdrawalAsync(
+            int withdrawalRequestId,
+            int adminId);
+
         Task<WithdrawalResponse> RejectWithdrawalAsync(
             int withdrawalRequestId,
             int adminId,

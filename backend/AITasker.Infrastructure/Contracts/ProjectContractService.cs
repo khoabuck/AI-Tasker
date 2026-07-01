@@ -12,6 +12,7 @@ namespace AITasker.Infrastructure.Contracts
     {
         private const string ProposalStatusAccepted = "ACCEPTED";
         private const string ProposalStatusRejected = "REJECTED";
+        private const string ProposalStatusSubmitted = "SUBMITTED";
         private const string ProposalStatusWithdrawn = "WITHDRAWN";
 
         private const string ContractStatusDraft = "DRAFT";
@@ -28,15 +29,18 @@ namespace AITasker.Infrastructure.Contracts
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IContractFailureRollbackService _contractFailureRollbackService;
 
         public ProjectContractService(
             AITaskerDbContext context,
             INotificationService notificationService,
-            IMarketplaceWorkflowPolicyService workflowPolicyService)
+            IMarketplaceWorkflowPolicyService workflowPolicyService,
+            IContractFailureRollbackService contractFailureRollbackService)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
+            _contractFailureRollbackService = contractFailureRollbackService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -60,20 +64,56 @@ namespace AITasker.Infrastructure.Contracts
 
             ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
 
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
 
             if (existingContract != null)
             {
+                if (string.Equals(existingContract.Status, ContractStatusCancelled, StringComparison.OrdinalIgnoreCase))
+                {
+                    existingContract.Status = ContractStatusDraft;
+                    existingContract.ClientConfirmed = false;
+                    existingContract.ExpertConfirmed = false;
+                    existingContract.ConfirmedAt = null;
+                    existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
+                    existingContract.SignExpiredAt = null;
+                    existingContract.CreatedAt = DateTime.UtcNow;
+                }
+
+                if (string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
+                {
+                    await EnsureProposalBaseVersionExistsAsync(proposal);
+                    existingContract.SourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
+                    existingContract.ProjectScope = proposal.WorkingApproach;
+                    existingContract.FinalPrice = proposal.ProposedPrice;
+                    existingContract.FinalTimelineDays = proposal.ProposedTimelineDays;
+                    existingContract.Deliverables = proposal.ExpectedOutputs;
+                    existingContract.AcceptanceCriteria = "Acceptance criteria must be confirmed by Client and Expert before project starts.";
+                    existingContract.PaymentTerms = "Milestone-based escrow payment managed through AITasker escrow.";
+                    existingContract.PlatformFeeRate = ResolvePlatformFeeRate(clientProfile);
+                    existingContract.PlatformFeeAmount = existingContract.FinalPrice * existingContract.PlatformFeeRate / 100m;
+                    existingContract.TotalClientPayment = existingContract.FinalPrice + existingContract.PlatformFeeAmount;
+                }
+
                 var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
                     .AnyAsync(x => x.ContractId == existingContract.ContractId);
 
-                if (!hasMilestoneDrafts)
+                if (!hasMilestoneDrafts ||
+                    string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
                 {
                     await CopyLatestProposalMilestonesToContractDraftAsync(
                         proposal.ProposalId,
                         existingContract.ContractId);
                 }
+
+                await NotifyContractDraftCreatedAsync(
+                    userId,
+                    existingContract,
+                    job,
+                    clientProfile,
+                    expertProfile);
 
                 return await MapToContractResponseAsync(existingContract);
             }
@@ -83,8 +123,6 @@ namespace AITasker.Infrastructure.Contracts
 
             var finalPrice = proposal.ProposedPrice;
             var finalTimelineDays = proposal.ProposedTimelineDays;
-
-
 
             var contract = BuildContract(
                 proposal,
@@ -97,7 +135,8 @@ namespace AITasker.Infrastructure.Contracts
                 "Acceptance criteria must be confirmed by Client and Expert before project starts.",
                 "Milestone-based escrow payment managed through AITasker escrow.",
                 ContractSourceProposal,
-                null);
+                null,
+                workflowPolicy.ContractSignWindowHours);
 
             contract.SourceProposalVersionNumber = sourceProposalVersionNumber;
 
@@ -181,6 +220,11 @@ namespace AITasker.Infrastructure.Contracts
             var job = await GetJobByIdAsync(proposal.JobId);
             var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
             var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
+
+            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= DateTime.UtcNow)
+            {
+                throw new InvalidOperationException("Contract signing deadline has expired. The contract will be cancelled by the deadline job and the job will be reopened.");
+            }
 
             var userIsClient = clientProfile.UserId == userId;
             var userIsExpert = expertProfile.UserId == userId;
@@ -327,28 +371,12 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Cannot cancel contract after the project has started. Please use dispute or project cancellation flow.");
             }
 
-            contract.Status = ContractStatusCancelled;
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
+            var now = DateTime.UtcNow;
 
-            if (userIsClient)
-            {
-                proposal.Status = ProposalStatusRejected;
-            }
-            else
-            {
-                proposal.Status = ProposalStatusWithdrawn;
-            }
-
-            job.Status = JobStatusOpen;
-            job.UpdatedAt = DateTime.UtcNow;
-
-            if (project != null)
-            {
-                project.Status = ProjectStatusCancelled;
-                project.EndDate = DateTime.UtcNow;
-            }
+            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
+                contract,
+                userIsClient ? "CLIENT_CANCELLED" : "EXPERT_CANCELLED",
+                now);
 
             await _context.SaveChangesAsync();
 
@@ -406,7 +434,8 @@ namespace AITasker.Infrastructure.Contracts
             string acceptanceCriteria,
             string paymentTerms,
             string contractSource,
-            string? chatSummary)
+            string? chatSummary,
+            int contractSignWindowHours)
         {
             if (finalPrice <= 0)
             {
@@ -444,6 +473,8 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = false,
                 ExpertConfirmed = false,
                 Status = ContractStatusDraft,
+                SignDeadlineAt = DateTime.UtcNow.AddHours(contractSignWindowHours),
+                SignExpiredAt = null,
                 CreatedAt = DateTime.UtcNow
             };
         }
@@ -831,6 +862,8 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = contract.ClientConfirmed,
                 ExpertConfirmed = contract.ExpertConfirmed,
                 Status = contract.Status,
+                SignDeadlineAt = contract.SignDeadlineAt,
+                SignExpiredAt = contract.SignExpiredAt,
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,

@@ -36,6 +36,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public string Status { get; set; } = string.Empty;
 
+
         public int? ContractId { get; set; }
 
         public int LatestVersionNumber { get; set; }
