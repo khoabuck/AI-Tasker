@@ -12,7 +12,7 @@ import ForgotPasswordPage from "../../modules/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
-import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
+import SetupProfilePage from "../../modules/auth/pages/SetupProfilepage";
 import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
@@ -139,36 +139,36 @@ export default function AppRouter() {
       <Route path="/dispute-policy" element={<DisputePolicyPage />} />
 
       {/* Client */}
-      <Route path="/client/dashboard" element={<RequireAuth><ClientDashboard /></RequireAuth>} />
-      <Route path="/client/post-job" element={<RequireAuth><PostJobPage /></RequireAuth>} />
-      <Route path="/client/profile" element={<RequireAuth><ClientProfilePage /></RequireAuth>} />
-      <Route path="/client/profile/edit" element={<RequireAuth><EditProfilePage /></RequireAuth>} />
-      <Route path="/client/experts" element={<RequireAuth><ExpertSearchPage /></RequireAuth>} />
-      <Route path="/client/ai-matching" element={<RequireAuth><AIMatchingPage /></RequireAuth>} />
-      <Route path="/client/messages/:conversationId?" element={<RequireAuth> <MessagesPage /> </RequireAuth>}/>
-      <Route path="/client/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
-      <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
-      <Route path="/client/job-credit-packages" element={<RequireAuth><JobCreditPackagesPage /></RequireAuth>} />
-      <Route path="/client/transactions/:id" element={<RequireAuth><TransactionDetailPage /></RequireAuth>} />
-      <Route path="/client/experts/:expertProfileId" element={<RequireAuth><ExpertProfileViewPage /></RequireAuth>} />
+      <Route path="/client/dashboard" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientDashboard /></ProtectedRoute>} />
+      <Route path="/client/post-job" element={<ProtectedRoute allowedRoles={["CLIENT"]}><PostJobPage /></ProtectedRoute>} />
+      <Route path="/client/profile" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProfilePage /></ProtectedRoute>} />
+      <Route path="/client/profile/edit" element={<ProtectedRoute allowedRoles={["CLIENT"]}><EditProfilePage /></ProtectedRoute>} />
+      <Route path="/client/experts" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ExpertSearchPage /></ProtectedRoute>} />
+      <Route path="/client/ai-matching" element={<ProtectedRoute allowedRoles={["CLIENT"]}><AIMatchingPage /></ProtectedRoute>} />
+      <Route path="/client/messages/:conversationId?" element={<ProtectedRoute allowedRoles={["CLIENT"]}><MessagesPage /></ProtectedRoute>} />
+      <Route path="/client/wallet" element={<ProtectedRoute allowedRoles={["CLIENT"]}><WalletPage /></ProtectedRoute>} />
+      <Route path="/client/transactions" element={<ProtectedRoute allowedRoles={["CLIENT"]}><TransactionsPage /></ProtectedRoute>} />
+      <Route path="/client/job-credit-packages" element={<ProtectedRoute allowedRoles={["CLIENT"]}><JobCreditPackagesPage /></ProtectedRoute>} />
+      <Route path="/client/transactions/:id" element={<ProtectedRoute allowedRoles={["CLIENT"]}><TransactionDetailPage /></ProtectedRoute>} />
+      <Route path="/client/experts/:expertProfileId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ExpertProfileViewPage /></ProtectedRoute>} />
 
       {/* Client jobs */}
-      <Route path="/client/jobs" element={<RequireAuth><JobsPage /></RequireAuth>} />
-      <Route path="/client/jobs/:id" element={<RequireAuth><ClientJobDetailPage /></RequireAuth>} />
-      <Route path="/client/jobs/:id/edit" element={<RequireAuth><EditJobPage /></RequireAuth>} />
-      <Route path="/client/jobs/:id/recommendations" element={<RequireAuth><ClientJobRecommendationPage /></RequireAuth>} />
+      <Route path="/client/jobs" element={<ProtectedRoute allowedRoles={["CLIENT"]}><JobsPage /></ProtectedRoute>} />
+      <Route path="/client/jobs/:id" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientJobDetailPage /></ProtectedRoute>} />
+      <Route path="/client/jobs/:id/edit" element={<ProtectedRoute allowedRoles={["CLIENT"]}><EditJobPage /></ProtectedRoute>} />
+      <Route path="/client/jobs/:id/recommendations" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientJobRecommendationPage /></ProtectedRoute>} />
 
       {/* Client projects */}
-      <Route path="/client/projects" element={<RequireAuth><ProjectsListPage /></RequireAuth>} />
-      <Route path="/client/projects-old" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
-      <Route path="/client/projects/:id" element={<RequireAuth><ClientProjectDetailPage /></RequireAuth>} />
-      <Route path="/client/projects/:id/review" element={<RequireAuth><ClientReviewPage /></RequireAuth>} />
-      <Route path="/client/milestones/:milestoneId/deliverables" element={<RequireAuth><MilestoneDeliverablesPage /></RequireAuth>} />
-      <Route path="/client/disputes" element={<RequireAuth><ClientDisputeDetailPage /></RequireAuth>} />
+      <Route path="/client/projects" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsListPage /></ProtectedRoute>} />
+      <Route path="/client/projects-old" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsPage /></ProtectedRoute>} />
+      <Route path="/client/projects/:id" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProjectDetailPage /></ProtectedRoute>} />
+      <Route path="/client/projects/:id/review" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientReviewPage /></ProtectedRoute>} />
+      <Route path="/client/milestones/:milestoneId/deliverables" element={<ProtectedRoute allowedRoles={["CLIENT"]}><MilestoneDeliverablesPage /></ProtectedRoute>} />
+      <Route path="/client/disputes" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientDisputeDetailPage /></ProtectedRoute>} />
 
       {/* Client proposals + notifications */}
-      <Route path="/client/proposals/:proposalId" element={<RequireAuth><ClientProposalDetailPage /></RequireAuth>} />
-      <Route path="/client/notifications" element={<RequireAuth><NotificationsPage /></RequireAuth>} />
+      <Route path="/client/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProposalDetailPage /></ProtectedRoute>} />
+      <Route path="/client/notifications" element={<ProtectedRoute allowedRoles={["CLIENT"]}><NotificationsPage /></ProtectedRoute>} />
 
       {/* Expert */}
       <Route path="/expert" element={<ProtectedRoute allowedRoles={["EXPERT"]}><Navigate to="/expert/dashboard" replace /></ProtectedRoute>} />

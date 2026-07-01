@@ -217,12 +217,14 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
-    if (typeof authService.loginWithGoogle === "function") {
-      authService.loginWithGoogle();
+    const backendUrl = import.meta.env.VITE_BACKEND_BASE_URL;
+
+    if (!backendUrl) {
+      setError("Missing VITE_BACKEND_BASE_URL");
       return;
     }
 
-    window.location.href = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
+    window.location.href = `${backendUrl}/api/auth/google-login`;
   };
 
   return (

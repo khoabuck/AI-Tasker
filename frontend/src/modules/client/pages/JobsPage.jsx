@@ -27,18 +27,21 @@ function JobCard({ job, onStatusChange }) {
 
   const handleSubmit = async (e) => {
     e.stopPropagation();
-    if (!confirm("Submit job này để mở cho expert apply?")) return;
+
     setActionLoading(true);
     try {
       const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
 
-      onStatusChange(
-        job.jobPostingId,
-        res?.data?.status || "OPEN"
-      );
+      const newStatus = res?.data?.status || "OPEN";
+
+      onStatusChange(job.jobPostingId, newStatus);
+
+      navigate(`/client/jobs?status=OPEN`);
     } catch (err) {
-      alert(err?.response?.data?.message || "Submit thất bại.");
-    } finally { setActionLoading(false); }
+      // không popup, không log, không gì cả
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCancel = async (e) => {

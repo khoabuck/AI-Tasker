@@ -1,31 +1,37 @@
 import { walletApi } from "../api/wallet.api";
 
-const unwrapData = (res) => res.data?.data ?? res.data;
+const unwrap = (res) => res.data?.data ?? res.data;
 
 export const walletService = {
-  async getWalletPageData() {
-    const [balRes, txRes, doRes] = await Promise.all([
-      walletApi.getBalance(),
-      walletApi.getTransactions(),
-      walletApi.getMyDepositOrders(),
-    ]);
+  async getWallet() {
+    const res = await walletApi.getWallet();
+    const data = unwrap(res);
 
-    const balRaw = unwrapData(balRes);
-    const txRaw = unwrapData(txRes);
-    const doRaw = unwrapData(doRes);
-
+    // Lưu ý: object này phụ thuộc walletApi.getWallet() trả về đúng shape có
+    // availableBalance/lockedBalance (tức phải gọi /wallets/me, không phải
+    // /wallets/balance — endpoint đó chỉ có field `balance` đơn lẻ).
     return {
-      // API thật: { success: true, balance: 580000 }
-      balance: Number(balRaw?.balance ?? 0),
-
-      // API thật: { success: true, data: [...] }
-      transactions: Array.isArray(txRaw) ? txRaw : [],
-
-      // Chưa có response thật nên giữ fallback an toàn
-      depositOrders: Array.isArray(doRaw)
-        ? doRaw
-        : doRaw?.items ?? doRaw?.data ?? [],
+      availableBalance: Number(data?.availableBalance ?? 0),
+      lockedBalance: Number(data?.lockedBalance ?? 0),
     };
+  },
+
+  async getTransactions() {
+    const res = await walletApi.getTransactions();
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getDepositOrders() {
+    const res = await walletApi.getMyDepositOrders();
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
+  },
+
+  async getEscrows(projectId) {
+    const res = await walletApi.getEscrows(projectId);
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
   },
 
   createDepositOrder(amount) {

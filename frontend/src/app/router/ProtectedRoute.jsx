@@ -23,12 +23,20 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   const status = String(user?.status || "").trim().toUpperCase();
   const pathname = location.pathname;
 
-  const isClientSetupPage = pathname === "/setup-profile";
+  const ROUTES = {
+  CLIENT_SETUP: "/setup-profile",
+  EXPERT_SETUP: "/expert/setup-profile",
+  EXPERT_EDIT: "/expert/profile/edit",
+  EXPERT_LOCKED: "/expert/profile-locked",
+};
 
-  const isExpertProfileReviewPage =
-    pathname === "/expert/setup-profile" ||
-    pathname === "/expert/profile/edit" ||
-    pathname === "/expert/profile-locked";
+  const isClientSetupPage = pathname === ROUTES.CLIENT_SETUP;
+
+  const isExpertProfileReviewPage = [
+    ROUTES.EXPERT_SETUP,
+    ROUTES.EXPERT_EDIT,
+    ROUTES.EXPERT_LOCKED,
+  ].includes(pathname);
 
   const isExpertLockedPage = pathname === "/expert/profile-locked";
 
@@ -61,10 +69,9 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     }
   }
 
-  if (
-    allowedRoles &&
-    !allowedRoles.map((item) => String(item).toUpperCase()).includes(role)
-  ) {
+  const normalizedRoles = allowedRoles?.map(r => String(r).toUpperCase());
+
+  if (normalizedRoles?.length && !normalizedRoles.includes(role)) {
     return <Navigate to="/unauthorized" replace />;
   }
 

@@ -9,6 +9,18 @@
 //
 // Withdraw vẫn dùng /withdrawals (giữ nguyên flow cũ, không có trong API list mới nhưng
 // chưa thấy yêu cầu đổi — nếu BE đã đổi endpoint này, báo lại để sửa)
+//
+// FIX (so với bản cũ):
+// 1) fetchAll() trước đây gọi walletService.getEscrows(selectedProjectId) với biến
+//    `selectedProjectId` chưa từng được khai báo (không có useState) → ReferenceError,
+//    làm Promise.all reject toàn bộ và trang không load được balance/transactions/deposit
+//    dù các API đó hoạt động bình thường. Đã bỏ lời gọi này và dùng thẳng field
+//    `lockedBalance` có sẵn trong response GET /api/wallets/me để tính Escrow.
+// 2) isExpenseTx() trước đây liệt "ESCROW_RELEASE" vào nhóm chi tiêu (trừ tiền), nhưng
+//    theo dữ liệu thật từ BE, ESCROW_RELEASE là tiền VÀO ví (amount dương, ví dụ +200₫
+//    khi freelancer được release tiền milestone) → đã bỏ ESCROW_RELEASE ra khỏi danh sách.
+// 3) metrics[] trước đây thiếu field icon/iconBg/iconColor khiến ô icon luôn trống →
+//    đã bổ sung đầy đủ cho cả 3 ô Balance / Escrow / Withdrawable.
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -117,7 +129,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
-            {step === "input" ? "Nạp tiền" : step === "qr" ? "Quét QR để thanh toán" : "Đơn nạp tiền đã hết hạn"}
+            {step === "input" ? "Deposit" : step === "qr" ? "Scan QR to pay" : "Deposit request expired"}
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
@@ -152,7 +164,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
               <button onClick={handleCreateOrder} disabled={loading}
                 style={{ flex: 2, padding: "12px", background: loading ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 {loading && <span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>}
-                {loading ? "Đang tạo..." : "Tạo đơn nạp tiền"}
+                {loading ? "Creating..." : "Create Deposit Request"}
               </button>
             </div>
           </div>
@@ -197,7 +209,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
                 <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Đang chờ thanh toán...</p>
                 <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
                   Hệ thống sẽ tự xác nhận khi nhận được thanh toán.
-                  {secondsLeft > 0 && ` Đơn hết hạn sau ${formatTime(secondsLeft)}`}
+                  {secondsLeft > 0 && ` The application expires after ${formatTime(secondsLeft)}`}
                 </p>
               </div>
             </div>
@@ -257,7 +269,14 @@ function WithdrawModal({ onClose, onSuccess }) {
       onSuccess();
       onClose();
     } catch (err) {
-      setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
+      const status = err?.response?.status;
+      if (status === 404) {
+        // API /withdrawals chưa được BE triển khai — báo rõ cho user thay vì
+        // để lộ lỗi kỹ thuật "404 Not Found" khó hiểu.
+        setError("Tính năng rút tiền hiện đang được nâng cấp. Vui lòng thử lại sau.");
+      } else {
+        setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
+      }
     } finally { setLoading(false); }
   };
 
@@ -332,10 +351,10 @@ function WithdrawModal({ onClose, onSuccess }) {
 const getTxType = (tx) =>
   (tx.type ?? tx.transactionType ?? "").toUpperCase();
 
+// FIX #2: bỏ "ESCROW_RELEASE" — đây là tiền VÀO ví (amount dương), không phải chi tiêu.
 const isExpenseTx = (tx) => {
   return [
     "ESCROW_LOCK",
-    "ESCROW_RELEASE",
     "PLATFORM_FEE",
     "WITHDRAWAL",
     "WITHDRAW",
@@ -382,16 +401,25 @@ export default function WalletPage() {
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
+  // FIX #1: bỏ walletService.getEscrows(selectedProjectId) — biến selectedProjectId
+  // chưa từng được khai báo (ReferenceError), khiến Promise.all reject toàn bộ và
+  // balance/transactions/depositOrders không bao giờ được set dù các API đó vẫn
+  // trả 200 OK bình thường. Escrow giờ lấy trực tiếp từ balance.lockedBalance
+  // (đã có sẵn trong response GET /api/wallets/me).
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const data = await walletService.getWalletPageData();
+      const [wallet, tx, deposit] = await Promise.all([
+        walletService.getWallet(),
+        walletService.getTransactions(),
+        walletService.getDepositOrders(),
+      ]);
 
-      setBalance(data.balance);
-      setTransactions(data.transactions);
-      setDepositOrders(data.depositOrders);
+      setBalance(wallet);
+      setTransactions(tx);
+      setDepositOrders(deposit);
     } catch (err) {
-      console.error("Wallet fetch error:", err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -405,15 +433,32 @@ export default function WalletPage() {
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  const metrics = balance !== null ? [
-    {
-      label: "Available Balance",
-      value: `${Number(balance ?? 0).toLocaleString()}₫`,
-      icon: "account_balance_wallet",
-      iconColor: "#00F0FF",
-      iconBg: "rgba(0,240,255,0.1)",
-    },
-  ] : [];
+  // FIX #3: bổ sung icon/iconBg/iconColor cho từng ô để icon hiển thị đúng thay vì trống.
+  const metrics = balance
+    ? [
+        {
+          label: "Balance",
+          value: `${balance.availableBalance.toLocaleString()}₫`,
+          icon: "account_balance_wallet",
+          iconBg: "rgba(0,240,255,0.1)",
+          iconColor: "#00F0FF",
+        },
+        {
+          label: "Escrow",
+          value: `${balance.lockedBalance.toLocaleString()}₫`,
+          icon: "lock",
+          iconBg: "rgba(250,204,21,0.1)",
+          iconColor: "#facc15",
+        },
+        {
+          label: "Withdrawable",
+          value: `${(balance.availableBalance - balance.lockedBalance).toLocaleString()}₫`,
+          icon: "outbox",
+          iconBg: "rgba(74,222,128,0.1)",
+          iconColor: "#4ade80",
+        },
+      ]
+    : [];
 
   return (
     <ClientLayout>
@@ -439,7 +484,7 @@ export default function WalletPage() {
           </span>
           Back
         </button>
-        
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
           <div>
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Wallet</h2>
@@ -473,7 +518,14 @@ export default function WalletPage() {
         {!loading && (
           <>
             {/* Balance Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(1, minmax(0, 1fr))", gap: 24, marginBottom: 32 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 24,
+                marginBottom: 32,
+              }}
+            >
               {metrics.map((m) => (
                 <div key={m.label} style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 24 }}>
                   <div style={{ padding: 12, background: m.iconBg, borderRadius: 12, color: m.iconColor, display: "inline-flex", marginBottom: 16 }}>
@@ -586,10 +638,10 @@ export default function WalletPage() {
         <DepositModal
           existingOrder={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onSuccess={() => showSuccess("Nạp tiền thành công!")}
+          onSuccess={() => showSuccess("Deposit successful!")}
         />
       )}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} onSuccess={() => showSuccess("Yêu cầu rút tiền đã được gửi!")} />}
+      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} onSuccess={() => showSuccess("Withdrawal request submitted!")}/>}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
