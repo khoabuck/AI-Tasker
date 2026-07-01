@@ -14,7 +14,7 @@ public interface IAIUsageCostService
         DateTime? to = null,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<AIUsageLogResponse>> GetUsageLogsAsync(
+    Task<IReadOnlyList<AiUsageLogResponse>> GetUsageLogsAsync(
         DateTime? from = null,
         DateTime? to = null,
         string? provider = null,

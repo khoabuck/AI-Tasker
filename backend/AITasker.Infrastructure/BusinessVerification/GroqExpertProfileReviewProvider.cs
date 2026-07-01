@@ -10,19 +10,11 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 {
     private const decimal ExpertProfilePassThreshold = 70m;
 
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
-    private readonly IAIUsageCostService _aiUsageCostService;
+    private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqExpertProfileReviewProvider(
-        HttpClient httpClient,
-        IConfiguration configuration,
-        IAIUsageCostService aiUsageCostService
-    )
+    public GroqExpertProfileReviewProvider(IGroqChatCompletionService groqChatCompletionService)
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
-        _aiUsageCostService = aiUsageCostService;
+        _groqChatCompletionService = groqChatCompletionService;
     }
 
     public async Task<ExpertProfileReviewProviderResult> ReviewAsync(
@@ -80,47 +72,14 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                 cancellationToken
             );
 
-            var responseText = await response.Content.ReadAsStringAsync(
-                cancellationToken
-            );
-
-            await TryRecordAIUsageAsync(
-                model,
-                JsonSerializer.Serialize(payload),
-                responseText,
-                response.IsSuccessStatusCode ? "SUCCESS" : "FAILED",
-                response.IsSuccessStatusCode ? null : responseText,
-                cancellationToken
-            );
-
-            if (!response.IsSuccessStatusCode)
-            {
-                return NeedsCorrection(
-                    $"AI provider error: {(int)response.StatusCode}. Please update the profile or try again later."
-                );
-            }
-
-            var groqResponse = JsonSerializer.Deserialize<GroqChatCompletionResponse>(
-                responseText,
-                new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                }
-            );
-
-            var content = groqResponse?.Choices
-                ?.FirstOrDefault()
-                ?.Message
-                ?.Content;
-
-            if (string.IsNullOrWhiteSpace(content))
+            if (string.IsNullOrWhiteSpace(aiResponse.Content))
             {
                 return NeedsCorrection(
                     "AI provider returned empty response. Please update the profile with stronger evidence."
                 );
             }
 
-            var result = ParseAiResult(content);
+            var result = ParseAiResult(aiResponse.Content);
 
             return NormalizeResult(result, request.YearsOfExperience);
         }
@@ -129,38 +88,6 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             return NeedsCorrection(
                 "AI profile review failed due to a system error. Please update the profile with valid proof URLs and certificate evidence."
             );
-        }
-    }
-
-    private async Task TryRecordAIUsageAsync(
-        string model,
-        string requestPayload,
-        string responsePayload,
-        string status,
-        string? errorMessage,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            await _aiUsageCostService.RecordFromOpenAICompatibleResponseAsync(
-                new RecordAIUsageRequest
-                {
-                    ModuleName = "EXPERT_PROFILE_CHECKER",
-                    Provider = "GROQ",
-                    ModelName = model,
-                    RequestPayload = requestPayload,
-                    ResponsePayload = responsePayload,
-                    Status = status,
-                    ErrorMessage = errorMessage,
-                    IsChargedToPlatform = true,
-                    IsChargedToUser = false
-                },
-                cancellationToken
-            );
-        }
-        catch
-        {
-            // AI usage logging must not block the user-facing AI feature.
         }
     }
 
@@ -479,20 +406,5 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             MissingInformation =
                 "Please update your profile with valid proof URLs and certificate evidence."
         };
-    }
-
-    private class GroqChatCompletionResponse
-    {
-        public List<GroqChoice>? Choices { get; set; }
-    }
-
-    private class GroqChoice
-    {
-        public GroqMessage? Message { get; set; }
-    }
-
-    private class GroqMessage
-    {
-        public string? Content { get; set; }
     }
 }

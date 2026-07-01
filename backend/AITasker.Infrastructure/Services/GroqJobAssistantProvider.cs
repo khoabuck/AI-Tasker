@@ -8,18 +8,11 @@ namespace AITasker.Infrastructure.Services;
 
 public class GroqJobAssistantProvider : IJobAssistantProvider
 {
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
-    private readonly IAIUsageCostService _aiUsageCostService;
+    private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqJobAssistantProvider(
-        HttpClient httpClient,
-        IConfiguration configuration,
-        IAIUsageCostService aiUsageCostService)
+    public GroqJobAssistantProvider(IGroqChatCompletionService groqChatCompletionService)
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
-        _aiUsageCostService = aiUsageCostService;
+        _groqChatCompletionService = groqChatCompletionService;
     }
 
     public async Task<JobAiAnalysisResult> AnalyzeAsync(
@@ -48,28 +41,7 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
             }
         );
 
-        using var response = await _httpClient.SendAsync(httpRequest);
-
-        var responseContent = await response.Content.ReadAsStringAsync();
-
-        await TryRecordAIUsageAsync(
-            model,
-            jsonBody,
-            responseContent,
-            response.IsSuccessStatusCode ? "SUCCESS" : "FAILED",
-            response.IsSuccessStatusCode ? null : responseContent
-        );
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Groq job assistant failed: {responseContent}"
-            );
-        }
-
-        var aiText = ExtractAssistantText(responseContent);
-
-        return ParseAiResult(aiText);
+        return ParseAiResult(aiResponse.Content);
     }
 
     private static string BuildPrompt(
@@ -131,56 +103,6 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
           "warnings": ["string"]
         }
         """;
-    }
-
-    private async Task TryRecordAIUsageAsync(
-        string model,
-        string requestPayload,
-        string responsePayload,
-        string status,
-        string? errorMessage)
-    {
-        try
-        {
-            await _aiUsageCostService.RecordFromOpenAICompatibleResponseAsync(
-                new RecordAIUsageRequest
-                {
-                    ModuleName = "AI_JOB_ASSISTANT",
-                    Provider = "GROQ",
-                    ModelName = model,
-                    RequestPayload = requestPayload,
-                    ResponsePayload = responsePayload,
-                    Status = status,
-                    ErrorMessage = errorMessage,
-                    IsChargedToPlatform = true,
-                    IsChargedToUser = false
-                }
-            );
-        }
-        catch
-        {
-            // AI usage logging must not block the user-facing AI feature.
-        }
-    }
-
-    private static string ExtractAssistantText(string responseContent)
-    {
-        using var document = JsonDocument.Parse(responseContent);
-
-        var root = document.RootElement;
-
-        var content = root
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString();
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new InvalidOperationException("AI response is empty.");
-        }
-
-        return content;
     }
 
     private static JobAiAnalysisResult ParseAiResult(string aiText)
