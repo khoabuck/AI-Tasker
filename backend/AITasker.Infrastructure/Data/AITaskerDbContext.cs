@@ -22,7 +22,11 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<AIModelPricingPolicy> AIModelPricingPolicies => Set<AIModelPricingPolicy>();
 
-    public DbSet<AIUsageLog> AIUsageLogs => Set<AIUsageLog>();
+    public DbSet<AiSettings> AiSettings => Set<AiSettings>();
+
+    public DbSet<AiAllowedModel> AiAllowedModels => Set<AiAllowedModel>();
+
+    public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
 
     public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
@@ -316,102 +320,6 @@ public class AITaskerDbContext : DbContext
                 x.IsActive,
                 x.EffectiveFrom
             });
-        });
-
-        // =========================
-        // AIUsageLogs
-        // =========================
-        modelBuilder.Entity<AIUsageLog>(entity =>
-        {
-            entity.ToTable("AIUsageLogs");
-
-            entity.HasKey(x => x.AIUsageLogId);
-
-            entity.Property(x => x.ModuleName)
-                .HasMaxLength(100)
-                .IsRequired();
-
-            entity.Property(x => x.Provider)
-                .HasMaxLength(50)
-                .IsRequired();
-
-            entity.Property(x => x.ModelName)
-                .HasMaxLength(100)
-                .IsRequired();
-
-            entity.Property(x => x.InputPricePerMillionTokensUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.OutputPricePerMillionTokensUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.EstimatedInputCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.EstimatedOutputCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.EstimatedTotalCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.ActualInputCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.ActualOutputCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.ActualTotalCostUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.ExchangeRateToVnd)
-                .HasColumnType("decimal(18,4)");
-
-            entity.Property(x => x.EstimatedTotalCostVnd)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.ActualTotalCostVnd)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.FreeTierSavingsUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.FreeTierSavingsVnd)
-                .HasColumnType("decimal(18,2)");
-
-            entity.Property(x => x.Status)
-                .HasMaxLength(30)
-                .IsRequired();
-
-            entity.Property(x => x.ErrorMessage)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.RequestPreview)
-                .HasMaxLength(1000);
-
-            entity.Property(x => x.ResponsePreview)
-                .HasMaxLength(1000);
-
-            entity.HasOne(x => x.User)
-                .WithMany()
-                .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasOne(x => x.AIModelPricingPolicy)
-                .WithMany()
-                .HasForeignKey(x => x.AIModelPricingPolicyId)
-                .OnDelete(DeleteBehavior.SetNull);
-
-            entity.HasIndex(x => x.AIModelPricingPolicyId);
-
-            entity.HasIndex(x => x.CreatedAt);
-
-            entity.HasIndex(x => x.Provider);
-
-            entity.HasIndex(x => x.ModuleName);
-
-            entity.HasIndex(x => x.ModelName);
-
-            entity.HasIndex(x => x.Status);
         });
 
         // =========================
