@@ -211,7 +211,7 @@ export default function AIMatchingPage() {
       navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
     } catch (err) {
       console.error("Create conversation failed:", err);
-      alert("Không thể tạo cuộc trò chuyện với Expert.");
+      alert("Unable to create a conversation with the Expert.");
     }
   };
 

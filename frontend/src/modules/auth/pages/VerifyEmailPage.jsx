@@ -10,9 +10,21 @@ export default function VerifyEmailPage() {
   const messageParam = searchParams.get("message");
   const isSuccess = successParam === "true";
 
-  const message = messageParam || (isSuccess
-    ? "Your email has been verified successfully. You can now log in."
-    : "The verification link is invalid or has expired.");
+  const isJwtLike = (text) => {
+    if (!text) return false;
+    return text.split(".").length === 3 && text.startsWith("eyJ");
+  };
+
+  const safeMessage =
+    messageParam && !isJwtLike(messageParam)
+      ? messageParam
+      : "";
+
+  const message =
+    safeMessage ||
+    (isSuccess
+      ? "Your email has been verified successfully. You can now log in."
+      : "The verification link is invalid or has expired.");
 
   return (
     <div style={{ background: "#12151B", color: "#e1e2eb", minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "Inter, sans-serif" }}>

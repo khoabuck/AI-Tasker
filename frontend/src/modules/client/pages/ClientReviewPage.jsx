@@ -84,9 +84,9 @@ export default function ClientReviewPage() {
 
   // ── Submit review ─────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (rating === 0) { setError("Vui lòng chọn số sao."); return; }
-    if (!comment.trim()) { setError("Vui lòng nhập nhận xét."); return; }
-    if (comment.trim().length < 10) { setError("Nhận xét quá ngắn (tối thiểu 10 ký tự)."); return; }
+    if (rating === 0) { setError("Please select a star rating."); return; }
+    if (!comment.trim()) { setError("Please enter your review."); return; }
+    if (comment.trim().length < 10) { setError("Review is too short (minimum 10 characters)."); return; }
 
     setSubmitting(true);
     setError("");
@@ -97,7 +97,7 @@ export default function ClientReviewPage() {
       });
       setSubmitted(true);
     } catch (err) {
-      setError(err?.response?.data?.message || "Gửi đánh giá thất bại. Vui lòng thử lại.");
+      setError(err?.response?.data?.message || "Submit review failed. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -162,8 +162,8 @@ export default function ClientReviewPage() {
           </h1>
           <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>
             {isReadonly
-              ? "Bạn đã đánh giá project này."
-              : "Chia sẻ trải nghiệm của bạn với AI Expert trong project này."}
+              ? "You have already reviewed this project."
+              : "Share your experience working with the AI Expert on this project."}
           </p>
         </div>
 
@@ -192,7 +192,7 @@ export default function ClientReviewPage() {
               value={comment}
               onChange={(e) => { setComment(e.target.value); setError(""); }}
               readOnly={isReadonly}
-              placeholder="Mô tả trải nghiệm của bạn với expert — chất lượng công việc, giao tiếp, đúng deadline..."
+              placeholder="Describe your experience with the expert — work quality, communication, on-time delivery..."
               rows={6}
               style={{
                 width: "100%", background: isReadonly ? "rgba(255,255,255,0.02)" : "#1d2026",

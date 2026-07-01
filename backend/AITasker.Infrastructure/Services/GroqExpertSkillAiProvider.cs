@@ -31,6 +31,25 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
             };
         }
 
+        var apiKey =
+            _configuration["Groq:ApiKey"] ??
+            _configuration["BusinessVerification:Groq:ApiKey"];
+
+        var model =
+            _configuration["Groq:Model"] ??
+            _configuration["BusinessVerification:Groq:Model"] ??
+            "openai/gpt-oss-120b";
+
+        var baseUrl =
+            _configuration["Groq:BaseUrl"] ??
+            _configuration["BusinessVerification:Groq:BaseUrl"] ??
+            "https://api.groq.com/openai/v1";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new InvalidOperationException("Groq API key is missing.");
+        }
+
         var prompt = BuildPrompt(input, availableSkills);
 
         var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(

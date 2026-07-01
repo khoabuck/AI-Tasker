@@ -24,6 +24,19 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         CancellationToken cancellationToken = default
     )
     {
+        var apiKey = _configuration["BusinessVerification:Groq:ApiKey"];
+        var baseUrl = _configuration["BusinessVerification:Groq:BaseUrl"]
+            ?? "https://api.groq.com/openai/v1";
+        var model = _configuration["BusinessVerification:Groq:Model"]
+            ?? "openai/gpt-oss-120b";
+
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            return NeedsCorrection(
+                "Groq API key is missing. Please update the profile with valid proof URLs and certificate evidence."
+            );
+        }
+
         try
         {
             var prompt = BuildPrompt(request);

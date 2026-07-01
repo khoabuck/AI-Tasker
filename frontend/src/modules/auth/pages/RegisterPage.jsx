@@ -5,7 +5,7 @@ import { getErrorMessage } from "../../../utils/auth.utils";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const GOOGLE_LOGIN_URL = "http://localhost:5070/api/auth/google-login";
+const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
 
 const GoogleIcon = () => (
   <svg style={{ width: 20, height: 20 }} viewBox="0 0 24 24">
@@ -21,6 +21,9 @@ export default function RegisterPage() {
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirmPassword: "", terms: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [focusField, setFocusField] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -55,16 +58,37 @@ export default function RegisterPage() {
     window.location.href = GOOGLE_LOGIN_URL;
   };
 
-  const inputStyle = {
-    background: "#232A35",
-    border: "1px solid rgba(255,255,255,0.12)",
-    borderRadius: "0.5rem",
+  const inputStyle = (fieldName) => ({
+    background: "#191c22",
+    border: `1px solid ${
+      focusField === fieldName
+        ? "rgba(0,240,255,0.5)"
+        : "rgba(255,255,255,0.12)"
+    }`,
+    borderRadius: "0.75rem",
     padding: "12px 16px 12px 48px",
     color: "#e1e2eb",
     width: "100%",
     outline: "none",
     fontFamily: "Inter, sans-serif",
-  };
+    transition: "all .25s ease",
+    WebkitBoxShadow: "0 0 0 1000px #191c22 inset",
+    WebkitTextFillColor: "#e1e2eb",
+  });
+
+  const iconStyle = (fieldName) => ({
+    position: "absolute",
+    left: 16,
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: focusField === fieldName ? "#00F0FF" : "#8c90a0",
+    fontSize: 20,
+    textShadow:
+      focusField === fieldName
+        ? "0 0 10px rgba(0,240,255,0.6)"
+        : "none",
+    transition: "all .25s ease",
+  });
 
   return (
     <div style={{ background: "#12151B", color: "#e1e2eb", minHeight: "100vh", display: "flex", flexDirection: "column", fontFamily: "Inter, sans-serif" }}>
@@ -113,8 +137,20 @@ export default function RegisterPage() {
                 <div>
                   <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Full Name</label>
                   <div style={{ position: "relative" }}>
-                    <span className="material-symbols-outlined" style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#8c90a0", fontSize: 20 }}>person</span>
-                    <input type="text" name="fullName" value={form.fullName} onChange={handleChange} required placeholder="Dr. Sarah Chen" style={inputStyle} />
+                    <span className="material-symbols-outlined" style={iconStyle("fullName")}>
+                      person
+                    </span>
+                    <input
+                      type="text"
+                      name="fullName"
+                      value={form.fullName}
+                      onChange={handleChange}
+                      required
+                      placeholder="Dr. Sarah Chen"
+                      style={inputStyle("fullName")}
+                      onFocus={() => setFocusField("fullName")}
+                      onBlur={() => setFocusField("")}
+                    />
                   </div>
                 </div>
 
@@ -122,8 +158,20 @@ export default function RegisterPage() {
                 <div>
                   <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Email Address</label>
                   <div style={{ position: "relative" }}>
-                    <span className="material-symbols-outlined" style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#8c90a0", fontSize: 20 }}>alternate_email</span>
-                    <input type="email" name="email" value={form.email} onChange={handleChange} required placeholder="sarah.chen@neural.ai" style={inputStyle} />
+                    <span className="material-symbols-outlined" style={iconStyle("email")}>
+                      alternate_email
+                    </span>
+                    <input
+                      type="email"
+                      name="email"
+                      value={form.email}
+                      onChange={handleChange}
+                      required
+                      placeholder="sarah.chen@neural.ai"
+                      style={inputStyle("email")}
+                      onFocus={() => setFocusField("email")}
+                      onBlur={() => setFocusField("")}
+                    />
                   </div>
                 </div>
 
@@ -132,15 +180,101 @@ export default function RegisterPage() {
                   <div>
                     <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Password</label>
                     <div style={{ position: "relative" }}>
-                      <span className="material-symbols-outlined" style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#8c90a0", fontSize: 20 }}>lock</span>
-                      <input type="password" name="password" value={form.password} onChange={handleChange} required placeholder="••••••••" style={inputStyle} />
+                      <span className="material-symbols-outlined" style={iconStyle("password")}>
+                        lock
+                      </span>
+
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        name="password"
+                        value={form.password}
+                        onChange={handleChange}
+                        required
+                        placeholder="••••••••"
+                        style={{ ...inputStyle("password"), paddingRight: 48 }}
+                        onFocus={() => setFocusField("password")}
+                        onBlur={() => setFocusField("")}
+                      />
+
+                      <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          style={{
+                            position: "absolute",
+                            right: 14,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color:
+                              focusField === "password" || showPassword
+                                ? "#00F0FF"
+                                : "#8c90a0",
+                            textShadow:
+                              focusField === "password" || showPassword
+                                ? "0 0 10px rgba(0,240,255,.6)"
+                                : "none",
+                            transition: "all .25s ease",
+                          }}
+                        >
+                        <span className="material-symbols-outlined">
+                          {showPassword ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
                     </div>
                   </div>
                   <div>
                     <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Confirm Password</label>
                     <div style={{ position: "relative" }}>
-                      <span className="material-symbols-outlined" style={{ position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)", color: "#8c90a0", fontSize: 20 }}>shield</span>
-                      <input type="password" name="confirmPassword" value={form.confirmPassword} onChange={handleChange} required placeholder="••••••••" style={inputStyle} />
+                      <span className="material-symbols-outlined" style={iconStyle("confirmPassword")}>
+                        shield
+                      </span>
+
+                      <input
+                        type={showConfirmPassword ? "text" : "password"}
+                        name="confirmPassword"
+                        value={form.confirmPassword}
+                        onChange={handleChange}
+                        required
+                        placeholder="••••••••"
+                        style={{ ...inputStyle("confirmPassword"), paddingRight: 48 }}
+                        onFocus={() => setFocusField("confirmPassword")}
+                        onBlur={() => setFocusField("")}
+                      />
+
+                      <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          style={{
+                            position: "absolute",
+                            right: 14,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color:
+                              focusField === "confirmPassword" || showConfirmPassword
+                                ? "#00F0FF"
+                                : "#8c90a0",
+                            textShadow:
+                              focusField === "confirmPassword" || showConfirmPassword
+                                ? "0 0 10px rgba(0,240,255,.6)"
+                                : "none",
+                            transition: "all .25s ease",
+                          }}
+                        >
+                        <span className="material-symbols-outlined">
+                          {showConfirmPassword ? "visibility_off" : "visibility"}
+                        </span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -150,10 +284,20 @@ export default function RegisterPage() {
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, marginTop: 8 }}>
                 <input type="checkbox" name="terms" id="terms" checked={form.terms} onChange={handleChange} style={{ width: 20, height: 20, accentColor: "#00F0FF", marginTop: 2, cursor: "pointer", flexShrink: 0 }} />
                 <label htmlFor="terms" style={{ fontSize: 14, color: "#8c90a0", cursor: "pointer" }}>
-                  I agree with{" "}
-                  <a href="#" style={{ color: "#00F0FF" }}>Terms of Service</a>{" "}
-                  và{" "}
-                  <a href="#" style={{ color: "#00F0FF" }}>Privacy Policy</a>
+                  I agree to the{" "}
+                  <Link
+                    to="/terms-of-service"
+                    style={{ color: "#00F0FF", textDecoration: "none", fontWeight: 600 }}
+                  >
+                    Terms of Service
+                  </Link>{" "}
+                  and{" "}
+                  <Link
+                    to="/privacy-policy"
+                    style={{ color: "#00F0FF", textDecoration: "none", fontWeight: 600 }}
+                  >
+                    Privacy Policy
+                  </Link>
                 </label>
               </div>
 

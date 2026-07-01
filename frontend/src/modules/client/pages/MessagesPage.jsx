@@ -9,7 +9,7 @@
 // và field phân biệt "tin nhắn của tôi" trong messages[].
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ClientNavbar from "../../../components/layout/ClientNavbar";
 import axiosInstance from "../../../api/axiosInstance";
 import authService from "../../../services/auth.service";
@@ -30,7 +30,7 @@ function formatMessageTime(dateStr) {
 
   const date = new Date(dateStr);
 
-  return date.toLocaleTimeString("vi-VN", {
+  return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
@@ -51,7 +51,7 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 19, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
-            {showRevisionForm ? "Yêu cầu chỉnh sửa" : "Review Proposal"}
+            {showRevisionForm ? "Request Revision" : "Review Proposal"}
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
@@ -68,11 +68,11 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
           </div>
         ) : p ? (
           showRevisionForm ? (
-            // ── Form yêu cầu sửa: giữ nguyên data cũ, chỉ thêm ghi chú ──
+            // ── Revision request form: keep existing proposal data and add notes only ──
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <p style={{ fontSize: 13, color: "#8c90a0", margin: 0, lineHeight: 1.6 }}>
-                Toàn bộ thông tin proposal hiện tại sẽ được gửi kèm vào tin nhắn để expert đối chiếu.
-                Bạn chỉ cần ghi chú điều muốn thay đổi.
+                The current proposal details will be sent with the message for the expert to compare.
+                You only need to note what changes you want.
               </p>
 
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 14, fontSize: 12, color: "#8c90a0", display: "flex", flexDirection: "column", gap: 4 }}>
@@ -82,10 +82,10 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
 
               <div>
                 <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-                  Ghi chú muốn sửa (vd: giảm giá, đổi timeline, bổ sung output...)
+                  Revision notes (e.g. lower price, shorten timeline, add outputs...)
                 </label>
                 <textarea value={revisionNote} onChange={(e) => setRevisionNote(e.target.value)}
-                  placeholder="Ví dụ: Giá hơi cao, mong bạn giảm xuống $450 và rút ngắn timeline còn 45 ngày..."
+                  placeholder="Example: The price is a bit high, please lower it to $450 and shorten the timeline to 45 days..."
                   rows={4}
                   style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
               </div>
@@ -97,13 +97,13 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setShowRevisionForm(false)}
                   style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-                  Quay lại
+                  Back
                 </button>
                 <button onClick={() => onRequestRevision(revisionNote)} disabled={state.requestingRevision}
                   style={{ flex: 2, padding: "12px", background: state.requestingRevision ? "#1d2026" : "#facc15", color: "#1d1500", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: state.requestingRevision ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   {state.requestingRevision
-                    ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang gửi...</>
-                    : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>send</span>Gửi yêu cầu sửa</>}
+                    ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
+                    : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>send</span>Send revision request</>}
                 </button>
               </div>
             </div>
@@ -168,8 +168,8 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
 
 export default function MessagesPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const initialConvId = searchParams.get("conversationId");
+  const { conversationId } = useParams();
+  const initialConvId = conversationId;
   const currentUser = authService.getCurrentUser();
   const currentUserId = currentUser?.userId ?? currentUser?.id;
 
@@ -221,9 +221,9 @@ export default function MessagesPage() {
             avatar:
               c.expertAvatarUrl ||
               c.otherPartyAvatarUrl ||
-              `https://i.pravatar.cc/100?u=${c.expertUserId ?? c.expertProfileId ?? convId}`,
+              "/default-avatar.png",
             online: c.isOtherPartyOnline ?? false,
-            lastMessage: c.lastMessage?.content || c.lastMessageContent || "Bắt đầu cuộc trò chuyện",
+            lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
             time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
             unread: c.unreadCount || 0,
             relatedProposalId: c.relatedProposalId,
@@ -256,7 +256,7 @@ export default function MessagesPage() {
       setActiveChat(null);
     }
     } catch (err) {
-      setError(err?.response?.data?.message || "Không thể tải danh sách trò chuyện.");
+      setError(err?.response?.data?.message || "Unable to load conversations.");
     } finally {
       setLoadingList(false);
     }
@@ -292,19 +292,26 @@ export default function MessagesPage() {
 
       setMessages(normalized);
     } catch (err) {
-      if (!silent) setError(err?.response?.data?.message || "Không thể tải tin nhắn.");
+      if (!silent) setError(err?.response?.data?.message || "Unable to load messages.");
     } finally {
       if (!silent) setLoadingMessages(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (!activeChat?.id) return;
-    fetchMessages(activeChat.id);
+  const MESSAGE_POLL_INTERVAL = 5000;
 
-    pollRef.current = setInterval(() => fetchMessages(activeChat.id, true), 5000);
-    return () => clearInterval(pollRef.current);
-  }, [activeChat?.id, fetchMessages]);
+useEffect(() => {
+  if (!activeChat?.id) return;
+
+  fetchMessages(activeChat.id);
+
+  pollRef.current = setInterval(
+    () => fetchMessages(activeChat.id, true),
+    MESSAGE_POLL_INTERVAL
+  );
+
+  return () => clearInterval(pollRef.current);
+}, [activeChat?.id, fetchMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -336,7 +343,7 @@ export default function MessagesPage() {
       });
       await fetchMessages(activeChat.id, true);
     } catch (err) {
-      setError(err?.response?.data?.message || "Gửi tin nhắn thất bại.");
+      setError(err?.response?.data?.message || "Send message failed.");
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       setInput(content);
     }
@@ -346,8 +353,8 @@ export default function MessagesPage() {
     if (!file || !activeChat?.id) return;
 
     if (type === "FILE") {
-      // Chưa có endpoint upload file thường trong API list — chỉ /api/uploads/images cho ảnh.
-      setError("Tải file đính kèm (không phải ảnh) chưa được hỗ trợ. Vui lòng báo BE bổ sung endpoint upload file.");
+      // There is no regular file upload endpoint in the API list — only /api/uploads/images for images.
+      setError("Uploading attachments (non-image) is not supported. Please ask backend to add a file upload endpoint.");
       return;
     }
 
@@ -361,13 +368,13 @@ export default function MessagesPage() {
       const url = res.data?.url ?? res.data?.data?.url ?? res.data;
 
       await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
-        content: "[Hình ảnh]",
+        content: "[Image]",
         messageType: "IMAGE",
         attachmentUrl: url,
       });
       await fetchMessages(activeChat.id, true);
     } catch (err) {
-      setError(err?.response?.data?.message || "Tải ảnh lên thất bại.");
+      setError(err?.response?.data?.message || "Image upload failed.");
     }
   };
 
@@ -401,14 +408,14 @@ export default function MessagesPage() {
           : null;
 
         if (!target) {
-          setProposalModal({ loading: false, error: "Không tìm thấy proposal của expert này cho job liên quan.", data: null });
+          setProposalModal({ loading: false, error: "No proposal found for this expert on the related job.", data: null });
           return;
         }
         proposalId = target.proposalId;
       }
 
       if (!proposalId) {
-        setProposalModal({ loading: false, error: "Không tìm thấy proposal liên kết.", data: null });
+        setProposalModal({ loading: false, error: "Linked proposal not found.", data: null });
         return;
       }
 
@@ -417,13 +424,13 @@ export default function MessagesPage() {
       if (Array.isArray(proposalData)) proposalData = proposalData[0] ?? null;
 
       if (!proposalData) {
-        setProposalModal({ loading: false, error: "Không tìm thấy proposal này.", data: null });
+        setProposalModal({ loading: false, error: "Proposal not found.", data: null });
         return;
       }
 
       setProposalModal({ loading: false, error: "", data: proposalData });
     } catch (err) {
-      setProposalModal({ loading: false, error: err?.response?.data?.message || "Không thể tải proposal. Vui lòng thử lại.", data: null });
+      setProposalModal({ loading: false, error: err?.response?.data?.message || "Unable to load proposal. Please try again.", data: null });
     }
   };
 
@@ -436,7 +443,7 @@ export default function MessagesPage() {
 
     const p = proposalModal.data;
     const summary =
-`Yêu cầu chỉnh sửa proposal (giữ nguyên thông tin cũ để đối chiếu):
+`Revision request for proposal (keeping existing details for reference):
 
 — Proposed Price: $${p.proposedPrice?.toLocaleString() ?? "—"}
 — Timeline: ${p.proposedTimelineDays ?? "—"} days
@@ -445,7 +452,7 @@ export default function MessagesPage() {
 — Working Approach: ${p.workingApproach ?? "—"}
 — Milestone Plan: ${p.preliminaryMilestonePlan ?? "—"}
 
-Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
+Client notes: ${feedbackText || "(no additional notes)"}`;
 
     try {
       await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
@@ -456,7 +463,7 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
       await fetchMessages(activeChat.id, true);
       setProposalModal(null);
     } catch (err) {
-      setProposalModal((prev) => ({ ...prev, requestingRevision: false, error: err?.response?.data?.message || "Gửi yêu cầu sửa thất bại." }));
+      setProposalModal((prev) => ({ ...prev, requestingRevision: false, error: err?.response?.data?.message || "Revision request failed." }));
     }
   };
 
@@ -477,7 +484,7 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
 
   // ── Delete conversation (chỉ ẩn cục bộ — chưa có API DELETE thật từ BE) ──
   const handleDeleteConversation = (conversationId) => {
-    if (!window.confirm("Xóa cuộc trò chuyện này? (Lưu ý: chỉ ẩn trên thiết bị này, BE chưa hỗ trợ xóa vĩnh viễn)")) return;
+    if (!window.confirm("Delete this conversation? (Note: this only hides it on this device; backend does not support permanent delete yet)")) return;
 
     setDeletedIds((prev) => {
       const next = [...prev, conversationId];
@@ -513,7 +520,7 @@ Ghi chú từ client: ${feedbackText || "(không có ghi chú thêm)"}`;
         <ClientNavbar />
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#8c90a0", flexDirection: "column", gap: 12 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 64, color: "#272a30" }}>chat_bubble_outline</span>
-          <p style={{ fontSize: 14 }}>Chưa có cuộc trò chuyện nào.</p>
+          <p style={{ fontSize: 14 }}>No conversations yet.</p>
         </div>
       </div>
     );

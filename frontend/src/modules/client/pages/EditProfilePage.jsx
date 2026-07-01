@@ -97,7 +97,7 @@ export default function EditProfilePage() {
         setInitialSnapshot(JSON.stringify(individualData));
         }
       } catch (err) {
-        setGlobalError("Không thể tải thông tin profile.");
+        setGlobalError("Unable to load profile information.");
       } finally {
         setFetching(false);
       }
@@ -129,47 +129,42 @@ export default function EditProfilePage() {
     }
 
     const phoneClean = f.phoneNumber.replace(/[\s\-\.]/g, "");
+
     if (!f.phoneNumber.trim()) {
-      errors.phoneNumber = "Số điện thoại không được để trống.";
-    } else if (
-      !/^(0[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(\+84[3-9]\d{8})$/.test(phoneClean) &&
-      !/^(84[3-9]\d{8})$/.test(phoneClean)
-    ) {
-      errors.phoneNumber = "Số điện thoại không hợp lệ (vd: 0912345678).";
+      errors.phoneNumber = "Personal phone number cannot be empty.";
+    } else if (!/^(0|84|\+84)(3|5|7|8|9)\d{8}$/.test(phoneClean)) {
+      errors.phoneNumber = "Invalid VN mobile number. Example: 0912345678.";
     }
 
     if (!f.address.trim()) {
-      errors.address = "Địa chỉ không được để trống.";
+      errors.address = "Address cannot be empty.";
     } else if (f.address.trim().length < 5) {
-      errors.address = "Địa chỉ quá ngắn (tối thiểu 5 ký tự).";
+      errors.address = "Address is too short (minimum 5 characters).";
     }
 
     if (clientType === "business") {
       const taxClean = business.taxCode.replace(/\-/g, "");
       if (!business.taxCode.trim()) {
-        errors.taxCode = "Mã số thuế không được để trống.";
+        errors.taxCode = "Tax code cannot be empty.";
       } else if (!/^\d{10}$/.test(taxClean) && !/^\d{13}$/.test(taxClean)) {
-        errors.taxCode = "Mã số thuế không hợp lệ (10 hoặc 13 chữ số).";
+        errors.taxCode = "Invalid tax code (10 or 13 digits).";
       }
 
-      if (!business.industry.trim()) errors.industry = "Ngành nghề không được để trống.";
+      if (!business.industry.trim()) errors.industry = "Industry cannot be empty.";
 
       if (!business.businessEmail.trim()) {
-        errors.businessEmail = "Email doanh nghiệp không được để trống.";
+        errors.businessEmail = "Business email cannot be empty.";
       } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(business.businessEmail.trim())) {
-        errors.businessEmail = "Email không đúng định dạng.";
+        errors.businessEmail = "Invalid email format.";
       }
 
       const bizPhoneClean = business.businessPhone.replace(/[\s\-\.]/g, "");
+
       if (!business.businessPhone.trim()) {
-        errors.businessPhone = "Số điện thoại doanh nghiệp không được để trống.";
-      } else if (
-        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
-      ) {
-        errors.businessPhone = "Số điện thoại doanh nghiệp không hợp lệ.";
+        errors.businessPhone = "Company phone number cannot be empty.";
+      } else if (!/^(0\d{9,10}|84\d{9,10}|\+84\d{9,10})$/.test(bizPhoneClean)) {
+        errors.businessPhone =
+          "Invalid company phone number. Example: 02812345678 or 0912345678.";
       }
     }
 
@@ -194,9 +189,7 @@ export default function EditProfilePage() {
   const feErrors = validateForm();
   if (Object.keys(feErrors).length > 0) {
     setFieldErrors(feErrors);
-    setGlobalError("Thông tin chưa hợp lệ. Vui lòng kiểm tra lại.");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    return;
+      setGlobalError("Invalid information. Please review the highlighted fields.");
   }
 
   setLoading(true);
@@ -205,13 +198,11 @@ export default function EditProfilePage() {
       let res;
       if (clientType === "individual") {
         res = await axiosInstance.put("/client-profiles/individual/me", {
-          fullName: individual.fullName,
           phoneNumber: individual.phoneNumber,
           address: individual.address,
         });
       } else {
         res = await axiosInstance.put("/client-profiles/business/me", {
-          fullName: business.fullName,
           phoneNumber: business.phoneNumber,
           address: business.address,
           taxCode: business.taxCode,
@@ -243,7 +234,7 @@ export default function EditProfilePage() {
       navigate("/client/profile", { replace: true, state: { refresh: Date.now() } });
     } catch (err) {
       const resData = err?.response?.data;
-      const message = resData?.message || resData?.title || "Đã có lỗi xảy ra hoặc xác minh thất bại.";
+      const message = resData?.message || resData?.title || "An error occurred or verification failed.";
 
       if (resData?.errors && typeof resData.errors === "object" && !Array.isArray(resData.errors)) {
         // BE trả lỗi theo từng field cụ thể → highlight đúng field đó
@@ -289,7 +280,7 @@ export default function EditProfilePage() {
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 28, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>
               Edit Profile
             </h1>
-            <p style={{ color: "#8c90a0", fontSize: 14 }}>Cập nhật thông tin — AI sẽ verify lại sau khi lưu</p>
+            <p style={{ color: "#8c90a0", fontSize: 14 }}>Update your information — AI will re-verify after saving</p>
           </div>
         </div>
 
@@ -299,10 +290,10 @@ export default function EditProfilePage() {
             <span className="material-symbols-outlined" style={{ fontSize: 20, color: "#f87171", flexShrink: 0, marginTop: 1 }}>gpp_bad</span>
             <div>
               <p style={{ color: "#f87171", fontSize: 14, fontWeight: 600, margin: "0 0 4px" }}>
-                {hasFieldErrors ? "AI Verification Failed" : "Lỗi"}
+                {hasFieldErrors ? "AI Verification Failed" : "Error"}
               </p>
               <p style={{ color: "#fca5a5", fontSize: 13, margin: 0 }}>
-                {globalError || "Vui lòng kiểm tra và sửa các trường được đánh dấu đỏ."}
+                {globalError || "Please review and correct the highlighted fields."}
               </p>
             </div>
           </div>
@@ -340,20 +331,22 @@ export default function EditProfilePage() {
               <div>
                 <label style={labelStyle}>Full Name</label>
                 <input
-                  type="text"
-                  name="fullName"
-                  value={form.fullName || ""}
-                  onChange={handleChange}
-                  style={getInputStyle("fullName", fieldErrors)}
-                  onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                  onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
-                />
+                    type="text"
+                    name="fullName"
+                    value={form.fullName || ""}
+                    disabled
+                    style={{
+                      ...getInputStyle("fullName", fieldErrors),
+                      opacity: 0.65,
+                      cursor: "not-allowed",
+                    }}
+                  />
                 <FieldError name="fullName" errors={fieldErrors} />
               </div>
               {/* Phone + Address */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <label style={{ ...labelStyle, color: fieldErrors.phoneNumber ? "#f87171" : "#8c90a0" }}>Phone Number</label>
+                  <label style={{ ...labelStyle, color: fieldErrors.phoneNumber ? "#f87171" : "#8c90a0" }}>Personal Phone Number</label>
                   <input type="text" name="phoneNumber" value={form.phoneNumber} onChange={handleChange}
                     placeholder="0912345678"
                     style={getInputStyle("phoneNumber", fieldErrors)}
@@ -364,7 +357,7 @@ export default function EditProfilePage() {
                 <div>
                   <label style={{ ...labelStyle, color: fieldErrors.address ? "#f87171" : "#8c90a0" }}>Address</label>
                   <input type="text" name="address" value={form.address} onChange={handleChange}
-                    placeholder="TP. Hồ Chí Minh"
+                    placeholder="Ho Chi Minh City"
                     style={getInputStyle("address", fieldErrors)}
                     onFocus={(e) => (e.target.style.borderColor = fieldErrors.address ? "#ef4444" : "#00F0FF")}
                     onBlur={(e) => (e.target.style.borderColor = fieldErrors.address ? "#ef4444" : "rgba(255,255,255,0.12)")} />
@@ -448,7 +441,7 @@ export default function EditProfilePage() {
                         <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
                       <div>
-                        <label style={{ ...labelStyle, color: fieldErrors.businessPhone ? "#f87171" : "#8c90a0" }}>Business Phone</label>
+                        <label style={{ ...labelStyle, color: fieldErrors.businessPhone ? "#f87171" : "#8c90a0" }}>Company Phone Number</label>
                         <input type="text" name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange}
                           style={getInputStyle("businessPhone", fieldErrors)}
                           onFocus={(e) => (e.target.style.borderColor = fieldErrors.businessPhone ? "#ef4444" : "#00F0FF")}
@@ -464,14 +457,14 @@ export default function EditProfilePage() {
               <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                 <button type="button" onClick={() => navigate("/client/profile")}
                   style={{ flex: 1, padding: "14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#e1e2eb", cursor: "pointer", fontWeight: 600, fontFamily: "Inter, sans-serif", fontSize: 15 }}>
-                  Hủy
+                  Cancel
                 </button>
                 <button type="submit" disabled={loading}
                   style={{ flex: 2, background: loading ? "#1d2026" : "#00F0FF", color: loading ? "#8c90a0" : "#002022", fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, padding: "14px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s" }}>
                   {loading ? (
-                    <><span className="material-symbols-outlined" style={{ animation: "spin 1s linear infinite" }}>autorenew</span><span>AI đang xác minh...</span></>
+                    <><span className="material-symbols-outlined" style={{ animation: "spin 1s linear infinite" }}>autorenew</span><span>AI is verifying...</span></>
                   ) : (
-                    <><span>Lưu & Xác minh</span><span className="material-symbols-outlined">verified</span></>
+                    <><span>Save & Verify</span><span className="material-symbols-outlined">verified</span></>
                   )}
                 </button>
               </div>

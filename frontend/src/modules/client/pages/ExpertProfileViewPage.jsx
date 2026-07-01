@@ -69,8 +69,8 @@ export default function ExpertProfileViewPage() {
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(
-        err?.response?.status === 404 ? "Không tìm thấy Expert này." :
-        err?.response?.data?.message || "Không thể tải hồ sơ Expert."
+        err?.response?.status === 404 ? "Expert not found." :
+        err?.response?.data?.message || "Unable to load expert profile."
       );
     } finally {
       setLoading(false);
@@ -93,7 +93,7 @@ export default function ExpertProfileViewPage() {
 
       navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
     } catch (err) {
-      alert(err?.response?.data?.message || "Không thể tạo cuộc trò chuyện với Expert.");
+      alert(err?.response?.data?.message || "Unable to start a conversation with the expert.");
     }
   };
 
@@ -113,10 +113,10 @@ export default function ExpertProfileViewPage() {
       <ClientLayout>
         <div className="flex flex-col items-center justify-center px-6 py-32 text-center">
           <span className="material-symbols-outlined mb-3 text-5xl text-red-400">error_outline</span>
-          <p className="mb-5 text-[15px] text-red-400">{error || "Không tìm thấy hồ sơ."}</p>
+          <p className="mb-5 text-[15px] text-red-400">{error || "Profile not found."}</p>
           <button onClick={() => navigate("/client/experts")}
             className="rounded-lg bg-cyan-400 px-6 py-2.5 font-bold text-[#101319] transition hover:brightness-110">
-            Quay lại tìm kiếm
+            Back to search
           </button>
         </div>
       </ClientLayout>

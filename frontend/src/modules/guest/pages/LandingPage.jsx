@@ -17,6 +17,13 @@ import HowItWorksSection from "../../../components/layout/HowItWorksSection";
 export default function LandingPage() {
   const [isDark, setIsDark] = useState(true);
 
+  useEffect(() => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
+  }, []);
+
   // Toggle class "dark" trên <html> để Tailwind dark mode hoạt động
   useEffect(() => {
     document.documentElement.classList.toggle("dark", isDark);

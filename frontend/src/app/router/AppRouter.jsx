@@ -13,6 +13,7 @@ import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
 import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
+import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
 import LandingPage from "../../modules/guest/pages/LandingPage";
@@ -25,7 +26,7 @@ import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
-import ProjectsPage from "../../modules/client/pages/Projectspage";
+import ProjectsPage from "../../modules/client/pages/ProjectsPage";
 import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
@@ -104,7 +105,17 @@ import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPa
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
 
 const RequireAuth = ({ children }) => {
-  if (!authService.isAuthenticated()) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-surface-dark text-white">
+        Loading...
+      </div>
+    );
+  }
+
+  if (!user && !authService.isAuthenticated()) {
     return <Navigate to="/login" replace />;
   }
 
@@ -142,7 +153,7 @@ export default function AppRouter() {
       <Route path="/client/profile/edit" element={<RequireAuth><EditProfilePage /></RequireAuth>} />
       <Route path="/client/experts" element={<RequireAuth><ExpertSearchPage /></RequireAuth>} />
       <Route path="/client/ai-matching" element={<RequireAuth><AIMatchingPage /></RequireAuth>} />
-      <Route path="/client/messages" element={<RequireAuth><MessagesPage /></RequireAuth>} />
+      <Route path="/client/messages/:conversationId?" element={<RequireAuth> <MessagesPage /> </RequireAuth>}/>
       <Route path="/client/wallet" element={<RequireAuth><WalletPage /></RequireAuth>} />
       <Route path="/client/transactions" element={<RequireAuth><TransactionsPage /></RequireAuth>} />
       <Route path="/client/job-credit-packages" element={<RequireAuth><JobCreditPackagesPage /></RequireAuth>} />

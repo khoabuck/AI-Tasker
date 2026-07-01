@@ -361,16 +361,6 @@ export default function DisputePolicyPage() {
               the data, contracts, and activity recorded on the system.
             </p>
 
-            <div style={{ marginTop: 40, padding: 24, background: "#11161D", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-              <div>
-                <p className="dp-mono" style={{ fontSize: 11, color: "#5b6470", letterSpacing: "0.1em", margin: "0 0 4px" }}>NEED TO FILE A DISPUTE?</p>
-                <p style={{ fontSize: 14.5, color: "#C2C8D2", margin: 0 }}>Open a dispute from your project page once you've gathered your evidence.</p>
-              </div>
-              <Link to={homeHref} style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 20px", background: "#00F0FF", color: "#002022", borderRadius: 9, fontSize: 13.5, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>
-                Back to home
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_forward</span>
-              </Link>
-            </div>
           </section>
 
         </main>
