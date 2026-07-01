@@ -43,7 +43,7 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
         var model =
             _configuration["Groq:Model"] ??
             _configuration["BusinessVerification:Groq:Model"] ??
-            "llama-3.3-70b-versatile";
+            "openai/gpt-oss-120b";
 
         var baseUrl =
             _configuration["Groq:BaseUrl"] ??
