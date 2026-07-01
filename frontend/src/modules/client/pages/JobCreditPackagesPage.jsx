@@ -34,7 +34,7 @@ const cardStyle = {
 };
 
 function formatVND(amount) {
-  return Number(amount || 0).toLocaleString("vi-VN") + " VNĐ";
+  return Number(amount || 0).toLocaleString("vi-VN") + " VND";
 }
 
 export default function JobCreditPackagesPage() {
@@ -219,16 +219,22 @@ export default function JobCreditPackagesPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {purchases.map((p, i) => (
-                <div key={p.purchaseId ?? i}
-                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, flexWrap: "wrap", gap: 8 }}>
+                <div
+                  key={p.jobCreditPackagePurchaseId ?? i}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, flexWrap: "wrap", gap: 8 }}
+                >
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 600, color: "#e1e2eb", margin: "0 0 2px" }}>{p.packageName || "—"}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: "#e1e2eb", margin: "0 0 2px" }}>
+                      {p.packageNameSnapshot || "—"}
+                    </p>
+
                     <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>
                       {p.purchasedAt ? new Date(p.purchasedAt).toLocaleString("vi-VN") : "—"}
                     </p>
                   </div>
+
                   <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "#00F0FF" }}>
-                    {formatVND(p.price)}
+                    {formatVND(p.pricePaid)}
                   </span>
                 </div>
               ))}

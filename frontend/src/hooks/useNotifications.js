@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import axiosInstance from "../api/axiosInstance";
 
-const POLL_INTERVAL = 30_000;
+const POLL_INTERVAL = 5_000;
 
 export function useNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -17,23 +17,32 @@ export function useNotifications() {
     } catch {}
   }, []);
 
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true);
+  const fetchNotifications = useCallback(async (showLoading = true) => {
+    if (showLoading) setLoading(true);
+
     try {
       const res = await axiosInstance.get("/notifications/me");
       const body = res.data;
+
       setNotifications(body.data ?? []);
-      setTotalCount(body.totalCount ?? 0);
       setUnreadCount(body.unreadCount ?? 0);
-    } catch {}
-    finally { setLoading(false); }
+      setTotalCount(body.totalCount ?? 0);
+    } catch (err) {
+      console.error("Fetch notifications failed:", err);
+    } finally {
+      if (showLoading) setLoading(false);
+    }
   }, []);
 
   const markRead = useCallback(async (notificationId) => {
     try {
       await axiosInstance.post(`/notifications/${notificationId}/read`);
       setNotifications((prev) =>
-        prev.map((n) => n.notificationId === notificationId ? { ...n, isRead: true } : n)
+        prev.map((n) =>
+          n.notificationId === notificationId
+            ? { ...n, isRead: true }
+            : n
+        )
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch {}
@@ -49,9 +58,23 @@ export function useNotifications() {
 
   useEffect(() => {
     fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, POLL_INTERVAL);
-    return () => clearInterval(interval);
-  }, [fetchUnreadCount]);
+    fetchNotifications(true);
 
-  return { notifications, unreadCount, totalCount, loading, fetchNotifications, markRead, markAllRead };
+    const intervalId = setInterval(() => {
+      fetchUnreadCount();
+      fetchNotifications(false);
+    }, POLL_INTERVAL);
+
+    return () => clearInterval(intervalId);
+  }, [fetchUnreadCount, fetchNotifications]);
+
+  return {
+    notifications,
+    unreadCount,
+    totalCount,
+    loading,
+    fetchNotifications,
+    markRead,
+    markAllRead,
+  };
 }

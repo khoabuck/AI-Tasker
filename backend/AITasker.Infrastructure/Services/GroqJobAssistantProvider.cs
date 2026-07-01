@@ -1,10 +1,8 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
-using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Infrastructure.Services;
 
@@ -28,67 +26,26 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         JobAssistantRequest request,
         List<string> availableSkills)
     {
-        var apiKey =
-            _configuration["Groq:ApiKey"] ??
-            _configuration["BusinessVerification:Groq:ApiKey"];
-
-        var model =
-            _configuration["Groq:Model"] ??
-            _configuration["BusinessVerification:Groq:Model"];
-
-        var baseUrl =
-            _configuration["Groq:BaseUrl"] ??
-            _configuration["BusinessVerification:Groq:BaseUrl"] ??
-            "https://api.groq.com/openai/v1";
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException("Groq API key is missing.");
-        }
-
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            throw new InvalidOperationException("Groq model is missing.");
-        }
-
         var prompt = BuildPrompt(request, availableSkills);
 
-        var body = new
-        {
-            model,
-            messages = new object[]
+        var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(
+            new GroqChatCompletionRequest
             {
-                new
+                Feature = "JobAssistant",
+                Messages = new List<GroqChatMessage>
                 {
-                    role = "system",
-                    content = "You are an AI job requirement analyst for an AI freelance marketplace. Return JSON only. Do not return markdown."
-                },
-                new
-                {
-                    role = "user",
-                    content = prompt
+                    new()
+                    {
+                        Role = "system",
+                        Content = "You are an AI job requirement analyst for an AI freelance marketplace. Return exactly one valid JSON object only. Do not return markdown, code fences, comments, or explanation."
+                    },
+                    new()
+                    {
+                        Role = "user",
+                        Content = prompt
+                    }
                 }
-            },
-            temperature = 0.2,
-            max_tokens = 1400
-        };
-
-        var jsonBody = JsonSerializer.Serialize(body);
-
-        var endpoint = $"{baseUrl.TrimEnd('/')}/chat/completions";
-
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            endpoint
-        );
-
-        httpRequest.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", apiKey);
-
-        httpRequest.Content = new StringContent(
-            jsonBody,
-            Encoding.UTF8,
-            "application/json"
+            }
         );
 
         using var response = await _httpClient.SendAsync(httpRequest);

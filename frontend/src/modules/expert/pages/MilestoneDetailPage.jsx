@@ -3,8 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import milestoneService from "../../../services/milestone.service";
 import deliverableService from "../../../services/deliverable.service";
-import { MILESTONE_STATUS_LABEL } from "../../../constants/projectStatus";
-import { DELIVERABLE_STATUS_LABEL } from "../../../constants/deliverableStatus";
 
 const emptySubmissionForm = {
   fileUrl: "",
@@ -20,7 +18,6 @@ export default function MilestoneDetailPage() {
 
   const [milestone, setMilestone] = useState(null);
   const [submissions, setSubmissions] = useState([]);
-
   const [submissionForm, setSubmissionForm] = useState(emptySubmissionForm);
 
   const [loading, setLoading] = useState(true);
@@ -73,7 +70,16 @@ export default function MilestoneDetailPage() {
         targetMilestoneId
       );
 
-      setSubmissions(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      const latest = getLatestSubmission(list);
+
+      setSubmissions(list);
+
+      if (latest && isChangeRequested(latest.status)) {
+        setSubmissionForm(buildFormFromSubmission(latest));
+      } else if (!latest) {
+        setSubmissionForm({ ...emptySubmissionForm });
+      }
     } catch (err) {
       console.error("LOAD SUBMISSIONS ERROR:", err?.response?.data || err);
       setSubmissionError(getFriendlyError(err, "Cannot load submissions."));
@@ -92,6 +98,13 @@ export default function MilestoneDetailPage() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const resetSubmissionForm = () => {
+    setMessage("");
+    setError("");
+    setSubmissionError("");
+    setSubmissionForm({ ...emptySubmissionForm });
   };
 
   const validateSubmission = () => {
@@ -118,6 +131,19 @@ export default function MilestoneDetailPage() {
     event.preventDefault();
 
     const realMilestoneId = getMilestoneId(milestone) || milestoneId;
+    const latestSubmission = getLatestSubmission(submissions);
+
+    const isResubmission =
+      Boolean(latestSubmission) &&
+      (isChangeRequested(latestSubmission.status) ||
+        isChangeRequested(milestone?.status));
+
+    if (latestSubmission && !isResubmission) {
+      setSubmissionError(
+        "You already submitted this milestone. You can submit again only when the client requests changes."
+      );
+      return;
+    }
 
     if (!realMilestoneId) {
       setSubmissionError("Cannot submit work because milestone is missing.");
@@ -142,32 +168,60 @@ export default function MilestoneDetailPage() {
         submissionForm
       );
 
-      setMessage("Your work has been submitted successfully.");
-      setSubmissionForm(emptySubmissionForm);
+      setMessage(
+        isResubmission
+          ? "Your updated work has been resubmitted successfully."
+          : "Your work has been submitted successfully."
+      );
+
+      setSubmissionForm({ ...emptySubmissionForm });
 
       await loadSubmissions(realMilestoneId);
     } catch (err) {
       console.error("SUBMIT WORK ERROR:", err?.response?.data || err);
-      setSubmissionError(getFriendlyError(err, "Cannot submit your work."));
+      setSubmissionError(
+        getFriendlyError(
+          err,
+          "Cannot submit your work. Please check the milestone status and try again."
+        )
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   const openSubmissionDetail = (submission) => {
-    if (!submission?.deliverableId) {
+    const submissionId = getSubmissionId(submission);
+
+    if (!submissionId) {
       setSubmissionError("Cannot open submission detail because id is missing.");
       return;
     }
 
-    navigate(`/expert/deliverables/${submission.deliverableId}`);
+    navigate(`/expert/deliverables/${submissionId}`);
+  };
+
+  const goBackToProject = () => {
+    const projectId = getProjectIdFromMilestone(milestone);
+
+    if (projectId) {
+      navigate(`/expert/projects/${projectId}`);
+      return;
+    }
+
+    navigate("/expert/projects");
   };
 
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading milestone...
+        <div className="flex min-h-[70vh] items-center justify-center">
+          <div className="rounded-2xl border border-white/10 bg-[#151a22] px-7 py-6 text-center">
+            <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+            <p className="text-sm font-semibold text-gray-300">
+              Loading milestone...
+            </p>
+          </div>
         </div>
       </ExpertLayout>
     );
@@ -176,7 +230,7 @@ export default function MilestoneDetailPage() {
   if (!milestone) {
     return (
       <ExpertLayout>
-        <div className="px-5 py-10 md:px-8">
+        <div className="px-5 py-8 md:px-8">
           <div className="mx-auto max-w-5xl">
             <Alert
               type="danger"
@@ -187,8 +241,11 @@ export default function MilestoneDetailPage() {
             <button
               type="button"
               onClick={() => navigate("/expert/projects")}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
             >
+              <span className="material-symbols-outlined text-[18px]">
+                arrow_back
+              </span>
               Back to Projects
             </button>
           </div>
@@ -197,76 +254,108 @@ export default function MilestoneDetailPage() {
     );
   }
 
-  const status = String(milestone.status || "PENDING").toUpperCase();
   const realMilestoneId = getMilestoneId(milestone) || milestoneId;
-  const canSubmit = canSubmitWorkForMilestone(status);
+  const milestoneStatus = String(milestone.status || "PENDING").toUpperCase();
+
+  const latestSubmission = getLatestSubmission(submissions);
+  const hasSubmission = Boolean(getSubmissionId(latestSubmission));
+
+  const needsResubmission =
+    hasSubmission &&
+    (isChangeRequested(latestSubmission?.status) ||
+      isChangeRequested(milestoneStatus));
+
+  const canSubmit =
+    canSubmitWorkForMilestone(milestoneStatus) &&
+    (!hasSubmission || needsResubmission) &&
+    !submissionLoading;
+
+  const milestoneUi = getMilestoneUiStatus({
+    milestoneStatus,
+    latestSubmission,
+    hasSubmission,
+    needsResubmission,
+  });
+
+  const formTitle = needsResubmission ? "Resubmit Work" : "Submit Work";
+  const formDescription = needsResubmission
+    ? "Update your links and notes based on the client's request, then submit this milestone again."
+    : "Share your completed work with the client for review.";
+
+  const latestClientFeedback = getClientFeedback(latestSubmission);
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-6xl">
+      <div className="px-5 py-6 md:px-8">
+        <div className="mx-auto max-w-7xl">
           <button
             type="button"
-            onClick={() =>
-              milestone.projectId
-                ? navigate(`/expert/projects/${milestone.projectId}`)
-                : navigate("/expert/projects")
-            }
-            className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+            onClick={goBackToProject}
+            className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
           >
-            <span className="material-symbols-outlined text-sm">
+            <span className="material-symbols-outlined text-[18px]">
               arrow_back
             </span>
             Back to project
           </button>
 
-          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                  Milestone Work
-                </p>
+          <section className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_50px_rgba(0,0,0,0.28)]">
+            <div className="relative overflow-hidden border-b border-white/10 p-5 md:p-6">
+              <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" />
+              <div className="absolute bottom-0 right-28 h-36 w-36 rounded-full bg-purple-400/10 blur-3xl" />
 
-                <h1 className="text-3xl font-bold text-white md:text-4xl">
-                  {milestone.title || "Untitled Milestone"}
-                </h1>
+              <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-[#00F0FF]">
+                    Milestone Workspace
+                  </p>
 
-                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review what needs to be delivered, submit your completed work,
-                  and track client feedback.
-                </p>
+                  <h1 className="max-w-4xl text-2xl font-black leading-tight text-white md:text-4xl">
+                    {milestone.title || "Untitled Milestone"}
+                  </h1>
 
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <StatusBadge status={status} />
+                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
+                    Review the brief, submit your work, and manage revisions in
+                    one clear workspace.
+                  </p>
 
-                  <InfoPill
-                    icon="calendar_month"
-                    label={`Due ${formatDate(milestone.dueDate)}`}
-                  />
-
-                  <InfoPill
-                    icon="payments"
-                    label={formatMoney(milestone.amount)}
-                    variant="success"
-                  />
-
-                  <InfoPill
-                    icon="assignment"
-                    label={`${submissions.length} submission${
-                      submissions.length === 1 ? "" : "s"
-                    }`}
-                  />
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <FriendlyStatusBadge ui={milestoneUi} />
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="button"
-                onClick={() => loadSubmissions(realMilestoneId)}
-                disabled={submissionLoading}
-                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {submissionLoading ? "Refreshing..." : "Refresh"}
-              </button>
+                <button
+                  type="button"
+                  onClick={() => loadSubmissions(realMilestoneId)}
+                  disabled={submissionLoading}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    refresh
+                  </span>
+                  {submissionLoading ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 divide-y divide-white/10 md:grid-cols-3 md:divide-x md:divide-y-0">
+              <HeroInfo
+                icon="calendar_month"
+                label="Due Date"
+                value={formatDate(milestone.dueDate)}
+              />
+
+              <HeroInfo
+                icon="payments"
+                label="Payment"
+                value={formatMoney(milestone.amount)}
+              />
+
+              <HeroInfo
+                icon="assignment"
+                label="Submissions"
+                value={submissions.length}
+              />
             </div>
           </section>
 
@@ -278,33 +367,44 @@ export default function MilestoneDetailPage() {
             <Alert type="danger" title="Milestone error" message={error} />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-            <main className="space-y-6">
-              <Card title="What you need to deliver" icon="task_alt">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {milestone.description || "No description provided."}
-                </p>
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_330px]">
+            <main className="space-y-5">
+              <Card
+                title="Work Brief"
+                subtitle="Review what the client expects before submitting."
+                icon="task_alt"
+              >
+                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                    {milestone.description || "No description provided."}
+                  </p>
+                </div>
 
                 {milestone.acceptanceCriteria && (
-                  <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                      Acceptance Criteria
-                    </p>
+                  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
+                    <div className="mb-2 flex items-center gap-2 text-cyan-300">
+                      <span className="material-symbols-outlined text-[18px]">
+                        checklist
+                      </span>
+                      <p className="text-xs font-black uppercase tracking-[0.18em]">
+                        Acceptance Criteria
+                      </p>
+                    </div>
 
-                    <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
+                    <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
                       {milestone.acceptanceCriteria}
                     </p>
                   </div>
                 )}
               </Card>
 
-              <Card title="Submit your work" icon="upload_file">
-                {!canSubmit && (
-                  <div className="mb-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm text-yellow-200">
-                    This milestone is currently closed for new submissions.
-                  </div>
-                )}
-
+              <Card
+                title={formTitle}
+                subtitle={formDescription}
+                icon={
+                  needsResubmission ? "published_with_changes" : "upload_file"
+                }
+              >
                 {submissionError && (
                   <Alert
                     type="danger"
@@ -313,118 +413,159 @@ export default function MilestoneDetailPage() {
                   />
                 )}
 
-                <form onSubmit={handleSubmitWork} className="space-y-5">
-                  <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-                    <Field label="File URL">
-                      <input
-                        type="url"
-                        value={submissionForm.fileUrl}
-                        disabled={!canSubmit || submitting}
-                        onChange={(event) =>
-                          updateSubmissionField("fileUrl", event.target.value)
-                        }
-                        placeholder="https://..."
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    </Field>
-
-                    <Field label="Demo URL">
-                      <input
-                        type="url"
-                        value={submissionForm.demoUrl}
-                        disabled={!canSubmit || submitting}
-                        onChange={(event) =>
-                          updateSubmissionField("demoUrl", event.target.value)
-                        }
-                        placeholder="https://..."
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    </Field>
-
-                    <Field label="Test Result URL">
-                      <input
-                        type="url"
-                        value={submissionForm.testResultUrl}
-                        disabled={!canSubmit || submitting}
-                        onChange={(event) =>
-                          updateSubmissionField(
-                            "testResultUrl",
-                            event.target.value
-                          )
-                        }
-                        placeholder="https://..."
-                        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                      />
-                    </Field>
+                {!canSubmitWorkForMilestone(milestoneStatus) && (
+                  <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
+                    This milestone is currently closed for submission.
                   </div>
+                )}
 
-                  <Field label="Delivery Description">
-                    <textarea
-                      rows={5}
+                {hasSubmission && !needsResubmission && (
+                  <SubmittedNotice
+                    submission={latestSubmission}
+                    onOpen={() => openSubmissionDetail(latestSubmission)}
+                  />
+                )}
+
+                {needsResubmission && (
+                  <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
+                    <div className="flex gap-3">
+                      <span className="material-symbols-outlined text-yellow-300">
+                        edit_note
+                      </span>
+
+                      <div>
+                        <p className="font-bold text-white">
+                          Changes requested by client
+                        </p>
+
+                        <p className="mt-1">
+                          Please update the milestone submission below. This
+                          will send a new submission to the client.
+                        </p>
+                      </div>
+                    </div>
+
+                    {latestClientFeedback && (
+                      <div className="mt-4 rounded-xl border border-yellow-400/30 bg-black/20 p-4">
+                        <p className="mb-1 text-xs font-bold uppercase tracking-wider text-yellow-300">
+                          Client Feedback
+                        </p>
+
+                        <p className="whitespace-pre-line text-sm text-yellow-50">
+                          {latestClientFeedback}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {canSubmit && (
+                  <form onSubmit={handleSubmitWork} className="space-y-5">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                      <SubmitWorkInput
+                        label="File URL"
+                        value={submissionForm.fileUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("fileUrl", value)
+                        }
+                        placeholder="https://drive.google.com/..."
+                      />
+
+                      <SubmitWorkInput
+                        label="Demo URL"
+                        value={submissionForm.demoUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("demoUrl", value)
+                        }
+                        placeholder="https://demo.example.com"
+                      />
+
+                      <SubmitWorkInput
+                        label="Test Result URL"
+                        value={submissionForm.testResultUrl}
+                        disabled={submitting}
+                        onChange={(value) =>
+                          updateSubmissionField("testResultUrl", value)
+                        }
+                        placeholder="https://docs.google.com/..."
+                      />
+                    </div>
+
+                    <SubmitWorkTextArea
+                      label="What did you deliver?"
+                      required
                       value={submissionForm.description}
-                      disabled={!canSubmit || submitting}
-                      onChange={(event) =>
-                        updateSubmissionField(
-                          "description",
-                          event.target.value
-                        )
+                      disabled={submitting}
+                      onChange={(value) =>
+                        updateSubmissionField("description", value)
                       }
-                      placeholder="Describe what you completed, what is included, and how the client can review it..."
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
-                    />
-                  </Field>
-
-                  <Field label="Handover Notes">
-                    <textarea
+                      placeholder="Describe what you completed, what changed, and how the client can review it..."
                       rows={4}
+                    />
+
+                    <SubmitWorkTextArea
+                      label="Notes for client"
                       value={submissionForm.handoverNotes}
-                      disabled={!canSubmit || submitting}
-                      onChange={(event) =>
-                        updateSubmissionField(
-                          "handoverNotes",
-                          event.target.value
-                        )
+                      disabled={submitting}
+                      onChange={(value) =>
+                        updateSubmissionField("handoverNotes", value)
                       }
                       placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
-                      className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                      rows={3}
                     />
-                  </Field>
 
-                  <button
-                    type="submit"
-                    disabled={!canSubmit || submitting}
-                    className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {submitting ? "Submitting..." : "Submit Work"}
-                  </button>
-                </form>
+                    <div className="flex flex-wrap justify-end gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={resetSubmissionForm}
+                        disabled={submitting}
+                        className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">
+                          send
+                        </span>
+
+                        {submitting
+                          ? "Submitting..."
+                          : needsResubmission
+                          ? "Resubmit Work"
+                          : "Submit Work"}
+                      </button>
+                    </div>
+                  </form>
+                )}
               </Card>
 
-              <Card title="Your submissions" icon="assignment">
+              <Card
+                title="Submission History"
+                subtitle="Track previous submissions and client review status."
+                icon="history"
+              >
                 {submissionLoading ? (
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-sm text-gray-400">
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-gray-400">
                     Loading submissions...
                   </div>
                 ) : submissions.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                    <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
-                      assignment
-                    </span>
-
-                    <h2 className="text-lg font-bold text-white">
-                      No work submitted yet
-                    </h2>
-
-                    <p className="mt-2 text-sm text-gray-400">
-                      Once you submit your work, it will appear here for
-                      tracking.
-                    </p>
-                  </div>
+                  <EmptyState
+                    icon="assignment"
+                    title="No submission yet"
+                    description="Your submitted work will appear here after you send it to the client."
+                  />
                 ) : (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {submissions.map((item, index) => (
                       <SubmissionCard
-                        key={item.deliverableId || index}
+                        key={getSubmissionId(item) || index}
                         submission={item}
                         onDetail={() => openSubmissionDetail(item)}
                       />
@@ -434,31 +575,53 @@ export default function MilestoneDetailPage() {
               </Card>
             </main>
 
-            <aside className="space-y-6">
-              <Card title="Quick Overview" icon="monitoring">
-                <Info label="Status" value={getMilestoneStatusLabel(status)} />
-                <Info label="Payment" value={formatMoney(milestone.amount)} />
-                <Info label="Due Date" value={formatDate(milestone.dueDate)} />
-                <Info label="Submissions" value={submissions.length} />
+            <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+              <Card title="Review Flow" icon="route">
+                <Step
+                  active={!hasSubmission}
+                  done={hasSubmission}
+                  number="1"
+                  title="Submit your work"
+                  description="Send the work links and notes for client review."
+                />
+
+                <Step
+                  active={hasSubmission && !needsResubmission}
+                  done={isApprovedStatus(latestSubmission?.status)}
+                  number="2"
+                  title="Client reviews"
+                  description="The client checks your submitted milestone."
+                />
+
+                <Step
+                  active={needsResubmission}
+                  done={false}
+                  number="3"
+                  title="Update if needed"
+                  description="If changes are requested, resubmit directly from this page."
+                />
               </Card>
 
-              <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-cyan-300">
-                    tips_and_updates
-                  </span>
-
-                  <div>
-                    <h3 className="font-bold text-white">Submission tips</h3>
-
-                    <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-300">
-                      <li>Provide at least one working link.</li>
-                      <li>Explain clearly what was delivered.</li>
-                      <li>Add setup or testing notes if needed.</li>
-                    </ul>
-                  </div>
-                </div>
-              </section>
+              <Card title="Helpful Tips" icon="tips_and_updates">
+                <ul className="space-y-2 text-sm leading-6 text-gray-300">
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Provide at least one working review link.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Keep the description clear and client-friendly.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    Use notes for setup steps, test accounts, or caveats.
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-cyan-300">•</span>
+                    When changes are requested, update the same form here.
+                  </li>
+                </ul>
+              </Card>
             </aside>
           </div>
         </div>
@@ -467,23 +630,100 @@ export default function MilestoneDetailPage() {
   );
 }
 
-function SubmissionCard({ submission, onDetail }) {
-  const status = String(submission.status || "SUBMITTED").toUpperCase();
+function SubmitWorkInput({ label, value, disabled, onChange, placeholder }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+        {label}
+      </span>
+
+      <input
+        type="url"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function SubmitWorkTextArea({
+  label,
+  required,
+  value,
+  disabled,
+  onChange,
+  placeholder,
+  rows = 4,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </span>
+
+      <textarea
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        rows={rows}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function SubmittedNotice({ submission, onOpen }) {
+  const ui = getSubmissionUiStatus(submission?.status);
 
   return (
-    <article className="rounded-xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/40">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div className="flex-1">
+        <div>
+          <FriendlyStatusBadge ui={ui} small />
+
+          <h3 className="mt-3 text-base font-bold text-white">
+            Work already submitted
+          </h3>
+
+          <p className="mt-2 text-sm leading-6 text-gray-400">
+            You can submit again only when the client requests changes. You can
+            still open the submission to view details and feedback.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onOpen}
+          className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+        >
+          View Submission
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function SubmissionCard({ submission, onDetail }) {
+  const ui = getSubmissionUiStatus(submission.status);
+
+  return (
+    <article className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 transition hover:border-cyan-400/40 hover:bg-white/[0.05]">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0 flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <SubmissionStatusBadge status={status} />
+            <FriendlyStatusBadge ui={ui} small />
 
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
               Version {submission.versionNumber || 1}
             </span>
 
-            {submission.submittedAt && (
+            {(submission.submittedAt || submission.createdAt) && (
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                {formatDate(submission.submittedAt)}
+                {formatDate(submission.submittedAt || submission.createdAt)}
               </span>
             )}
           </div>
@@ -492,21 +732,21 @@ function SubmissionCard({ submission, onDetail }) {
             {submission.title || "Submitted Work"}
           </h3>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
-            {submission.description || "No description."}
+          <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
+            {submission.description || "No description provided."}
           </p>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <LinkPill label="File" url={submission.fileUrl} />
             <LinkPill label="Demo" url={submission.demoUrl} />
-            <LinkPill label="Test Result" url={submission.testResultUrl} />
+            <LinkPill label="Test" url={submission.testResultUrl} />
           </div>
         </div>
 
         <button
           type="button"
           onClick={onDetail}
-          className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
         >
           Detail
         </button>
@@ -515,19 +755,25 @@ function SubmissionCard({ submission, onDetail }) {
   );
 }
 
-function Card({ title, icon, children }) {
+function Card({ title, subtitle, icon, children }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-      <div className="mb-4 flex items-center gap-3">
+    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_12px_35px_rgba(0,0,0,0.2)]">
+      <div className="mb-4 flex items-start gap-3">
         {icon && (
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
-            <span className="material-symbols-outlined text-xl text-cyan-300">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+            <span className="material-symbols-outlined text-lg text-cyan-300">
               {icon}
             </span>
           </div>
         )}
 
-        <h2 className="text-xl font-extrabold text-white">{title}</h2>
+        <div>
+          <h2 className="text-lg font-extrabold text-white">{title}</h2>
+
+          {subtitle && (
+            <p className="mt-1 text-sm leading-5 text-gray-500">{subtitle}</p>
+          )}
+        </div>
       </div>
 
       {children}
@@ -535,81 +781,61 @@ function Card({ title, icon, children }) {
   );
 }
 
-function Field({ label, children }) {
+function HeroInfo({ icon, label, value }) {
   return (
-    <label className="block">
-      <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
+    <div className="p-4">
+      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+        <span className="material-symbols-outlined text-lg">{icon}</span>
+      </div>
 
-function Info({ label, value }) {
-  return (
-    <div className="mb-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-1 break-words font-bold text-white">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 text-base font-black text-white">
         {formatInfoValue(value)}
       </p>
     </div>
   );
 }
 
-function InfoPill({ icon, label, variant = "default" }) {
-  const style =
-    variant === "success"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : "border-white/10 bg-white/[0.04] text-gray-300";
+function Step({ number, title, description, active, done }) {
+  const style = done
+    ? "border-green-400/30 bg-green-400/10 text-green-300"
+    : active
+    ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+    : "border-white/10 bg-white/[0.04] text-gray-500";
 
   return (
-    <span
-      className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold ${style}`}
-    >
-      <span className="material-symbols-outlined text-sm">{icon}</span>
-      {label}
-    </span>
+    <div className="mb-4 flex gap-3 last:mb-0">
+      <div
+        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-black ${style}`}
+      >
+        {done ? (
+          <span className="material-symbols-outlined text-sm">check</span>
+        ) : (
+          number
+        )}
+      </div>
+
+      <div>
+        <p className="font-bold text-white">{title}</p>
+
+        <p className="mt-1 text-sm leading-5 text-gray-400">{description}</p>
+      </div>
+    </div>
   );
 }
 
-function StatusBadge({ status }) {
-  const style =
-    status === "COMPLETED" || status === "APPROVED"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "REVISION_REQUESTED"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "CANCELLED" ||
-        status === "CANCELED" ||
-        status === "REJECTED" ||
-        status === "DISPUTED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
-
+function FriendlyStatusBadge({ ui, small = false }) {
   return (
     <span
-      className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
+      className={`inline-flex items-center gap-2 rounded-full border font-bold ${ui.className} ${
+        small ? "px-3 py-1 text-xs" : "px-4 py-1.5 text-xs"
+      }`}
     >
-      {getMilestoneStatusLabel(status)}
-    </span>
-  );
-}
-
-function SubmissionStatusBadge({ status }) {
-  const style =
-    status === "APPROVED"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "REVISION_REQUESTED"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "DISPUTED" || status === "REJECTED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
-
-  return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
-    >
-      {DELIVERABLE_STATUS_LABEL[status] || formatStatusLabel(status)}
+      <span className="material-symbols-outlined text-sm">{ui.icon}</span>
+      {ui.label}
     </span>
   );
 }
@@ -622,10 +848,26 @@ function LinkPill({ label, url }) {
       href={url}
       target="_blank"
       rel="noreferrer"
-      className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300 hover:bg-cyan-400 hover:text-black"
+      className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
     >
       {label}
     </a>
+  );
+}
+
+function EmptyState({ icon, title, description }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-center">
+      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
+        {icon}
+      </span>
+
+      <h2 className="text-base font-bold text-white">{title}</h2>
+
+      <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-gray-400">
+        {description}
+      </p>
+    </div>
   );
 }
 
@@ -636,11 +878,24 @@ function Alert({ type, title, message }) {
       : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
-    <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
+    <div className={`mb-5 rounded-2xl border px-5 py-4 text-sm ${style}`}>
       <p className="font-bold">{title}</p>
+
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+function buildFormFromSubmission(submission) {
+  return {
+    fileUrl: submission?.fileUrl || submission?.raw?.fileUrl || "",
+    demoUrl: submission?.demoUrl || submission?.raw?.demoUrl || "",
+    testResultUrl:
+      submission?.testResultUrl || submission?.raw?.testResultUrl || "",
+    description: submission?.description || submission?.raw?.description || "",
+    handoverNotes:
+      submission?.handoverNotes || submission?.raw?.handoverNotes || "",
+  };
 }
 
 function getMilestoneId(milestone) {
@@ -651,22 +906,66 @@ function getMilestoneId(milestone) {
     milestone?.MilestoneID ||
     milestone?.projectMilestoneId ||
     milestone?.ProjectMilestoneId ||
-    milestone?.projectMilestoneID ||
-    milestone?.ProjectMilestoneID ||
     milestone?.id ||
     milestone?.Id ||
     milestone?.raw?.milestoneId ||
     milestone?.raw?.MilestoneId ||
-    milestone?.raw?.milestoneID ||
-    milestone?.raw?.MilestoneID ||
     milestone?.raw?.projectMilestoneId ||
     milestone?.raw?.ProjectMilestoneId ||
-    milestone?.raw?.projectMilestoneID ||
-    milestone?.raw?.ProjectMilestoneID ||
     milestone?.raw?.id ||
     milestone?.raw?.Id ||
     ""
   );
+}
+
+function getProjectIdFromMilestone(milestone) {
+  return (
+    milestone?.projectId ||
+    milestone?.ProjectId ||
+    milestone?.projectID ||
+    milestone?.ProjectID ||
+    milestone?.raw?.projectId ||
+    milestone?.raw?.ProjectId ||
+    milestone?.raw?.projectID ||
+    milestone?.raw?.ProjectID ||
+    ""
+  );
+}
+
+function getSubmissionId(submission) {
+  return (
+    submission?.deliverableId ||
+    submission?.DeliverableId ||
+    submission?.deliverableID ||
+    submission?.DeliverableID ||
+    submission?.submissionId ||
+    submission?.SubmissionId ||
+    submission?.id ||
+    submission?.Id ||
+    submission?.raw?.deliverableId ||
+    submission?.raw?.DeliverableId ||
+    submission?.raw?.submissionId ||
+    submission?.raw?.SubmissionId ||
+    submission?.raw?.id ||
+    submission?.raw?.Id ||
+    ""
+  );
+}
+
+function getLatestSubmission(submissions) {
+  if (!Array.isArray(submissions) || submissions.length === 0) return null;
+
+  return [...submissions].sort((a, b) => {
+    const dateA = new Date(a.submittedAt || a.createdAt || 0).getTime();
+    const dateB = new Date(b.submittedAt || b.createdAt || 0).getTime();
+
+    if (dateA !== dateB) return dateB - dateA;
+
+    const versionA = Number(a.versionNumber || 0);
+    const versionB = Number(b.versionNumber || 0);
+
+    return versionB - versionA;
+  })[0];
 }
 
 function canSubmitWorkForMilestone(status) {
@@ -681,22 +980,129 @@ function canSubmitWorkForMilestone(status) {
     "RELEASED",
     "CANCELLED",
     "CANCELED",
-    "REJECTED",
-    "DECLINED",
     "DISPUTED",
+    "CLOSED",
+    "VOID",
   ].includes(value);
 }
 
-function getMilestoneStatusLabel(status) {
-  return MILESTONE_STATUS_LABEL[status] || formatStatusLabel(status || "PENDING");
+function isChangeRequested(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  return [
+    "REVISION_REQUESTED",
+    "REVISION_REQUIRED",
+    "NEEDS_REVISION",
+    "CHANGES_REQUESTED",
+    "REQUEST_REVISION",
+    "REVISION",
+    "RESUBMISSION_REQUESTED",
+    "RESUBMIT_REQUESTED",
+    "REWORK_REQUIRED",
+    "REJECTED",
+    "REJECTED_BY_CLIENT",
+  ].includes(value);
+}
+
+function isApprovedStatus(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  return [
+    "APPROVED",
+    "ACCEPTED",
+    "COMPLETED",
+    "DONE",
+    "PAID",
+    "RELEASED",
+  ].includes(value);
+}
+
+function getMilestoneUiStatus({
+  milestoneStatus,
+  latestSubmission,
+  hasSubmission,
+  needsResubmission,
+}) {
+  if (needsResubmission || isChangeRequested(milestoneStatus)) {
+    return {
+      label: "Changes Requested",
+      icon: "edit_note",
+      className: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (
+    isApprovedStatus(milestoneStatus) ||
+    isApprovedStatus(latestSubmission?.status)
+  ) {
+    return {
+      label: "Approved",
+      icon: "verified",
+      className: "border-green-400/30 bg-green-400/10 text-green-300",
+    };
+  }
+
+  if (hasSubmission) {
+    return {
+      label: "Waiting for Review",
+      icon: "schedule",
+      className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+    };
+  }
+
+  return {
+    label: "Ready to Submit",
+    icon: "rocket_launch",
+    className: "border-purple-400/30 bg-purple-400/10 text-purple-300",
+  };
+}
+
+function getSubmissionUiStatus(status) {
+  if (isChangeRequested(status)) {
+    return {
+      label: "Changes Requested",
+      icon: "edit_note",
+      className: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (isApprovedStatus(status)) {
+    return {
+      label: "Approved",
+      icon: "verified",
+      className: "border-green-400/30 bg-green-400/10 text-green-300",
+    };
+  }
+
+  return {
+    label: "Waiting for Review",
+    icon: "schedule",
+    className: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+  };
+}
+
+function getClientFeedback(submission) {
+  return (
+    submission?.clientFeedback ||
+    submission?.feedback ||
+    submission?.revisionReason ||
+    submission?.reviewNote ||
+    submission?.raw?.clientFeedback ||
+    submission?.raw?.feedback ||
+    submission?.raw?.revisionReason ||
+    submission?.raw?.reviewNote ||
+    ""
+  );
 }
 
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  if (!number) return "$0";
-
-  return `$${number.toLocaleString()}`;
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
@@ -706,7 +1112,7 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatInfoValue(value) {
@@ -715,13 +1121,6 @@ function formatInfoValue(value) {
   }
 
   return value;
-}
-
-function formatStatusLabel(status) {
-  return String(status || "")
-    .replace(/_/g, " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getFriendlyError(err, fallback) {

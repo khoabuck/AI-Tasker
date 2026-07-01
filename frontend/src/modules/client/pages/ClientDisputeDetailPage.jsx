@@ -76,7 +76,7 @@ export default function ClientDisputeDetailPage() {
         : list[0];
 
       if (!match) {
-        setError("Không tìm thấy khiếu nại nào cho project này.");
+        setError("No complaints were found for this project.");
         return;
       }
 
@@ -86,7 +86,7 @@ export default function ClientDisputeDetailPage() {
       setDispute(detail ?? match);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải thông tin khiếu nại.");
+      setError(err?.response?.data?.message || "Unable to load complaint information.");
     } finally {
       setLoading(false);
     }
@@ -116,7 +116,7 @@ export default function ClientDisputeDetailPage() {
       await fetchDispute();
       setTimeout(() => setEvidenceSent(false), 3000);
     } catch (err) {
-      setEvidenceError(err?.response?.data?.message || "Gửi bằng chứng thất bại.");
+      setEvidenceError(err?.response?.data?.message || "Submit proof of failure.");
     } finally {
       setSubmittingEvidence(false);
     }
@@ -142,7 +142,7 @@ export default function ClientDisputeDetailPage() {
           <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy khiếu nại."}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Quay lại Projects
+            Back to Projects
           </button>
         </div>
       </ClientLayout>
@@ -233,7 +233,7 @@ export default function ClientDisputeDetailPage() {
                   <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: "0 0 6px", whiteSpace: "pre-line" }}>{ev.evidenceText}</p>
                   {ev.fileUrl && (
                     <a href={ev.fileUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "#00F0FF" }}>
-                      Xem file đính kèm
+                      See attached file
                     </a>
                   )}
                   <p style={{ fontSize: 11, color: "#5b6470", margin: "6px 0 0" }}>
@@ -283,7 +283,7 @@ export default function ClientDisputeDetailPage() {
                   marginBottom: 8,
                 }}
               >
-                Link bằng chứng
+                Proof link
               </label>
 
               <input
@@ -306,7 +306,7 @@ export default function ClientDisputeDetailPage() {
               />
 
               <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
-                Dán link Google Drive, Dropbox, OneDrive, PDF hoặc hình ảnh công khai.
+                Paste a link to Google Drive, Dropbox, OneDrive, PDF, or a public image.
               </p>
             </div>
 
@@ -319,7 +319,7 @@ export default function ClientDisputeDetailPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                 {evidenceSent ? "check_circle" : submittingEvidence ? "hourglass_empty" : "upload_file"}
               </span>
-              {evidenceSent ? "Đã gửi!" : submittingEvidence ? "Đang gửi..." : "Submit Evidence"}
+              {evidenceSent ? "Sent!" : submittingEvidence ? "Sending..." : "Submit Evidence"}
             </button>
           </div>
         )}

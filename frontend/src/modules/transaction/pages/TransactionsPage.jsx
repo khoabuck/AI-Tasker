@@ -1,5 +1,5 @@
 // src/modules/client/pages/TransactionsPage.jsx
-// Trang Transactions — Finance > Transactions
+// Transactions page — Finance > Transactions
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
@@ -28,7 +28,40 @@ export default function TransactionsPage() {
 
   const [filterType, setFilterType] = useState("All");
   const [filterStatus, setFilterStatus] = useState("All");
+  const [dateRange, setDateRange] = useState("30_DAYS");
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [dateOpen, setDateOpen] = useState(false);
+  const [typeOpen, setTypeOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const [rowsOpen, setRowsOpen] = useState(false);
+
+  const DATE_OPTIONS = [
+    { label: "Today", value: "TODAY" },
+    { label: "Last 7 Days", value: "7_DAYS" },
+    { label: "Last 30 Days", value: "30_DAYS" },
+    { label: "Last 1 Year", value: "1_YEAR" },
+    { label: "All Time", value: "ALL" },
+  ];
+
+  const TYPE_OPTIONS = [
+    "All",
+    "DEPOSIT",
+    "ESCROW_LOCK",
+    "ESCROW_RELEASE",
+    "PLATFORM_FEE",
+    "WITHDRAWAL",
+  ];
+
+  const STATUS_OPTIONS = [
+    "All",
+    "SUCCESS",
+    "PENDING",
+    "FAILED",
+    "PAID",
+  ];
+
+const ROW_OPTIONS = [5, 10, 20, 50];
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -37,9 +70,11 @@ export default function TransactionsPage() {
 
       try {
         const data = await transactionService.getMyTransactions();
+        console.log("Transactions API data:", data);
+        console.log("First transaction:", data?.[0]);
         setTransactions(data);
       } catch (err) {
-        setError(err?.response?.data?.message || "Không thể tải lịch sử giao dịch.");
+        setError(err?.response?.data?.message || "Unable to load transaction history.");
       } finally {
         setLoading(false);
       }
@@ -57,6 +92,7 @@ export default function TransactionsPage() {
       "PLATFORM_FEE",
       "WITHDRAWAL",
       "WITHDRAW",
+      "JOB_CREDIT_PACKAGE_PURCHASE",
     ].includes(getTxType(tx));
   };
 
@@ -78,42 +114,120 @@ export default function TransactionsPage() {
     }
 
     if (getTxType(tx) === "DEPOSIT") {
-      return "Nạp tiền vào ví";
+      return "Deposit to wallet";
     }
 
     return tx.description ?? "—";
   };
 
-  const filtered = useMemo(() => {
-    return transactions.filter((tx) => {
-      const type = getTxType(tx);
-      const status = (tx.status ?? "").toUpperCase();
+  const formatTxDate = (value) => {
+    if (!value) return "—";
 
-      const matchType =
-        filterType === "All" || type === filterType.toUpperCase();
+    const date = new Date(value);
 
-      const matchStatus =
-        filterStatus === "All" || status === filterStatus.toUpperCase();
+    if (Number.isNaN(date.getTime())) return "—";
 
-      const matchProject =
-        !selectedProjectId || String(tx.projectId) === String(selectedProjectId);
-
-      const matchMilestone =
-        !selectedMilestoneId || String(tx.milestoneId) === String(selectedMilestoneId);
-
-      const matchTransaction =
-        !selectedTransactionId || String(tx.transactionId) === String(selectedTransactionId);
-
-      return matchType && matchStatus && matchProject && matchMilestone && matchTransaction;
+    return date.toLocaleString("vi-VN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
-  }, [
-    transactions,
-    filterType,
-    filterStatus,
-    selectedProjectId,
-    selectedMilestoneId,
-    selectedTransactionId,
-  ]);
+  };
+
+  const getDateRangeStart = () => {
+    const now = new Date();
+    const start = new Date(now);
+
+    switch (dateRange) {
+      case "TODAY":
+        start.setHours(0, 0, 0, 0);
+        return start;
+
+      case "7_DAYS":
+        start.setDate(now.getDate() - 7);
+        return start;
+
+      case "30_DAYS":
+        start.setDate(now.getDate() - 30);
+        return start;
+
+      case "1_YEAR":
+        start.setFullYear(now.getFullYear() - 1);
+        return start;
+
+      case "ALL":
+      default:
+        return null;
+    }
+  };
+
+  const filtered = useMemo(() => {
+  const startDate = getDateRangeStart();
+  const now = new Date();
+
+  return transactions.filter((tx) => {
+    const type = getTxType(tx);
+    const status = (tx.status ?? "").toUpperCase();
+
+    const txDate = tx.createdAt ? new Date(tx.createdAt) : null;
+
+    const matchDate =
+      !startDate || (txDate && txDate >= startDate && txDate <= now);
+
+    const matchType =
+      filterType === "All" || type === filterType.toUpperCase();
+
+    const matchStatus =
+      filterStatus === "All" || status === filterStatus.toUpperCase();
+
+    const matchProject =
+      !selectedProjectId || String(tx.projectId) === String(selectedProjectId);
+
+    const matchMilestone =
+      !selectedMilestoneId || String(tx.milestoneId) === String(selectedMilestoneId);
+
+    const matchTransaction =
+      !selectedTransactionId || String(tx.transactionId) === String(selectedTransactionId);
+
+    return (
+      matchDate &&
+      matchType &&
+      matchStatus &&
+      matchProject &&
+      matchMilestone &&
+      matchTransaction
+    );
+  });
+}, [
+  transactions,
+  filterType,
+  filterStatus,
+  dateRange,
+  selectedProjectId,
+  selectedMilestoneId,
+  selectedTransactionId,
+]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+const paginatedTransactions = filtered.slice(
+  (page - 1) * pageSize,
+  page * pageSize
+);
+
+useEffect(() => {
+  setPage(1);
+}, [
+  filterType,
+  filterStatus,
+  dateRange,
+  pageSize,
+  selectedProjectId,
+  selectedMilestoneId,
+  selectedTransactionId,
+]);
 
   const handleExport = () => {
     // TODO (BE): GET /wallet/transactions/export → download file
@@ -126,7 +240,7 @@ export default function TransactionsPage() {
 
         <button
           onClick={() => navigate(-1)}
-          className="mb-6 flex w-fit items-center gap-2 rounded-lg border border-cyan-400/30 px-4 py-2 text-cyan-400 transition hover:bg-cyan-400/10"
+          className="mb-6 flex w-fit items-center gap-2 rounded-lg border border-cyan-400/25 px-4 py-2 text-cyan-400 transition hover:bg-cyan-400/8"
         >
           <span className="material-symbols-outlined text-[18px]">
             arrow_back
@@ -149,37 +263,203 @@ export default function TransactionsPage() {
         </div>
 
         {/* Filters */}
-        <div style={{ background: "rgba(29,32,38,0.4)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: 12, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 24 }}>
+        <div className="relative z-[100] mb-6 flex flex-wrap items-center gap-3 overflow-visible rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#1d2026]/60 to-[#15171c]/60 p-4 shadow-[0_8px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
           {/* Date */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "rgba(29,32,38,0.5)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, cursor: "pointer", fontSize: 14, color: "#c2c6d6" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#00F0FF" }}>calendar_month</span>
-            Last 30 Days
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>expand_more</span>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setDateOpen(!dateOpen);
+                setTypeOpen(false);
+                setStatusOpen(false);
+                setRowsOpen(false);
+              }}
+              className={`flex min-w-[190px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
+                dateOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-cyan-400">
+                  calendar_month
+                </span>
+                {DATE_OPTIONS.find((item) => item.value === dateRange)?.label}
+              </span>
+              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${dateOpen ? "rotate-180" : ""}`}>
+                expand_more
+              </span>
+            </button>
+
+            {dateOpen && (
+              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+                {DATE_OPTIONS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => {
+                      setDateRange(item.value);
+                      setPage(1);
+                      setDateOpen(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                      dateRange === item.value
+                        ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
+                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Type filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 13, color: "#8c90a0", fontWeight: 500 }}>Type:</span>
-            <select value={filterType} onChange={(e) => setFilterType(e.target.value)}
-              style={{ background: "rgba(29,32,38,0.5)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#e1e2eb", fontSize: 13, outline: "none", cursor: "pointer" }}>
-              {["All", "DEPOSIT", "ESCROW_LOCK", "ESCROW_RELEASE", "PLATFORM_FEE", "WITHDRAWAL"].map((t) => (
-                <option key={t}>{t}</option>
-              ))}
-            </select>
+          {/* Type */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setTypeOpen(!typeOpen);
+                setDateOpen(false);
+                setStatusOpen(false);
+                setRowsOpen(false);
+              }}
+              className={`flex min-w-[210px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
+                typeOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              }`}
+            >
+              <span>
+                <span className="mr-2 text-[#8c90a0]">Type:</span>
+                {filterType}
+              </span>
+              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${typeOpen ? "rotate-180" : ""}`}>
+                expand_more
+              </span>
+            </button>
+
+            {typeOpen && (
+              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+                {TYPE_OPTIONS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setFilterType(item);
+                      setPage(1);
+                      setTypeOpen(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                    filterType === item
+                      ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
+                      : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                  }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          {/* Status filter */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ fontSize: 13, color: "#8c90a0", fontWeight: 500 }}>Status:</span>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}
-              style={{ background: "rgba(29,32,38,0.5)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "6px 10px", color: "#e1e2eb", fontSize: 13, outline: "none", cursor: "pointer" }}>
-              {["All", "SUCCESS", "PENDING", "FAILED", "PAID"].map((s) => (
-                <option key={s}>{s}</option>
-              ))}
-            </select>
+          {/* Status */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setStatusOpen(!statusOpen);
+                setDateOpen(false);
+                setTypeOpen(false);
+                setRowsOpen(false);
+              }}
+              className={`flex min-w-[170px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
+                statusOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              }`}
+            >
+              <span>
+                <span className="mr-2 text-[#8c90a0]">Status:</span>
+                {filterStatus}
+              </span>
+              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${statusOpen ? "rotate-180" : ""}`}>
+                expand_more
+              </span>
+            </button>
+
+            {statusOpen && (
+              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+                {STATUS_OPTIONS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setFilterStatus(item);
+                      setPage(1);
+                      setStatusOpen(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                      filterStatus === item
+                        ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
+                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
-          <button onClick={() => { setFilterType("All"); setFilterStatus("All"); }}
+          {/* Rows */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setRowsOpen(!rowsOpen);
+                setDateOpen(false);
+                setTypeOpen(false);
+                setStatusOpen(false);
+              }}
+              className={`flex min-w-[120px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
+                rowsOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              }`}
+            >
+              <span>
+                <span className="mr-2 text-[#8c90a0]">Rows:</span>
+                {pageSize}
+              </span>
+              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${rowsOpen ? "rotate-180" : ""}`}>
+                expand_more
+              </span>
+            </button>
+
+            {rowsOpen && (
+              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+                {ROW_OPTIONS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => {
+                      setPageSize(item);
+                      setPage(1);
+                      setRowsOpen(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                      pageSize === item
+                        ? "bg-cyan-400/15 text-cyan-300"
+                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <button onClick={() => {
+            setFilterType("All");
+            setFilterStatus("All");
+            setDateRange("30_DAYS");
+            setPage(1);
+          }}
             style={{ fontSize: 11, fontFamily: "JetBrains Mono, monospace", color: "#8c90a0", background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.1em" }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
@@ -191,14 +471,27 @@ export default function TransactionsPage() {
         <div style={{ background: "rgba(29,32,38,0.4)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" }}>
 
           {/* Table Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 3fr 1.5fr 1.5fr 1fr", padding: "14px 24px", background: "rgba(29,32,38,0.3)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 2.4fr 3fr 1.5fr 1.5fr 1fr", padding: "14px 24px", background: "rgba(29,32,38,0.3)", borderBottom: "1px solid rgba(255,255,255,0.1)", columnGap: 20 }}>
             {["Date", "Type", "Project Name", "Amount", "Status", "Action"].map((h, i) => (
               <div key={h} style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "#8c90a0", textAlign: i >= 3 ? "right" : "left" }}>{h}</div>
             ))}
           </div>
 
           {/* Table Body */}
-          <div style={{ overflowY: "auto", maxHeight: "55vh" }}>
+          <div
+              className="
+                overflow-y-auto
+                pr-1
+                [scrollbar-width:thin]
+                [scrollbar-color:rgba(0,240,255,0.45)_transparent]
+                [&::-webkit-scrollbar]:w-1.5
+                [&::-webkit-scrollbar-track]:bg-transparent
+                [&::-webkit-scrollbar-thumb]:rounded-full
+                [&::-webkit-scrollbar-thumb]:bg-cyan-400/35
+                hover:[&::-webkit-scrollbar-thumb]:bg-cyan-400/65
+              "
+              style={{ maxHeight: "55vh" }}
+            >
             {loading ? (
               <div style={{ textAlign: "center", padding: "60px 0", color: "#8c90a0" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, animation: "spin 1s linear infinite", color: "#00F0FF" }}>
@@ -215,19 +508,19 @@ export default function TransactionsPage() {
                 <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12 }}>receipt_long</span>
                 No transactions found
               </div>
-            ) : filtered.map((tx) => {
+            ) : paginatedTransactions.map((tx) => {
               const statusKey = (tx.status ?? "").toUpperCase();
               const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.PENDING;
 
               return (
                 <div key={tx.transactionId ?? tx.id}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 3fr 1.5fr 1.5fr 1fr", padding: "18px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.2s" }}
+                  style={{ display: "grid", gridTemplateColumns: "1fr 2.4fr 3fr 1.5fr 1.5fr 1fr", columnGap: 20, padding: "18px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.2s" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
 
                   {/* Date */}
-                  <div style={{ fontSize: 13, color: "#8c90a0" }}>
-                    {tx.createdAt ? new Date(tx.createdAt).toLocaleDateString("vi-VN") : "—"}
+                  <div className="text-[13px] text-[#8c90a0]">
+                    {formatTxDate(tx.createdAt)}
                   </div>
 
                   {/* Type */}
@@ -237,7 +530,10 @@ export default function TransactionsPage() {
                         {isExpenseTx(tx) ? "output" : "input"}
                       </span>
                     </div>
-                    <span style={{ fontSize: 13, color: "#e1e2eb" }}>
+                    <span
+                      className="min-w-0 truncate text-[13px] text-[#e1e2eb]"
+                      title={getTxType(tx)}
+                    >
                       {getTxType(tx)}
                     </span>
                   </div>
@@ -274,19 +570,49 @@ export default function TransactionsPage() {
           </div>
         </div>
 
-        {/* Pagination */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 24 }}>
-          <button style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#8c90a0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_left</span>
+        <div className="mt-6 flex items-center justify-center gap-2">
+          <button
+            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+            disabled={page === 1}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 ${
+              page === 1
+                ? "cursor-not-allowed text-[#3d4050]"
+                : "cursor-pointer text-[#8c90a0] hover:border-cyan-400/25 hover:text-cyan-400"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              chevron_left
+            </span>
           </button>
-          {[1, 2, 3, "...", 12].map((p, i) => (
-            <button key={i} onClick={() => typeof p === "number" && setPage(p)}
-              style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${page === p ? "transparent" : "rgba(255,255,255,0.12)"}`, background: page === p ? "#00F0FF" : "transparent", color: page === p ? "#002022" : "#8c90a0", fontFamily: "JetBrains Mono, monospace", fontSize: 12, cursor: typeof p === "number" ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center" }}>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPage(p)}
+              className={`flex h-8 w-8 items-center justify-center rounded-lg border text-xs font-mono ${
+                page === p
+                  ? "border-transparent bg-cyan-400 text-[#002022]"
+                  : "border-white/10 text-[#8c90a0] hover:border-cyan-400/25 hover:text-cyan-400"
+              }`}
+            >
               {p}
             </button>
           ))}
-          <button style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#8c90a0", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>chevron_right</span>
+
+          <button
+            onClick={() =>
+              setPage((prev) => Math.min(totalPages, prev + 1))
+            }
+            disabled={page === totalPages}
+            className={`flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 ${
+              page === totalPages
+                ? "cursor-not-allowed text-[#3d4050]"
+                : "cursor-pointer text-[#8c90a0] hover:border-cyan-400/25 hover:text-cyan-400"
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              chevron_right
+            </span>
           </button>
         </div>
 

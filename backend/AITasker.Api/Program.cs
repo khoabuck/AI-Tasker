@@ -3,6 +3,7 @@ using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
+using AITasker.Infrastructure.AI;
 using AITasker.Infrastructure.BusinessVerification;
 using AITasker.Infrastructure.Data;
 using AITasker.Infrastructure.Email;
@@ -21,6 +22,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
@@ -59,18 +61,64 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // =========================
+// Forwarded Headers
+// Fix HTTPS behind Render / Cloudflare / reverse proxy
+// =========================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto |
+        ForwardedHeaders.XForwardedHost;
+
+    // Required for cloud proxies like Render/Cloudflare.
+    // Without this, ASP.NET Core may ignore forwarded headers
+    // and generate http:// redirect_uri instead of https://.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// =========================
 // CORS
 // =========================
-var allowedOrigins = builder.Configuration
+const string CorsPolicyName = "FrontendPolicy";
+
+var configuredOrigins = builder.Configuration
     .GetSection("Cors:AllowedOrigins")
-    .Get<string[]>() ?? new[] { "http://localhost:5173" };
+    .Get<string[]>() ?? Array.Empty<string>();
+
+var allowedOrigins = configuredOrigins
+    .Concat(new[]
+    {
+        "http://localhost:5173",
+        "http://localhost:5174"
+    })
+    .Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(origin => origin.Trim().TrimEnd('/'))
+    .Distinct(StringComparer.OrdinalIgnoreCase)
+    .ToArray();
+
+Console.WriteLine("Allowed CORS origins: " + string.Join(", ", allowedOrigins));
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("FrontendPolicy", policy =>
+    options.AddPolicy(CorsPolicyName, policy =>
     {
         policy
-            .WithOrigins(allowedOrigins)
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.IsNullOrWhiteSpace(origin))
+                {
+                    return false;
+                }
+
+                var normalizedOrigin = origin.Trim().TrimEnd('/');
+
+                return allowedOrigins.Contains(
+                    normalizedOrigin,
+                    StringComparer.OrdinalIgnoreCase
+                );
+            })
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
@@ -208,7 +256,7 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<IEmailSender, SmtpEmailSender>();
+builder.Services.AddScoped<IEmailSender, MailtrapEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================
@@ -232,6 +280,15 @@ builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService
 builder.Services.AddScoped<IAIUsageCostService, AIUsageCostService>();
 
 // =========================
+// Admin AI Management / Groq Runtime Config
+// =========================
+builder.Services.AddScoped<IAiManagementService, AiManagementService>();
+builder.Services.AddHttpClient<IGroqChatCompletionService, GroqChatCompletionService>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(45);
+});
+
+// =========================
 // Upload Images - Cloudinary
 // =========================
 builder.Services.AddScoped<IImageUploadService, CloudinaryImageUploadService>();
@@ -245,7 +302,7 @@ builder.Services.AddScoped<ISkillService, SkillService>();
 // BE2 - Expert Skills API
 // =========================
 builder.Services.AddScoped<IExpertSkillService, ExpertSkillService>();
-builder.Services.AddHttpClient<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
+builder.Services.AddScoped<IExpertSkillAiProvider, GroqExpertSkillAiProvider>();
 
 // =========================
 // BE2 - Expert Directory / Recommendation
@@ -264,11 +321,8 @@ builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 // BE2 - AI Job Assistant
 // =========================
 builder.Services.AddScoped<IJobAssistantService, JobAssistantService>();
-builder.Services.AddHttpClient<IJobAssistantProvider, GroqJobAssistantProvider>();
-builder.Services.AddHttpClient<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(30);
-});
+builder.Services.AddScoped<IJobAssistantProvider, GroqJobAssistantProvider>();
+builder.Services.AddScoped<IJobSkillRelevanceValidator, GroqJobSkillRelevanceValidator>();
 
 // =========================
 // BE2 - Proposal / Contract / Project / Milestone Flow
@@ -342,7 +396,7 @@ builder.Services.AddHttpClient<
 // Expert Profile AI Review Provider
 // Groq AI
 // =========================
-builder.Services.AddHttpClient<
+builder.Services.AddScoped<
     IExpertProfileReviewProvider,
     GroqExpertProfileReviewProvider
 >();
@@ -373,27 +427,40 @@ builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(clie
 // =========================
 var app = builder.Build();
 
+// IMPORTANT:
+// This must run before HTTPS redirection, routing, CORS, authentication.
+// It fixes Google OAuth redirect_uri from http://... to https://...
+// when the app is deployed behind Render / Cloudflare.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Local dev tạm thời không bật HTTPS redirect.
-// app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
-app.UseCors("FrontendPolicy");
+app.UseRouting();
+
+app.UseCors(CorsPolicyName);
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapControllers();
+app.MapControllers().RequireCors(CorsPolicyName);
 
 // =======================================================
 // MAP SIGNALR REALTIME HUBS ENDPOINTS
 // =======================================================
-app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications");
-app.MapHub<ConversationHub>("/hubs/conversations");
+app.MapHub<AITasker.Api.Hubs.NotificationHub>("/hubs/notifications")
+    .RequireCors(CorsPolicyName);
+
+app.MapHub<ConversationHub>("/hubs/conversations")
+    .RequireCors(CorsPolicyName);
 
 // =========================
 // Test endpoints
@@ -405,7 +472,7 @@ app.MapGet("/", () => Results.Ok(new
     health = "/api/health",
     databaseHealth = "/api/health/db",
     googleLogin = "/api/auth/google-login"
-}));
+})).RequireCors(CorsPolicyName);
 
 app.MapGet("/api/health", () => Results.Ok(new
 {
@@ -413,7 +480,7 @@ app.MapGet("/api/health", () => Results.Ok(new
     app = "AITasker.Api",
     environment = app.Environment.EnvironmentName,
     time = DateTime.UtcNow
-}));
+})).RequireCors(CorsPolicyName);
 
 app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
 {
@@ -436,6 +503,6 @@ app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
             detail: ex.InnerException?.Message ?? ex.Message
         );
     }
-});
+}).RequireCors(CorsPolicyName);
 
 app.Run();

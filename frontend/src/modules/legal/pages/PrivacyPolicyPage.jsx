@@ -2,7 +2,7 @@
 // Static page — no API calls. Suggested route: /privacy-policy (public, no auth required)
 
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 
 const SECTIONS = [
@@ -79,6 +79,7 @@ function useScrollSpy(ids) {
 }
 
 export default function PrivacyPolicyPage() {
+  const navigate = useNavigate();
   const sectionIds = SECTIONS.map((s) => s.id);
   const activeId = useScrollSpy(sectionIds);
   const topRef = useRef(null);
@@ -132,10 +133,29 @@ export default function PrivacyPolicyPage() {
               <span style={{ color: "#00F0FF" }}>AI</span> Tasker
             </span>
           </Link>
-          <Link to={homeHref} style={{ display: "flex", alignItems: "center", gap: 6, color: "#8B95A1", fontSize: 13, textDecoration: "none" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_back</span>
-            Back to home
-          </Link>
+          <button
+          type="button"
+          onClick={() => navigate(-1)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            color: "#8B95A1",
+            fontSize: 13,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 16 }}
+          >
+            arrow_back
+          </span>
+          Back
+        </button>
         </div>
       </header>
 
@@ -318,16 +338,6 @@ export default function PrivacyPolicyPage() {
               latest version.
             </p>
 
-            <div style={{ marginTop: 40, padding: 24, background: "#11161D", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
-              <div>
-                <p className="pp-mono" style={{ fontSize: 11, color: "#5b6470", letterSpacing: "0.1em", margin: "0 0 4px" }}>QUESTIONS?</p>
-                <p style={{ fontSize: 14.5, color: "#C2C8D2", margin: 0 }}>Contact the AI Tasker team for clarification on this policy.</p>
-              </div>
-              <Link to={homeHref} style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 20px", background: "#00F0FF", color: "#002022", borderRadius: 9, fontSize: 13.5, fontWeight: 700, textDecoration: "none", whiteSpace: "nowrap" }}>
-                Back to home
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_forward</span>
-              </Link>
-            </div>
           </section>
 
         </main>

@@ -72,9 +72,9 @@ function RequestRevisionModal({ onClose, onSubmit, submitting, error }) {
           </button>
         </div>
 
-        <label style={sectionLabel}>Nội dung cần sửa lại <span style={{ color: "#f87171" }}>*</span></label>
+        <label style={sectionLabel}>Revision details <span style={{ color: "#f87171" }}>*</span></label>
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={5}
-          placeholder="Mô tả cụ thể phần nào chưa đạt yêu cầu, cần sửa gì..."
+          placeholder="Describe exactly what is not acceptable and what should be fixed..."
           style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box", marginBottom: 16 }} />
 
         {error && (
@@ -83,13 +83,13 @@ function RequestRevisionModal({ onClose, onSubmit, submitting, error }) {
 
         <div style={{ display: "flex", gap: 10 }}>
           <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
-            Hủy
+            Cancel
           </button>
           <button onClick={() => onSubmit(note)} disabled={submitting || !note.trim()}
             style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#facc15", color: submitting ? "#8c90a0" : "#1d1500", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting || !note.trim() ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
             {submitting
-              ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Đang gửi...</>
-              : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>Gửi yêu cầu sửa</>}
+              ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
+              : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>Send Revision Request</>}
           </button>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default function MilestoneDeliverablesPage() {
       if (err?.code === "ERR_CANCELED") return;
 
       if (!silent) {
-        setError(err?.response?.data?.message || "Không thể tải deliverable.");
+        setError(err?.response?.data?.message || "Unable to load deliverable.");
       }
     } finally {
       if (!silent) {
@@ -149,17 +149,19 @@ export default function MilestoneDeliverablesPage() {
     return () => controller.abort();
   }, [fetchData]);
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchData(undefined, true);
-    }, 3000);
+  const DELIVERABLE_POLL_INTERVAL = 3000;
 
-    return () => clearInterval(intervalId);
-  }, [fetchData]);
+    useEffect(() => {
+      const intervalId = setInterval(() => {
+        fetchData(undefined, true);
+      }, DELIVERABLE_POLL_INTERVAL);
+
+      return () => clearInterval(intervalId);
+    }, [fetchData]);
 
   const handleApprove = async () => {
     if (!deliverable?.deliverableId) return;
-    if (!confirm("Xác nhận deliverable này đã đạt yêu cầu? Hành động này không thể hoàn tác.")) return;
+    if (!confirm("Confirm this deliverable meets requirements? This action cannot be undone.")) return;
 
     setActionLoading("approve");
     setActionError("");
@@ -170,10 +172,10 @@ export default function MilestoneDeliverablesPage() {
       // để thấy ngay banner "Expert đang làm tới" đã nhảy sang milestone mới,
       // không cần ở lại trang deliverable này nữa.
       navigate(`/client/projects/${milestone.projectId}`, {
-        state: { successMsg: "Deliverable đã được chấp nhận! Tiền đã giải ngân, Expert có thể bắt đầu milestone tiếp theo." },
+        state: { successMsg: "Deliverable approved! Funds have been released and the Expert can start the next milestone." },
       });
     } catch (err) {
-      setActionError(err?.response?.data?.message || "Approve thất bại. Vui lòng thử lại.");
+      setActionError(err?.response?.data?.message || "Approval failed. Please try again.");
       setActionLoading(null);
     }
   };
@@ -188,10 +190,10 @@ export default function MilestoneDeliverablesPage() {
         feedback: note,
       });
       setShowRevisionModal(false);
-      setSuccessMsg("Yêu cầu sửa đã được gửi cho Expert.");
+      setSuccessMsg("Revision request has been sent to the Expert.");
       await fetchData();
     } catch (err) {
-      setActionError(err?.response?.data?.message || "Gửi yêu cầu sửa thất bại.");
+      setActionError(err?.response?.data?.message || "Failed to send revision request.");
     } finally {
       setActionLoading(null);
     }
@@ -214,10 +216,15 @@ export default function MilestoneDeliverablesPage() {
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 24px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy milestone."}</p>
-          <button onClick={() => navigate(-1)}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Quay lại
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Milestone not found."}</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mb-6 flex items-center gap-1.5 border-none bg-transparent p-0 text-sm text-gray-400 transition hover:text-cyan-400"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              arrow_back
+            </span>
+            Back
           </button>
         </div>
       </ClientLayout>
@@ -378,7 +385,7 @@ export default function MilestoneDeliverablesPage() {
                 <button onClick={handleApprove} disabled={!!actionLoading}
                   style={{ flex: 1, padding: "13px", background: actionLoading === "approve" ? "#1d2026" : "#22c55e", color: actionLoading === "approve" ? "#8c90a0" : "#002022", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: actionLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   {actionLoading === "approve"
-                    ? <><span className="material-symbols-outlined" style={{ fontSize: 18, animation: "spin 1s linear infinite" }}>autorenew</span>Đang xử lý...</>
+                    ? <><span className="material-symbols-outlined" style={{ fontSize: 18, animation: "spin 1s linear infinite" }}>autorenew</span>Processing...</>
                     : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>Approve Deliverable</>}
                 </button>
               </div>

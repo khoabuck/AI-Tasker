@@ -536,6 +536,196 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // AI Management
+        // =========================
+        modelBuilder.Entity<AiSettings>(entity =>
+        {
+            entity.ToTable("AiSettings");
+
+            entity.HasKey(x => x.AiSettingsId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.Model)
+                .HasMaxLength(100)
+                .HasDefaultValue("openai/gpt-oss-120b")
+                .IsRequired();
+
+            entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.JobAssistantMaxTokens)
+                .HasDefaultValue(3000)
+                .IsRequired();
+
+            entity.Property(x => x.ExpertSkillMaxTokens)
+                .HasDefaultValue(1500)
+                .IsRequired();
+
+            entity.Property(x => x.ProfileReviewMaxTokens)
+                .HasDefaultValue(2000)
+                .IsRequired();
+
+            entity.Property(x => x.SkillValidatorMaxTokens)
+                .HasDefaultValue(1200)
+                .IsRequired();
+
+            entity.Property(x => x.Temperature)
+                .HasDefaultValue(0.1)
+                .IsRequired();
+
+            entity.Property(x => x.JsonObjectResponse)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.MonthlyTokenLimit)
+                .HasDefaultValue(1000000)
+                .IsRequired();
+
+            entity.Property(x => x.MonthlyRequestLimit)
+                .HasDefaultValue(50000)
+                .IsRequired();
+
+            entity.Property(x => x.DailyRequestLimitPerUser)
+                .HasDefaultValue(50)
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.Provider);
+            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+
+
+        modelBuilder.Entity<AiAllowedModel>(entity =>
+        {
+            entity.ToTable("AiAllowedModels");
+
+            entity.HasKey(x => x.AiAllowedModelId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.Model)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.DisplayName)
+                .HasMaxLength(150)
+                .IsRequired();
+
+            entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.SupportsJsonObjectResponse)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.MaxOutputTokens)
+                .HasDefaultValue(4096)
+                .IsRequired();
+
+            entity.Property(x => x.Notes)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => new { x.Provider, x.Model })
+                .IsUnique();
+
+            entity.HasIndex(x => x.IsEnabled);
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        modelBuilder.Entity<AiUsageLog>(entity =>
+        {
+            entity.ToTable("AiUsageLogs");
+
+            entity.HasKey(x => x.AiUsageLogId);
+
+            entity.Property(x => x.Feature)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.EntityType)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .HasDefaultValue("Groq")
+                .IsRequired();
+
+            entity.Property(x => x.Model)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.PromptTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CompletionTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.TotalTokens)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.ErrorCode)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.ErrorMessage)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => x.Feature);
+            entity.HasIndex(x => x.Model);
+            entity.HasIndex(x => x.Status);
+            entity.HasIndex(x => x.CreatedAt);
+        });
+
+        // =========================
         // JobPostingAiPolicies
         // =========================
         modelBuilder.Entity<JobPostingAiPolicy>(entity =>

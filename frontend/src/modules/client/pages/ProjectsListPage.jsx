@@ -10,18 +10,21 @@ const STATUS_TABS = [
   { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
   { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
   { key: "DISPUTED", label: "Disputed", icon: "gavel", color: "#ef4444" },
+  { key: "CANCELLED", label: "Cancelled", icon: "cancel", color: "#9ca3af" },
 ];
 
 const STATUS_CLASS = {
   ACTIVE: "border-cyan-400/30 bg-cyan-400/10 text-cyan-400",
   COMPLETED: "border-green-500/30 bg-green-500/10 text-green-400",
   DISPUTED: "border-red-500/30 bg-red-500/10 text-red-400",
+  CANCELLED: "border-gray-400/30 bg-gray-400/10 text-gray-400",
 };
 
 const STATUS_CONFIG = {
   ACTIVE: { label: "Active", color: "#00F0FF", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
   COMPLETED:   { label: "Completed",   color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
   DISPUTED:    { label: "Disputed",    color: "#ef4444", bg: "rgba(239,68,68,0.08)", border: "rgba(239,68,68,0.25)" },
+  CANCELLED: { label: "Cancelled", color: "#9ca3af", bg: "rgba(156,163,175,0.08)", border: "rgba(156,163,175,0.25)" },
 };
 
 function ProjectCard({ project }) {
@@ -42,8 +45,11 @@ function ProjectCard({ project }) {
             {project.title || project.jobTitle}
           </h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <img src={project.expertAvatar || `https://i.pravatar.cc/60?u=${project.expertId}`} alt={expertName}
-              style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }} />
+            <img
+              src={project.expertAvatar || "/images/default-avatar.png"}
+              alt={expertName}
+              style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
+            />
             <span style={{ fontSize: 13, color: "#8c90a0" }}>{expertName}</span>
           </div>
         </div>
@@ -58,10 +64,10 @@ function ProjectCard({ project }) {
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
-          {project.totalAmount != null && (
+          {(project.totalBudget ?? project.milestoneTotalAmount) != null && (
             <div>
               <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: "#00F0FF" }}>
-                ${project.totalAmount.toLocaleString()}
+                ${(project.totalBudget ?? project.milestoneTotalAmount).toLocaleString()}
               </span>
             </div>
           )}
@@ -147,7 +153,7 @@ export default function ProjectsListPage() {
       setAllProjects(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải danh sách projects.");
+      setError(err?.response?.data?.message || "Unable to load the list of projects.");
     } finally {
       setLoading(false);
     }
@@ -159,7 +165,9 @@ export default function ProjectsListPage() {
     return () => controller.abort();
   }, [fetchProjects, location.key]);
 
-  const filteredProjects = allProjects.filter( (p) => (p.status || "").toUpperCase() === activeStatus);
+  const filteredProjects = allProjects.filter(
+  (p) => (p.status || "").toUpperCase() === activeStatus.toUpperCase()
+);
 
   return (
     <ClientLayout>
@@ -214,7 +222,7 @@ export default function ProjectsListPage() {
         {!loading && !error && filteredProjects.length === 0 && (
           <div style={{ textAlign: "center", padding: "80px 0" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#272a30" }}>folder_off</span>
-            <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>Không có project nào ở trạng thái {STATUS_CONFIG[activeStatus]?.label}</p>
+            <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>No projects are in this state. {STATUS_CONFIG[activeStatus]?.label}</p>
           </div>
         )}
 
