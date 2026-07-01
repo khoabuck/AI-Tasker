@@ -4,22 +4,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const SKILL_OPTIONS = [
-  { id: 1,  name: "Chatbot" },
-  { id: 2,  name: "NLP" },
-  { id: 3,  name: "OpenAI API" },
-  { id: 4,  name: "Python" },
-  { id: 5,  name: "Computer Vision" },
-  { id: 6,  name: "OCR" },
-  { id: 7,  name: "Data Analytics" },
-  { id: 8,  name: "Automation" },
-  { id: 9,  name: "Prompt Engineering" },
-  { id: 10, name: "RAG" },
-  { id: 11, name: "SQL" },
-  { id: 12, name: "Power BI" },
-  { id: 13, name: "ASP.NET Core" },
-  { id: 14, name: "SignalR" },
-];
+
 
 const DEFAULT_FORM = {
   title: "", budgetMin: "", budgetMax: "",
@@ -28,6 +13,22 @@ const DEFAULT_FORM = {
   expectedDeliverables: "", deadline: "",
   skills: [],
 };
+
+const JOB_RETURN_STATUSES = ["DRAFT", "OPEN", "CANCELLED"];
+
+const COMPLEXITY_OPTIONS = [
+  { value: "SIMPLE", label: "Simple" },
+  { value: "MEDIUM", label: "Medium" },
+  { value: "COMPLEX", label: "Complex" },
+];
+
+const DEFAULT_DEADLINE_DAYS = 30;
+
+const getDefaultDeadlineIso = () =>
+  new Date(
+    Date.now() + DEFAULT_DEADLINE_DAYS * 24 * 60 * 60 * 1000
+  ).toISOString();
+
 
 const inputStyle = {
   background: "#1d2026",
@@ -73,7 +74,7 @@ const buildPayload = (form) => ({
   budgetMax: toNullableNumber(form.budgetMax),
   deadline: form.deadline
     ? new Date(form.deadline).toISOString()
-    : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    : getDefaultDeadlineIso(),
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
@@ -111,11 +112,11 @@ export default function PostJobPage() {
   const editId = searchParams.get("editId");
   const rawReturnStatus = searchParams.get("returnStatus");
 
-  const returnStatus = ["DRAFT", "OPEN", "CANCELLED"].includes(
-    String(rawReturnStatus || "").toUpperCase()
-  )
-    ? String(rawReturnStatus).toUpperCase()
-    : "DRAFT";
+  const normalizedReturnStatus = String(rawReturnStatus || "").toUpperCase();
+
+const returnStatus = JOB_RETURN_STATUSES.includes(normalizedReturnStatus)
+  ? normalizedReturnStatus
+  : "DRAFT";
   const isEditMode = !!editId;
 
   const [mode, setMode] = useState("manual"); // "manual" | "ai"
@@ -131,6 +132,40 @@ export default function PostJobPage() {
   const [clientProfile, setClientProfile] = useState(null);
   const [budgetNote, setBudgetNote] = useState("");
   const [budgetEstimated, setBudgetEstimated] = useState(false);
+
+  const [skillOptions, setSkillOptions] = useState([]);
+
+useEffect(() => {
+  const controller = new AbortController();
+
+  const loadSkills = async () => {
+    try {
+      const res = await axiosInstance.get("/skills", {
+        params: { activeOnly: true },
+        signal: controller.signal,
+      });
+
+      const rawSkills = res.data?.data ?? res.data ?? [];
+
+      const skills = rawSkills
+        .map((s) => ({
+          id: Number(s.skillId ?? s.id),
+          name: s.skillName ?? s.name,
+        }))
+        .filter((s) => Number.isInteger(s.id) && s.id > 0 && s.name);
+
+      setSkillOptions(skills);
+    } catch (err) {
+      if (err?.code === "ERR_CANCELED") return;
+      console.error("Load skills failed:", err);
+      setSkillOptions([]);
+    }
+  };
+
+  loadSkills();
+
+  return () => controller.abort();
+}, []);
 
   const totalJobCredits = getTotalJobCredits(clientProfile);
   const totalAiCredits = getTotalAiCredits(clientProfile);
@@ -289,7 +324,7 @@ const toggleSkill = (skill) => {
         rawRequirement: form.description,
         budgetMin: toNullableNumber(form.budgetMin),
         budgetMax: toNullableNumber(form.budgetMax),
-        deadline: form.deadline || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        deadline: form.deadline || getDefaultDeadlineIso(),
         projectTypeHint: form.projectType || "",
         complexityHint: "",
       });
@@ -321,11 +356,7 @@ const suggestedSkills = (data.suggestedSkills || [])
 
     setAiSuggestedSkills(suggestedSkills);
     setIrrelevantSkills([]);
-      const defaultDeadline = new Date(
-        Date.now() + 30 * 24 * 60 * 60 * 1000
-      )
-        .toISOString()
-        .split("T")[0];
+      const defaultDeadline = getDefaultDeadlineIso().split("T")[0];
 
       setForm((prev) => ({
         ...prev,
@@ -648,9 +679,11 @@ const suggestedSkills = (data.suggestedSkills || [])
                         onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                         onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}>
                         <option value="">Select complexity...</option>
-                        <option value="SIMPLE">Simple</option>
-                        <option value="MEDIUM">Medium</option>
-                        <option value="COMPLEX">Complex</option>
+                        {COMPLEXITY_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
@@ -700,7 +733,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                   <p style={{ fontSize: 13, color: "#8c90a0", marginBottom: 16 }}>Select all skills needed for this job.</p>
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                    {SKILL_OPTIONS.map((skill) => {
+                    {skillOptions.map((skill) => {
                       const selected = !!form.skills.find((s) => s.id === skill.id);
                       return (
                         <button key={skill.id} type="button" onClick={() => toggleSkill(skill)}
@@ -961,9 +994,11 @@ const suggestedSkills = (data.suggestedSkills || [])
                             onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                             onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}>
                             <option value="">Select...</option>
-                            <option value="SIMPLE">Simple</option>
-                            <option value="MEDIUM">Medium</option>
-                            <option value="COMPLEX">Complex</option>
+                            {COMPLEXITY_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -1004,7 +1039,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                       <label style={labelStyle}>Suggested Skills</label>
                       <p style={{ fontSize: 12, color: "#8c90a0", marginBottom: 12 }}>AI suggested these — you can add or remove.</p>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-                        {SKILL_OPTIONS.map((skill) => {
+                        {skillOptions.map((skill) => {
                           const selected = !!form.skills.find((s) => s.id === skill.id);
 
                           const isIrrelevant = irrelevantSkills.some(

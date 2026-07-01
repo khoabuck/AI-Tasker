@@ -149,13 +149,15 @@ export default function MilestoneDeliverablesPage() {
     return () => controller.abort();
   }, [fetchData]);
 
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      fetchData(undefined, true);
-    }, 3000);
+  const DELIVERABLE_POLL_INTERVAL = 3000;
 
-    return () => clearInterval(intervalId);
-  }, [fetchData]);
+    useEffect(() => {
+      const intervalId = setInterval(() => {
+        fetchData(undefined, true);
+      }, DELIVERABLE_POLL_INTERVAL);
+
+      return () => clearInterval(intervalId);
+    }, [fetchData]);
 
   const handleApprove = async () => {
     if (!deliverable?.deliverableId) return;
@@ -216,7 +218,7 @@ export default function MilestoneDeliverablesPage() {
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
           <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Milestone not found."}</p>
           <button
-            onClick={() => navigate(`/client/projects/${milestone.projectId}`)}
+            onClick={() => navigate(-1)}
             className="mb-6 flex items-center gap-1.5 border-none bg-transparent p-0 text-sm text-gray-400 transition hover:text-cyan-400"
           >
             <span className="material-symbols-outlined text-[18px]">

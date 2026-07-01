@@ -30,8 +30,12 @@ function JobCard({ job, onStatusChange }) {
     if (!confirm("Submit job này để mở cho expert apply?")) return;
     setActionLoading(true);
     try {
-      await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
-      onStatusChange(job.jobPostingId, "OPEN");
+      const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
+
+      onStatusChange(
+        job.jobPostingId,
+        res?.data?.status || "OPEN"
+      );
     } catch (err) {
       alert(err?.response?.data?.message || "Submit thất bại.");
     } finally { setActionLoading(false); }

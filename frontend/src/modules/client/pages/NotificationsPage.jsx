@@ -5,16 +5,29 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import { useNotifications } from "../../../hooks/useNotifications";
 
 const TYPE_CONFIG = {
-  PROPOSAL_SUBMITTED:  { icon: "description",  color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
-  PROPOSAL_ACCEPTED:   { icon: "check_circle", color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
-  PROPOSAL_REJECTED:   { icon: "cancel",       color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
-  MESSAGE_RECEIVED:    { icon: "chat",          color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
-  DEPOSIT:             { icon: "add_card",      color: "#00F0FF", bg: "rgba(0,240,255,0.1)"   },
-  WITHDRAWAL:          { icon: "outbox",        color: "#facc15", bg: "rgba(250,204,21,0.1)"  },
-  WITHDRAWAL_APPROVED: { icon: "check_circle", color: "#22c55e", bg: "rgba(34,197,94,0.1)"   },
-  WITHDRAWAL_REJECTED: { icon: "cancel",       color: "#ef4444", bg: "rgba(239,68,68,0.1)"   },
-  JOB_INVITED:         { icon: "person_add",   color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
-  SYSTEM:              { icon: "notifications",color: "#8c90a0", bg: "rgba(140,144,160,0.1)" },
+  PROPOSAL_SUBMITTED: { icon: "description", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
+  PROPOSAL_ACCEPTED: { icon: "check_circle", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+  PROPOSAL_REJECTED: { icon: "cancel", color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
+
+  CHAT_MESSAGE_RECEIVED: { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  MESSAGE_RECEIVED: { icon: "chat", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+
+  DELIVERABLE_SUBMITTED: { icon: "upload_file", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
+  DELIVERABLE_APPROVED: { icon: "verified", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+
+  ESCROW_LOCKED: { icon: "lock", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
+  ESCROW_RELEASED: { icon: "payments", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+  ESCROW_LOCK_EXPIRED: { icon: "lock_clock", color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
+
+  CONTRACT_CONFIRMED_PENDING_ESCROW: { icon: "contract", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
+
+  DEPOSIT: { icon: "add_card", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
+  WITHDRAWAL: { icon: "outbox", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
+  WITHDRAWAL_APPROVED: { icon: "check_circle", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+  WITHDRAWAL_REJECTED: { icon: "cancel", color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
+
+  JOB_INVITED: { icon: "person_add", color: "#c0c1ff", bg: "rgba(192,193,255,0.1)" },
+  SYSTEM: { icon: "notifications", color: "#8c90a0", bg: "rgba(140,144,160,0.1)" },
 };
 
 function getTypeCfg(type) {
@@ -79,27 +92,36 @@ function getNotificationTargetUrl(notification) {
     "proposalId",
     "relatedProposalId",
     "targetProposalId",
-    "entityId",
-    "referenceId",
-    "targetId",
   ]);
 
   const conversationId = getValue(notification, metadata, [
     "conversationId",
     "relatedConversationId",
     "targetConversationId",
-    "entityId",
-    "referenceId",
-    "targetId",
   ]);
 
   const milestoneId = getValue(notification, metadata, [
     "milestoneId",
     "relatedMilestoneId",
     "targetMilestoneId",
-    "entityId",
-    "referenceId",
-    "targetId",
+  ]);
+
+  const projectId = getValue(notification, metadata, [
+    "projectId",
+    "relatedProjectId",
+    "targetProjectId",
+  ]);
+
+  const contractId = getValue(notification, metadata, [
+    "contractId",
+    "relatedContractId",
+    "targetContractId",
+  ]);
+
+  const deliverableId = getValue(notification, metadata, [
+    "deliverableId",
+    "relatedDeliverableId",
+    "targetDeliverableId",
   ]);
 
   switch (type) {
@@ -117,22 +139,42 @@ function getNotificationTargetUrl(notification) {
         ? `/client/proposals/${proposalId}`
         : "/client/projects";
 
-    case "JOB_INVITED":
-      return "/expert/messages";
+    case "CONTRACT_CONFIRMED_PENDING_ESCROW":
+      return contractId
+        ? `/client/contracts/${contractId}`
+        : projectId
+          ? `/client/projects/${projectId}`
+          : "/client/projects";
+
+    case "ESCROW_LOCKED":
+    case "ESCROW_LOCK_EXPIRED":
+      return projectId
+        ? `/client/projects/${projectId}`
+        : "/client/projects";
 
     case "DELIVERABLE_SUBMITTED":
+    case "DELIVERABLE_APPROVED":
     case "MILESTONE_DELIVERABLE_SUBMITTED":
     case "DELIVERABLE_CREATED":
       return milestoneId
         ? `/client/milestones/${milestoneId}/deliverables`
-        : "/client/projects";
+        : deliverableId
+          ? `/client/deliverables/${deliverableId}`
+          : "/client/projects";
+
+    case "ESCROW_RELEASED":
+      return milestoneId
+        ? `/client/milestones/${milestoneId}/deliverables`
+        : "/client/wallet";
 
     case "DEPOSIT":
     case "WITHDRAWAL":
     case "WITHDRAWAL_APPROVED":
     case "WITHDRAWAL_REJECTED":
-    case "ESCROW_RELEASED":
       return "/client/wallet";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
 
     default:
       return "/client/notifications";

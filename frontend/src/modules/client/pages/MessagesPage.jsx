@@ -221,7 +221,7 @@ export default function MessagesPage() {
             avatar:
               c.expertAvatarUrl ||
               c.otherPartyAvatarUrl ||
-              `https://i.pravatar.cc/100?u=${c.expertUserId ?? c.expertProfileId ?? convId}`,
+              "/default-avatar.png",
             online: c.isOtherPartyOnline ?? false,
             lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
             time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
@@ -298,13 +298,20 @@ export default function MessagesPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!activeChat?.id) return;
-    fetchMessages(activeChat.id);
+  const MESSAGE_POLL_INTERVAL = 5000;
 
-    pollRef.current = setInterval(() => fetchMessages(activeChat.id, true), 5000);
-    return () => clearInterval(pollRef.current);
-  }, [activeChat?.id, fetchMessages]);
+useEffect(() => {
+  if (!activeChat?.id) return;
+
+  fetchMessages(activeChat.id);
+
+  pollRef.current = setInterval(
+    () => fetchMessages(activeChat.id, true),
+    MESSAGE_POLL_INTERVAL
+  );
+
+  return () => clearInterval(pollRef.current);
+}, [activeChat?.id, fetchMessages]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
