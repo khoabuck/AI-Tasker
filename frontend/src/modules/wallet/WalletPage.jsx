@@ -139,7 +139,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
         {step === "input" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
-              <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Số tiền (VND)</label>
+              <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Amount (VND)</label>
               <div style={{ position: "relative" }}>
                 <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>₫</span>
                 <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(""); }} placeholder="20000"
@@ -160,7 +160,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
             {error && <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>}
 
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Hủy</button>
+              <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleCreateOrder} disabled={loading}
                 style={{ flex: 2, padding: "12px", background: loading ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 {loading && <span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>}
@@ -175,7 +175,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
             <div style={{ background: "#fff", borderRadius: 12, padding: 16 }}>
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(order.qrContent || "")}`}
-                alt="QR thanh toán"
+                alt="QR payment"
                 style={{ width: 220, height: 220, display: "block" }}
               />
             </div>
@@ -191,31 +191,25 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
               <span style={{ fontSize: 12, color: "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.orderCode}</span>
               <button onClick={handleCopyContent} style={{ background: "none", border: "none", color: "#00F0FF", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12, flexShrink: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{copied ? "check" : "content_copy"}</span>
-                {copied ? "Đã copy" : "Copy"}
+                {copied ? "Copied" : "Copy"}
               </button>
             </div>
 
-            {order.checkoutUrl && (
-              <a href={order.checkoutUrl} target="_blank" rel="noopener noreferrer"
-                style={{ width: "100%", textAlign: "center", padding: "11px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none", boxSizing: "border-box" }}>
-                Mở trang thanh toán PayOS
-              </a>
-            )}
 
             {/* Trạng thái chờ — tự poll, KHÔNG có nút tự xác nhận */}
             <div style={{ width: "100%", background: "rgba(250,204,21,0.06)", border: "1px solid rgba(250,204,21,0.2)", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, boxSizing: "border-box" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#facc15", animation: "spin 1.5s linear infinite" }}>autorenew</span>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Đang chờ thanh toán...</p>
+                <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Waiting for payment...</p>
                 <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
-                  Hệ thống sẽ tự xác nhận khi nhận được thanh toán.
+                  System will automatically confirm when payment is received.
                   {secondsLeft > 0 && ` The application expires after ${formatTime(secondsLeft)}`}
                 </p>
               </div>
             </div>
 
             <button onClick={onClose} style={{ width: "100%", padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer", boxSizing: "border-box" }}>
-              Đóng (tiếp tục chờ trong nền)
+              Close (continue waiting in background)
             </button>
           </div>
         )}
@@ -224,11 +218,11 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", textAlign: "center" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171" }}>schedule</span>
             <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-              Đơn nạp tiền đã hết hạn hoặc bị hủy. Vui lòng tạo đơn mới để tiếp tục.
+              Your deposit order has expired or been cancelled. Please create a new order to continue.
             </p>
             <button onClick={handleRetry}
               style={{ width: "100%", padding: "12px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              Tạo đơn mới
+              Create a new order
             </button>
           </div>
         )}
@@ -273,7 +267,7 @@ function WithdrawModal({ onClose, onSuccess }) {
       if (status === 404) {
         // API /withdrawals chưa được BE triển khai — báo rõ cho user thay vì
         // để lộ lỗi kỹ thuật "404 Not Found" khó hiểu.
-        setError("Tính năng rút tiền hiện đang được nâng cấp. Vui lòng thử lại sau.");
+        setError("The withdrawal feature is currently being upgraded. Please try again later.");
       } else {
         setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
       }
@@ -292,7 +286,7 @@ function WithdrawModal({ onClose, onSuccess }) {
       onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Rút tiền</h3>
+          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Withdraw</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
           </button>
@@ -300,7 +294,7 @@ function WithdrawModal({ onClose, onSuccess }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.amount ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Số tiền</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.amount ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Amount</label>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>₫</span>
               <input type="number" name="amount" value={form.amount} onChange={handleChange} placeholder="100000"
@@ -310,21 +304,21 @@ function WithdrawModal({ onClose, onSuccess }) {
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Tên ngân hàng</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Bank Name</label>
             <input type="text" name="bankName" value={form.bankName} onChange={handleChange} placeholder="Vietcombank, Techcombank..."
               style={inputStyle("bankName")} />
             {fieldErrors.bankName && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankName}</p>}
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountNumber ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Số tài khoản</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountNumber ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Account Number</label>
             <input type="text" name="bankAccountNumber" value={form.bankAccountNumber} onChange={handleChange} placeholder="0123456789"
               style={inputStyle("bankAccountNumber")} />
             {fieldErrors.bankAccountNumber && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankAccountNumber}</p>}
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountHolder ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Tên chủ tài khoản</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountHolder ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Account Holder Name</label>
             <input type="text" name="bankAccountHolder" value={form.bankAccountHolder} onChange={handleChange} placeholder="NGUYEN VAN A"
               style={inputStyle("bankAccountHolder")} />
             {fieldErrors.bankAccountHolder && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankAccountHolder}</p>}
@@ -335,11 +329,11 @@ function WithdrawModal({ onClose, onSuccess }) {
           )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Hủy</button>
+            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
             <button onClick={handleSubmit} disabled={loading}
               style={{ flex: 2, padding: "12px", background: loading ? "#1d2026" : "#00F0FF", color: loading ? "#8c90a0" : "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {loading && <span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>}
-              {loading ? "Đang xử lý..." : "Xác nhận rút tiền"}
+              {loading ? "Processing..." : "Confirm Withdrawal"}
             </button>
           </div>
         </div>
@@ -633,7 +627,7 @@ export default function WalletPage() {
         )}
       </div>
 
-      {showDeposit && <DepositModal onClose={() => setShowDeposit(false)} onSuccess={() => showSuccess("Nạp tiền thành công!")} />}
+      {showDeposit && <DepositModal onClose={() => setShowDeposit(false)} onSuccess={() => showSuccess("Deposit successful!")} />}
       {selectedOrder && (
         <DepositModal
           existingOrder={selectedOrder}

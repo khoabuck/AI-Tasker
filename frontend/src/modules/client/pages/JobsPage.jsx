@@ -3,7 +3,7 @@
 // PUT /api/jobs/{id}/submit  ← submit draft
 // PUT /api/jobs/{id}/cancel  ← cancel job
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -26,23 +26,23 @@ function JobCard({ job, onStatusChange }) {
   const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.DRAFT;
 
   const handleSubmit = async (e) => {
-    e.stopPropagation();
+  e.stopPropagation();
 
-    setActionLoading(true);
-    try {
-      const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
+  setActionLoading(true);
+  try {
+    const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
 
-      const newStatus = res?.data?.status || "OPEN";
+    const newStatus = res?.data?.data?.status || "OPEN";
 
-      onStatusChange(job.jobPostingId, newStatus);
+    onStatusChange(job.jobPostingId, newStatus);
 
-      navigate(`/client/jobs?status=OPEN`);
-    } catch (err) {
-      // không popup, không log, không gì cả
-    } finally {
-      setActionLoading(false);
-    }
-  };
+    navigate(`/client/jobs?status=OPEN`);
+  } catch (err) {
+    // silent
+  } finally {
+    setActionLoading(false);
+  }
+};
 
   const handleCancel = async (e) => {
     e.stopPropagation();
@@ -163,16 +163,25 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  // Đánh dấu đã load lần đầu chưa. Từ lần refetch thứ 2 trở đi (khi quay lại
+  // trang) sẽ fetch ngầm, giữ nguyên list cũ trên màn hình → không nháy trắng.
+  const hasLoadedOnce = useRef(false);
+
   const fetchJobs = useCallback(async (signal) => {
-    setLoading(true);
+    // Chỉ bật spinner khi CHƯA có data (lần đầu). Refetch nền thì không bật,
+    // để list hiện tại ở nguyên trên màn hình trong lúc tải.
+    if (!hasLoadedOnce.current) {
+      setLoading(true);
+    }
     setError("");
     try {
       const res = await axiosInstance.get("/jobs/my", { signal });
       const raw = res.data;
       setAllJobs(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
+      hasLoadedOnce.current = true;
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Không thể tải danh sách jobs.");
+      setError(err?.response?.data?.message || "Could not load jobs list.");
     } finally {
       setLoading(false);
     }
@@ -188,80 +197,96 @@ export default function JobsPage() {
     setAllJobs((prev) => prev.map((j) => j.jobPostingId === jobId ? { ...j, status: newStatus } : j));
   };
 
-  const filteredJobs = allJobs.filter((j) => j.status === activeStatus);
+  const filteredJobs = allJobs.filter((j) => {
+    const status = j.status || "DRAFT";
+
+    if (activeStatus === "OPEN") {
+      return status === "OPEN" || status === "ACTIVE";
+    }
+
+    return status === activeStatus;
+  });
+
+  // Chỉ hiện spinner toàn trang ở lần load đầu (chưa có job nào).
+  const showFullLoading = loading && allJobs.length === 0;
 
   return (
     <ClientLayout>
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
+      <div style={{ minHeight: "100vh", background: "#0b0e14" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
 
-        {/* Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
-          <div>
-            <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Jobs</h1>
-            <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Quản lý các job postings của bạn.</p>
-          </div>
-          <button onClick={() => navigate("/client/post-job")}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", fontWeight: 700, borderRadius: 10, border: "none", cursor: "pointer", fontSize: 14, fontFamily: "Hanken Grotesk, sans-serif", boxShadow: "0 0 16px rgba(0,240,255,0.2)" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
-            Post New Job
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          {STATUS_TABS.map((tab) => {
-            const count = allJobs.filter((j) => j.status === tab.key).length;
-            const active = activeStatus === tab.key;
-            return (
-              <button key={tab.key}
-                onClick={() => setSearchParams({ status: tab.key })}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "none", border: "none", borderBottom: active ? `2px solid ${tab.color}` : "2px solid transparent", color: active ? tab.color : "#8c90a0", cursor: "pointer", fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: "Inter, sans-serif", transition: "all 0.2s", marginBottom: -1 }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{tab.icon}</span>
-                {tab.label}
-                <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: active ? tab.color + "20" : "rgba(255,255,255,0.06)", color: active ? tab.color : "#8c90a0" }}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Loading */}
-        {loading && (
-          <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-            Loading jobs...
-          </div>
-        )}
-    
-        {/* Error */}
-        {error && !loading && (
-          <div style={{ textAlign: "center", padding: "60px 24px" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-            <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
-            <button onClick={() => fetchJobs(new AbortController().signal)}
-              style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
-              Thử lại
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
+            <div>
+              <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Jobs</h1>
+              <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Quản lý các job postings của bạn.</p>
+            </div>
+            <button onClick={() => navigate("/client/post-job")}
+              style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", fontWeight: 700, borderRadius: 10, border: "none", cursor: "pointer", fontSize: 14, fontFamily: "Hanken Grotesk, sans-serif", boxShadow: "0 0 16px rgba(0,240,255,0.2)" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>add</span>
+              Post New Job
             </button>
           </div>
-        )}
 
-        {/* Empty */}
-        {!loading && !error && filteredJobs.length === 0 && (
-          <div style={{ textAlign: "center", padding: "80px 0" }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#272a30" }}>inbox</span>
-            <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>Không có job nào ở trạng thái {STATUS_CONFIG[activeStatus]?.label}</p>
+          {/* Tabs */}
+          <div style={{ display: "flex", gap: 8, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            {STATUS_TABS.map((tab) => {
+              const count =
+                tab.key === "OPEN"
+                  ? allJobs.filter((j) => j.status === "OPEN" || j.status === "ACTIVE").length
+                  : allJobs.filter((j) => j.status === tab.key).length;
+              const active = activeStatus === tab.key;
+              return (
+                <button key={tab.key}
+                  onClick={() => setSearchParams({ status: tab.key })}
+                  style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "none", border: "none", borderBottom: active ? `2px solid ${tab.color}` : "2px solid transparent", color: active ? tab.color : "#8c90a0", cursor: "pointer", fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: "Inter, sans-serif", transition: "all 0.2s", marginBottom: -1 }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{tab.icon}</span>
+                  {tab.label}
+                  <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: active ? tab.color + "20" : "rgba(255,255,255,0.06)", color: active ? tab.color : "#8c90a0" }}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
-        )}
 
-        {/* List */}
-        {!loading && !error && filteredJobs.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {filteredJobs.map((job) => (
-              <JobCard key={job.jobPostingId} job={job} onStatusChange={handleStatusChange} />
-            ))}
-          </div>
-        )}
+          {/* Loading (chỉ lần đầu) */}
+          {showFullLoading && (
+            <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
+              Loading jobs...
+            </div>
+          )}
+
+          {/* Error */}
+          {error && !showFullLoading && (
+            <div style={{ textAlign: "center", padding: "60px 24px" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
+              <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
+              <button onClick={() => fetchJobs(new AbortController().signal)}
+                style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
+                Thử lại
+              </button>
+            </div>
+          )}
+
+          {/* Empty */}
+          {!showFullLoading && !error && filteredJobs.length === 0 && (
+            <div style={{ textAlign: "center", padding: "80px 0" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#272a30" }}>inbox</span>
+              <p style={{ color: "#8c90a0", fontSize: 16, marginBottom: 6 }}>Không có job nào ở trạng thái {STATUS_CONFIG[activeStatus]?.label}</p>
+            </div>
+          )}
+
+          {/* List */}
+          {!showFullLoading && !error && filteredJobs.length > 0 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {filteredJobs.map((job) => (
+                <JobCard key={job.jobPostingId} job={job} onStatusChange={handleStatusChange} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>

@@ -14,6 +14,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { clientContractApi } from "../../../api/clientContract.api";
 
 const STATUS_CONFIG = {
   ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
@@ -206,7 +207,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
               type="url"
               value={evidenceFileUrl}
               onChange={(e) => setEvidenceFileUrl(e.target.value)}
-              placeholder="https://drive.google.com/... hoặc https://example.com/file.pdf"
+              placeholder="https://drive.google.com/... or https://example.com/file.pdf"
               style={{
                 width: "100%",
                 background: "#1d2026",
@@ -267,6 +268,9 @@ export default function ClientProjectDetailPage() {
 
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
+  const proposalId =
+  project?.proposalId ||
+  project?.latestProposalId;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [disputeModal, setDisputeModal] = useState(null); // { milestone } | { milestone: null } khi mở cho cả project
@@ -396,6 +400,32 @@ export default function ClientProjectDetailPage() {
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
               Message
+            </button>
+
+            <button
+              onClick={() =>
+                navigate(
+                  `/client/projects/${projectId}/contract?proposalId=${proposalId}`
+                )
+              }
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "9px 16px",
+                background: "rgba(34,197,94,0.12)",
+                color: "#22c55e",
+                border: "1px solid rgba(34,197,94,0.3)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer"
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                description
+              </span>
+              Contract Detail
             </button>
 
             {project.status === "COMPLETED" && (

@@ -37,7 +37,7 @@ export default function RegisterPage() {
     e.preventDefault();
     if (!isFormValid) return;
     if (form.password !== form.confirmPassword) {
-      setError("Mật khẩu xác nhận không khớp.");
+      setError("Confirm password does not match.");
       return;
     }
     setLoading(true);
@@ -190,7 +190,6 @@ export default function RegisterPage() {
                         value={form.password}
                         onChange={handleChange}
                         required
-                        placeholder="••••••••"
                         style={{ ...inputStyle("password"), paddingRight: 48 }}
                         onFocus={() => setFocusField("password")}
                         onBlur={() => setFocusField("")}
@@ -240,7 +239,6 @@ export default function RegisterPage() {
                         value={form.confirmPassword}
                         onChange={handleChange}
                         required
-                        placeholder="••••••••"
                         style={{ ...inputStyle("confirmPassword"), paddingRight: 48 }}
                         onFocus={() => setFocusField("confirmPassword")}
                         onBlur={() => setFocusField("")}

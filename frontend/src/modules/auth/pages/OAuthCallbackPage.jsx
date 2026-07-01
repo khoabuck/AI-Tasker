@@ -15,7 +15,7 @@ export default function OAuthCallbackPage() {
     const token = searchParams.get("token");
 
     if (!token) {
-      setError("Không tìm thấy token. Vui lòng đăng nhập lại.");
+      setError("Token not found. Please log in again.");
       return;
     }
 
@@ -34,7 +34,7 @@ export default function OAuthCallbackPage() {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("user");
 
-      setError("Xác thực Google thất bại. Vui lòng thử lại.");
+      setError("Google authentication failed. Please try again.");
     }
   };
 

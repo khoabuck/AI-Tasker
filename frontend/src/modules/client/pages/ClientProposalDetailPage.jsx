@@ -36,6 +36,34 @@ const sectionLabel = {
   display: "block",
 };
 
+// ── Helper: đọc trạng thái ký của contract từ nhiều field khác nhau ────
+function readContractSignState(contract) {
+  // BE trả về clientConfirmed / expertConfirmed (bool) và status ("DRAFT" | "CONFIRMED")
+  const clientSigned = contract?.clientConfirmed === true;
+  const expertSigned = contract?.expertConfirmed === true;
+
+  const contractStatus = (contract?.status || "").toUpperCase();
+
+  const bothSigned =
+    (clientSigned && expertSigned) || contractStatus === "CONFIRMED";
+
+  return { clientSigned, expertSigned, bothSigned };
+}
+
+// Suy ra nhãn hiển thị "bước hiện tại" cho client, thay vì đổ raw "DRAFT"/"CONFIRMED".
+// Chỉ derive từ field BE đã trả (clientConfirmed / expertConfirmed / projectEscrowLockedAt),
+// không cần thêm API.
+function getContractStageLabel(contract) {
+  if (!contract) return "—";
+
+  const { clientSigned, expertSigned, bothSigned } = readContractSignState(contract);
+
+  if (bothSigned && contract.projectEscrowLockedAt) return "Active";
+  if (bothSigned) return "Ready to lock escrow";
+  if (clientSigned && !expertSigned) return "Waiting for the Expert to sign";
+  return "Waiting for signatures";
+}
+
 // ── Message Modal ─────────────────────────────────────────────────────
 function MessageModal({ proposal, onClose, navigate }) {
   const [message, setMessage] = useState("");
@@ -50,8 +78,6 @@ function MessageModal({ proposal, onClose, navigate }) {
     setSending(true);
     setSendError("");
     try {
-      // Kiểm tra đã có conversation nào gắn với proposal này chưa, tránh tạo trùng
-      // mỗi lần bấm gửi từ trang Proposal/Job Detail.
       let conversationId = null;
       try {
         const listRes = await axiosInstance.get("/conversations/me");
@@ -60,18 +86,16 @@ function MessageModal({ proposal, onClose, navigate }) {
         const existing = list.find((c) => c.relatedProposalId === proposal.proposalId);
         if (existing) conversationId = existing.conversationId;
       } catch {
-        // Nếu check lỗi, vẫn tiếp tục thử tạo mới ở bước dưới
+        // ignore, thử tạo mới ở bước dưới
       }
 
       if (conversationId) {
-        // Đã có conversation — gửi tiếp vào đó, không tạo mới
         await axiosInstance.post(`/conversations/${conversationId}/messages`, {
           content: message,
           messageType: "TEXT",
           attachmentUrl: null,
         });
       } else {
-        // Chưa có — tạo conversation mới kèm tin nhắn đầu
         const res = await axiosInstance.post("/conversations", {
           conversationType: "JOB_INQUIRY",
           clientUserId: proposal.clientUserId,
@@ -172,6 +196,10 @@ export default function ClientProposalDetailPage() {
   const [showEscrowModal, setShowEscrowModal] = useState(false);
   const [projectReadyForEscrow, setProjectReadyForEscrow] = useState(null);
 
+  // Giữ tham chiếu tới hàm check mới nhất, để interval không cần đưa
+  // contractCreated vào dependency (tránh hủy/tạo lại interval gây nhấp nháy).
+  const checkContractRef = useRef(null);
+
   const fetchProposal = useCallback(async (signal) => {
     setLoading(true);
     setError("");
@@ -179,8 +207,6 @@ export default function ClientProposalDetailPage() {
       const res = await axiosInstance.get(`/proposals/${proposalId}`, { signal });
       const raw = res.data;
 
-      // BE bọc response dạng { success, data }. "data" có thể là object proposal
-      // trực tiếp, hoặc 1 array chứa đúng 1 proposal (như đã thấy thực tế) — xử lý cả 2.
       let proposalData = raw?.data ?? raw;
       if (Array.isArray(proposalData)) {
         proposalData = proposalData[0] ?? null;
@@ -214,11 +240,7 @@ export default function ClientProposalDetailPage() {
     const fetchClientProfile = async () => {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
-
-        const profile =
-          res.data?.data ??
-          res.data;
-
+        const profile = res.data?.data ?? res.data;
         setClientProfile(profile);
       } catch {
         setClientProfile(null);
@@ -229,275 +251,265 @@ export default function ClientProposalDetailPage() {
   }, []);
 
   useEffect(() => {
-  const fetchWalletBalance = async () => {
-    setWalletLoading(true);
-
-    try {
-      const res = await axiosInstance.get("/wallets/balance");
-
-      setWalletBalance(Number(res.data?.balance ?? 0));
-    } catch (err) {
-      console.error(err);
-      setWalletBalance(0);
-    } finally {
-      setWalletLoading(false);
-    }
-  };
-
-  fetchWalletBalance();
-}, []);
-
-  useEffect(() => {
-  const fetchExistingContractDraft = async () => {
-    try {
-      const res = await axiosInstance.get(`/proposals/${proposalId}/contract`);
-      const contract = res.data?.data ?? res.data;
-
-      if (!contract) return;
-
-      setContractCreated(contract);
-
-      setProposal((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: "ACCEPTED",
-            }
-          : prev
-      );
-    } catch (err) {
-      if (err?.response?.status !== 404) {
-        console.error("Fetch existing contract draft failed:", err);
+    const fetchWalletBalance = async () => {
+      setWalletLoading(true);
+      try {
+        const res = await axiosInstance.get("/wallets/balance");
+        setWalletBalance(Number(res.data?.balance ?? 0));
+      } catch (err) {
+        console.error(err);
+        setWalletBalance(0);
+      } finally {
+        setWalletLoading(false);
       }
-    }
-  };
+    };
 
-  fetchExistingContractDraft();
-}, [proposalId]);
+    fetchWalletBalance();
+  }, []);
+
+  // ── Restore đúng trạng thái đang dở dang khi client rời trang rồi quay lại ──
+  useEffect(() => {
+    const fetchExistingContract = async () => {
+      try {
+        const res = await axiosInstance.get(
+          `/proposals/${proposalId}/contract`
+        );
+
+        const contract = res.data?.data ?? res.data ?? null;
+
+        if (!contract) return;
+
+        setContractCreated(contract);
+
+        const { clientSigned, bothSigned } = readContractSignState(contract);
+
+        if (bothSigned && contract?.projectId && !contract?.projectEscrowLockedAt) {
+          // Cả 2 đã ký, project đã tạo nhưng escrow chưa lock
+          // → đưa thẳng client về đúng bước "I agree escrow" thay vì bắt họ bấm Sign lại
+          setProjectReadyForEscrow({
+            projectId: contract.projectId,
+            totalClientPayment: contract.totalClientPayment,
+            finalPrice: contract.finalPrice,
+            platformFeeAmount: contract.platformFeeAmount,
+          });
+          setShowEscrowModal(true);
+        } else if (clientSigned && !bothSigned) {
+          // Client đã ký, Expert chưa ký
+          // → resume modal "chờ Expert ký" + tự động polling lại, KHÔNG hiện nút Sign nữa
+          setShowWaitingExpertModal(true);
+        }
+      } catch (err) {
+        if (err?.response?.status !== 404) {
+          console.error(err);
+        }
+      }
+    };
+
+    fetchExistingContract();
+  }, [proposalId]);
 
   useEffect(() => {
     if (!showWaitingExpertModal) return;
 
     const intervalId = setInterval(() => {
-      checkContractAndGoProject();
+      checkContractRef.current?.();
     }, 3000);
 
     return () => clearInterval(intervalId);
-  }, [showWaitingExpertModal, contractCreated]);
+  }, [showWaitingExpertModal]);
 
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
-  setShowAcceptModal(false);
+    setShowAcceptModal(false);
+    setActionLoading("accept");
 
-  setActionLoading("accept");
+    try {
+      await axiosInstance.post(
+        `/proposals/${proposalId}/decision?decision=ACCEPT`
+      );
 
-  try {
-    await axiosInstance.post(
-      `/proposals/${proposalId}/decision?decision=ACCEPT`
-    );
+      const contractRes = await axiosInstance.post(
+        `/contracts/from-proposal/${proposalId}`
+      );
 
-    const contractRes = await axiosInstance.post(
-      `/contracts/from-proposal/${proposalId}`
-    );
+      const contract = contractRes.data?.data ?? contractRes.data;
+      setContractCreated(contract);
 
-    const contract = contractRes.data?.data ?? contractRes.data;
+      const refreshed = await axiosInstance.get(`/proposals/${proposalId}`);
+      setProposal(refreshed.data?.data ?? refreshed.data);
 
-    setProposal((prev) => ({
-      ...prev,
-      status: "ACCEPTED",
-    }));
-
-    setContractCreated(contract);
-
-  } catch (err) {
-    alert(
-      err?.response?.data?.message ||
-      err?.message ||
-      "Accept proposal failed."
-    );
-  } finally {
-    setActionLoading(null);
-  }
-};
+      // Lưu ý: KHÔNG dispatch "jobs:refresh" ở đây.
+      // Job chỉ được coi là đổi trạng thái khi project thật sự ACTIVE,
+      // tức là sau khi escrow được lock (xem handleLockEscrow bên dưới).
+    } catch (err) {
+      alert(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Accept proposal failed."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const handleSignContract = async () => {
-  const contractId =
-    contractCreated?.contractId ??
-    contractCreated?.id ??
-    contractCreated?.projectContractId;
+    const contractId =
+      contractCreated?.contractId ??
+      contractCreated?.id ??
+      contractCreated?.projectContractId;
 
-  if (!contractId) {
-    alert("Contract not found.");
-    return;
-  }
+    if (!contractId) {
+      alert("Contract not found.");
+      return;
+    }
 
-  if (!hasEnoughWallet) {
-    navigate("/client/wallet");
-    return;
-  }
+    if (!hasEnoughWallet) {
+      navigate("/client/wallet");
+      return;
+    }
 
-  setActionLoading("sign");
+    setActionLoading("sign");
 
-  try {
-    const confirmRes = await axiosInstance.post(
-      `/contracts/${contractId}/confirm`
-    );
+    try {
+      const confirmRes = await axiosInstance.post(
+        `/contracts/${contractId}/confirm`
+      );
 
-    const confirmedContract = confirmRes.data?.data ?? confirmRes.data;
-    setContractCreated(confirmedContract);
+      const confirmedContract = confirmRes.data?.data ?? confirmRes.data;
+      setContractCreated(confirmedContract);
 
-    const clientSigned =
-    confirmedContract?.clientConfirmed === true ||
-    Boolean(confirmedContract?.clientConfirmedAt) ||
-    Boolean(confirmedContract?.clientSignedAt);
+      const refreshedProposal = await axiosInstance.get(
+        `/proposals/${proposalId}`
+      );
+      setProposal(refreshedProposal.data?.data ?? refreshedProposal.data);
 
-  const expertSigned =
-    confirmedContract?.expertConfirmed === true ||
-    Boolean(confirmedContract?.expertConfirmedAt) ||
-    Boolean(confirmedContract?.expertSignedAt);
+      const { bothSigned: isBothSigned } = readContractSignState(confirmedContract);
 
-  const contractStatus = (confirmedContract?.status || "").toUpperCase();
+      if (isBothSigned) {
+        try {
+          await axiosInstance.post(`/projects/from-contract/${contractId}`);
+        } catch (err) {
+          const status = err?.response?.status;
+          const message = err?.response?.data?.message || "";
+          if (status !== 409 && !message.toLowerCase().includes("already")) {
+            throw err;
+          }
+        }
 
-  const isBothSigned =
-    (clientSigned && expertSigned) ||
-    ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
+        const projectId = confirmedContract?.projectId ?? null;
+        setShowWaitingExpertModal(false);
 
-    if (isBothSigned) {
+        if (projectId) {
+          setProjectReadyForEscrow({
+            projectId,
+            totalClientPayment: confirmedContract?.totalClientPayment,
+            finalPrice: confirmedContract?.finalPrice,
+            platformFeeAmount: confirmedContract?.platformFeeAmount,
+          });
+          setShowEscrowModal(true);
+          return;
+        }
+
+        navigate("/client/projects?status=PENDING_ESCROW");
+        return;
+      }
+
+      setShowWaitingExpertModal(true);
+    } catch (err) {
+      alert(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Sign contract failed."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const checkContractAndGoProject = async () => {
+    const contractId =
+      contractCreated?.contractId ??
+      contractCreated?.id ??
+      contractCreated?.projectContractId;
+
+    if (!contractId) return;
+
+    try {
+      const res = await axiosInstance.get(`/contracts/${contractId}`);
+      const contract = res.data?.data ?? res.data;
+
+      setContractCreated(contract);
+
+      const { bothSigned: isBothSigned } = readContractSignState(contract);
+
+      if (!isBothSigned) return;
+
       try {
         await axiosInstance.post(`/projects/from-contract/${contractId}`);
       } catch (err) {
         const status = err?.response?.status;
         const message = err?.response?.data?.message || "";
-
         if (status !== 409 && !message.toLowerCase().includes("already")) {
           throw err;
         }
       }
 
-     const projectId = confirmedContract?.projectId ?? null;
-
+      const projectId = contract?.projectId ?? null;
       setShowWaitingExpertModal(false);
 
       if (projectId) {
         setProjectReadyForEscrow({
           projectId,
-          totalClientPayment: confirmedContract?.totalClientPayment,
-          finalPrice: confirmedContract?.finalPrice,
-          platformFeeAmount: confirmedContract?.platformFeeAmount,
+          totalClientPayment: contract?.totalClientPayment,
+          finalPrice: contract?.finalPrice,
+          platformFeeAmount: contract?.platformFeeAmount,
         });
-
         setShowEscrowModal(true);
         return;
-}
-
-navigate("/client/projects?status=PENDING_ESCROW");
-return;
-    }
-
-    setShowWaitingExpertModal(true);
-  } catch (err) {
-    alert(
-      err?.response?.data?.message ||
-      err?.message ||
-      "Sign contract failed."
-    );
-  } finally {
-    setActionLoading(null);
-  }
-};
-
-const checkContractAndGoProject = async () => {
-  const contractId =
-    contractCreated?.contractId ??
-    contractCreated?.id ??
-    contractCreated?.projectContractId;
-
-  if (!contractId) return;
-
-  try {
-    const res = await axiosInstance.get(`/contracts/${contractId}`);
-    const contract = res.data?.data ?? res.data;
-
-    const clientSigned =
-      contract?.clientConfirmed === true ||
-      Boolean(contract?.clientConfirmedAt) ||
-      Boolean(contract?.clientSignedAt);
-
-    const expertSigned =
-      contract?.expertConfirmed === true ||
-      Boolean(contract?.expertConfirmedAt) ||
-      Boolean(contract?.expertSignedAt);
-
-    const contractStatus = (contract?.status || "").toUpperCase();
-
-    const isBothSigned =
-      (clientSigned && expertSigned) ||
-      ["ACCEPTED", "ACTIVE", "SIGNED", "CONFIRMED"].includes(contractStatus);
-
-    if (!isBothSigned) return;
-
-    try {
-      await axiosInstance.post(`/projects/from-contract/${contractId}`);
-    } catch (err) {
-      const status = err?.response?.status;
-      const message = err?.response?.data?.message || "";
-
-      if (status !== 409 && !message.toLowerCase().includes("already")) {
-        throw err;
       }
+
+      navigate("/client/projects?status=PENDING_ESCROW");
+    } catch (err) {
+      console.error("Check contract failed:", err);
     }
+  };
 
-    const projectId = contract?.projectId ?? null;
+  // Luôn cho ref trỏ tới bản checkContractAndGoProject mới nhất (đọc được
+  // contractCreated hiện tại) mà không phải đưa nó vào dependency của interval.
+  checkContractRef.current = checkContractAndGoProject;
 
-    setShowWaitingExpertModal(false);
+  const handleLockEscrow = async () => {
+    const projectId = projectReadyForEscrow?.projectId;
 
-    if (projectId) {
-      setProjectReadyForEscrow({
-        projectId,
-        totalClientPayment: contract?.totalClientPayment,
-        finalPrice: contract?.finalPrice,
-        platformFeeAmount: contract?.platformFeeAmount,
-      });
-
-      setShowEscrowModal(true);
+    if (!projectId) {
+      alert("Project not found.");
       return;
     }
 
-    navigate("/client/projects?status=PENDING_ESCROW");
-  } catch (err) {
-    console.error("Check contract failed:", err);
-  }
-};
+    setActionLoading("lockEscrow");
 
-  const handleLockEscrow = async () => {
-  const projectId = projectReadyForEscrow?.projectId;
+    try {
+      await axiosInstance.post(`/escrows/projects/${projectId}/lock`);
 
-  if (!projectId) {
-    alert("Project not found.");
-    return;
-  }
+      setShowEscrowModal(false);
+      setProjectReadyForEscrow(null);
 
-  setActionLoading("lockEscrow");
+      // Đây mới là thời điểm project thật sự ACTIVE
+      // → chỉ refresh job/project list ở đây, không refresh sớm hơn
+      window.dispatchEvent(new Event("jobs:refresh"));
+      window.dispatchEvent(new Event("projects:refresh"));
 
-  try {
-    await axiosInstance.post(`/escrows/projects/${projectId}/lock`);
-
-    setShowEscrowModal(false);
-    setProjectReadyForEscrow(null);
-
-    navigate("/client/projects?status=ACTIVE");
-  } catch (err) {
-    alert(
-      err?.response?.data?.message ||
-      err?.message ||
-      "Lock escrow failed."
-    );
-  } finally {
-    setActionLoading(null);
-  }
-};
-
-
+      navigate("/client/projects?status=ACTIVE");
+    } catch (err) {
+      alert(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Lock escrow failed."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
@@ -516,7 +528,7 @@ const checkContractAndGoProject = async () => {
   // ── Loading ───────────────────────────────────────────────────────
   if (loading) return (
     <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
+      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
         <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
         Loading proposal...
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -526,7 +538,7 @@ const checkContractAndGoProject = async () => {
 
   if (error) return (
     <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 24px" }}>
+      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <button onClick={() => navigate(-1)}
@@ -551,14 +563,24 @@ const checkContractAndGoProject = async () => {
     proposal.proposedPrice || proposal.bidAmount || 0
   );
 
-  const platformFeeRate = Number(clientProfile?.platformFeeRate ?? 5);
+  // Khi đã có contract, mọi con số tiền lấy thẳng từ BE (đã tính sẵn),
+  // không tự tính lại ở FE để tránh lệch số. Chỉ fallback tính tay khi
+  // chưa có contract (giai đoạn trước khi Accept).
+  const platformFeeRate = Number(
+    contractCreated?.platformFeeRate ?? clientProfile?.platformFeeRate ?? 5
+  );
 
-  const requiredDeposit =
-    proposedPrice * (1 + platformFeeRate / 100);
+  const requiredDeposit = Number(
+    contractCreated?.totalClientPayment ??
+    proposedPrice * (1 + platformFeeRate / 100)
+  );
 
   const hasEnoughWallet =
     !walletLoading &&
     Number(walletBalance ?? 0) >= requiredDeposit;
+
+  const { clientSigned: clientAlreadySigned } = readContractSignState(contractCreated);
+
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
     : "—";
@@ -579,7 +601,6 @@ const checkContractAndGoProject = async () => {
         {/* Header */}
         <div style={{ ...cardStyle, marginBottom: 24 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            {/* Expert avatar */}
             <img src={proposal.expertAvatarUrl || proposal.avatarUrl || "/default-avatar.png"}
               style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)", flexShrink: 0 }} />
 
@@ -594,7 +615,6 @@ const checkContractAndGoProject = async () => {
               </div>
               <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 12px" }}>{proposal.expertTitle || "AI Expert"}</p>
 
-              {/* Price + Timeline */}
               <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
                 <div>
                   <span style={sectionLabel}>Proposed Price</span>
@@ -623,9 +643,7 @@ const checkContractAndGoProject = async () => {
                 ({platformFeeRate}% platform fee)
             </div>
 
-            {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {/* Message */}
               <button onClick={() => setShowMessage(true)}
                 style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
                 onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.18)"; e.currentTarget.style.borderColor = "#c0c1ff"; e.currentTarget.style.boxShadow = "0 0 12px rgba(192,193,255,0.2)"; }}
@@ -672,7 +690,6 @@ const checkContractAndGoProject = async () => {
                 </>
               )}
 
-              {/* Accepted badge */}
               {proposal.status === "ACCEPTED" && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "rgba(34,197,94,0.1)", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 8, color: "#22c55e", fontSize: 13, fontWeight: 700 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>verified</span>
@@ -684,100 +701,114 @@ const checkContractAndGoProject = async () => {
         </div>
 
         {contractCreated && (
-  <div style={{ ...cardStyle, marginBottom: 24, border: "1px solid rgba(0,240,255,0.25)" }}>
-    <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#00F0FF", marginBottom: 16 }}>
-      Contract Preview
-    </h3>
+          <div style={{ ...cardStyle, marginBottom: 24, border: "1px solid rgba(0,240,255,0.25)" }}>
+            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#00F0FF", marginBottom: 16 }}>
+              Contract Preview
+            </h3>
 
-    <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-        <strong>Expert:</strong> {expertName}
-      </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+              <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+                <strong>Expert:</strong> {expertName}
+              </p>
+              <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+                <strong>Proposal Price:</strong> ${proposedPrice.toLocaleString()}
+              </p>
+              <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+                <strong>Timeline:</strong> {proposal.proposedTimelineDays || proposal.estimatedDays} days
+              </p>
+              <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
+                <strong>Status:</strong> {getContractStageLabel(contractCreated)}
+              </p>
+            </div>
 
-      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-        <strong>Proposal Price:</strong> ${proposedPrice.toLocaleString()}
-      </p>
+            <div
+              style={{
+                marginBottom: 16,
+                padding: "10px 12px",
+                borderRadius: 8,
+                background: hasEnoughWallet ? "rgba(34,197,94,0.08)" : "rgba(250,204,21,0.08)",
+                border: `1px solid ${hasEnoughWallet ? "rgba(34,197,94,0.25)" : "rgba(250,204,21,0.25)"}`,
+                color: hasEnoughWallet ? "#22c55e" : "#facc15",
+                fontSize: 13,
+              }}
+            >
+              Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+              {" — "}
+              Required: ${requiredDeposit.toFixed(2)}
+              {" "}
+              ({platformFeeRate}% platform fee)
+            </div>
 
-      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-        <strong>Timeline:</strong> {proposal.proposedTimelineDays || proposal.estimatedDays} days
-      </p>
-
-      <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-        <strong>Status:</strong> {contractCreated.status || "DRAFT"}
-      </p>
-    </div>
-
-    <div
-      style={{
-        marginBottom: 16,
-        padding: "10px 12px",
-        borderRadius: 8,
-        background: hasEnoughWallet ? "rgba(34,197,94,0.08)" : "rgba(250,204,21,0.08)",
-        border: `1px solid ${hasEnoughWallet ? "rgba(34,197,94,0.25)" : "rgba(250,204,21,0.25)"}`,
-        color: hasEnoughWallet ? "#22c55e" : "#facc15",
-        fontSize: 13,
-      }}
-    >
-      Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
-      {" — "}
-      Required: ${requiredDeposit.toFixed(2)}
-      {" "}
-      ({platformFeeRate}% platform fee)
-    </div>
-
-    {hasEnoughWallet ? (
-      <button
-        type="button"
-        onClick={handleSignContract}
-        disabled={isSigning}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "11px 20px",
-          background: isSigning ? "rgba(0,240,255,0.08)" : "#00F0FF",
-          color: isSigning ? "#00F0FF" : "#002022",
-          border: "1px solid rgba(0,240,255,0.5)",
-          borderRadius: 8,
-          fontSize: 14,
-          fontWeight: 700,
-          cursor: isSigning ? "not-allowed" : "pointer",
-        }}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-          {isSigning ? "hourglass_empty" : "draw"}
-        </span>
-        {isSigning ? "Signing..." : "Sign Contract"}
-      </button>
-    ) : (
-      <button
-        type="button"
-        onClick={() => navigate("/client/wallet")}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 6,
-          padding: "11px 20px",
-          background: "rgba(250,204,21,0.12)",
-          color: "#facc15",
-          border: "1px solid rgba(250,204,21,0.35)",
-          borderRadius: 8,
-          fontSize: 14,
-          fontWeight: 700,
-          cursor: "pointer",
-        }}
-      >
-        <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
-          account_balance_wallet
-        </span>
-        Deposit Wallet
-      </button>
-    )}
-  </div>
-)}
+            {clientAlreadySigned ? (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "11px 16px",
+                  background: "rgba(0,240,255,0.06)",
+                  border: "1px solid rgba(0,240,255,0.25)",
+                  borderRadius: 8,
+                  color: "#00F0FF",
+                  fontSize: 13,
+                  fontWeight: 600,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>hourglass_top</span>
+                You already signed. Waiting for the AI Expert to sign...
+              </div>
+            ) : hasEnoughWallet ? (
+              <button
+                type="button"
+                onClick={handleSignContract}
+                disabled={isSigning}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "11px 20px",
+                  background: isSigning ? "rgba(0,240,255,0.08)" : "#00F0FF",
+                  color: isSigning ? "#00F0FF" : "#002022",
+                  border: "1px solid rgba(0,240,255,0.5)",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: isSigning ? "not-allowed" : "pointer",
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                  {isSigning ? "hourglass_empty" : "draw"}
+                </span>
+                {isSigning ? "Signing..." : "Sign Contract"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate("/client/wallet")}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "11px 20px",
+                  background: "rgba(250,204,21,0.12)",
+                  color: "#facc15",
+                  border: "1px solid rgba(250,204,21,0.35)",
+                  borderRadius: 8,
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                  account_balance_wallet
+                </span>
+                Deposit Wallet
+              </button>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
-          {/* Cover Letter */}
           <div style={cardStyle}>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               Cover Letter
@@ -787,7 +818,6 @@ const checkContractAndGoProject = async () => {
             </p>
           </div>
 
-          {/* Expected Outputs */}
           {proposal.expectedOutputs && (
             <div style={cardStyle}>
               <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
@@ -799,7 +829,6 @@ const checkContractAndGoProject = async () => {
             </div>
           )}
 
-          {/* Working Approach */}
           {proposal.workingApproach && (
             <div style={cardStyle}>
               <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
@@ -811,7 +840,6 @@ const checkContractAndGoProject = async () => {
             </div>
           )}
 
-          {/* Milestone Drafts */}
           {proposal.milestones?.length > 0 && (
             <div style={{ ...cardStyle, border: "1px solid rgba(192,193,255,0.15)", background: "rgba(192,193,255,0.02)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(192,193,255,0.1)" }}>
@@ -858,7 +886,6 @@ const checkContractAndGoProject = async () => {
             </div>
           )}
 
-          {/* Counter Offer — if present */}
           {(proposal.counterPrice || proposal.counterMessage) && (
             <div style={{ ...cardStyle, border: "1px solid rgba(249,115,22,0.2)", background: "rgba(249,115,22,0.02)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(249,115,22,0.1)" }}>

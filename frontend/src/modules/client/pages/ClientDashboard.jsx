@@ -238,7 +238,7 @@ export default function ClientDashboard() {
       } catch (err) {
         setError(
           err?.response?.data?.message ||
-            "Không thể tải danh sách expert."
+            "Could not load expert list."
         );
       } finally {
         setLoading(false);

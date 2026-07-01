@@ -69,12 +69,15 @@ const ROW_OPTIONS = [5, 10, 20, 50];
       setError("");
 
       try {
-        const data = await transactionService.getMyTransactions();
-        console.log("Transactions API data:", data);
-        console.log("First transaction:", data?.[0]);
-        setTransactions(data);
+        const list = await transactionService.getMyTransactions();
+
+        setTransactions(list);
       } catch (err) {
-        setError(err?.response?.data?.message || "Unable to load transaction history.");
+        console.error(err);
+        setError(
+          err?.response?.data?.message ||
+          "Unable to load transaction history."
+        );
       } finally {
         setLoading(false);
       }
