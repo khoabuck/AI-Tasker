@@ -97,7 +97,7 @@ import AdminJobPostingAiPolicyPage from "../../modules/admin/pages/AdminJobPosti
 import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCreditPackagesPage";
 import AdminProposalCreditPackagesPage from "../../modules/admin/pages/AdminProposalCreditPackagesPage";
 import AdminProposalCreditsPage from "../../modules/admin/pages/AdminProposalCreditsPage";
-
+import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPage";
 
 
 // Error pages
@@ -236,7 +236,7 @@ export default function AppRouter() {
       <Route path="/admin/job-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobCreditPackagesPage /></ProtectedRoute>} /> 
       <Route path="/admin/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditPackagesPage /></ProtectedRoute>} />
       <Route path="/admin/proposal-credits" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditsPage /></ProtectedRoute>} />
-
+      <Route path="/admin/ai-management" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAiManagementPage /></ProtectedRoute>}/>
 
 
       {/* 404 */}

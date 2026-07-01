@@ -95,6 +95,11 @@ export default function AdminNavbar() {
           Job AI Policy
         </NavLink>
 
+        <NavLink to="/admin/ai-management" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">hub</span>
+          AI Management
+        </NavLink>
+
         <NavLink to="/admin/job-credit-packages" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">inventory_2</span>
           Credit Packages
