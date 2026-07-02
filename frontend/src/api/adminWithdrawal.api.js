@@ -5,9 +5,20 @@ const adminWithdrawalApi = {
     return axiosInstance.get("/withdrawals/admin", { params });
   },
 
-  approveWithdrawal(withdrawalRequestId, data = {}) {
+  getPayosBalance() {
+    return axiosInstance.get("/withdrawals/admin/payos/balance");
+  },
+
+  approveWithdrawalPayos(withdrawalRequestId, data = {}) {
     return axiosInstance.post(
-      `/withdrawals/admin/${withdrawalRequestId}/approve`,
+      `/withdrawals/admin/${withdrawalRequestId}/approve-payos`,
+      data
+    );
+  },
+
+  syncWithdrawalPayos(withdrawalRequestId, data = {}) {
+    return axiosInstance.post(
+      `/withdrawals/admin/${withdrawalRequestId}/sync-payos`,
       data
     );
   },

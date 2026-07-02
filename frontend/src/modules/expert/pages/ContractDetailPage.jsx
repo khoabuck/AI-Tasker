@@ -30,8 +30,9 @@ export default function ContractDetailPage() {
   );
 
   const canRespond = useMemo(() => {
+    if (!realContractId) return false;
     return canAcceptContract(status, contract) || canDeclineContract(status, contract);
-  }, [status, contract]);
+  }, [status, contract, realContractId]);
 
   const contractTitle = getField(
     contract,
@@ -44,6 +45,8 @@ export default function ContractDetailPage() {
       "Title",
       "job.title",
       "Job.Title",
+      "project.title",
+      "Project.Title",
     ],
     "Contract"
   );
@@ -59,6 +62,8 @@ export default function ContractDetailPage() {
       "Description",
       "job.description",
       "Job.Description",
+      "project.description",
+      "Project.Description",
     ],
     ""
   );
@@ -168,13 +173,9 @@ export default function ContractDetailPage() {
 
   const loadMilestoneDrafts = async (id) => {
     try {
-      const fn =
-        contractService.getContractMilestoneDrafts ||
-        contractService.getMilestoneDrafts;
+      if (!id) return [];
 
-      if (!fn) return [];
-
-      const data = await fn.call(contractService, id);
+      const data = await contractService.getContractMilestoneDrafts(id);
 
       return Array.isArray(data)
         ? data.map((item, index) => normalizeMilestone(item, index))
@@ -186,6 +187,8 @@ export default function ContractDetailPage() {
   };
 
   const refreshAfterAction = async (updatedContract) => {
+    if (!updatedContract) return;
+
     setContract(updatedContract);
 
     const id = getContractId(updatedContract) || realContractId;
@@ -196,10 +199,17 @@ export default function ContractDetailPage() {
       setMilestoneDrafts(
         apiMilestones.length > 0 ? apiMilestones : fallbackMilestones
       );
+    } else {
+      setMilestoneDrafts(fallbackMilestones);
     }
   };
 
   const handleAcceptContract = async () => {
+    if (!realContractId) {
+      setError("Cannot accept this contract because contract id is missing.");
+      return;
+    }
+
     const ok = window.confirm("Are you sure you want to accept this contract?");
     if (!ok) return;
 
@@ -223,7 +233,7 @@ export default function ContractDetailPage() {
         }
 
         navigate("/expert/projects", { replace: true });
-      }, 1500);
+      }, 1200);
     } catch (err) {
       console.error("ACCEPT CONTRACT ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot accept contract right now."));
@@ -233,6 +243,11 @@ export default function ContractDetailPage() {
   };
 
   const handleDeclineContract = async () => {
+    if (!realContractId) {
+      setError("Cannot decline this contract because contract id is missing.");
+      return;
+    }
+
     if (!declineReason.trim()) {
       setError("Please enter a reason before declining this contract.");
       return;
@@ -381,8 +396,8 @@ export default function ContractDetailPage() {
                   {canRespond
                     ? "The client has sent this contract for your confirmation. Review it carefully before accepting or declining."
                     : isDraftContract(status)
-                    ? "This is still a draft contract. You can review the details, but you cannot accept or decline it until the client sends it to you."
-                    : "This contract is no longer waiting for your response."}
+                      ? "This is still a draft contract. You can review the details, but you cannot accept or decline it until the client sends it to you."
+                      : "This contract is no longer waiting for your response."}
                 </p>
 
                 {canRespond && (
@@ -768,10 +783,10 @@ function StatusBadge({ status, contract }) {
   const style = isContractAccepted(normalized)
     ? "border-green-400/30 bg-green-400/10 text-green-300"
     : isContractDeclined(normalized)
-    ? "border-red-400/30 bg-red-400/10 text-red-300"
-    : isDraftContract(normalized) && !isWaitingForExpert(normalized, contract)
-    ? "border-white/10 bg-white/[0.04] text-gray-300"
-    : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : isDraftContract(normalized) && !isWaitingForExpert(normalized, contract)
+        ? "border-white/10 bg-white/[0.04] text-gray-300"
+        : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
     <span
@@ -787,8 +802,8 @@ function Alert({ type, title, message }) {
     type === "success"
       ? "border-green-500/30 bg-green-500/10 text-green-300"
       : type === "warning"
-      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
-      : "border-red-500/30 bg-red-500/10 text-red-300";
+        ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+        : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
     <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
@@ -917,6 +932,10 @@ function getExpertReceivable(contract) {
       "ExpertReceivableAmount",
       "expertAmount",
       "ExpertAmount",
+      "totalAmount",
+      "TotalAmount",
+      "amount",
+      "Amount",
     ],
     0
   );

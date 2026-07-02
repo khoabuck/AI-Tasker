@@ -352,7 +352,7 @@ export default function MyProposalsPage() {
               <div className="mt-5 flex flex-wrap justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate("/expert/proposals/drafts")}
+                  onClick={() => navigate("/expert/proposal/drafts")}
                   className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
                   View Drafts
