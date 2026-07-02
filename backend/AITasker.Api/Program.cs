@@ -74,7 +74,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // Required for cloud proxies like Render/Cloudflare.
     // Without this, ASP.NET Core may ignore forwarded headers
     // and generate http:// redirect_uri instead of https://.
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
