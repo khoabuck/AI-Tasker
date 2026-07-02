@@ -8,6 +8,8 @@ import { useAuth } from "../../../context/AuthContext";
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
+const CORRECTION_FEEDBACK_KEY = "aitasker_expert_profile_correction_feedback";
+const RESUBMIT_COUNTER_KEY = "aitasker_expert_profile_resubmit_counter";
 
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
@@ -23,6 +25,7 @@ const CERTIFICATE_TYPE_OPTIONS = [
 const CERTIFICATE_TYPES = CERTIFICATE_TYPE_OPTIONS.map((item) => item.value);
 
 const emptyForm = {
+  fullName: "",
   avatarUrl: "",
   professionalTitle: "",
   bio: "",
@@ -70,12 +73,44 @@ export default function SetupExpertProfilePage() {
     maxAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
   });
 
+  const [resubmitCounter, setResubmitCounter] = useState(() =>
+    readJson(RESUBMIT_COUNTER_KEY)
+  );
+
   const formErrors = useMemo(() => validateForm(formData), [formData]);
+
+  const displayReviewLimit = useMemo(() => {
+    if (!isEditPage || !resubmitCounter) return reviewLimit;
+
+    const maxAttempts =
+      Number(resubmitCounter.maxAttempts || 0) ||
+      Number(reviewLimit.maxAttempts || 0) ||
+      MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+    const submissionCount = Math.min(
+      maxAttempts,
+      Math.max(0, Number(resubmitCounter.submissionCount || 0))
+    );
+
+    const remainingAttempts = Math.max(
+      0,
+      Number.isFinite(Number(resubmitCounter.remainingAttempts))
+        ? Number(resubmitCounter.remainingAttempts)
+        : maxAttempts - submissionCount
+    );
+
+    return {
+      ...reviewLimit,
+      submissionCount,
+      remainingAttempts,
+      maxAttempts,
+    };
+  }, [isEditPage, reviewLimit, resubmitCounter]);
 
   const isReviewLocked = isExpertProfileReviewLocked(reviewLimit);
   const isNoAttemptsLeft = hasNoExpertProfileAttemptsLeft(reviewLimit);
   const remainingReviewAttempts =
-    getRemainingExpertProfileAttempts(reviewLimit);
+    getRemainingExpertProfileAttempts(displayReviewLimit);
 
   const shouldDisableSubmit =
     saving || uploadingAvatar || isReviewLocked || isNoAttemptsLeft;
@@ -150,6 +185,7 @@ export default function SetupExpertProfilePage() {
         setFormData({
           ...createEmptyForm(),
           ...safeDraft,
+          availableForWork: true,
           certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
 
@@ -162,6 +198,7 @@ export default function SetupExpertProfilePage() {
         setFormData({
           ...createEmptyForm(),
           ...safeDraft,
+          availableForWork: true,
           certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
 
@@ -337,6 +374,7 @@ export default function SetupExpertProfilePage() {
 
       const submitPayload = {
         ...formData,
+        availableForWork: true,
         certificates: normalizeCertificatesForPayload(formData.certificates),
       };
 
@@ -345,6 +383,8 @@ export default function SetupExpertProfilePage() {
       const result = isEditPage
         ? await expertProfileService.resubmitExpertProfile(submitPayload)
         : await expertProfileService.createExpertProfile(submitPayload);
+
+      saveCorrectionFeedback(result);
 
       const nextLimitFromResult = extractExpertProfileReviewLimit(result);
       const refreshedLimit = await refreshProfileLimitFromServer();
@@ -361,6 +401,11 @@ export default function SetupExpertProfilePage() {
 
       setReviewLimit(nextLimit);
 
+      if (isEditPage) {
+        const nextCounter = updateResubmitCounterAfterSubmit(nextLimit);
+        setResubmitCounter(nextCounter);
+      }
+
       const reviewStatus = getReviewStatus(result);
       const userStatus = getUserStatus(result);
       const missingInformation = getMissingInformation(result);
@@ -368,25 +413,27 @@ export default function SetupExpertProfilePage() {
       const feedback = buildReviewFeedback({
         backendPayload: result,
         missingInformation,
-        limit: nextLimit,
+        limit: isEditPage ? displayReviewLimit : nextLimit,
       });
 
       if (shouldRedirectToLockedPage(nextLimit)) {
         saveCorrectionDraft(submitPayload);
         updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
-
         navigate("/expert/profile-locked", { replace: true });
         return;
       }
 
       if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         clearExpertProfileDrafts();
+        clearCorrectionFeedback();
+        localStorage.removeItem(RESUBMIT_COUNTER_KEY);
         updateLocalUserStatus("ACTIVE");
 
         setModal({
           type: "success",
           title: "Profile approved",
-          message: "Your expert profile has been approved.",
+          message:
+            "Great work. Your expert profile has been approved and is now ready for clients.",
           feedback,
           showResubmit: false,
           showClose: false,
@@ -406,7 +453,8 @@ export default function SetupExpertProfilePage() {
         setModal({
           type: "warning",
           title: "Your profile needs improvement",
-          message: "Please update the items below and submit again.",
+          message:
+            "Your profile is not ready for approval yet. Review your total score and the score summary below.",
           feedback,
           showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
@@ -421,8 +469,9 @@ export default function SetupExpertProfilePage() {
 
         setModal({
           type: "danger",
-          title: "Your profile could not be approved",
-          message: "Please review the feedback below and submit again.",
+          title: "Your profile was not approved",
+          message:
+            "Your profile did not meet the approval requirements. Please review the score summary before resubmitting.",
           feedback,
           showResubmit: !shouldRedirectToLockedPage(nextLimit),
           showClose: true,
@@ -436,7 +485,8 @@ export default function SetupExpertProfilePage() {
       setModal({
         type: "info",
         title: "Profile submitted",
-        message: "Your profile was submitted. Please review the feedback below.",
+        message:
+          "Your profile was submitted successfully. Please review the feedback below.",
         feedback,
         showResubmit: false,
         showClose: true,
@@ -471,6 +521,36 @@ export default function SetupExpertProfilePage() {
 
   const handleGoResubmit = () => {
     saveCorrectionDraft(formData);
+
+    const currentCounter = readJson(RESUBMIT_COUNTER_KEY);
+
+    if (currentCounter) {
+      setResubmitCounter(currentCounter);
+
+      setReviewLimit((prev) => ({
+        ...prev,
+        submissionCount: Number(currentCounter.submissionCount || 0),
+        remainingAttempts: Number(currentCounter.remainingAttempts || 0),
+        maxAttempts:
+          Number(currentCounter.maxAttempts || 0) ||
+          Number(prev.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS),
+      }));
+    } else {
+      const maxAttempts =
+        Number(reviewLimit.maxAttempts || 0) ||
+        MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+      const nextCounter = startResubmitCounter(maxAttempts);
+      setResubmitCounter(nextCounter);
+
+      setReviewLimit((prev) => ({
+        ...prev,
+        submissionCount: 0,
+        remainingAttempts: maxAttempts,
+        maxAttempts,
+      }));
+    }
+
     setModal(null);
     navigate("/expert/profile/edit", { replace: true });
   };
@@ -538,26 +618,26 @@ export default function SetupExpertProfilePage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Complete your profile so clients can understand your skills,
+              Complete your profile so clients can understand your name, skills,
               experience, public work links, and optional certificates.
               Portfolio and GitHub are required. LinkedIn is optional.
             </p>
           </div>
 
           {(isEditPage ||
-            Number(reviewLimit.submissionCount || 0) > 0 ||
-            reviewLimit.lockedUntil) && (
-            <ExpertProfileReviewLimitNotice
-              submissionCount={reviewLimit.submissionCount}
-              remainingAttempts={remainingReviewAttempts}
-              lockedUntil={reviewLimit.lockedUntil}
-              locked={isReviewLocked || isNoAttemptsLeft}
-              max={
-                reviewLimit.maxAttempts ||
-                MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS
-              }
-            />
-          )}
+            Number(displayReviewLimit.submissionCount || 0) > 0 ||
+            displayReviewLimit.lockedUntil) && (
+              <ExpertProfileReviewLimitNotice
+                submissionCount={displayReviewLimit.submissionCount}
+                remainingAttempts={remainingReviewAttempts}
+                lockedUntil={displayReviewLimit.lockedUntil}
+                locked={isReviewLocked || isNoAttemptsLeft}
+                max={
+                  displayReviewLimit.maxAttempts ||
+                  MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS
+                }
+              />
+            )}
 
           {error && (
             <Alert
@@ -609,6 +689,16 @@ export default function SetupExpertProfilePage() {
 
                 <div className="space-y-4">
                   <TextInput
+                    label="Full Name"
+                    required
+                    value={formData.fullName}
+                    onChange={(value) => updateField("fullName", value)}
+                    onBlur={() => markTouched("fullName")}
+                    error={getFieldError("fullName")}
+                    placeholder="Example: Nguyen Van A"
+                  />
+
+                  <TextInput
                     label="Professional Title"
                     required
                     value={formData.professionalTitle}
@@ -630,55 +720,30 @@ export default function SetupExpertProfilePage() {
                     placeholder="At least 50 characters. Describe your AI experience, projects, and strengths."
                   />
 
-                  <TextInput
-                    label="Skills"
-                    required
-                    value={formData.skills}
-                    onChange={(value) => updateField("skills", value)}
-                    onBlur={() => markTouched("skills")}
-                    error={getFieldError("skills")}
-                    placeholder="AI Automation, RAG, Chatbot, Python, ASP.NET Core"
-                  />
-                </div>
-              </div>
-            </section>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_220px]">
+                    <TextInput
+                      label="Skills"
+                      required
+                      value={formData.skills}
+                      onChange={(value) => updateField("skills", value)}
+                      onBlur={() => markTouched("skills")}
+                      error={getFieldError("skills")}
+                      placeholder="AI Automation, RAG, Chatbot, Python, ASP.NET Core"
+                    />
 
-            <section className="border-t border-white/10 pt-6">
-              <h2 className="mb-4 text-lg font-bold text-white">
-                Work Availability
-              </h2>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <NumberInput
-                  label="Years of Experience"
-                  required
-                  value={formData.yearsOfExperience}
-                  onChange={(value) => updateField("yearsOfExperience", value)}
-                  onBlur={() => markTouched("yearsOfExperience")}
-                  error={getFieldError("yearsOfExperience")}
-                  placeholder="Example: 3"
-                />
-
-                <label className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                  <div>
-                    <p className="text-sm font-bold text-gray-300">
-                      Available for work
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      Show clients that you are ready for new projects.
-                    </p>
+                    <NumberInput
+                      label="Years of Experience"
+                      required
+                      value={formData.yearsOfExperience}
+                      onChange={(value) =>
+                        updateField("yearsOfExperience", value)
+                      }
+                      onBlur={() => markTouched("yearsOfExperience")}
+                      error={getFieldError("yearsOfExperience")}
+                      placeholder="3"
+                    />
                   </div>
-
-                  <input
-                    type="checkbox"
-                    checked={Boolean(formData.availableForWork)}
-                    onChange={(event) =>
-                      updateField("availableForWork", event.target.checked)
-                    }
-                    className="h-5 w-5 accent-cyan-400"
-                  />
-                </label>
+                </div>
               </div>
             </section>
 
@@ -763,6 +828,7 @@ export default function SetupExpertProfilePage() {
                   <p className="font-bold text-gray-300">
                     No certificates added.
                   </p>
+
                   <p className="mt-1">
                     You can submit without certificates. Adding certificates can
                     help strengthen your profile.
@@ -780,6 +846,7 @@ export default function SetupExpertProfilePage() {
                           <p className="font-bold text-white">
                             Certificate {index + 1}
                           </p>
+
                           <p className="mt-1 text-xs text-gray-500">
                             We will review the certificate link automatically.
                           </p>
@@ -845,12 +912,12 @@ export default function SetupExpertProfilePage() {
                 {saving
                   ? "Submitting..."
                   : isReviewLocked
-                  ? "Profile Locked"
-                  : isNoAttemptsLeft
-                  ? "No Attempts Left"
-                  : isEditPage
-                  ? "Resubmit Profile"
-                  : "Submit Profile"}
+                    ? "Profile Locked"
+                    : isNoAttemptsLeft
+                      ? "No Attempts Left"
+                      : isEditPage
+                        ? "Resubmit Profile"
+                        : "Submit Profile"}
               </button>
             </div>
           </form>
@@ -906,8 +973,8 @@ function ExpertProfileReviewLimitNotice({
   const style = locked
     ? "border-red-500/30 bg-red-500/10 text-red-300"
     : remainingAttempts <= 1
-    ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
-    : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200";
+      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+      : "border-cyan-500/30 bg-cyan-500/10 text-cyan-200";
 
   return (
     <section className={`mb-6 rounded-2xl border p-5 ${style}`}>
@@ -949,48 +1016,75 @@ function ExpertProfileReviewLimitNotice({
 }
 
 function ResultModal({ modal, onClose, onGoResubmit }) {
-  const icon =
+  const config =
     modal.type === "success"
-      ? "check_circle"
+      ? {
+        icon: "check_circle",
+        iconColor: "text-green-300",
+        badge: "Approved",
+        badgeClass: "border-green-400/30 bg-green-400/10 text-green-200",
+        actionClass:
+          "border-green-300/50 bg-green-300/10 text-green-200 hover:bg-green-300 hover:text-black",
+      }
       : modal.type === "warning"
-      ? "warning"
-      : modal.type === "danger"
-      ? "error"
-      : "info";
-
-  const color =
-    modal.type === "success"
-      ? "text-green-300"
-      : modal.type === "warning"
-      ? "text-yellow-300"
-      : modal.type === "danger"
-      ? "text-red-300"
-      : "text-cyan-300";
-
-  const buttonColor =
-    modal.type === "success"
-      ? "border-green-300/50 bg-green-300/10 text-green-200 hover:bg-green-300 hover:text-black"
-      : modal.type === "warning"
-      ? "border-yellow-300/50 bg-yellow-300/10 text-yellow-200 hover:bg-yellow-300 hover:text-black"
-      : "border-red-300/50 bg-red-300/10 text-red-200 hover:bg-red-300 hover:text-black";
+        ? {
+          icon: "warning",
+          iconColor: "text-yellow-300",
+          badge: "Needs Improvement",
+          badgeClass: "border-yellow-400/30 bg-yellow-400/10 text-yellow-200",
+          actionClass:
+            "border-cyan-300/50 bg-cyan-300/10 text-cyan-200 hover:bg-cyan-300 hover:text-black",
+        }
+        : modal.type === "danger"
+          ? {
+            icon: "error",
+            iconColor: "text-red-300",
+            badge: "Action Required",
+            badgeClass: "border-red-400/30 bg-red-400/10 text-red-200",
+            actionClass:
+              "border-cyan-300/50 bg-cyan-300/10 text-cyan-200 hover:bg-cyan-300 hover:text-black",
+          }
+          : {
+            icon: "info",
+            iconColor: "text-cyan-300",
+            badge: "Submitted",
+            badgeClass: "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+            actionClass:
+              "border-cyan-300/50 bg-cyan-300/10 text-cyan-200 hover:bg-cyan-300 hover:text-black",
+          };
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
-        <div className="border-b border-white/10 p-6">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-              <span className={`material-symbols-outlined text-3xl ${color}`}>
-                {icon}
+      <div
+        className="
+          max-h-[82vh] w-full max-w-xl overflow-y-auto rounded-2xl
+          border border-white/10 bg-[#151a22]
+          shadow-[0_30px_120px_rgba(0,0,0,0.65)]
+          [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
+        "
+      >
+        <div className="border-b border-white/10 p-4">
+          <div className="flex gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+              <span
+                className={`material-symbols-outlined text-3xl ${config.iconColor}`}
+              >
+                {config.icon}
               </span>
             </div>
 
-            <div>
-              <h3 className="text-xl font-extrabold text-white">
+            <div className="min-w-0 flex-1">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider ${config.badgeClass}`}
+              >
+                {config.badge}
+              </span>
+
+              <h3 className="mt-2 text-lg font-extrabold text-white">
                 {modal.title}
               </h3>
 
-              <p className="mt-2 text-sm leading-6 text-gray-300">
+              <p className="mt-2 text-sm leading-5 text-gray-300">
                 {modal.message}
               </p>
             </div>
@@ -998,17 +1092,17 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
         </div>
 
         {modal.feedback ? (
-          <SimpleReviewFeedback feedback={modal.feedback} />
+          <ReviewFeedbackPanel feedback={modal.feedback} />
         ) : null}
 
-        <div className="flex flex-col gap-3 border-t border-white/10 p-6 sm:flex-row sm:justify-end">
+        <div className="flex flex-col gap-3 border-t border-white/10 p-4 sm:flex-row sm:justify-end">
           {modal.showClose && (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300"
             >
-              Close
+              Review Later
             </button>
           )}
 
@@ -1016,9 +1110,9 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
             <button
               type="button"
               onClick={onGoResubmit}
-              className={`rounded-xl border px-5 py-3 text-sm font-bold transition ${buttonColor}`}
+              className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition ${config.actionClass}`}
             >
-              Update Profile
+              Update and Resubmit Profile
             </button>
           )}
         </div>
@@ -1027,55 +1121,88 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
   );
 }
 
-function SimpleReviewFeedback({ feedback }) {
+function ReviewFeedbackPanel({ feedback }) {
   return (
-    <div className="space-y-5 p-6">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <FeedbackMetric label="Score" value={feedback.scoreText || "N/A"} />
-        <FeedbackMetric
-          label="Passing score"
-          value={feedback.passThreshold || "N/A"}
+    <div className="space-y-4 p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ScoreCard
+          label="Profile Score"
+          value={feedback.scoreText || "N/A"}
+          helper="Your current total review score."
+          tone={feedback.isPassing ? "success" : "warning"}
         />
-        <FeedbackMetric
-          label="Attempts"
-          value={`${feedback.attempts.used}/${feedback.attempts.max}`}
-          subText={`${feedback.attempts.remaining} remaining`}
+
+        <ScoreCard
+          label="Required Score"
+          value={feedback.passThresholdText || "N/A"}
+          helper="Minimum score required to activate your profile."
+          tone="info"
         />
       </div>
 
-      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-yellow-200">
-          Main issue
+      <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+        <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
+          Score Summary
         </p>
 
-        <p className="mt-3 text-sm leading-6 text-gray-200">
-          {feedback.mainIssue}
-        </p>
+        <div className="font-mono text-sm leading-7 text-gray-100">
+          {feedback.scoreBreakdownItems.length > 0 ? (
+            feedback.scoreBreakdownItems.map((item, index) => (
+              <p key={`${item.title}-${index}`}>
+                {item.title}:{" "}
+                {item.maxScore > 0
+                  ? `${item.score}/${item.maxScore}`
+                  : item.score}
+              </p>
+            ))
+          ) : (
+            <p>No score breakdown was returned by the server.</p>
+          )}
+        </div>
       </div>
 
-      <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-5">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
-          What to improve
-        </p>
+      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
+        <div className="flex items-start gap-3">
+          <span className="material-symbols-outlined mt-0.5 text-yellow-300">
+            checklist
+          </span>
 
-        <p className="mt-3 text-sm leading-6 text-gray-200">
-          {feedback.fixAction}
-        </p>
+          <div>
+            <p className="font-extrabold text-yellow-100">What to improve</p>
+            <p className="mt-2 text-sm leading-6 text-gray-200">
+              {feedback.fixAction}
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function FeedbackMetric({ label, value, subText }) {
+function ScoreCard({ label, value, helper, tone }) {
+  const toneClass =
+    tone === "success"
+      ? "border-green-400/20 bg-green-400/10"
+      : tone === "warning"
+        ? "border-yellow-400/20 bg-yellow-400/10"
+        : "border-cyan-400/20 bg-cyan-400/10";
+
+  const valueClass =
+    tone === "success"
+      ? "text-green-200"
+      : tone === "warning"
+        ? "text-yellow-200"
+        : "text-cyan-200";
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+    <div className={`rounded-2xl border p-4 ${toneClass}`}>
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-400">
         {label}
       </p>
 
-      <p className="mt-2 text-lg font-black text-white">{value}</p>
+      <p className={`mt-3 text-3xl font-black ${valueClass}`}>{value}</p>
 
-      {subText ? <p className="mt-1 text-xs text-gray-500">{subText}</p> : null}
+      <p className="mt-2 text-xs leading-5 text-gray-400">{helper}</p>
     </div>
   );
 }
@@ -1094,8 +1221,132 @@ function Alert({ type, title, message }) {
   );
 }
 
+function TextInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+  type = "text",
+  inputMode,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <input
+        type={type}
+        inputMode={inputMode}
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function NumberInput(props) {
+  return (
+    <TextInput
+      {...props}
+      inputMode="numeric"
+      onChange={(nextValue) => {
+        if (/^\d*$/.test(nextValue)) props.onChange(nextValue);
+      }}
+    />
+  );
+}
+
+function SelectInput({
+  label,
+  value,
+  onChange,
+  onBlur,
+  required,
+  error,
+  options,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <select
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
+      >
+        {options.map((option) => (
+          <option
+            key={option.value}
+            value={option.value}
+            className="bg-[#151a22] text-white"
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  onBlur,
+  placeholder,
+  required,
+  error,
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      <textarea
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        rows={5}
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${error ? "border-red-400/60" : "border-white/10"
+          }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function FieldError({ message }) {
+  if (!message) return null;
+
+  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
+}
 function validateForm(data) {
   const errors = {};
+
+  if (isEmpty(data.fullName)) {
+    errors.fullName = "Full name is required.";
+  } else if (String(data.fullName).trim().length < 2) {
+    errors.fullName = "Full name should be at least 2 characters.";
+  }
 
   if (isEmpty(data.professionalTitle)) {
     errors.professionalTitle = "Professional title is required.";
@@ -1187,132 +1438,17 @@ function validateForm(data) {
   return errors;
 }
 
-function TextInput({
-  label,
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  required,
-  error,
-  type = "text",
-  inputMode,
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
-
-      <input
-        type={type}
-        inputMode={inputMode}
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
-      />
-
-      <FieldError message={error} />
-    </div>
-  );
-}
-
-function NumberInput(props) {
-  return (
-    <TextInput
-      {...props}
-      inputMode="numeric"
-      onChange={(nextValue) => {
-        if (/^\d*$/.test(nextValue)) props.onChange(nextValue);
-      }}
-    />
-  );
-}
-
-function SelectInput({
-  label,
-  value,
-  onChange,
-  onBlur,
-  required,
-  error,
-  options,
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
-
-      <select
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
-      >
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            className="bg-[#151a22] text-white"
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-
-      <FieldError message={error} />
-    </div>
-  );
-}
-
-function TextArea({
-  label,
-  value,
-  onChange,
-  onBlur,
-  placeholder,
-  required,
-  error,
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
-
-      <textarea
-        value={value ?? ""}
-        onChange={(event) => onChange(event.target.value)}
-        onBlur={onBlur}
-        placeholder={placeholder}
-        rows={5}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
-      />
-
-      <FieldError message={error} />
-    </div>
-  );
-}
-
-function FieldError({ message }) {
-  if (!message) return null;
-
-  return <p className="mt-2 text-xs font-semibold text-red-300">{message}</p>;
-}
-
 function buildFormFromProfile(profile) {
   const certificates = profile?.certificates || profile?.Certificates || [];
 
   return {
+    fullName:
+      profile?.fullName ||
+      profile?.FullName ||
+      profile?.userFullName ||
+      profile?.UserFullName ||
+      profile?.name ||
+      "",
     avatarUrl: profile?.avatarUrl || profile?.AvatarUrl || "",
     professionalTitle:
       profile?.professionalTitle || profile?.ProfessionalTitle || "",
@@ -1320,8 +1456,7 @@ function buildFormFromProfile(profile) {
     skills: profile?.skills || profile?.Skills || "",
     yearsOfExperience:
       profile?.yearsOfExperience ?? profile?.YearsOfExperience ?? "",
-    availableForWork:
-      profile?.availableForWork ?? profile?.AvailableForWork ?? true,
+    availableForWork: true,
     portfolioUrl: profile?.portfolioUrl || profile?.PortfolioUrl || "",
     linkedInUrl:
       profile?.linkedInUrl ||
@@ -1347,6 +1482,7 @@ function removeDeprecatedExpertFields(data) {
   delete next.linkedinUrl;
   delete next.githubUrl;
 
+  next.availableForWork = true;
   next.certificates = normalizeCertificatesForForm(next.certificates);
 
   return next;
@@ -1388,7 +1524,6 @@ function normalizeCertificatesForPayload(certificates) {
 
 function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
   const reviewNote = getReviewNote(backendPayload);
-
   const scoreInfo = extractProfileScoreInfo(backendPayload);
   const parsedScore = parseFinalProfileScore(reviewNote);
 
@@ -1399,17 +1534,43 @@ function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
     "N/A";
 
   const passThreshold =
-    parsePassThreshold(reviewNote) ?? scoreInfo.profilePassScore ?? "N/A";
+    parsePassThreshold(reviewNote) ?? scoreInfo.profilePassScore ?? null;
+
+  const passThresholdText =
+    passThreshold !== null && passThreshold !== undefined
+      ? `${passThreshold}/${scoreInfo.profileScoreMax || 100}`
+      : "N/A";
 
   const normalizedLimit = normalizeReviewLimit(limit);
+  const scoreBreakdownItems = buildScoreBreakdownItems(
+    backendPayload,
+    reviewNote
+  );
+
+  const improvementItems = buildImprovementItems({
+    reviewNote,
+    missingInformation,
+    scoreBreakdownItems,
+  });
+
+  const scorePercent = getScorePercent(scoreText);
+  const passPercent =
+    passThreshold !== null && scoreInfo.profileScoreMax
+      ? Math.round(
+        (Number(passThreshold) / Number(scoreInfo.profileScoreMax)) * 100
+      )
+      : 70;
 
   return {
     scoreText,
-    passThreshold,
-    mainIssue: buildMainIssue(reviewNote),
+    passThresholdText,
+    scoreBreakdownItems,
+    improvementItems,
+    isPassing: scorePercent !== null && scorePercent >= passPercent,
     fixAction: buildFixAction({
       reviewNote,
       missingInformation,
+      improvementItems,
     }),
     attempts: {
       used: normalizedLimit.submissionCount,
@@ -1419,33 +1580,214 @@ function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
   };
 }
 
-function buildMainIssue(reviewNote) {
-  const text = String(reviewNote || "").trim();
+function buildScoreBreakdownItems(data, reviewNote) {
+  const raw = data?.raw || data?.Raw || data || {};
 
-  if (!text) {
-    return "Your profile needs stronger evidence before it can be approved.";
+  const scoreBreakdown =
+    data?.scoreBreakdown ||
+    data?.ScoreBreakdown ||
+    raw?.scoreBreakdown ||
+    raw?.ScoreBreakdown ||
+    null;
+
+  const items = [];
+
+  if (scoreBreakdown && typeof scoreBreakdown === "object") {
+    Object.entries(scoreBreakdown).forEach(([key, value]) => {
+      if (value && typeof value === "object") {
+        const score = Number(
+          value.score ?? value.value ?? value.points ?? value.currentScore ?? 0
+        );
+
+        const maxScore = Number(value.maxScore ?? value.max ?? value.total ?? 0);
+
+        const note =
+          value.note ||
+          value.reason ||
+          value.description ||
+          value.message ||
+          "";
+
+        const passedValue = value.passed ?? value.isPassed;
+        const passed =
+          typeof passedValue === "boolean"
+            ? passedValue
+            : maxScore > 0
+              ? score / maxScore >= 0.7
+              : false;
+
+        items.push({
+          key,
+          title: value.label || value.name || toReadableLabel(key),
+          score: Number.isFinite(score) ? score : 0,
+          maxScore: Number.isFinite(maxScore) && maxScore > 0 ? maxScore : 0,
+          note,
+          status: passed ? "good" : "weak",
+        });
+      } else if (typeof value === "number") {
+        items.push({
+          key,
+          title: toReadableLabel(key),
+          score: value,
+          maxScore: 0,
+          note: "",
+          status: "info",
+        });
+      }
+    });
   }
 
-  return (
-    extractSentence(text, /extremely high and not supported/i) ||
-    extractSentence(text, /claimed experience is much higher/i) ||
-    extractSentence(text, /lacks strong evidence/i) ||
-    firstSentence(text) ||
-    "Your profile needs stronger evidence before it can be approved."
-  );
+  if (items.length > 0) return items;
+
+  return buildScoreBreakdownFromReviewNote(reviewNote);
 }
 
-function buildFixAction({ reviewNote, missingInformation }) {
+function buildScoreBreakdownFromReviewNote(reviewNote) {
+  const text = String(reviewNote || "");
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean);
+
+  const result = [];
+
+  lines.forEach((line) => {
+    const match = line.match(
+      /^(.+?):\s*(\d+)\s*\/\s*(\d+)(?:\s*[-–]\s*(.+))?$/i
+    );
+
+    if (!match) return;
+
+    const score = Number(match[2]);
+    const maxScore = Number(match[3]);
+
+    result.push({
+      key: toCamelKey(match[1]),
+      title: match[1].trim(),
+      score,
+      maxScore,
+      note: match[4] || "",
+      status: maxScore > 0 && score / maxScore >= 0.7 ? "good" : "weak",
+    });
+  });
+
+  return result;
+}
+
+function buildImprovementItems({
+  reviewNote,
+  missingInformation,
+  scoreBreakdownItems,
+}) {
+  const items = [];
+
+  const weakScoreItems = (scoreBreakdownItems || []).filter(
+    (item) => item.status === "weak"
+  );
+
+  weakScoreItems.forEach((item) => {
+    items.push({
+      title: item.title,
+      description:
+        item.note ||
+        `This section scored ${item.maxScore > 0 ? `${item.score}/${item.maxScore}` : item.score
+        }. Add stronger evidence or more complete information to improve it.`,
+    });
+  });
+
   const missingText = String(missingInformation || "").trim();
 
-  if (missingText) return missingText;
+  if (missingText) {
+    items.unshift({
+      title: "Missing information",
+      description: missingText,
+    });
+  }
+
+  const textItems = extractUsefulFeedbackLines(reviewNote);
+
+  textItems.forEach((item) => {
+    if (
+      !items.some(
+        (existing) =>
+          existing.title.toLowerCase() === item.title.toLowerCase() ||
+          existing.description.toLowerCase() === item.description.toLowerCase()
+      )
+    ) {
+      items.push(item);
+    }
+  });
+
+  if (items.length > 0) return items.slice(0, 8);
+
+  return [
+    {
+      title: "Evidence is not strong enough",
+      description:
+        "Add clearer proof of your experience, such as real projects, GitHub repositories, portfolio case studies, certificates, or detailed work examples.",
+    },
+  ];
+}
+
+function extractUsefulFeedbackLines(reviewNote) {
+  const text = String(reviewNote || "").trim();
+
+  if (!text) return [];
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean)
+    .filter(
+      (line) =>
+        !/Final profile score/i.test(line) &&
+        !/Pass threshold/i.test(line) &&
+        line.length >= 12
+    );
+
+  const useful = lines.filter((line) =>
+    /missing|weak|invalid|not enough|low|required|unsupported|evidence|portfolio|github|certificate|experience|bio|skill/i.test(
+      line
+    )
+  );
+
+  return useful.slice(0, 6).map((line, index) => {
+    const [label, ...rest] = line.split(":");
+    const hasLabel = rest.length > 0 && label.length <= 45;
+
+    return {
+      title: hasLabel ? label.trim() : `Issue ${index + 1}`,
+      description: hasLabel ? rest.join(":").trim() : line,
+    };
+  });
+}
+
+function buildFixAction({ reviewNote, missingInformation, improvementItems }) {
+  const missingText = String(missingInformation || "").trim();
+
+  if (missingText) {
+    return "Complete the missing information listed above, then resubmit your profile for another review.";
+  }
 
   const text = String(reviewNote || "").trim();
 
-  return (
+  const actionFromText =
     extractSentence(text, /Additional evidence is required/i) ||
-    "Add stronger evidence such as detailed project descriptions, certificates, GitHub repositories, portfolio links, or a LinkedIn profile."
-  );
+    extractSentence(text, /Please add/i) ||
+    extractSentence(text, /You should add/i) ||
+    "";
+
+  if (actionFromText) return actionFromText;
+
+  const titles = (improvementItems || []).map((item) => item.title);
+
+  if (titles.length > 0) {
+    return `Improve these sections: ${titles.join(
+      ", "
+    )}. After updating them, click "Update and Resubmit Profile".`;
+  }
+
+  return "Add stronger evidence such as detailed project descriptions, certificates, GitHub repositories, portfolio links, or a LinkedIn profile.";
 }
 
 function extractProfileScoreInfo(data) {
@@ -1667,7 +2009,7 @@ function isMeaningfulReviewLimit(limit) {
   return (
     Number(limit.submissionCount || 0) > 0 ||
     Number(limit.remainingAttempts || 0) <
-      Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
+    Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS) ||
     Boolean(limit.lockedUntil) ||
     Boolean(limit.reviewStatus) ||
     Boolean(limit.userStatus)
@@ -1683,8 +2025,8 @@ function normalizeReviewLimit(limit) {
 
   const remainingAttempts =
     limit?.remainingAttempts !== "" &&
-    limit?.remainingAttempts !== null &&
-    limit?.remainingAttempts !== undefined
+      limit?.remainingAttempts !== null &&
+      limit?.remainingAttempts !== undefined
       ? Math.max(0, Number(limit.remainingAttempts || 0))
       : Math.max(0, maxAttempts - submissionCount);
 
@@ -1720,9 +2062,7 @@ function advanceReviewLimitLocally(previousLimit, result) {
     reviewStatus === "PENDING" ||
     reviewStatus === "";
 
-  if (!shouldCountAttempt) {
-    return base;
-  }
+  if (!shouldCountAttempt) return base;
 
   const nextUsed = Math.min(base.maxAttempts, Number(base.submissionCount) + 1);
 
@@ -1777,9 +2117,7 @@ function getRemainingExpertProfileAttempts(limit) {
   ) {
     const remaining = Number(limit.remainingAttempts);
 
-    if (Number.isFinite(remaining)) {
-      return Math.max(0, remaining);
-    }
+    if (Number.isFinite(remaining)) return Math.max(0, remaining);
   }
 
   const max = Number(limit.maxAttempts || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS);
@@ -1805,6 +2143,21 @@ function buildScoreText(scoreInfo) {
   if (maxScore === null || maxScore === undefined) return String(score);
 
   return `${score}/${maxScore}`;
+}
+
+function getScorePercent(scoreText) {
+  const match = String(scoreText || "").match(/(\d+)\s*\/\s*(\d+)/);
+
+  if (!match) return null;
+
+  const score = Number(match[1]);
+  const maxScore = Number(match[2]);
+
+  if (!Number.isFinite(score) || !Number.isFinite(maxScore) || maxScore <= 0) {
+    return null;
+  }
+
+  return Math.round((score / maxScore) * 100);
 }
 
 function getReviewStatus(data) {
@@ -1850,6 +2203,8 @@ function getReviewNote(data) {
 
   return (
     pickFirst(
+      data?.profileReviewNote,
+      data?.ProfileReviewNote,
       data?.reviewNote,
       data?.ReviewNote,
       data?.correctionNote,
@@ -1858,6 +2213,8 @@ function getReviewNote(data) {
       data?.RejectionReason,
       data?.verificationNote,
       data?.VerificationNote,
+      raw?.profileReviewNote,
+      raw?.ProfileReviewNote,
       raw?.reviewNote,
       raw?.ReviewNote,
       raw?.correctionNote,
@@ -1909,15 +2266,77 @@ function updateLocalUserStatus(status) {
   }
 }
 
+function startResubmitCounter(maxAttempts) {
+  const safeMax =
+    Number(maxAttempts || 0) || MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const counter = {
+    submissionCount: 0,
+    remainingAttempts: safeMax,
+    maxAttempts: safeMax,
+  };
+
+  try {
+    localStorage.setItem(RESUBMIT_COUNTER_KEY, JSON.stringify(counter));
+  } catch {
+    // Ignore localStorage errors
+  }
+
+  return counter;
+}
+
+function updateResubmitCounterAfterSubmit(limit) {
+  const current = readJson(RESUBMIT_COUNTER_KEY);
+
+  const maxAttempts =
+    Number(current?.maxAttempts || 0) ||
+    Number(limit?.maxAttempts || 0) ||
+    MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS;
+
+  const currentUsed = Math.max(0, Number(current?.submissionCount || 0));
+  const nextUsed = Math.min(maxAttempts, currentUsed + 1);
+
+  const counter = {
+    submissionCount: nextUsed,
+    remainingAttempts: Math.max(0, maxAttempts - nextUsed),
+    maxAttempts,
+  };
+
+  try {
+    localStorage.setItem(RESUBMIT_COUNTER_KEY, JSON.stringify(counter));
+  } catch {
+    // Ignore localStorage errors
+  }
+
+  return counter;
+}
+
 function saveCorrectionDraft(data) {
   try {
     localStorage.setItem(
       CORRECTION_DRAFT_KEY,
       JSON.stringify({
         ...data,
+        availableForWork: true,
         certificates: normalizeCertificatesForPayload(data?.certificates),
       })
     );
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function saveCorrectionFeedback(data) {
+  try {
+    localStorage.setItem(CORRECTION_FEEDBACK_KEY, JSON.stringify(data || {}));
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function clearCorrectionFeedback() {
+  try {
+    localStorage.removeItem(CORRECTION_FEEDBACK_KEY);
   } catch {
     // Ignore localStorage errors
   }
@@ -1987,6 +2406,10 @@ function getSimpleSubmitError(error) {
 
   if (!message) return "";
 
+  if (message.includes("FullName") || message.includes("fullName")) {
+    return "Full name is required.";
+  }
+
   if (message.includes("Certificate URL is invalid")) {
     return "One of your certificate links is invalid.";
   }
@@ -2045,13 +2468,19 @@ function extractSentence(text, regex) {
   return sentences.find((sentence) => regex.test(sentence)) || "";
 }
 
-function firstSentence(text) {
-  return (
-    String(text || "")
-      .split(/(?<=[.!?])\s+/)
-      .map((sentence) => sentence.trim())
-      .filter(Boolean)[0] || ""
-  );
+function toReadableLabel(value) {
+  return String(value || "")
+    .replace(/([A-Z])/g, " $1")
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
+function toCamelKey(value) {
+  return String(value || "")
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, char) => char.toUpperCase())
+    .replace(/^./, (char) => char.toLowerCase());
 }
 
 function isEmpty(value) {

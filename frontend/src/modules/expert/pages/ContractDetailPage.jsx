@@ -12,6 +12,7 @@ export default function ContractDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
+  const [acceptSuccessModal, setAcceptSuccessModal] = useState(null);
 
   const [showDeclineBox, setShowDeclineBox] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
@@ -212,7 +213,20 @@ export default function ContractDetailPage() {
 
       await refreshAfterAction(updatedContract);
 
-      setMessage("Contract accepted successfully.");
+      const projectId = getProjectId(updatedContract) || realProjectId;
+
+      setAcceptSuccessModal({
+        projectId,
+      });
+
+      setTimeout(() => {
+        if (projectId) {
+          navigate(`/expert/projects/${projectId}`, { replace: true });
+          return;
+        }
+
+        navigate("/expert/projects", { replace: true });
+      }, 1500);
     } catch (err) {
       console.error("ACCEPT CONTRACT ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot accept contract right now."));
@@ -470,9 +484,7 @@ export default function ContractDetailPage() {
 
               <Card title="Acceptance Criteria" icon="verified">
                 <TextValue
-                  value={
-                    acceptanceCriteria || "No acceptance criteria provided."
-                  }
+                  value={acceptanceCriteria || "No acceptance criteria provided."}
                 />
               </Card>
 
@@ -543,9 +555,7 @@ export default function ContractDetailPage() {
               <Card title="Dates" icon="event">
                 <Info
                   label="Created"
-                  value={formatDate(
-                    getField(contract, ["createdAt", "CreatedAt"], "")
-                  )}
+                  value={formatDate(getField(contract, ["createdAt", "CreatedAt"], ""))}
                 />
 
                 {getField(contract, ["confirmedAt", "ConfirmedAt"], "") && (
@@ -570,7 +580,40 @@ export default function ContractDetailPage() {
           </div>
         </div>
       </div>
+
+      {acceptSuccessModal && (
+        <AcceptSuccessModal projectId={acceptSuccessModal.projectId} />
+      )}
     </ExpertLayout>
+  );
+}
+
+function AcceptSuccessModal({ projectId }) {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-green-400/30 bg-[#151a22] p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-green-400/30 bg-green-400/10">
+          <span className="material-symbols-outlined text-4xl text-green-300">
+            check_circle
+          </span>
+        </div>
+
+        <h2 className="mt-5 text-2xl font-extrabold text-white">
+          Contract accepted successfully
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-gray-400">
+          Your contract has been confirmed. We are redirecting you to your
+          project workspace.
+        </p>
+
+        <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-200">
+          {projectId
+            ? `Redirecting to Project #${projectId}...`
+            : "Redirecting to your projects..."}
+        </div>
+      </div>
+    </div>
   );
 }
 
