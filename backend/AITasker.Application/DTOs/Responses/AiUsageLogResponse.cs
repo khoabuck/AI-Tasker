@@ -10,6 +10,7 @@ public class AiUsageLogResponse
 
     public string? UserFullName { get; set; }
 
+    // BE1-style usage log fields
     public string Feature { get; set; } = string.Empty;
 
     public string? EntityType { get; set; }
