@@ -174,8 +174,9 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      if (!result.success) {
-        setError(result.message || "Login failed.");
+      if (!result.success || !result.accessToken) {
+        console.log("LOGIN RESULT:", result);
+        setError(result.message || "Login failed: missing access token.");
         return;
       }
 

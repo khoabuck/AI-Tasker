@@ -56,12 +56,14 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   }
 
   if (status === "PENDING_PROFILE") {
-    if (role === "EXPERT" && !isExpertProfileReviewPage) {
-      return <Navigate to="/expert/setup-profile" replace />;
+    if (role === "CLIENT") {
+      if (isClientSetupPage) return children;
+      return <Navigate to="/setup-profile" replace />;
     }
 
-    if (role === "CLIENT" && !isClientSetupPage) {
-      return <Navigate to="/setup-profile" replace />;
+    if (role === "EXPERT") {
+      if (isExpertProfileReviewPage) return children;
+      return <Navigate to="/expert/setup-profile" replace />;
     }
 
     if (role === "ADMIN") {

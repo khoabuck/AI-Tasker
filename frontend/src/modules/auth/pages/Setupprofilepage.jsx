@@ -17,6 +17,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
+import { useAuth } from "../../../context/AuthContext";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
@@ -72,6 +73,7 @@ function parseApiError(err) {
 
 export default function SetupProfilePage() {
   const navigate = useNavigate();
+  const { handleLoginSuccess } = useAuth();
 
   const [clientType, setClientType] = useState("individual");
   const [loading, setLoading] = useState(false);
@@ -107,6 +109,25 @@ export default function SetupProfilePage() {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
         const data = res.data;
+
+        if (data?.userStatus === "ACTIVE") {
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+        const updatedUser = {
+          ...currentUser,
+          role: "CLIENT",
+          status: "ACTIVE",
+        };
+
+        handleLoginSuccess({
+          accessToken: localStorage.getItem("accessToken"),
+          user: updatedUser,
+        });
+
+        navigate("/client/dashboard", { replace: true });
+        return;
+      }
+
         const bp = data?.businessProfile || null;
         const isBusiness = data?.clientType === "BUSINESS" || Boolean(bp);
 
@@ -137,7 +158,7 @@ export default function SetupProfilePage() {
       }
     };
     loadProfile();
-  }, []);
+  }, [navigate, handleLoginSuccess]);
 
   // ── Ban countdown — tự update mỗi giây, tự unlock khi hết ─────────
   useEffect(() => {
@@ -337,7 +358,10 @@ export default function SetupProfilePage() {
         const meRes = await axiosInstance.get("/auth/me");
         const freshUser = meRes?.data?.data || meRes?.data;
 
-        localStorage.setItem("user", JSON.stringify(freshUser));
+        handleLoginSuccess({
+          accessToken: localStorage.getItem("accessToken"),
+          user: freshUser,
+        });
 
         navigate("/client/dashboard", { replace: true });
         return;
