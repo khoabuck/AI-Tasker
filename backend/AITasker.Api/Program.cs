@@ -23,7 +23,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.HttpOverrides;
-
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
 
@@ -256,7 +255,7 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<IEmailSender, MailtrapEmailSender>();
+builder.Services.AddScoped<IEmailSender, GmailSmtpEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================
