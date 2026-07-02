@@ -1,4 +1,4 @@
-using AITasker.Application.DTOs.Responses;
+﻿using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
@@ -416,21 +416,7 @@ namespace AITasker.Infrastructure.Dashboards
                 .AsNoTracking()
                 .ToListAsync();
 
-            var aiUsageLogs = await _context.AiUsageLogs
-                .AsNoTracking()
-                .ToListAsync();
-
-            var aiPricingPolicies = await _context.AIModelPricingPolicies
-                .AsNoTracking()
-                .ToListAsync();
-
-            var aiUsageCosts = aiUsageLogs
-                .Select(x => CalculateAiUsageCost(x, aiPricingPolicies))
-                .ToList();
-
             var platformTotalRevenue = platformWallet?.TotalRevenue ?? 0;
-            var estimatedAiCostVnd = aiUsageCosts.Sum(x => x.EstimatedTotalCostVnd);
-            var actualAiCostVnd = aiUsageCosts.Sum(x => x.ActualTotalCostVnd);
 
             return new AdminFinanceOverviewResponse
             {
@@ -441,16 +427,6 @@ namespace AITasker.Infrastructure.Dashboards
                 PlatformFeeRevenue = platformWallet?.PlatformFeeRevenue ?? 0,
                 WithdrawalFeeRevenue = platformWallet?.WithdrawalFeeRevenue ?? 0,
                 AdjustmentBalance = platformWallet?.AdjustmentBalance ?? 0,
-
-                TotalAIRequests = aiUsageLogs.Count,
-                TotalAITokens = aiUsageLogs.Sum(x => (long)x.TotalTokens),
-                EstimatedAICostUsd = aiUsageCosts.Sum(x => x.EstimatedTotalCostUsd),
-                EstimatedAICostVnd = estimatedAiCostVnd,
-                ActualAICostUsd = aiUsageCosts.Sum(x => x.ActualTotalCostUsd),
-                ActualAICostVnd = actualAiCostVnd,
-                FreeTierAISavingsVnd = aiUsageCosts.Sum(x => x.FreeTierSavingsVnd),
-                EstimatedNetPlatformProfitVnd = platformTotalRevenue - estimatedAiCostVnd,
-                ActualNetPlatformProfitVnd = platformTotalRevenue - actualAiCostVnd,
 
                 TotalUserAvailableBalance = wallets.Sum(x => x.AvailableBalance),
                 TotalUserLockedBalance = wallets.Sum(x => x.LockedBalance),
@@ -735,72 +711,6 @@ namespace AITasker.Infrastructure.Dashboards
             return transactions
                 .Where(t => normalizedTypes.Contains(Normalize(t.Type)))
                 .Sum(t => Math.Abs(t.Amount));
-        }
-
-
-        private static AdminAiUsageCostSnapshot CalculateAiUsageCost(
-            AiUsageLog log,
-            IReadOnlyCollection<AIModelPricingPolicy> pricingPolicies)
-        {
-            var policy = pricingPolicies
-                .Where(x =>
-                    Normalize(x.Provider) == Normalize(log.Provider) &&
-                    NormalizeModelName(x.ModelName) == NormalizeModelName(log.Model) &&
-                    x.EffectiveFrom <= log.CreatedAt)
-                .OrderByDescending(x => x.EffectiveFrom)
-                .FirstOrDefault();
-
-            var inputPrice = policy?.InputPricePerMillionTokensUsd ?? 0m;
-            var outputPrice = policy?.OutputPricePerMillionTokensUsd ?? 0m;
-            var exchangeRate = policy?.ExchangeRateToVnd ?? 25000m;
-            var isFreeTier = policy?.IsFreeTier ?? true;
-
-            var inputCostUsd = CalculateAiTokenCost(log.PromptTokens, inputPrice);
-            var outputCostUsd = CalculateAiTokenCost(log.CompletionTokens, outputPrice);
-            var estimatedTotalCostUsd = inputCostUsd + outputCostUsd;
-            var actualTotalCostUsd = isFreeTier ? 0m : estimatedTotalCostUsd;
-            var freeTierSavingsUsd = Math.Max(estimatedTotalCostUsd - actualTotalCostUsd, 0m);
-
-            return new AdminAiUsageCostSnapshot
-            {
-                EstimatedTotalCostUsd = estimatedTotalCostUsd,
-                ActualTotalCostUsd = actualTotalCostUsd,
-                EstimatedTotalCostVnd = estimatedTotalCostUsd * exchangeRate,
-                ActualTotalCostVnd = actualTotalCostUsd * exchangeRate,
-                FreeTierSavingsVnd = freeTierSavingsUsd * exchangeRate
-            };
-        }
-
-        private static decimal CalculateAiTokenCost(
-            int tokens,
-            decimal pricePerMillionTokensUsd)
-        {
-            if (tokens <= 0 || pricePerMillionTokensUsd <= 0)
-            {
-                return 0m;
-            }
-
-            return Math.Round(tokens / 1_000_000m * pricePerMillionTokensUsd, 8);
-        }
-
-        private static string NormalizeModelName(string? value)
-        {
-            return string.IsNullOrWhiteSpace(value)
-                ? string.Empty
-                : value.Trim().ToLowerInvariant();
-        }
-
-        private sealed class AdminAiUsageCostSnapshot
-        {
-            public decimal EstimatedTotalCostUsd { get; set; }
-
-            public decimal ActualTotalCostUsd { get; set; }
-
-            public decimal EstimatedTotalCostVnd { get; set; }
-
-            public decimal ActualTotalCostVnd { get; set; }
-
-            public decimal FreeTierSavingsVnd { get; set; }
         }
 
         private static int NormalizeTake(int take)
