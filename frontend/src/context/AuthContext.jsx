@@ -42,7 +42,9 @@ export function AuthProvider({ children }) {
   // Gọi để lấy lại user mới nhất từ server
   const refreshUser = async () => {
     try {
-      const freshUser = await getMeApi();
+      const res = await getMeApi();
+      const freshUser = res?.data?.data || res?.data || res;
+
       setUser(freshUser);
       saveAuth({ user: freshUser });
     } catch (err) {

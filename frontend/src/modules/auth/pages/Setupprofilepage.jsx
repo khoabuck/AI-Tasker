@@ -179,7 +179,7 @@ export default function SetupProfilePage() {
   const attempts = business.verificationSubmissionCount || 0;
 
   const inputClass = (name) =>
-    `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+    `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 [color-scheme:dark] autofill:shadow-[inset_0_0_0px_1000px_#232A35] autofill:[-webkit-text-fill-color:#e1e2eb] ${
       fieldErrors[name] ? "border-red-500 focus:border-red-500" : "border-white/10 focus:border-cyan-400"
     }`;
 
@@ -325,11 +325,21 @@ export default function SetupProfilePage() {
       let res;
 
       if (clientType === "individual") {
-        const payload = { phoneNumber: individual.phoneNumber.trim(), address: individual.address.trim() };
+        const payload = {
+          phoneNumber: individual.phoneNumber.trim(),
+          address: individual.address.trim(),
+        };
+
         res = isEdit
           ? await axiosInstance.put("/client-profiles/individual/me", payload)
           : await axiosInstance.post("/client-profiles/individual", payload);
-        navigate("/client/dashboard");
+
+        const meRes = await axiosInstance.get("/auth/me");
+        const freshUser = meRes?.data?.data || meRes?.data;
+
+        localStorage.setItem("user", JSON.stringify(freshUser));
+
+        navigate("/client/dashboard", { replace: true });
         return;
       }
 
