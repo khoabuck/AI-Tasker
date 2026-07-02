@@ -1,4 +1,4 @@
-﻿namespace AITasker.Application.DTOs.Responses;
+namespace AITasker.Application.DTOs.Responses;
 
 public class AiUsageLogResponse
 {
@@ -26,6 +26,23 @@ public class AiUsageLogResponse
     public int CompletionTokens { get; set; }
 
     public int TotalTokens { get; set; }
+
+    // Cost calculation fields, computed by AIUsageCostService from token usage + pricing policy.
+    public decimal InputPricePerMillionTokensUsd { get; set; }
+
+    public decimal OutputPricePerMillionTokensUsd { get; set; }
+
+    public decimal EstimatedTotalCostUsd { get; set; }
+
+    public decimal ActualTotalCostUsd { get; set; }
+
+    public decimal EstimatedTotalCostVnd { get; set; }
+
+    public decimal ActualTotalCostVnd { get; set; }
+
+    public decimal FreeTierSavingsVnd { get; set; }
+
+    public bool IsFreeTier { get; set; }
 
     public string Status { get; set; } = string.Empty;
 

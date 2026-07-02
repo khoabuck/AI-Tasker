@@ -1,4 +1,4 @@
-﻿namespace AITasker.Application.DTOs.Responses
+namespace AITasker.Application.DTOs.Responses
 {
     public class AdminFinanceOverviewResponse
     {
@@ -13,6 +13,24 @@
         public decimal WithdrawalFeeRevenue { get; set; }
 
         public decimal AdjustmentBalance { get; set; }
+
+        public int TotalAIRequests { get; set; }
+
+        public long TotalAITokens { get; set; }
+
+        public decimal EstimatedAICostUsd { get; set; }
+
+        public decimal EstimatedAICostVnd { get; set; }
+
+        public decimal ActualAICostUsd { get; set; }
+
+        public decimal ActualAICostVnd { get; set; }
+
+        public decimal FreeTierAISavingsVnd { get; set; }
+
+        public decimal EstimatedNetPlatformProfitVnd { get; set; }
+
+        public decimal ActualNetPlatformProfitVnd { get; set; }
 
         public decimal TotalUserAvailableBalance { get; set; }
 

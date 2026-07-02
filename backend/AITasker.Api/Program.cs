@@ -1,4 +1,4 @@
-﻿using System.Text;
+using System.Text;
 using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
@@ -277,6 +277,8 @@ builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>(
 builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
 builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
+builder.Services.AddScoped<IAIUsageCostService, AIUsageCostService>();
+
 // =========================
 // Admin AI Management / Groq Runtime Config
 // =========================

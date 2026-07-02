@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
