@@ -10,6 +10,7 @@ const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
 const CORRECTION_FEEDBACK_KEY = "aitasker_expert_profile_correction_feedback";
 const RESUBMIT_COUNTER_KEY = "aitasker_expert_profile_resubmit_counter";
+const FIELD_SCORE_FEEDBACK_KEY = "aitasker_expert_profile_field_score_feedback";
 
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
@@ -77,6 +78,11 @@ export default function SetupExpertProfilePage() {
     readJson(RESUBMIT_COUNTER_KEY)
   );
 
+  const [fieldScores, setFieldScores] = useState(() => {
+    if (!isEditPage) return {};
+    return buildFieldScoreMap(readJson(FIELD_SCORE_FEEDBACK_KEY));
+  });
+
   const formErrors = useMemo(() => validateForm(formData), [formData]);
 
   const displayReviewLimit = useMemo(() => {
@@ -121,6 +127,14 @@ export default function SetupExpertProfilePage() {
   }, [isEditPage]);
 
   useEffect(() => {
+    if (isEditPage) {
+      setFieldScores(buildFieldScoreMap(readJson(FIELD_SCORE_FEEDBACK_KEY)));
+    } else {
+      setFieldScores({});
+    }
+  }, [isEditPage]);
+
+  useEffect(() => {
     if (!loading) {
       localStorage.setItem(draftKey, JSON.stringify(formData));
     }
@@ -131,6 +145,7 @@ export default function SetupExpertProfilePage() {
       setLoading(true);
       setError("");
 
+      const registeredFullName = await getRegisteredFullNameFromAuth();
       const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
       const normalDraft = readJson(draftKey);
 
@@ -185,6 +200,7 @@ export default function SetupExpertProfilePage() {
         setFormData({
           ...createEmptyForm(),
           ...safeDraft,
+          fullName: safeDraft.fullName || registeredFullName,
           availableForWork: true,
           certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
@@ -198,6 +214,7 @@ export default function SetupExpertProfilePage() {
         setFormData({
           ...createEmptyForm(),
           ...safeDraft,
+          fullName: safeDraft.fullName || registeredFullName,
           availableForWork: true,
           certificates: normalizeCertificatesForForm(safeDraft.certificates),
         });
@@ -206,11 +223,19 @@ export default function SetupExpertProfilePage() {
       }
 
       if (isEditPage && profile) {
-        setFormData(buildFormFromProfile(profile));
+        const profileForm = buildFormFromProfile(profile);
+
+        setFormData({
+          ...profileForm,
+          fullName: profileForm.fullName || registeredFullName,
+        });
         return;
       }
 
-      setFormData(createEmptyForm());
+      setFormData({
+        ...createEmptyForm(),
+        fullName: registeredFullName,
+      });
     } catch (err) {
       console.error("LOAD EXPERT PROFILE ERROR:", getRawBackendPayload(err));
       setError(
@@ -426,6 +451,7 @@ export default function SetupExpertProfilePage() {
       if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
         clearExpertProfileDrafts();
         clearCorrectionFeedback();
+        clearFieldScoreFeedback();
         localStorage.removeItem(RESUBMIT_COUNTER_KEY);
         updateLocalUserStatus("ACTIVE");
 
@@ -522,6 +548,11 @@ export default function SetupExpertProfilePage() {
   const handleGoResubmit = () => {
     saveCorrectionDraft(formData);
 
+    if (modal?.feedback) {
+      saveFieldScoreFeedback(modal.feedback);
+      setFieldScores(buildFieldScoreMap(modal.feedback));
+    }
+
     const currentCounter = readJson(RESUBMIT_COUNTER_KEY);
 
     if (currentCounter) {
@@ -557,6 +588,8 @@ export default function SetupExpertProfilePage() {
 
   const handleClearDraft = () => {
     clearExpertProfileDrafts();
+    clearFieldScoreFeedback();
+    setFieldScores({});
     setFormData(createEmptyForm());
     setTouched({});
     setSubmitted(false);
@@ -696,6 +729,7 @@ export default function SetupExpertProfilePage() {
                     onBlur={() => markTouched("fullName")}
                     error={getFieldError("fullName")}
                     placeholder="Example: Nguyen Van A"
+                    scoreBadge={getFieldScoreBadge(fieldScores, "fullName")}
                   />
 
                   <TextInput
@@ -708,6 +742,7 @@ export default function SetupExpertProfilePage() {
                     onBlur={() => markTouched("professionalTitle")}
                     error={getFieldError("professionalTitle")}
                     placeholder="Example: AI Automation Engineer"
+                    scoreBadge={getFieldScoreBadge(fieldScores, "professionalTitle")}
                   />
 
                   <TextArea
@@ -718,6 +753,7 @@ export default function SetupExpertProfilePage() {
                     onBlur={() => markTouched("bio")}
                     error={getFieldError("bio")}
                     placeholder="At least 50 characters. Describe your AI experience, projects, and strengths."
+                    scoreBadge={getFieldScoreBadge(fieldScores, "bio")}
                   />
 
                   <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_220px]">
@@ -729,6 +765,7 @@ export default function SetupExpertProfilePage() {
                       onBlur={() => markTouched("skills")}
                       error={getFieldError("skills")}
                       placeholder="AI Automation, RAG, Chatbot, Python, ASP.NET Core"
+                      scoreBadge={getFieldScoreBadge(fieldScores, "skills")}
                     />
 
                     <NumberInput
@@ -741,6 +778,7 @@ export default function SetupExpertProfilePage() {
                       onBlur={() => markTouched("yearsOfExperience")}
                       error={getFieldError("yearsOfExperience")}
                       placeholder="3"
+                      scoreBadge={getFieldScoreBadge(fieldScores, "yearsOfExperience")}
                     />
                   </div>
                 </div>
@@ -766,6 +804,7 @@ export default function SetupExpertProfilePage() {
                   onBlur={() => markTouched("portfolioUrl")}
                   error={getFieldError("portfolioUrl")}
                   placeholder="https://your-portfolio.com"
+                  scoreBadge={getFieldScoreBadge(fieldScores, "portfolioUrl")}
                 />
 
                 <TextInput
@@ -775,6 +814,7 @@ export default function SetupExpertProfilePage() {
                   onBlur={() => markTouched("linkedInUrl")}
                   error={getFieldError("linkedInUrl")}
                   placeholder="https://linkedin.com/in/you"
+                  scoreBadge={getFieldScoreBadge(fieldScores, "linkedInUrl")}
                 />
 
                 <TextInput
@@ -785,6 +825,7 @@ export default function SetupExpertProfilePage() {
                   onBlur={() => markTouched("gitHubUrl")}
                   error={getFieldError("gitHubUrl")}
                   placeholder="https://github.com/you"
+                  scoreBadge={getFieldScoreBadge(fieldScores, "gitHubUrl")}
                 />
               </div>
 
@@ -843,9 +884,17 @@ export default function SetupExpertProfilePage() {
                     >
                       <div className="mb-4 flex items-center justify-between">
                         <div>
-                          <p className="font-bold text-white">
-                            Certificate {index + 1}
-                          </p>
+                          <div className="flex items-center gap-3">
+                            <p className="font-bold text-white">
+                              Certificate {index + 1}
+                            </p>
+
+                            {getFieldScoreBadge(fieldScores, "certificates") ? (
+                              <ScoreBadge
+                                badge={getFieldScoreBadge(fieldScores, "certificates")}
+                              />
+                            ) : null}
+                          </div>
 
                           <p className="mt-1 text-xs text-gray-500">
                             We will review the certificate link automatically.
@@ -1057,7 +1106,7 @@ function ResultModal({ modal, onClose, onGoResubmit }) {
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
       <div
         className="
-          max-h-[82vh] w-full max-w-xl overflow-y-auto rounded-2xl
+          max-h-[86vh] w-full max-w-3xl overflow-y-auto rounded-2xl
           border border-white/10 bg-[#151a22]
           shadow-[0_30px_120px_rgba(0,0,0,0.65)]
           [scrollbar-width:none] [&::-webkit-scrollbar]:hidden
@@ -1126,55 +1175,210 @@ function ReviewFeedbackPanel({ feedback }) {
     <div className="space-y-4 p-4">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <ScoreCard
-          label="Profile Score"
+          label="Current Score"
           value={feedback.scoreText || "N/A"}
-          helper="Your current total review score."
+          helper="Your total score from this profile review."
           tone={feedback.isPassing ? "success" : "warning"}
         />
 
         <ScoreCard
           label="Required Score"
           value={feedback.passThresholdText || "N/A"}
-          helper="Minimum score required to activate your profile."
+          helper="Minimum score required to activate your expert profile."
           tone="info"
         />
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-        <p className="mb-3 text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
-          Score Summary
-        </p>
+      <ScoreBreakdownTable items={feedback.scoreBreakdownItems || []} />
 
-        <div className="font-mono text-sm leading-7 text-gray-100">
-          {feedback.scoreBreakdownItems.length > 0 ? (
-            feedback.scoreBreakdownItems.map((item, index) => (
-              <p key={`${item.title}-${index}`}>
-                {item.title}:{" "}
-                {item.maxScore > 0
-                  ? `${item.score}/${item.maxScore}`
-                  : item.score}
+      <ImprovementChecklist
+        items={feedback.improvementItems || []}
+        fallback={feedback.fixAction}
+      />
+    </div>
+  );
+}
+
+function ScoreBreakdownTable({ items }) {
+  const summaryItems = buildPopupScoreSummaryItems(items);
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-500">
+            Score Summary
+          </p>
+          <p className="mt-1 text-xs text-gray-400">
+            A short overview of your main review categories.
+          </p>
+        </div>
+      </div>
+
+      {summaryItems.length > 0 ? (
+        <div className="divide-y divide-white/10">
+          {summaryItems.map((item) => (
+            <div
+              key={item.key}
+              className="grid grid-cols-[1fr_auto] items-center gap-4 px-4 py-3"
+            >
+              <p className="text-sm font-bold text-white">{item.title}</p>
+
+              <p className="text-right font-mono text-sm font-black text-gray-100">
+                {item.text}
               </p>
-            ))
-          ) : (
-            <p>No score breakdown was returned by the server.</p>
-          )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="px-4 py-5 text-sm leading-6 text-gray-400">
+          No score summary was returned by the server. Please review the
+          general feedback below and improve your profile evidence.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function buildPopupScoreSummaryItems(items) {
+  const sourceItems = Array.isArray(items) ? items : [];
+
+  const profile = findScoreItem(sourceItems, ["profile", "completeness"]);
+  const aiSkill = findScoreItem(sourceItems, ["ai", "skill"]) || findScoreItem(sourceItems, ["skill"]);
+  const experience = findScoreItem(sourceItems, ["experience"]) || findScoreItem(sourceItems, ["credibility"]);
+  const proof =
+    findScoreItem(sourceItems, ["proof"]) ||
+    findScoreItem(sourceItems, ["portfolio", "github"]) ||
+    combineScoreItems(
+      "portfolioGithubProof",
+      "Portfolio / GitHub Proof",
+      sourceItems.filter((item) => {
+        const text = getScoreItemText(item);
+        return (
+          text.includes("portfolio") ||
+          text.includes("github") ||
+          text.includes("git hub") ||
+          text.includes("linkedin") ||
+          text.includes("linked in")
+        );
+      })
+    );
+  const certificate = findScoreItem(sourceItems, ["certificate"]);
+  const trustRisk = findScoreItem(sourceItems, ["trust"]) || findScoreItem(sourceItems, ["risk"]);
+
+  return [
+    normalizePopupScoreItem("profileCompleteness", "Profile Completeness", profile),
+    normalizePopupScoreItem("aiSkillRelevance", "AI Skill Relevance", aiSkill),
+    normalizePopupScoreItem("experience", "Experience", experience),
+    normalizePopupScoreItem("portfolioGithubProof", "Portfolio / GitHub Proof", proof),
+    normalizePopupScoreItem("certificateEvidence", "Certificate Evidence", certificate),
+    normalizePopupScoreItem("trustRisk", "Trust Risk", trustRisk),
+  ].filter(Boolean);
+}
+
+function normalizePopupScoreItem(key, title, item) {
+  if (!item) return null;
+
+  return {
+    key,
+    title,
+    text: formatSectionScore(item),
+  };
+}
+
+function findScoreItem(items, keywords) {
+  return items.find((item) => {
+    const text = getScoreItemText(item);
+    return keywords.every((keyword) => text.includes(keyword));
+  });
+}
+
+function combineScoreItems(key, title, items) {
+  const validItems = (items || []).filter((item) => Number(item?.maxScore || 0) > 0);
+
+  if (validItems.length === 0) return null;
+
+  return {
+    key,
+    title,
+    score: validItems.reduce((sum, item) => sum + Number(item.score || 0), 0),
+    maxScore: validItems.reduce((sum, item) => sum + Number(item.maxScore || 0), 0),
+  };
+}
+
+function getScoreItemText(item) {
+  return String(`${item?.key || ""} ${item?.title || ""}`).toLowerCase();
+}
+
+function formatSectionScore(item) {
+  if (!item) return "N/A";
+
+  const score = formatScoreNumber(item.score);
+  const maxScore = Number(item.maxScore || 0);
+
+  if (maxScore > 0) return `${score}/${formatScoreNumber(maxScore)}`;
+
+  return String(score || "N/A");
+}
+
+function formatScoreNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) return String(value ?? "N/A");
+
+  return Number.isInteger(number) ? String(number) : String(Number(number.toFixed(2)));
+}
+
+function ImprovementChecklist({ items, fallback }) {
+  const safeItems = Array.isArray(items) ? items.slice(0, 4) : [];
+
+  return (
+    <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
+      <div className="mb-3 flex items-start gap-3">
+        <span className="material-symbols-outlined mt-0.5 text-yellow-300">
+          checklist
+        </span>
+
+        <div>
+          <p className="font-extrabold text-yellow-100">
+            Recommended Improvements
+          </p>
+          <p className="mt-1 text-xs leading-5 text-gray-300">
+            Focus on these items before resubmitting.
+          </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
-        <div className="flex items-start gap-3">
-          <span className="material-symbols-outlined mt-0.5 text-yellow-300">
-            checklist
-          </span>
+      {safeItems.length > 0 ? (
+        <div className="space-y-2">
+          {safeItems.map((item, index) => (
+            <div
+              key={`${item.title}-${index}`}
+              className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5"
+            >
+              <div className="flex gap-3">
+                <div className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-yellow-300/20 text-[11px] font-black text-yellow-100">
+                  {index + 1}
+                </div>
 
-          <div>
-            <p className="font-extrabold text-yellow-100">What to improve</p>
-            <p className="mt-2 text-sm leading-6 text-gray-200">
-              {feedback.fixAction}
-            </p>
-          </div>
+                <div>
+                  <p className="text-sm font-bold text-white">
+                    {item.title || `Improvement ${index + 1}`}
+                  </p>
+                  <p className="mt-1 text-xs leading-5 text-gray-300">
+                    {item.description || fallback}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : (
+        <p className="text-sm leading-6 text-gray-200">
+          {fallback ||
+            "Add clearer project evidence, public work links, and verifiable profile information."}
+        </p>
+      )}
     </div>
   );
 }
@@ -1231,12 +1435,11 @@ function TextInput({
   error,
   type = "text",
   inputMode,
+  scoreBadge,
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
+      <FieldLabel label={label} required={required} scoreBadge={scoreBadge} />
 
       <input
         type={type}
@@ -1274,12 +1477,11 @@ function SelectInput({
   required,
   error,
   options,
+  scoreBadge,
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
+      <FieldLabel label={label} required={required} scoreBadge={scoreBadge} />
 
       <select
         value={value ?? ""}
@@ -1312,12 +1514,11 @@ function TextArea({
   placeholder,
   required,
   error,
+  scoreBadge,
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-bold text-gray-300">
-        {label} {required && <span className="text-red-300">*</span>}
-      </label>
+      <FieldLabel label={label} required={required} scoreBadge={scoreBadge} />
 
       <textarea
         value={value ?? ""}
@@ -1331,6 +1532,39 @@ function TextArea({
 
       <FieldError message={error} />
     </div>
+  );
+}
+
+function FieldLabel({ label, required, scoreBadge }) {
+  return (
+    <div className="mb-2 flex items-center justify-between gap-3">
+      <label className="block text-sm font-bold text-gray-300">
+        {label} {required && <span className="text-red-300">*</span>}
+      </label>
+
+      {scoreBadge ? <ScoreBadge badge={scoreBadge} /> : null}
+    </div>
+  );
+}
+
+function ScoreBadge({ badge }) {
+  const toneClass =
+    badge.tone === "success"
+      ? "border-green-400/30 bg-green-400/10 text-green-200"
+      : badge.tone === "danger"
+        ? "border-red-400/30 bg-red-400/10 text-red-200"
+        : "border-yellow-400/30 bg-yellow-400/10 text-yellow-100";
+
+  const icon = badge.tone === "success" ? "✓" : "⚠";
+
+  return (
+    <span
+      title={badge.label || "Review score"}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${toneClass}`}
+    >
+      <span aria-hidden="true">{icon}</span>
+      <span>{badge.text}</span>
+    </span>
   );
 }
 
@@ -1679,54 +1913,130 @@ function buildImprovementItems({
   missingInformation,
   scoreBreakdownItems,
 }) {
-  const items = [];
-
-  const weakScoreItems = (scoreBreakdownItems || []).filter(
-    (item) => item.status === "weak"
-  );
-
-  weakScoreItems.forEach((item) => {
-    items.push({
-      title: item.title,
-      description:
-        item.note ||
-        `This section scored ${item.maxScore > 0 ? `${item.score}/${item.maxScore}` : item.score
-        }. Add stronger evidence or more complete information to improve it.`,
-    });
-  });
+  const groupedItems = [];
+  const weakScoreItems = (scoreBreakdownItems || []).filter(isLowScoreItem);
 
   const missingText = String(missingInformation || "").trim();
 
   if (missingText) {
-    items.unshift({
-      title: "Missing information",
-      description: missingText,
+    addUniqueImprovement(groupedItems, {
+      key: "missing",
+      title: "Add missing information",
+      description: shortenText(missingText, 120),
     });
   }
+
+  weakScoreItems.forEach((item) => {
+    addUniqueImprovement(groupedItems, getImprovementSuggestion(item));
+  });
 
   const textItems = extractUsefulFeedbackLines(reviewNote);
 
   textItems.forEach((item) => {
-    if (
-      !items.some(
-        (existing) =>
-          existing.title.toLowerCase() === item.title.toLowerCase() ||
-          existing.description.toLowerCase() === item.description.toLowerCase()
-      )
-    ) {
-      items.push(item);
-    }
+    addUniqueImprovement(groupedItems, {
+      key: toCamelKey(item.title),
+      title: item.title,
+      description: shortenText(item.description, 120),
+    });
   });
 
-  if (items.length > 0) return items.slice(0, 8);
+  if (groupedItems.length > 0) return groupedItems.slice(0, 4);
 
   return [
     {
-      title: "Evidence is not strong enough",
+      key: "evidence",
+      title: "Add stronger evidence",
       description:
-        "Add clearer proof of your experience, such as real projects, GitHub repositories, portfolio case studies, certificates, or detailed work examples.",
+        "Add real project links, GitHub repositories, portfolio case studies, or certificates.",
     },
   ];
+}
+
+function isLowScoreItem(item) {
+  if (!item) return false;
+
+  const maxScore = Number(item.maxScore || 0);
+  const score = Number(item.score || 0);
+
+  if (!Number.isFinite(maxScore) || maxScore <= 0) return false;
+  if (!Number.isFinite(score)) return false;
+
+  return score / maxScore < 0.7;
+}
+
+function getImprovementSuggestion(item) {
+  const title = String(item?.title || "").toLowerCase();
+
+  if (title.includes("portfolio") || title.includes("github")) {
+    return {
+      key: "public-work",
+      title: "Improve portfolio and GitHub proof",
+      description:
+        "Show real AI projects with clear repositories, demos, screenshots, or case studies.",
+    };
+  }
+
+  if (title.includes("proof") || title.includes("evidence")) {
+    return {
+      key: "project-proof",
+      title: "Add stronger project proof",
+      description:
+        "Include direct AI project links, demos, screenshots, or real work examples.",
+    };
+  }
+
+  if (title.includes("linkedin")) {
+    return {
+      key: "professional-profile",
+      title: "Add professional profile evidence",
+      description:
+        "Add LinkedIn if available, or strengthen your public work and profile links.",
+    };
+  }
+
+  if (title.includes("certificate") || title.includes("trust")) {
+    return {
+      key: "verification",
+      title: "Make your information easier to verify",
+      description:
+        "Use consistent names across your profile, certificates, and public links.",
+    };
+  }
+
+  if (title.includes("bio") || title.includes("skill") || title.includes("profile")) {
+    return {
+      key: "profile-detail",
+      title: "Clarify your expert profile",
+      description:
+        "Describe your AI skills, experience, and project results more clearly.",
+    };
+  }
+
+  return {
+    key: toCamelKey(item?.title || "improvement"),
+    title: `Improve ${item?.title || "this section"}`,
+    description: "Add clearer and more verifiable information for this section.",
+  };
+}
+
+function addUniqueImprovement(items, nextItem) {
+  if (!nextItem) return;
+
+  const key = String(nextItem.key || nextItem.title || "").toLowerCase();
+
+  if (items.some((item) => String(item.key || item.title || "").toLowerCase() === key)) {
+    return;
+  }
+
+  items.push(nextItem);
+}
+
+function shortenText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+
+  if (text.length <= maxLength) return text;
+
+  return `${text.slice(0, maxLength - 3).trim()}...`;
 }
 
 function extractUsefulFeedbackLines(reviewNote) {
@@ -2244,6 +2554,145 @@ function getMissingInformation(data) {
   if (Array.isArray(value)) return value.join(", ");
 
   return String(value || "");
+}
+
+function saveFieldScoreFeedback(feedback) {
+  try {
+    localStorage.setItem(
+      FIELD_SCORE_FEEDBACK_KEY,
+      JSON.stringify({
+        scoreBreakdownItems: feedback?.scoreBreakdownItems || [],
+      })
+    );
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function clearFieldScoreFeedback() {
+  try {
+    localStorage.removeItem(FIELD_SCORE_FEEDBACK_KEY);
+  } catch {
+    // Ignore localStorage errors
+  }
+}
+
+function buildFieldScoreMap(feedback) {
+  const items = Array.isArray(feedback?.scoreBreakdownItems)
+    ? feedback.scoreBreakdownItems
+    : Array.isArray(feedback)
+      ? feedback
+      : [];
+
+  const map = {};
+
+  const profile = findScoreItem(items, ["profile", "completeness"]);
+  const aiSkill = findScoreItem(items, ["ai", "skill"]) || findScoreItem(items, ["skill"]);
+  const experience = findScoreItem(items, ["experience"]) || findScoreItem(items, ["credibility"]);
+  const portfolio = findScoreItem(items, ["portfolio"]);
+  const github = findScoreItem(items, ["github"]) || findScoreItem(items, ["git", "hub"]);
+  const linkedIn = findScoreItem(items, ["linkedin"]) || findScoreItem(items, ["linked", "in"]);
+  const certificate = findScoreItem(items, ["certificate"]);
+
+  const profileBadge = buildScoreBadgeFromItem(profile);
+  const aiSkillBadge = buildScoreBadgeFromItem(aiSkill);
+  const experienceBadge = buildScoreBadgeFromItem(experience);
+  const portfolioBadge = buildScoreBadgeFromItem(portfolio);
+  const githubBadge = buildScoreBadgeFromItem(github);
+  const linkedInBadge = buildScoreBadgeFromItem(linkedIn);
+  const certificateBadge = buildScoreBadgeFromItem(certificate);
+
+  if (profileBadge) {
+    map.fullName = profileBadge;
+    map.professionalTitle = profileBadge;
+    map.bio = profileBadge;
+  }
+
+  if (aiSkillBadge) {
+    map.skills = aiSkillBadge;
+  }
+
+  if (experienceBadge) {
+    map.yearsOfExperience = experienceBadge;
+  }
+
+  if (portfolioBadge) {
+    map.portfolioUrl = portfolioBadge;
+  }
+
+  if (githubBadge) {
+    map.gitHubUrl = githubBadge;
+  }
+
+  if (linkedInBadge) {
+    map.linkedInUrl = linkedInBadge;
+  }
+
+  if (certificateBadge) {
+    map.certificates = certificateBadge;
+  }
+
+  return map;
+}
+
+function buildScoreBadgeFromItem(item) {
+  if (!item) return null;
+
+  const maxScore = Number(item.maxScore || 0);
+  const score = Number(item.score || 0);
+
+  if (!Number.isFinite(score)) return null;
+
+  const text = maxScore > 0
+    ? `${formatScoreNumber(score)}/${formatScoreNumber(maxScore)}`
+    : formatScoreNumber(score);
+
+  const percent = maxScore > 0 ? score / maxScore : null;
+
+  return {
+    text,
+    label: item.title || "Review score",
+    tone:
+      percent === null
+        ? "warning"
+        : percent >= 0.8
+          ? "success"
+          : percent >= 0.5
+            ? "warning"
+            : "danger",
+  };
+}
+
+function getFieldScoreBadge(fieldScores, fieldName) {
+  if (!fieldScores || !fieldName) return null;
+
+  return fieldScores[fieldName] || null;
+}
+
+async function getRegisteredFullNameFromAuth() {
+  const storedName = extractRegisteredFullName(authService.getCurrentUser?.());
+
+  try {
+    const freshUser = await authService.refreshCurrentUser();
+    return extractRegisteredFullName(freshUser) || storedName;
+  } catch {
+    return storedName;
+  }
+}
+
+function extractRegisteredFullName(user) {
+  if (!user) return "";
+
+  return String(
+    pickFirst(
+      user.fullName,
+      user.FullName,
+      user.name,
+      user.Name,
+      user.displayName,
+      user.DisplayName
+    ) || ""
+  ).trim();
 }
 
 function updateLocalUserStatus(status) {
