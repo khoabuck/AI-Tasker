@@ -1098,6 +1098,46 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(5,2)")
                 .IsRequired();
 
+            entity.Property(x => x.ProfileCompletenessScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.AiSkillRelevanceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ExperienceCredibilityScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.PortfolioEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.GitHubEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.LinkedInEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CertificateEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.TrustRiskScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
             entity.Property(x => x.Level)
                 .HasMaxLength(20)
                 .IsRequired();

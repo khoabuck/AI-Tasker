@@ -37,6 +37,24 @@ public class ExpertProfile
 
     public decimal ProfileScore { get; set; }
 
+    // Detailed scoring fields.
+    // These fields allow frontend/admin to show exactly where the expert lost points.
+    public decimal ProfileCompletenessScore { get; set; }
+
+    public decimal AiSkillRelevanceScore { get; set; }
+
+    public decimal ExperienceCredibilityScore { get; set; }
+
+    public decimal PortfolioEvidenceScore { get; set; }
+
+    public decimal GitHubEvidenceScore { get; set; }
+
+    public decimal LinkedInEvidenceScore { get; set; }
+
+    public decimal CertificateEvidenceScore { get; set; }
+
+    public decimal TrustRiskScore { get; set; }
+
     // FRESHER / JUNIOR / MID_LEVEL / SENIOR / LEAD
     public string Level { get; set; } = "FRESHER";
 
