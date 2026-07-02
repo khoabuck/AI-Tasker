@@ -10,14 +10,8 @@ public class AiUsageLogResponse
 
     public string? UserFullName { get; set; }
 
+    // BE1-style usage log fields
     public string Feature { get; set; } = string.Empty;
-
-    // Compatibility alias for older Admin AI usage endpoint naming.
-    public string ModuleName
-    {
-        get => Feature;
-        set => Feature = value ?? string.Empty;
-    }
 
     public string? EntityType { get; set; }
 
@@ -27,31 +21,13 @@ public class AiUsageLogResponse
 
     public string Model { get; set; } = string.Empty;
 
-    // Compatibility alias for older cost-tracking naming.
-    public string ModelName
-    {
-        get => Model;
-        set => Model = value ?? string.Empty;
-    }
-
     public int PromptTokens { get; set; }
-
-    public int InputTokens
-    {
-        get => PromptTokens;
-        set => PromptTokens = value;
-    }
 
     public int CompletionTokens { get; set; }
 
-    public int OutputTokens
-    {
-        get => CompletionTokens;
-        set => CompletionTokens = value;
-    }
-
     public int TotalTokens { get; set; }
 
+    // Cost calculation fields, computed by AIUsageCostService from token usage + pricing policy.
     public decimal InputPricePerMillionTokensUsd { get; set; }
 
     public decimal OutputPricePerMillionTokensUsd { get; set; }
