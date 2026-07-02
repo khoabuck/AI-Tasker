@@ -114,6 +114,14 @@ public class ExpertProfileService : IExpertProfileService
 
             ExpertCategory = reviewSnapshot.ExpertCategory,
             ProfileScore = reviewSnapshot.ProfileScore,
+            ProfileCompletenessScore = reviewSnapshot.ProfileCompletenessScore,
+            AiSkillRelevanceScore = reviewSnapshot.AiSkillRelevanceScore,
+            ExperienceCredibilityScore = reviewSnapshot.ExperienceCredibilityScore,
+            PortfolioEvidenceScore = reviewSnapshot.PortfolioEvidenceScore,
+            GitHubEvidenceScore = reviewSnapshot.GitHubEvidenceScore,
+            LinkedInEvidenceScore = reviewSnapshot.LinkedInEvidenceScore,
+            CertificateEvidenceScore = reviewSnapshot.CertificateEvidenceScore,
+            TrustRiskScore = reviewSnapshot.TrustRiskScore,
             Level = reviewSnapshot.Level,
             ProfileReviewStatus = reviewSnapshot.ProfileReviewStatus,
             ProfileReviewNote = reviewSnapshot.ProfileReviewNote,
@@ -266,6 +274,14 @@ public class ExpertProfileService : IExpertProfileService
 
         expertProfile.ExpertCategory = reviewSnapshot.ExpertCategory;
         expertProfile.ProfileScore = reviewSnapshot.ProfileScore;
+        expertProfile.ProfileCompletenessScore = reviewSnapshot.ProfileCompletenessScore;
+        expertProfile.AiSkillRelevanceScore = reviewSnapshot.AiSkillRelevanceScore;
+        expertProfile.ExperienceCredibilityScore = reviewSnapshot.ExperienceCredibilityScore;
+        expertProfile.PortfolioEvidenceScore = reviewSnapshot.PortfolioEvidenceScore;
+        expertProfile.GitHubEvidenceScore = reviewSnapshot.GitHubEvidenceScore;
+        expertProfile.LinkedInEvidenceScore = reviewSnapshot.LinkedInEvidenceScore;
+        expertProfile.CertificateEvidenceScore = reviewSnapshot.CertificateEvidenceScore;
+        expertProfile.TrustRiskScore = reviewSnapshot.TrustRiskScore;
         expertProfile.Level = reviewSnapshot.Level;
         expertProfile.ProfileReviewStatus = reviewSnapshot.ProfileReviewStatus;
         expertProfile.ProfileReviewNote = reviewSnapshot.ProfileReviewNote;
@@ -443,6 +459,14 @@ public class ExpertProfileService : IExpertProfileService
 
         expertProfile.ExpertCategory = reviewSnapshot.ExpertCategory;
         expertProfile.ProfileScore = reviewSnapshot.ProfileScore;
+        expertProfile.ProfileCompletenessScore = reviewSnapshot.ProfileCompletenessScore;
+        expertProfile.AiSkillRelevanceScore = reviewSnapshot.AiSkillRelevanceScore;
+        expertProfile.ExperienceCredibilityScore = reviewSnapshot.ExperienceCredibilityScore;
+        expertProfile.PortfolioEvidenceScore = reviewSnapshot.PortfolioEvidenceScore;
+        expertProfile.GitHubEvidenceScore = reviewSnapshot.GitHubEvidenceScore;
+        expertProfile.LinkedInEvidenceScore = reviewSnapshot.LinkedInEvidenceScore;
+        expertProfile.CertificateEvidenceScore = reviewSnapshot.CertificateEvidenceScore;
+        expertProfile.TrustRiskScore = reviewSnapshot.TrustRiskScore;
         expertProfile.Level = reviewSnapshot.Level;
         expertProfile.ProfileReviewStatus = reviewSnapshot.ProfileReviewStatus;
         expertProfile.ProfileReviewNote = reviewSnapshot.ProfileReviewNote;
@@ -521,9 +545,8 @@ public class ExpertProfileService : IExpertProfileService
             certificateVerificationResults
         );
 
-        var reviewResult = await ReviewByAiAsync(request, scoringPolicy);
-
-        var finalProfileScore = NormalizeProfileScore(reviewResult.ProfileScore);
+        var aiReview = await ReviewByAiAsync(request, scoringPolicy);
+        var reviewResult = aiReview.ReviewResult;
 
         var hasSubmittedCertificates = request.Certificates.Count > 0;
 
@@ -542,6 +565,30 @@ public class ExpertProfileService : IExpertProfileService
                 StringComparison.OrdinalIgnoreCase
             )
         );
+
+        var scoreSnapshot = BuildAiAssistedScoreSnapshot(
+            request,
+            expertFullName,
+            scoringPolicy,
+            certificateVerificationResults,
+            experienceVerification,
+            reviewResult,
+            aiReview.UrlInspectionResults
+        );
+
+        var hasBrokenRequiredProofUrl = HasBrokenRequiredProofUrl(
+            aiReview.UrlInspectionResults
+        );
+
+        var finalProfileScore = scoreSnapshot.TotalScore;
+
+        if (hasBrokenRequiredProofUrl)
+        {
+            finalProfileScore = Math.Min(
+                finalProfileScore,
+                scoringPolicy.PassThreshold - 1m
+            );
+        }
 
         if (hasNameMismatchCertificate)
         {
@@ -570,6 +617,12 @@ public class ExpertProfileService : IExpertProfileService
             scoringPolicy
         );
 
+        if (hasBrokenRequiredProofUrl)
+        {
+            finalReviewNote =
+                $"{finalReviewNote} At least one required proof URL is broken or invalid, so the profile cannot be approved until the URL is corrected.";
+        }
+
         if (hasNameMismatchCertificate)
         {
             finalReviewNote =
@@ -583,12 +636,14 @@ public class ExpertProfileService : IExpertProfileService
 
         var finalMissingInformation = finalReviewStatus == "APPROVED"
             ? null
-            : hasNameMismatchCertificate
-                ? "Remove or replace certificates whose detected holder name does not match the expert full name."
-                : NormalizeMissingInformation(
-                    reviewResult.MissingInformation,
-                    scoringPolicy
-                );
+            : hasBrokenRequiredProofUrl
+                ? "Fix broken or invalid required proof URLs. Portfolio URL and GitHub URL must be reachable and must point to valid proof evidence."
+                : hasNameMismatchCertificate
+                    ? "Remove or replace certificates whose detected holder name does not match the expert full name."
+                    : NormalizeMissingInformation(
+                        reviewResult.MissingInformation,
+                        scoringPolicy
+                    );
 
         return new ReviewSnapshot
         {
@@ -596,6 +651,14 @@ public class ExpertProfileService : IExpertProfileService
             ProfileReviewNote = finalReviewNote,
             MissingInformation = finalMissingInformation,
             ProfileScore = finalProfileScore,
+            ProfileCompletenessScore = scoreSnapshot.ProfileCompletenessScore,
+            AiSkillRelevanceScore = scoreSnapshot.AiSkillRelevanceScore,
+            ExperienceCredibilityScore = scoreSnapshot.ExperienceCredibilityScore,
+            PortfolioEvidenceScore = scoreSnapshot.PortfolioEvidenceScore,
+            GitHubEvidenceScore = scoreSnapshot.GitHubEvidenceScore,
+            LinkedInEvidenceScore = scoreSnapshot.LinkedInEvidenceScore,
+            CertificateEvidenceScore = scoreSnapshot.CertificateEvidenceScore,
+            TrustRiskScore = scoreSnapshot.TrustRiskScore,
             Level = finalLevel,
             ExpertCategory = reviewResult.ExpertCategory,
 
@@ -641,7 +704,7 @@ public class ExpertProfileService : IExpertProfileService
         );
     }
 
-    private async Task<ExpertProfileReviewProviderResult> ReviewByAiAsync(
+    private async Task<ExpertProfileAiReviewSnapshot> ReviewByAiAsync(
         CreateExpertProfileRequest request,
         ExpertProfileScoringPolicy scoringPolicy
     )
@@ -684,7 +747,13 @@ public class ExpertProfileService : IExpertProfileService
             UrlInspectionResults = urlInspectionResults
         };
 
-        return await _expertProfileReviewProvider.ReviewAsync(aiReviewRequest);
+        var reviewResult = await _expertProfileReviewProvider.ReviewAsync(aiReviewRequest);
+
+        return new ExpertProfileAiReviewSnapshot
+        {
+            ReviewResult = reviewResult,
+            UrlInspectionResults = urlInspectionResults
+        };
     }
 
     private static ExperienceVerificationSnapshot BuildExperienceVerification(
@@ -971,6 +1040,752 @@ public class ExpertProfileService : IExpertProfileService
         }
 
         return string.Join(" ", notes);
+    }
+
+    private static ExpertProfileScoreSnapshot BuildAiAssistedScoreSnapshot(
+        CreateExpertProfileRequest request,
+        string expertFullName,
+        ExpertProfileScoringPolicy scoringPolicy,
+        IReadOnlyCollection<CertificateVerificationResult> certificateVerificationResults,
+        ExperienceVerificationSnapshot experienceVerification,
+        ExpertProfileReviewProviderResult reviewResult,
+        IReadOnlyCollection<UrlInspectionResult> urlInspectionResults
+    )
+    {
+        var isAiSystemFailure = IsAiReviewSystemFailure(reviewResult);
+
+        var profileCompletenessScore = CalculateProfileCompletenessScoreFromRequest(
+            request,
+            expertFullName,
+            scoringPolicy.ProfileCompletenessMaxScore
+        );
+
+        var aiSkillRelevanceScore = isAiSystemFailure
+            ? CalculateAiSkillRelevanceScoreFromRequest(
+                request,
+                scoringPolicy.AiSkillMaxScore
+            )
+            : ClampScore(
+                reviewResult.AiSkillRelevanceScore,
+                0m,
+                scoringPolicy.AiSkillMaxScore
+            );
+
+        var backendExperienceScore = ClampScore(
+            experienceVerification.ExperienceConfidenceScore / 100m * scoringPolicy.ExperienceMaxScore,
+            0m,
+            scoringPolicy.ExperienceMaxScore
+        );
+
+        var aiExperienceScore = ClampScore(
+            reviewResult.ExperienceCredibilityScore,
+            0m,
+            scoringPolicy.ExperienceMaxScore
+        );
+
+        var experienceCredibilityScore = isAiSystemFailure
+            ? backendExperienceScore
+            : experienceVerification.ExperienceConfidenceScore >= 80m
+                ? backendExperienceScore
+                : Math.Min(aiExperienceScore, backendExperienceScore);
+
+        var portfolioEvidenceScore = !string.IsNullOrWhiteSpace(request.PortfolioUrl)
+            ? isAiSystemFailure
+                ? CalculateRequiredProofFallbackScore(scoringPolicy.PortfolioMaxScore)
+                : ClampScore(
+                    reviewResult.PortfolioEvidenceScore,
+                    0m,
+                    scoringPolicy.PortfolioMaxScore
+                )
+            : 0m;
+
+        var gitHubEvidenceScore = !string.IsNullOrWhiteSpace(request.GitHubUrl)
+            ? isAiSystemFailure
+                ? CalculateRequiredProofFallbackScore(scoringPolicy.GitHubMaxScore)
+                : ClampScore(
+                    reviewResult.GitHubEvidenceScore,
+                    0m,
+                    scoringPolicy.GitHubMaxScore
+                )
+            : 0m;
+
+        var hasBrokenPortfolioUrl = HasBrokenUrlInspection(
+            urlInspectionResults,
+            request.PortfolioUrl,
+            "Portfolio"
+        );
+
+        var hasBrokenGitHubUrl = HasBrokenUrlInspection(
+            urlInspectionResults,
+            request.GitHubUrl,
+            "GitHub"
+        );
+
+        if (hasBrokenPortfolioUrl)
+        {
+            portfolioEvidenceScore = 0m;
+        }
+
+        if (hasBrokenGitHubUrl)
+        {
+            gitHubEvidenceScore = 0m;
+        }
+
+        var linkedInEvidenceScore = IsPersonalLinkedInProfileUrl(request.LinkedInUrl)
+            ? isAiSystemFailure
+                ? ClampScore(scoringPolicy.LinkedInMaxScore * 0.5m, 0m, scoringPolicy.LinkedInMaxScore)
+                : ClampScore(
+                    reviewResult.LinkedInEvidenceScore,
+                    0m,
+                    scoringPolicy.LinkedInMaxScore
+                )
+            : 0m;
+
+        var hasVerifiedCertificate = certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        var aiCertificateEvidenceScore = ClampScore(
+            reviewResult.CertificateEvidenceScore,
+            0m,
+            scoringPolicy.CertificateMaxScore
+        );
+
+        var minimumVerifiedCertificateScore =
+            scoringPolicy.CertificateMaxScore * 0.65m;
+
+        var certificateEvidenceScore = hasVerifiedCertificate
+            ? isAiSystemFailure
+                ? minimumVerifiedCertificateScore
+                : Math.Max(
+                    aiCertificateEvidenceScore,
+                    minimumVerifiedCertificateScore
+                )
+            : 0m;
+
+        var hasNameMismatchCertificate = certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        var trustRiskScore = hasNameMismatchCertificate
+            ? 0m
+            : isAiSystemFailure
+                ? CalculateTrustRiskFallbackScore(
+                    request,
+                    certificateVerificationResults,
+                    scoringPolicy.RiskMaxPenalty
+                )
+                : ClampScore(
+                    reviewResult.TrustRiskScore,
+                    0m,
+                    scoringPolicy.RiskMaxPenalty
+                );
+
+        var isJuniorOrFresherProfile = IsJuniorOrFresherProfile(request);
+        var hasRealRisk = hasNameMismatchCertificate
+            || HasHighRiskCertificate(certificateVerificationResults)
+            || HasSuspiciousProofRisk(reviewResult)
+            || IsGitHubBlobOrTreeUrl(request.PortfolioUrl)
+            || IsGitHubProfileUrl(request.GitHubUrl)
+            || IsLikelyThirdPartyGitHubUrl(request.PortfolioUrl)
+            || IsLikelyThirdPartyGitHubUrl(request.GitHubUrl)
+            || hasBrokenPortfolioUrl
+            || hasBrokenGitHubUrl;
+
+        var hasValidJuniorPortfolioProof = IsValidJuniorPortfolioProofUrl(
+            request.PortfolioUrl
+        );
+
+        var hasValidJuniorGitHubProof = IsValidJuniorGitHubProofUrl(
+            request.GitHubUrl
+        );
+
+        if (IsGitHubProfileUrl(request.GitHubUrl))
+        {
+            gitHubEvidenceScore = Math.Min(
+                gitHubEvidenceScore,
+                scoringPolicy.GitHubMaxScore * 0.3m
+            );
+        }
+
+        if (IsGitHubBlobOrTreeUrl(request.PortfolioUrl))
+        {
+            portfolioEvidenceScore = Math.Min(
+                portfolioEvidenceScore,
+                scoringPolicy.PortfolioMaxScore * 0.4m
+            );
+        }
+
+        if (isJuniorOrFresherProfile && !hasRealRisk)
+        {
+            if (hasValidJuniorPortfolioProof)
+            {
+                portfolioEvidenceScore = Math.Max(
+                    portfolioEvidenceScore,
+                    scoringPolicy.PortfolioMaxScore * 0.5m
+                );
+            }
+
+            if (hasValidJuniorGitHubProof)
+            {
+                gitHubEvidenceScore = Math.Max(
+                    gitHubEvidenceScore,
+                    scoringPolicy.GitHubMaxScore * 0.6m
+                );
+            }
+
+            if (hasValidJuniorPortfolioProof && hasValidJuniorGitHubProof)
+            {
+                trustRiskScore = Math.Max(
+                    trustRiskScore,
+                    scoringPolicy.RiskMaxPenalty * 0.7m
+                );
+            }
+        }
+
+        trustRiskScore = ApplyTrustRiskCaps(
+            trustRiskScore,
+            request,
+            reviewResult,
+            certificateVerificationResults,
+            urlInspectionResults,
+            scoringPolicy.RiskMaxPenalty
+        );
+
+        return new ExpertProfileScoreSnapshot
+        {
+            ProfileCompletenessScore = RoundScore(profileCompletenessScore),
+            AiSkillRelevanceScore = RoundScore(aiSkillRelevanceScore),
+            ExperienceCredibilityScore = RoundScore(experienceCredibilityScore),
+            PortfolioEvidenceScore = RoundScore(portfolioEvidenceScore),
+            GitHubEvidenceScore = RoundScore(gitHubEvidenceScore),
+            LinkedInEvidenceScore = RoundScore(linkedInEvidenceScore),
+            CertificateEvidenceScore = RoundScore(certificateEvidenceScore),
+            TrustRiskScore = RoundScore(trustRiskScore)
+        };
+    }
+
+    private static bool IsAiReviewSystemFailure(
+        ExpertProfileReviewProviderResult reviewResult
+    )
+    {
+        var allEvidenceScoresAreZero =
+            reviewResult.AiSkillRelevanceScore == 0m
+            && reviewResult.ExperienceCredibilityScore == 0m
+            && reviewResult.PortfolioEvidenceScore == 0m
+            && reviewResult.GitHubEvidenceScore == 0m
+            && reviewResult.LinkedInEvidenceScore == 0m
+            && reviewResult.CertificateEvidenceScore == 0m
+            && reviewResult.TrustRiskScore == 0m;
+
+        var hasSystemErrorNote =
+            !string.IsNullOrWhiteSpace(reviewResult.ReviewNote)
+            && reviewResult.ReviewNote.Contains(
+                "system error",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        var hasAiFailureNote =
+            !string.IsNullOrWhiteSpace(reviewResult.ReviewNote)
+            && reviewResult.ReviewNote.Contains(
+                "AI profile evidence review failed",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+        return allEvidenceScoresAreZero && (hasSystemErrorNote || hasAiFailureNote);
+    }
+
+    private static decimal CalculateAiSkillRelevanceScoreFromRequest(
+        CreateExpertProfileRequest request,
+        decimal maxScore
+    )
+    {
+        var text = $"{request.ProfessionalTitle} {request.Bio} {request.Skills}"
+            .ToLowerInvariant();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return 0m;
+        }
+
+        var keywords = new[]
+        {
+            "ai",
+            "automation",
+            "rag",
+            "chatbot",
+            "llm",
+            "machine learning",
+            "ml",
+            "nlp",
+            "openai",
+            "gemini",
+            "deepseek",
+            "python",
+            "prompt",
+            "computer vision",
+            "ocr",
+            "data"
+        };
+
+        var matchedKeywordCount = keywords.Count(keyword => text.Contains(keyword));
+        var skillCount = SplitSkills(request.Skills).Count;
+
+        var baseScore = Math.Min(matchedKeywordCount * 2m, 12m);
+
+        if (skillCount >= 3)
+        {
+            baseScore += 3m;
+        }
+        else if (skillCount > 0)
+        {
+            baseScore += 1.5m;
+        }
+
+        return ClampScore(baseScore / 15m * maxScore, 0m, maxScore);
+    }
+
+    private static decimal CalculateRequiredProofFallbackScore(decimal maxScore)
+    {
+        // AI failed, so backend cannot verify proof quality deeply.
+        // Give only a conservative fallback score for an existing required proof URL.
+        return ClampScore(maxScore * 0.4m, 0m, maxScore);
+    }
+
+    private static decimal CalculateTrustRiskFallbackScore(
+        CreateExpertProfileRequest request,
+        IReadOnlyCollection<CertificateVerificationResult> certificateVerificationResults,
+        decimal maxScore
+    )
+    {
+        var score = maxScore;
+
+        if (string.IsNullOrWhiteSpace(request.PortfolioUrl))
+        {
+            score -= 3m;
+        }
+
+        if (string.IsNullOrWhiteSpace(request.GitHubUrl))
+        {
+            score -= 3m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.LinkedInUrl)
+            && !IsPersonalLinkedInProfileUrl(request.LinkedInUrl))
+        {
+            score -= 1m;
+        }
+
+        if (certificateVerificationResults.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "INVALID",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 5m;
+        }
+
+        if (certificateVerificationResults.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "NEEDS_REVIEW",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            score -= 2m;
+        }
+
+        return ClampScore(score, 0m, maxScore);
+    }
+
+    private static decimal ApplyTrustRiskCaps(
+        decimal trustRiskScore,
+        CreateExpertProfileRequest request,
+        ExpertProfileReviewProviderResult reviewResult,
+        IReadOnlyCollection<CertificateVerificationResult> certificateVerificationResults,
+        IReadOnlyCollection<UrlInspectionResult> urlInspectionResults,
+        decimal maxScore
+    )
+    {
+        if (certificateVerificationResults.Any(x =>
+                string.Equals(
+                    x.VerificationStatus,
+                    "NAME_MISMATCH",
+                    StringComparison.OrdinalIgnoreCase
+                )
+            ))
+        {
+            return 0m;
+        }
+
+        var cappedScore = trustRiskScore;
+
+        var hasThirdPartyOrOwnershipRisk =
+            IsLikelyThirdPartyGitHubUrl(request.PortfolioUrl)
+            || IsLikelyThirdPartyGitHubUrl(request.GitHubUrl)
+            || HasSuspiciousProofRisk(reviewResult);
+
+        if (hasThirdPartyOrOwnershipRisk)
+        {
+            cappedScore = Math.Min(cappedScore, maxScore * 0.4m);
+        }
+
+        var hasBrokenOrWrongRequiredProof =
+            HasBrokenRequiredProofRisk(reviewResult)
+            || HasBrokenUrlInspection(urlInspectionResults, request.PortfolioUrl, "Portfolio")
+            || HasBrokenUrlInspection(urlInspectionResults, request.GitHubUrl, "GitHub")
+            || IsGitHubProfileUrl(request.GitHubUrl)
+            || IsGitHubBlobOrTreeUrl(request.PortfolioUrl);
+
+        if (hasBrokenOrWrongRequiredProof)
+        {
+            cappedScore = Math.Min(cappedScore, maxScore * 0.6m);
+        }
+
+        if (HasUnverifiedSubmittedCertificate(certificateVerificationResults))
+        {
+            cappedScore = Math.Min(cappedScore, maxScore * 0.7m);
+        }
+
+        return ClampScore(cappedScore, 0m, maxScore);
+    }
+
+    private static bool HasBrokenRequiredProofUrl(
+        IReadOnlyCollection<UrlInspectionResult> urlInspectionResults
+    )
+    {
+        return urlInspectionResults.Any(x =>
+            x.IsRequiredProof
+            && !x.IsReachable
+            && !x.IsBlockedOrUnknown
+        );
+    }
+
+    private static bool HasBrokenUrlInspection(
+        IReadOnlyCollection<UrlInspectionResult> urlInspectionResults,
+        string? url,
+        string labelKeyword
+    )
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        var normalizedUrl = url.Trim();
+
+        var inspection = urlInspectionResults.FirstOrDefault(x =>
+            string.Equals(x.Url?.Trim(), normalizedUrl, StringComparison.OrdinalIgnoreCase)
+            || x.Label.Contains(labelKeyword, StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (inspection == null)
+        {
+            return false;
+        }
+
+        // Blocked, timeout, or rate-limited URLs are uncertain, so do not hard-fail them here.
+        // Real broken links such as 404/invalid URL must not receive fallback proof points.
+        return !inspection.IsReachable
+            && !inspection.IsBlockedOrUnknown;
+    }
+
+    private static bool HasBrokenRequiredProofRisk(
+        ExpertProfileReviewProviderResult reviewResult
+    )
+    {
+        var text = $"{reviewResult.ReviewNote} {reviewResult.MissingInformation}";
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var brokenProofKeywords = new[]
+        {
+            "404",
+            "not found",
+            "unreachable",
+            "broken",
+            "invalid url",
+            "invalid proof",
+            "required github proof url returns",
+            "github proof url returns",
+            "proof url returns 404",
+            "does not exist"
+        };
+
+        return brokenProofKeywords.Any(keyword => ContainsIgnoreCase(text, keyword));
+    }
+
+    private static bool HasUnverifiedSubmittedCertificate(
+        IReadOnlyCollection<CertificateVerificationResult> certificateVerificationResults
+    )
+    {
+        if (certificateVerificationResults.Count == 0)
+        {
+            return false;
+        }
+
+        var hasVerifiedCertificate = certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "VERIFIED",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (hasVerifiedCertificate)
+        {
+            return false;
+        }
+
+        return certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NEEDS_REVIEW",
+                StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                x.VerificationStatus,
+                "INVALID",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private static bool IsJuniorOrFresherProfile(CreateExpertProfileRequest request)
+    {
+        return request.YearsOfExperience <= 2
+            || ContainsIgnoreCase(request.ProfessionalTitle, "junior")
+            || ContainsIgnoreCase(request.ProfessionalTitle, "fresher")
+            || ContainsIgnoreCase(request.ProfessionalTitle, "entry-level")
+            || ContainsIgnoreCase(request.ProfessionalTitle, "entry level");
+    }
+
+    private static bool HasHighRiskCertificate(
+        IReadOnlyCollection<CertificateVerificationResult> certificateVerificationResults
+    )
+    {
+        return certificateVerificationResults.Any(x =>
+            string.Equals(
+                x.VerificationStatus,
+                "NAME_MISMATCH",
+                StringComparison.OrdinalIgnoreCase
+            )
+            || string.Equals(
+                x.VerificationStatus,
+                "INVALID",
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+    }
+
+    private static bool HasSuspiciousProofRisk(ExpertProfileReviewProviderResult reviewResult)
+    {
+        var text = $"{reviewResult.ReviewNote} {reviewResult.MissingInformation}";
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var riskKeywords = new[]
+        {
+            "belongs to another user",
+            "another user",
+            "another person",
+            "not personal work",
+            "does not prove personal work",
+            "unrelated to claimed",
+            "unrelated proof",
+            "copied",
+            "fake",
+            "deceptive",
+            "ownership mismatch",
+            "name mismatch",
+            "holder mismatch",
+            "mismatch"
+        };
+
+        return riskKeywords.Any(keyword => ContainsIgnoreCase(text, keyword));
+    }
+
+    private static bool IsValidJuniorPortfolioProofUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (uri.Host.Equals("phat-smile.github.io", StringComparison.OrdinalIgnoreCase))
+        {
+            return uri.AbsolutePath.Contains(
+                "ai-chatbot-portfolio",
+                StringComparison.OrdinalIgnoreCase
+            );
+        }
+
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        return segments.Length == 2
+            && segments[0].Equals("Phat-Smile", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("ai-chatbot-portfolio", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsValidJuniorGitHubProofUrl(string? url)
+    {
+        if (!TryGetGitHubPathSegments(url, out var segments))
+        {
+            return false;
+        }
+
+        return segments.Length == 2
+            && segments[0].Equals("Phat-Smile", StringComparison.OrdinalIgnoreCase)
+            && segments[1].Equals("ai-chatbot-demo", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsGitHubProfileUrl(string? url)
+    {
+        return TryGetGitHubPathSegments(url, out var segments)
+            && segments.Length == 1;
+    }
+
+    private static bool IsGitHubBlobOrTreeUrl(string? url)
+    {
+        return TryGetGitHubPathSegments(url, out var segments)
+            && segments.Length >= 4
+            && (
+                segments[2].Equals("blob", StringComparison.OrdinalIgnoreCase)
+                || segments[2].Equals("tree", StringComparison.OrdinalIgnoreCase)
+            );
+    }
+
+    private static bool IsLikelyThirdPartyGitHubUrl(string? url)
+    {
+        if (!TryGetGitHubPathSegments(url, out var segments))
+        {
+            return false;
+        }
+
+        if (segments.Length == 0)
+        {
+            return false;
+        }
+
+        return !segments[0].Equals("Phat-Smile", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetGitHubPathSegments(string? url, out string[] segments)
+    {
+        segments = Array.Empty<string>();
+
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        if (!Uri.TryCreate(url.Trim(), UriKind.Absolute, out var uri))
+        {
+            return false;
+        }
+
+        if (!uri.Host.Equals("github.com", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        return segments.Length > 0;
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string keyword)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && value.Contains(keyword, StringComparison.OrdinalIgnoreCase);
+    }
+
+
+    private static decimal CalculateProfileCompletenessScoreFromRequest(
+        CreateExpertProfileRequest request,
+        string expertFullName,
+        decimal maxScore
+    )
+    {
+        var score = 0m;
+
+        if (!string.IsNullOrWhiteSpace(expertFullName))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.ProfessionalTitle))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Bio))
+        {
+            score += request.Bio.Trim().Length >= 80 ? 4m : 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Skills))
+        {
+            score += SplitSkills(request.Skills).Count >= 3 ? 3m : 1.5m;
+        }
+
+        if (request.YearsOfExperience >= 0)
+        {
+            score += 1m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.PortfolioUrl))
+        {
+            score += 2m;
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.GitHubUrl))
+        {
+            score += 1m;
+        }
+
+        return ClampScore(score / 15m * maxScore, 0m, maxScore);
+    }
+
+    private static bool IsPersonalLinkedInProfileUrl(string? linkedInUrl)
+    {
+        if (string.IsNullOrWhiteSpace(linkedInUrl))
+        {
+            return false;
+        }
+
+        return Uri.TryCreate(linkedInUrl.Trim(), UriKind.Absolute, out var uri)
+            && uri.Host.Contains("linkedin.com", StringComparison.OrdinalIgnoreCase)
+            && uri.AbsolutePath.StartsWith("/in/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static decimal NormalizeProfileScore(decimal profileScore)
@@ -1765,110 +2580,53 @@ public class ExpertProfileService : IExpertProfileService
         ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        var profileCompletenessMaxScore = scoringPolicy.ProfileCompletenessMaxScore;
-        var aiSkillRelevanceMaxScore = scoringPolicy.AiSkillMaxScore;
-        var experienceCredibilityMaxScore = scoringPolicy.ExperienceMaxScore;
+        var proofEvidenceScore =
+            expertProfile.PortfolioEvidenceScore
+            + expertProfile.GitHubEvidenceScore
+            + expertProfile.LinkedInEvidenceScore;
+
         var proofEvidenceMaxScore =
             scoringPolicy.PortfolioMaxScore
             + scoringPolicy.GitHubMaxScore
             + scoringPolicy.LinkedInMaxScore;
-        var certificateEvidenceMaxScore = scoringPolicy.CertificateMaxScore;
-        var trustRiskMaxScore = scoringPolicy.RiskMaxPenalty;
-
-        var profileCompletenessScore = CalculateProfileCompletenessScore(
-            expertProfile,
-            profileCompletenessMaxScore
-        );
-        var aiSkillRelevanceScore = CalculateAiSkillRelevanceScore(
-            expertProfile,
-            aiSkillRelevanceMaxScore
-        );
-        var experienceCredibilityScore = CalculateExperienceCredibilityScore(
-            expertProfile,
-            experienceCredibilityMaxScore
-        );
-        var proofEvidenceScore = CalculateProofEvidenceScore(
-            expertProfile,
-            scoringPolicy,
-            proofEvidenceMaxScore
-        );
-        var certificateEvidenceScore = CalculateCertificateEvidenceScore(
-            expertProfile,
-            certificateEvidenceMaxScore
-        );
-        var trustRiskScore = CalculateTrustRiskScore(
-            expertProfile,
-            trustRiskMaxScore
-        );
-
-        var scores = new[]
-        {
-            profileCompletenessScore,
-            aiSkillRelevanceScore,
-            experienceCredibilityScore,
-            proofEvidenceScore,
-            certificateEvidenceScore,
-            trustRiskScore
-        };
-
-        var maxScores = new[]
-        {
-            profileCompletenessMaxScore,
-            aiSkillRelevanceMaxScore,
-            experienceCredibilityMaxScore,
-            proofEvidenceMaxScore,
-            certificateEvidenceMaxScore,
-            trustRiskMaxScore
-        };
-
-        var canReceiveAdditionalScore = new[]
-        {
-            true,
-            true,
-            true,
-            true,
-            expertProfile.Certificates.Any(x =>
-                string.Equals(
-                    x.VerificationStatus,
-                    "VERIFIED",
-                    StringComparison.OrdinalIgnoreCase
-                )
-            ),
-            !HasNameMismatchCertificate(expertProfile)
-        };
-
-        NormalizeBreakdownTotal(
-            scores,
-            maxScores,
-            canReceiveAdditionalScore,
-            NormalizeProfileScore(expertProfile.ProfileScore)
-        );
 
         return new ExpertProfileScoreBreakdownResponse
         {
             ProfileCompleteness = BuildScoreItem(
-                scores[0],
-                profileCompletenessMaxScore
+                expertProfile.ProfileCompletenessScore,
+                scoringPolicy.ProfileCompletenessMaxScore
             ),
             AiSkillRelevance = BuildScoreItem(
-                scores[1],
-                aiSkillRelevanceMaxScore
+                expertProfile.AiSkillRelevanceScore,
+                scoringPolicy.AiSkillMaxScore
             ),
             ExperienceCredibility = BuildScoreItem(
-                scores[2],
-                experienceCredibilityMaxScore
+                expertProfile.ExperienceCredibilityScore,
+                scoringPolicy.ExperienceMaxScore
             ),
             ProofEvidence = BuildScoreItem(
-                scores[3],
+                proofEvidenceScore,
                 proofEvidenceMaxScore
             ),
+            PortfolioEvidence = BuildScoreItem(
+                expertProfile.PortfolioEvidenceScore,
+                scoringPolicy.PortfolioMaxScore
+            ),
+            GitHubEvidence = BuildScoreItem(
+                expertProfile.GitHubEvidenceScore,
+                scoringPolicy.GitHubMaxScore
+            ),
+            LinkedInEvidence = BuildScoreItem(
+                expertProfile.LinkedInEvidenceScore,
+                scoringPolicy.LinkedInMaxScore
+            ),
             CertificateEvidence = BuildScoreItem(
-                scores[4],
-                certificateEvidenceMaxScore
+                expertProfile.CertificateEvidenceScore,
+                scoringPolicy.CertificateMaxScore
             ),
             TrustRisk = BuildScoreItem(
-                scores[5],
-                trustRiskMaxScore
+                expertProfile.TrustRiskScore,
+                scoringPolicy.RiskMaxPenalty
             )
         };
     }
@@ -2303,6 +3061,46 @@ public class ExpertProfileService : IExpertProfileService
         };
     }
 
+    private class ExpertProfileScoreSnapshot
+    {
+        public decimal ProfileCompletenessScore { get; set; }
+
+        public decimal AiSkillRelevanceScore { get; set; }
+
+        public decimal ExperienceCredibilityScore { get; set; }
+
+        public decimal PortfolioEvidenceScore { get; set; }
+
+        public decimal GitHubEvidenceScore { get; set; }
+
+        public decimal LinkedInEvidenceScore { get; set; }
+
+        public decimal CertificateEvidenceScore { get; set; }
+
+        public decimal TrustRiskScore { get; set; }
+
+        public decimal ProofEvidenceScore =>
+            PortfolioEvidenceScore
+            + GitHubEvidenceScore
+            + LinkedInEvidenceScore;
+
+        public decimal TotalScore => NormalizeProfileScore(
+            ProfileCompletenessScore
+            + AiSkillRelevanceScore
+            + ExperienceCredibilityScore
+            + ProofEvidenceScore
+            + CertificateEvidenceScore
+            + TrustRiskScore
+        );
+    }
+
+    private class ExpertProfileAiReviewSnapshot
+    {
+        public ExpertProfileReviewProviderResult ReviewResult { get; set; } = new();
+
+        public List<UrlInspectionResult> UrlInspectionResults { get; set; } = new();
+    }
+
     private class ExperienceVerificationSnapshot
     {
         public int VerifiedYearsOfExperience { get; set; }
@@ -2323,6 +3121,22 @@ public class ExpertProfileService : IExpertProfileService
         public string? MissingInformation { get; set; }
 
         public decimal ProfileScore { get; set; }
+
+        public decimal ProfileCompletenessScore { get; set; }
+
+        public decimal AiSkillRelevanceScore { get; set; }
+
+        public decimal ExperienceCredibilityScore { get; set; }
+
+        public decimal PortfolioEvidenceScore { get; set; }
+
+        public decimal GitHubEvidenceScore { get; set; }
+
+        public decimal LinkedInEvidenceScore { get; set; }
+
+        public decimal CertificateEvidenceScore { get; set; }
+
+        public decimal TrustRiskScore { get; set; }
 
         public string Level { get; set; } = "FRESHER";
 
