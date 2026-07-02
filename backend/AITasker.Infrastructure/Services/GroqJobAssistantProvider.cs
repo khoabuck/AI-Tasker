@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
@@ -76,7 +76,7 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
           1. If BudgetMin or BudgetMax is already provided in the form values, return those values for the matching fields and set suggestedBudgetSource = "FORM".
           2. If the raw requirement explicitly states a budget, extract it and set suggestedBudgetSource = "RAW_REQUIREMENT".
           3. If the raw requirement does not clearly mention budget and form values are empty, estimate a practical VND budget range based on scope, complexity, required skills, likely deliverables, and deadline. Set suggestedBudgetSource = "AI_ESTIMATE".
-        - If the raw requirement says a range like "5 million to 10 million VND", "5-10 triệu", or "khoảng 5 tới 10 triệu", return suggestedBudgetMin = 5000000 and suggestedBudgetMax = 10000000.
+        - If the raw requirement says a range like "5 million to 10 million VND", "5-10 triá»‡u", or "khoáº£ng 5 tá»›i 10 triá»‡u", return suggestedBudgetMin = 5000000 and suggestedBudgetMax = 10000000.
         - If the raw requirement says a single maximum budget like "budget 10 million VND", return suggestedBudgetMax = 10000000 and suggestedBudgetMin = null.
         - If the raw requirement says a minimum budget, return suggestedBudgetMin.
         - When estimating budget, do not return null unless the requirement is too vague to price at all.
@@ -232,3 +232,4 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         return decimal.Round(value.Value, 0, MidpointRounding.AwayFromZero);
     }
 }
+

@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
@@ -74,7 +74,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // Required for cloud proxies like Render/Cloudflare.
     // Without this, ASP.NET Core may ignore forwarded headers
     // and generate http:// redirect_uri instead of https://.
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
@@ -277,8 +277,6 @@ builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>(
 builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
 builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
-builder.Services.AddScoped<IAIUsageCostService, AIUsageCostService>();
-
 // =========================
 // Admin AI Management / Groq Runtime Config
 // =========================
