@@ -30,8 +30,8 @@ export default function ContractDetailPage() {
   );
 
   const canRespond = useMemo(() => {
-    return canAcceptContract(status) || canDeclineContract(status);
-  }, [status]);
+    return canAcceptContract(status, contract) || canDeclineContract(status, contract);
+  }, [status, contract]);
 
   const contractTitle = getField(
     contract,
@@ -201,7 +201,6 @@ export default function ContractDetailPage() {
 
   const handleAcceptContract = async () => {
     const ok = window.confirm("Are you sure you want to accept this contract?");
-
     if (!ok) return;
 
     try {
@@ -215,9 +214,7 @@ export default function ContractDetailPage() {
 
       const projectId = getProjectId(updatedContract) || realProjectId;
 
-      setAcceptSuccessModal({
-        projectId,
-      });
+      setAcceptSuccessModal({ projectId });
 
       setTimeout(() => {
         if (projectId) {
@@ -242,7 +239,6 @@ export default function ContractDetailPage() {
     }
 
     const ok = window.confirm("Are you sure you want to decline this contract?");
-
     if (!ok) return;
 
     try {
@@ -325,7 +321,7 @@ export default function ContractDetailPage() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <StatusBadge status={status} />
+                  <StatusBadge status={status} contract={contract} />
 
                   {realContractId && (
                     <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-300">
@@ -391,7 +387,7 @@ export default function ContractDetailPage() {
 
                 {canRespond && (
                   <div className="mt-4 flex flex-col gap-2">
-                    {canAcceptContract(status) && (
+                    {canAcceptContract(status, contract) && (
                       <button
                         type="button"
                         disabled={actionLoading === "accept"}
@@ -404,7 +400,7 @@ export default function ContractDetailPage() {
                       </button>
                     )}
 
-                    {canDeclineContract(status) && (
+                    {canDeclineContract(status, contract) && (
                       <button
                         type="button"
                         disabled={actionLoading === "decline"}
@@ -431,7 +427,7 @@ export default function ContractDetailPage() {
             />
           )}
 
-          {showDeclineBox && canDeclineContract(status) && (
+          {showDeclineBox && canDeclineContract(status, contract) && (
             <section className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-red-200">
                 Reason for declining
@@ -529,22 +525,18 @@ export default function ContractDetailPage() {
               <PaymentSummary contract={contract} />
 
               <Card title="Contract Info" icon="info">
-                <Info label="Status" value={getContractStatusLabel(status)} />
+                <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
                 <Info label="Expert" value={expertName} />
 
                 <Info
                   label="Client Confirmed"
-                  value={formatBoolean(
-                    getField(contract, ["clientConfirmed", "ClientConfirmed"], false)
-                  )}
+                  value={formatBoolean(isClientConfirmed(contract))}
                 />
 
                 <Info
                   label="Expert Confirmed"
-                  value={formatBoolean(
-                    getField(contract, ["expertConfirmed", "ExpertConfirmed"], false)
-                  )}
+                  value={formatBoolean(isExpertConfirmed(contract))}
                 />
 
                 {realProposalId && <Info label="Proposal" value={`#${realProposalId}`} />}
@@ -770,14 +762,14 @@ function TextValue({ value }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, contract }) {
   const normalized = normalizeStatus(status);
 
   const style = isContractAccepted(normalized)
     ? "border-green-400/30 bg-green-400/10 text-green-300"
     : isContractDeclined(normalized)
     ? "border-red-400/30 bg-red-400/10 text-red-300"
-    : isDraftContract(normalized)
+    : isDraftContract(normalized) && !isWaitingForExpert(normalized, contract)
     ? "border-white/10 bg-white/[0.04] text-gray-300"
     : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
@@ -785,7 +777,7 @@ function StatusBadge({ status }) {
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {getContractStatusLabel(normalized)}
+      {getContractStatusLabel(normalized, contract)}
     </span>
   );
 }
@@ -842,6 +834,19 @@ function getNumberField(entity, paths = [], fallback = 0) {
   const number = Number(value);
 
   return Number.isNaN(number) ? fallback : number;
+}
+
+function getBooleanField(entity, paths = [], fallback = false) {
+  const value = getField(entity, paths, fallback);
+
+  if (typeof value === "boolean") return value;
+
+  const text = String(value || "").trim().toLowerCase();
+
+  if (["true", "1", "yes"].includes(text)) return true;
+  if (["false", "0", "no"].includes(text)) return false;
+
+  return fallback;
 }
 
 function getContractId(contract) {
@@ -1087,17 +1092,11 @@ function normalizeMilestone(item, index = 0) {
       "",
 
     amount: Number(item?.amount ?? item?.Amount ?? 0),
-
     durationDays: Number(duration),
-
     deadlineOffsetDays: Number(duration),
-
     revisionLimit: item?.revisionLimit ?? item?.RevisionLimit ?? null,
-
     orderIndex: Number(item?.orderIndex ?? item?.OrderIndex ?? index + 1),
-
     status: String(item?.status || item?.Status || "PENDING").toUpperCase(),
-
     raw: item,
   };
 }
@@ -1108,6 +1107,32 @@ function normalizeStatus(status) {
 
 function isDraftContract(status) {
   return ["DRAFT", "CREATED", "PREVIEW"].includes(normalizeStatus(status));
+}
+
+function isClientConfirmed(contract) {
+  return getBooleanField(
+    contract,
+    [
+      "clientConfirmed",
+      "ClientConfirmed",
+      "isClientConfirmed",
+      "IsClientConfirmed",
+    ],
+    false
+  );
+}
+
+function isExpertConfirmed(contract) {
+  return getBooleanField(
+    contract,
+    [
+      "expertConfirmed",
+      "ExpertConfirmed",
+      "isExpertConfirmed",
+      "IsExpertConfirmed",
+    ],
+    false
+  );
 }
 
 function isContractSentToExpert(status) {
@@ -1126,6 +1151,18 @@ function isContractSentToExpert(status) {
   ].includes(normalizeStatus(status));
 }
 
+function isWaitingForExpert(status, contract) {
+  const normalized = normalizeStatus(status);
+
+  if (isContractSentToExpert(normalized)) return true;
+
+  return (
+    isDraftContract(normalized) &&
+    isClientConfirmed(contract) &&
+    !isExpertConfirmed(contract)
+  );
+}
+
 function isContractAccepted(status) {
   return ["ACCEPTED", "CONFIRMED", "ACTIVE", "SIGNED"].includes(
     normalizeStatus(status)
@@ -1138,16 +1175,18 @@ function isContractDeclined(status) {
   );
 }
 
-function canAcceptContract(status) {
-  return isContractSentToExpert(status);
+function canAcceptContract(status, contract) {
+  return isWaitingForExpert(status, contract);
 }
 
-function canDeclineContract(status) {
-  return isContractSentToExpert(status);
+function canDeclineContract(status, contract) {
+  return isWaitingForExpert(status, contract);
 }
 
-function getContractStatusLabel(status) {
+function getContractStatusLabel(status, contract) {
   const value = normalizeStatus(status);
+
+  if (isWaitingForExpert(value, contract)) return "Waiting Expert";
 
   const map = {
     DRAFT: "Draft",

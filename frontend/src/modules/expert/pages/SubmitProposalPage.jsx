@@ -298,6 +298,51 @@ export default function SubmitProposalPage() {
     }
   };
 
+
+  const ensureCanSubmitProposal = async () => {
+    try {
+      setAccessLoading(true);
+
+      const latestCredits =
+        await proposalCreditPackageService.getMyProposalCredits();
+
+      setProposalCredits(latestCredits);
+
+      const latestPaidCredits = getAvailableProposalCredits(latestCredits);
+      const latestFreeSubmit = getFreeSubmitRemaining(latestCredits);
+      const latestCanSubmit = getCanSubmitNewProposal(latestCredits);
+
+      const canSubmit =
+        latestCanSubmit !== false &&
+        latestPaidCredits + latestFreeSubmit > 0;
+
+      if (!canSubmit) {
+        setShowUpgradeModal(true);
+        setError(
+          "You need proposal credits before submitting. Please buy a credit package to continue."
+        );
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("CHECK PROPOSAL CREDIT ERROR:", err?.response?.data || err);
+
+      setShowUpgradeModal(true);
+      setError(
+        getFriendlyError(
+          err,
+          "Cannot verify your proposal credits right now. Please try again."
+        )
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return false;
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
   const handleSubmitDraft = async () => {
     if (!currentDraftId) {
       await handleSaveDraft();
@@ -319,6 +364,10 @@ export default function SubmitProposalPage() {
 
     if (shouldRequireUpgrade) {
       setShowUpgradeModal(true);
+      return;
+    }
+
+    if (!(await ensureCanSubmitProposal())) {
       return;
     }
 
@@ -438,6 +487,10 @@ export default function SubmitProposalPage() {
 
     if (shouldRequireUpgrade) {
       setShowUpgradeModal(true);
+      return;
+    }
+
+    if (!(await ensureCanSubmitProposal())) {
       return;
     }
 

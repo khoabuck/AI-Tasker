@@ -334,13 +334,25 @@ export const normalizeProject = (project) => {
     ),
 
     progressPercent: toNumber(
-      getValue(project.progressPercent, project.ProgressPercent, project.progress, project.Progress, 0),
+      getValue(
+        project.progressPercent,
+        project.ProgressPercent,
+        project.progress,
+        project.Progress,
+        0
+      ),
       0
     ),
 
     startDate: getValue(project.startDate, project.StartDate, ""),
     endDate: getValue(project.endDate, project.EndDate, ""),
-    deadline: getValue(project.deadline, project.Deadline, project.endDate, project.EndDate, ""),
+    deadline: getValue(
+      project.deadline,
+      project.Deadline,
+      project.endDate,
+      project.EndDate,
+      ""
+    ),
 
     status,
 
@@ -364,30 +376,10 @@ export const normalizeProject = (project) => {
 };
 
 const projectService = {
-  async createProjectFromContract(contractId) {
-    if (isInvalidId(contractId)) {
-      throw new Error("Invalid contract id.");
-    }
-
-    const response = await projectApi.createProjectFromContract(contractId);
-    return normalizeProject(unwrapData(response));
-  },
-
-  async initializeProject(contractId) {
-    if (isInvalidId(contractId)) {
-      throw new Error("Invalid contract id.");
-    }
-
-    const response = await projectApi.initializeProject(contractId);
-    return normalizeProject(unwrapData(response));
-  },
-
   async getMyProjects() {
     const response = await projectApi.getMyProjects();
 
-    return unwrapListData(response)
-      .map(normalizeProject)
-      .filter(Boolean);
+    return unwrapListData(response).map(normalizeProject).filter(Boolean);
   },
 
   async getProjectById(projectId) {
