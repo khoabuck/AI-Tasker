@@ -55,7 +55,7 @@ public class ExpertProfile
 
     public DateTime? VerifiedAt { get; set; }
 
-    public bool FreeProposalSubmitUsed { get; set; }
+    public int FreeProposalSubmitUsedCount { get; set; }
 
     public int ProposalSubmitCredits { get; set; }
 

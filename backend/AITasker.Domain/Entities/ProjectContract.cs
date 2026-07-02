@@ -43,6 +43,10 @@ namespace AITasker.Domain.Entities
 
         public string Status { get; set; } = "DRAFT";
 
+        public DateTime? SignDeadlineAt { get; set; }
+
+        public DateTime? SignExpiredAt { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public DateTime? ConfirmedAt { get; set; }

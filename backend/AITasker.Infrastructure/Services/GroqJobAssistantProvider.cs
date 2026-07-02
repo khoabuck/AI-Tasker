@@ -10,8 +10,7 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
 {
     private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqJobAssistantProvider(
-        IGroqChatCompletionService groqChatCompletionService)
+    public GroqJobAssistantProvider(IGroqChatCompletionService groqChatCompletionService)
     {
         _groqChatCompletionService = groqChatCompletionService;
     }

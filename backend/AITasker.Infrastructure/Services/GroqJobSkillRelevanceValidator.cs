@@ -10,8 +10,7 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
 {
     private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqJobSkillRelevanceValidator(
-        IGroqChatCompletionService groqChatCompletionService)
+    public GroqJobSkillRelevanceValidator(IGroqChatCompletionService groqChatCompletionService)
     {
         _groqChatCompletionService = groqChatCompletionService;
     }
@@ -46,6 +45,7 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
             request.SelectedSkillNames,
             request.AvailableSkillNames
         );
+
     }
 
     private static string BuildPrompt(JobSkillRelevanceValidationRequest request)

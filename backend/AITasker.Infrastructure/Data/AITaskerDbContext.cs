@@ -20,6 +20,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
 
+    public DbSet<AIModelPricingPolicy> AIModelPricingPolicies => Set<AIModelPricingPolicy>();
+
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
 
     public DbSet<AiAllowedModel> AiAllowedModels => Set<AiAllowedModel>();
@@ -267,6 +269,60 @@ public class AITaskerDbContext : DbContext
         });
 
         // =========================
+        // AIModelPricingPolicies
+        // =========================
+        modelBuilder.Entity<AIModelPricingPolicy>(entity =>
+        {
+            entity.ToTable("AIModelPricingPolicies", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_AIModelPricingPolicies_Prices",
+                    "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0");
+
+                table.HasCheckConstraint(
+                    "CK_AIModelPricingPolicies_ExchangeRate",
+                    "[ExchangeRateToVnd] > 0");
+            });
+
+            entity.HasKey(x => x.AIModelPricingPolicyId);
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.ModelName)
+                .HasMaxLength(100)
+                .IsRequired();
+
+            entity.Property(x => x.InputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.OutputPricePerMillionTokensUsd)
+                .HasColumnType("decimal(18,8)");
+
+            entity.Property(x => x.ExchangeRateToVnd)
+                .HasColumnType("decimal(18,4)");
+
+            entity.Property(x => x.UpdateReason)
+                .HasMaxLength(500);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
+
+            entity.HasIndex(x => new
+            {
+                x.Provider,
+                x.ModelName,
+                x.IsActive,
+                x.EffectiveFrom
+            });
+        });
+
+        // =========================
         // MarketplaceWorkflowPolicies
         // =========================
         modelBuilder.Entity<MarketplaceWorkflowPolicy>(entity =>
@@ -274,6 +330,9 @@ public class AITaskerDbContext : DbContext
             entity.ToTable("MarketplaceWorkflowPolicies");
 
             entity.HasKey(x => x.MarketplaceWorkflowPolicyId);
+
+            entity.Property(x => x.ContractSignWindowHours)
+                .IsRequired();
 
             entity.Property(x => x.MinimumWithdrawalAmount)
                 .HasColumnType("decimal(18,2)");
@@ -290,30 +349,14 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.UpdateReason)
                 .HasMaxLength(500);
 
-            entity.HasIndex(x => x.IsActive);
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasData(new MarketplaceWorkflowPolicy
-            {
-                MarketplaceWorkflowPolicyId = 1,
-                ProposalDraftLimit = 10,
-                ProposalMilestoneLimit = 10,
-                FreeProposalSubmitCount = 1,
-                ResubmitNoteMaxLength = 1000,
-                EscrowLockWindowHours = 24,
-                ExpertMaxActiveProjects = 3,
-                DeliverableReviewWindowHours = 24,
-                DeliverableAutoApproveGraceHours = 6,
-                MinimumWithdrawalAmount = 1000m,
-                WithdrawalFeeRate = 0.10m,
-                MinimumDepositAmount = 1000m,
-                MaximumDepositAmount = 500000000m,
-                DisputeLostWarningThreshold = 3,
-                IsActive = true,
-                UpdatedByAdminId = null,
-                UpdateReason = "Default marketplace workflow policy.",
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+            entity.HasIndex(x => x.UpdatedByAdminId);
+
+            entity.HasIndex(x => x.IsActive);
         });
 
 
@@ -851,47 +894,7 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.DisplayOrder);
 
-            entity.HasData(
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 1,
-                    PackageName = "Basic",
-                    Description = "3 job posting credits and 10 AI generation credits.",
-                    JobPostCredits = 3,
-                    AiGenerationCredits = 10,
-                    Price = 49000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 1,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 2,
-                    PackageName = "Pro",
-                    Description = "10 job posting credits and 35 AI generation credits.",
-                    JobPostCredits = 10,
-                    AiGenerationCredits = 35,
-                    Price = 149000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 2,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new JobCreditPackage
-                {
-                    JobCreditPackageId = 3,
-                    PackageName = "Business",
-                    Description = "30 job posting credits and 120 AI generation credits.",
-                    JobPostCredits = 30,
-                    AiGenerationCredits = 120,
-                    Price = 399000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 3,
-                    CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, DateTimeKind.Utc)
-                }
-            );
+
         });
 
         // =========================
@@ -1120,8 +1123,8 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.VerifiedAt);
 
-            entity.Property(x => x.FreeProposalSubmitUsed)
-                .HasDefaultValue(false)
+            entity.Property(x => x.FreeProposalSubmitUsedCount)
+                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(x => x.ProposalSubmitCredits)
@@ -1429,6 +1432,7 @@ public class AITaskerDbContext : DbContext
                 t.HasCheckConstraint(
                     "CK_Proposals_Price_Timeline",
                     "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
+
             });
 
             entity.HasKey(e => e.ProposalId);
@@ -1671,44 +1675,7 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.DisplayOrder);
 
-            entity.HasData(
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 1,
-                    PackageName = "Basic",
-                    Description = "5 proposal submit credits.",
-                    ProposalSubmitCredits = 5,
-                    Price = 49000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 1,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 2,
-                    PackageName = "Pro",
-                    Description = "20 proposal submit credits.",
-                    ProposalSubmitCredits = 20,
-                    Price = 149000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 2,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                },
-                new ProposalCreditPackage
-                {
-                    ProposalCreditPackageId = 3,
-                    PackageName = "Business",
-                    Description = "60 proposal submit credits.",
-                    ProposalSubmitCredits = 60,
-                    Price = 399000m,
-                    Currency = "VND",
-                    IsActive = true,
-                    DisplayOrder = 3,
-                    CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, DateTimeKind.Utc)
-                }
-            );
+
         });
 
         // =========================
@@ -2019,6 +1986,10 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.SignDeadlineAt);
+
+            entity.Property(e => e.SignExpiredAt);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -2027,6 +1998,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.ExpertId);
 
             entity.HasIndex(e => e.Status);
+
+            entity.HasIndex(e => e.SignDeadlineAt);
 
             entity.HasOne(e => e.Proposal)
                 .WithOne(p => p.ProjectContract)
@@ -2262,7 +2235,7 @@ public class AITaskerDbContext : DbContext
             {
                 t.HasCheckConstraint(
                 "CK_Wallets_Balances",
-                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
+                "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [PendingEarningsBalance] >= 0 AND [TotalEarning] >= 0");
             });
 
             entity.HasKey(w => w.WalletId);
@@ -2271,6 +2244,9 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(w => w.LockedBalance)
+                .HasColumnType("decimal(18,2)");
+
+            entity.Property(w => w.PendingEarningsBalance)
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(w => w.TotalEarning)
@@ -2410,18 +2386,7 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.AdjustmentBalance)
                 .HasColumnType("decimal(18,2)");
 
-            entity.HasData(new PlatformWallet
-            {
-                PlatformWalletId = 1,
-                WalletCode = "MAIN",
-                AvailableBalance = 0,
-                TotalRevenue = 0,
-                PlatformFeeRevenue = 0,
-                WithdrawalFeeRevenue = 0,
-                AdjustmentBalance = 0,
-                CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)
-            });
+
         });
 
         // =========================
@@ -2472,6 +2437,26 @@ public class AITaskerDbContext : DbContext
                 .WithMany(x => x.Transactions)
                 .HasForeignKey(x => x.PlatformWalletId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.Contract)
+                .WithMany()
+                .HasForeignKey(x => x.ContractId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(x => x.WithdrawalRequest)
+                .WithMany()
+                .HasForeignKey(x => x.WithdrawalRequestId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         // =========================
@@ -2951,6 +2936,11 @@ public class AITaskerDbContext : DbContext
                 .HasDefaultValue(string.Empty)
                 .IsRequired();
 
+            entity.Property(w => w.BankBin)
+                .HasMaxLength(20)
+                .HasDefaultValue(string.Empty)
+                .IsRequired();
+
             entity.Property(w => w.BankName)
                 .HasMaxLength(100)
                 .IsRequired();
@@ -2974,6 +2964,37 @@ public class AITaskerDbContext : DbContext
             entity.Property(w => w.PayoutReferenceCode)
                 .HasMaxLength(100);
 
+            entity.Property(w => w.PayoutProvider)
+                .HasMaxLength(30);
+
+            entity.Property(w => w.PayOsPayoutId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsTransactionId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsReferenceId)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsIdempotencyKey)
+                .HasMaxLength(100);
+
+            entity.Property(w => w.PayOsApprovalState)
+                .HasMaxLength(50);
+
+            entity.Property(w => w.PayOsTransactionState)
+                .HasMaxLength(50);
+
+            entity.Property(w => w.PayOsRawResponse)
+                .HasColumnType("nvarchar(max)");
+
+            entity.Property(w => w.FailureReason)
+                .HasMaxLength(1000);
+
+            entity.Property(w => w.PayoutRequestedAt);
+
+            entity.Property(w => w.PayoutConfirmedAt);
+
             entity.Property(w => w.Status)
                 .HasMaxLength(30)
                 .IsRequired();
@@ -2991,6 +3012,20 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(w => w.BankVerificationStatus);
 
             entity.HasIndex(w => w.PayoutReferenceCode);
+
+            entity.HasIndex(w => w.PayoutProvider);
+
+            entity.HasIndex(w => w.PayOsPayoutId)
+                .IsUnique()
+                .HasFilter("[PayOsPayoutId] IS NOT NULL");
+
+            entity.HasIndex(w => w.PayOsReferenceId)
+                .IsUnique()
+                .HasFilter("[PayOsReferenceId] IS NOT NULL");
+
+            entity.HasIndex(w => w.PayOsIdempotencyKey)
+                .IsUnique()
+                .HasFilter("[PayOsIdempotencyKey] IS NOT NULL");
 
             entity.HasIndex(w => w.CreatedAt);
 

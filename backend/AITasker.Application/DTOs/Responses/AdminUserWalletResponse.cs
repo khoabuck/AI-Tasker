@@ -18,6 +18,10 @@ namespace AITasker.Application.DTOs.Responses
 
         public decimal LockedBalance { get; set; }
 
+        public decimal PendingEarningsBalance { get; set; }
+
+        public decimal WithdrawableBalance { get; set; }
+
         public decimal TotalEarning { get; set; }
 
         public DateTime UpdatedAt { get; set; }

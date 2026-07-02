@@ -83,39 +83,6 @@ public class AdminProposalCreditsController : ControllerBase
         }
     }
 
-    [HttpPatch("experts/{expertProfileId:int}/free-submit")]
-    public async Task<IActionResult> SetFreeProposalSubmit(
-        int expertProfileId,
-        [FromBody] AdminSetFreeProposalSubmitRequest request)
-    {
-        try
-        {
-            var adminId = GetCurrentAdminId();
-
-            var result = await _adminProposalCreditService.SetFreeProposalSubmitAsync(
-                adminId,
-                expertProfileId,
-                request);
-
-            if (result == null)
-            {
-                return NotFound(new
-                {
-                    message = "Expert profile not found."
-                });
-            }
-
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new
-            {
-                message = ex.Message
-            });
-        }
-    }
-
     private int GetCurrentAdminId()
     {
         var userIdValue =

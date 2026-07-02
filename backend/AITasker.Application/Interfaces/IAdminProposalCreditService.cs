@@ -17,9 +17,4 @@ public interface IAdminProposalCreditService
         int adminId,
         int expertProfileId,
         AdminAdjustProposalCreditsRequest request);
-
-    Task<AdminProposalCreditResponse?> SetFreeProposalSubmitAsync(
-        int adminId,
-        int expertProfileId,
-        AdminSetFreeProposalSubmitRequest request);
 }

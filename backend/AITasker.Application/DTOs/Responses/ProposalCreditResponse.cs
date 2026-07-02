@@ -2,7 +2,9 @@ namespace AITasker.Application.DTOs.Responses;
 
 public class ProposalCreditResponse
 {
-    public bool FreeSubmitUsed { get; set; }
+    public int FreeSubmitTotal { get; set; }
+
+    public int FreeSubmitUsedCount { get; set; }
 
     public int FreeSubmitRemaining { get; set; }
 

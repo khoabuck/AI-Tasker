@@ -10,6 +10,21 @@ namespace AITasker.Infrastructure.Services;
 
 public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyService
 {
+    private const int DefaultProposalDraftLimit = 10;
+    private const int DefaultProposalMilestoneLimit = 10;
+    private const int DefaultFreeProposalSubmitCount = 5;
+    private const int DefaultResubmitNoteMaxLength = 1000;
+    private const int DefaultContractSignWindowHours = 24;
+    private const int DefaultEscrowLockWindowHours = 24;
+    private const int DefaultExpertMaxActiveProjects = 3;
+    private const int DefaultDeliverableReviewWindowHours = 24;
+    private const int DefaultDeliverableAutoApproveGraceHours = 6;
+    private const decimal DefaultMinimumWithdrawalAmount = 1000m;
+    private const decimal DefaultWithdrawalFeeRate = 0.10m;
+    private const decimal DefaultMinimumDepositAmount = 1000m;
+    private const decimal DefaultMaximumDepositAmount = 500000000m;
+    private const int DefaultDisputeLostWarningThreshold = 3;
+
     private readonly AITaskerDbContext _context;
     private readonly IAdminAuditLogService _adminAuditLogService;
 
@@ -43,6 +58,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.ProposalMilestoneLimit = request.ProposalMilestoneLimit;
         policy.FreeProposalSubmitCount = request.FreeProposalSubmitCount;
         policy.ResubmitNoteMaxLength = request.ResubmitNoteMaxLength;
+        policy.ContractSignWindowHours = request.ContractSignWindowHours;
         policy.EscrowLockWindowHours = request.EscrowLockWindowHours;
         policy.ExpertMaxActiveProjects = request.ExpertMaxActiveProjects;
         policy.DeliverableReviewWindowHours = request.DeliverableReviewWindowHours;
@@ -80,19 +96,53 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
 
         if (policy != null)
         {
+            NormalizeLegacyDefaultPolicy(policy);
             return policy;
         }
 
-        policy = new MarketplaceWorkflowPolicy
-        {
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
-        };
+        policy = CreateDefaultPolicy();
 
         _context.MarketplaceWorkflowPolicies.Add(policy);
 
         return policy;
+    }
+
+    private static void NormalizeLegacyDefaultPolicy(MarketplaceWorkflowPolicy policy)
+    {
+        // Older seed data used 1 free proposal submit while current service/entity defaults use 5.
+        // Only normalize untouched default rows so an admin setting of 1 is never overwritten.
+        if (policy.UpdatedByAdminId == null &&
+            policy.FreeProposalSubmitCount == 1 &&
+            string.Equals(policy.UpdateReason, "Default marketplace workflow policy.", StringComparison.OrdinalIgnoreCase))
+        {
+            policy.FreeProposalSubmitCount = DefaultFreeProposalSubmitCount;
+            policy.UpdatedAt = DateTime.UtcNow;
+        }
+    }
+
+    private static MarketplaceWorkflowPolicy CreateDefaultPolicy()
+    {
+        return new MarketplaceWorkflowPolicy
+        {
+            ProposalDraftLimit = DefaultProposalDraftLimit,
+            ProposalMilestoneLimit = DefaultProposalMilestoneLimit,
+            FreeProposalSubmitCount = DefaultFreeProposalSubmitCount,
+            ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength,
+            ContractSignWindowHours = DefaultContractSignWindowHours,
+            EscrowLockWindowHours = DefaultEscrowLockWindowHours,
+            ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
+            DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
+            DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours,
+            MinimumWithdrawalAmount = DefaultMinimumWithdrawalAmount,
+            WithdrawalFeeRate = DefaultWithdrawalFeeRate,
+            MinimumDepositAmount = DefaultMinimumDepositAmount,
+            MaximumDepositAmount = DefaultMaximumDepositAmount,
+            DisputeLostWarningThreshold = DefaultDisputeLostWarningThreshold,
+            IsActive = true,
+            UpdateReason = "Default marketplace workflow policy.",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
     }
 
     private static void ValidateRequest(UpdateMarketplaceWorkflowPolicyRequest request)
@@ -107,15 +157,19 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Proposal milestone limit must be between 1 and 50.");
         }
 
-        if (request.FreeProposalSubmitCount < 0 || request.FreeProposalSubmitCount > 1)
+        if (request.FreeProposalSubmitCount < 0 || request.FreeProposalSubmitCount > 100)
         {
-            throw new InvalidOperationException(
-                "Free proposal submit count must be 0 or 1 because the current expert profile stores free submit as a boolean flag.");
+            throw new InvalidOperationException("Free proposal submit count must be between 0 and 100.");
         }
 
         if (request.ResubmitNoteMaxLength < 100 || request.ResubmitNoteMaxLength > 5000)
         {
             throw new InvalidOperationException("Resubmit note max length must be between 100 and 5000.");
+        }
+
+        if (request.ContractSignWindowHours <= 0 || request.ContractSignWindowHours > 720)
+        {
+            throw new InvalidOperationException("Contract sign window hours must be between 1 and 720.");
         }
 
         if (request.EscrowLockWindowHours <= 0 || request.EscrowLockWindowHours > 720)
@@ -174,6 +228,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalMilestoneLimit = policy.ProposalMilestoneLimit,
             FreeProposalSubmitCount = policy.FreeProposalSubmitCount,
             ResubmitNoteMaxLength = policy.ResubmitNoteMaxLength,
+            ContractSignWindowHours = policy.ContractSignWindowHours,
             EscrowLockWindowHours = policy.EscrowLockWindowHours,
             ExpertMaxActiveProjects = policy.ExpertMaxActiveProjects,
             DeliverableReviewWindowHours = policy.DeliverableReviewWindowHours,

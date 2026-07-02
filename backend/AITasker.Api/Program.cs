@@ -13,16 +13,19 @@ using AITasker.Infrastructure.Reviews;
 using AITasker.Infrastructure.Banking;
 using AITasker.Infrastructure.Dashboards;
 using AITasker.Infrastructure.Conversations;
+using AITasker.Infrastructure.Contracts;
+using AITasker.Infrastructure.Projects;
 using AITasker.Api.BackgroundServices;
 using AITasker.Infrastructure.Notifications;
+using AITasker.Infrastructure.Payments.PayOs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
-
 
 // =========================
 // Controllers
@@ -58,6 +61,24 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // =========================
+// Forwarded Headers
+// Fix HTTPS behind Render / Cloudflare / reverse proxy
+// =========================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor |
+        ForwardedHeaders.XForwardedProto |
+        ForwardedHeaders.XForwardedHost;
+
+    // Required for cloud proxies like Render/Cloudflare.
+    // Without this, ASP.NET Core may ignore forwarded headers
+    // and generate http:// redirect_uri instead of https://.
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+// =========================
 // CORS
 // =========================
 const string CorsPolicyName = "FrontendPolicy";
@@ -70,9 +91,7 @@ var allowedOrigins = configuredOrigins
     .Concat(new[]
     {
         "http://localhost:5173",
-        "http://localhost:5174",
-        "https://ai-tasker-beta.vercel.app",
-        "https://ai-tasker-git-develop-ait-asker.vercel.app"
+        "http://localhost:5174"
     })
     .Where(origin => !string.IsNullOrWhiteSpace(origin))
     .Select(origin => origin.Trim().TrimEnd('/'))
@@ -258,6 +277,7 @@ builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>(
 builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
 builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
+builder.Services.AddScoped<IAIUsageCostService, AIUsageCostService>();
 
 // =========================
 // Admin AI Management / Groq Runtime Config
@@ -311,10 +331,14 @@ builder.Services.AddScoped<IMarketplaceWorkflowPolicyService, MarketplaceWorkflo
 builder.Services.AddScoped<IAdminProposalCreditService, AdminProposalCreditService>();
 builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.ProposalService>();
 builder.Services.AddScoped<IProposalCreditPackageService, ProposalCreditPackageService>();
+builder.Services.AddScoped<IExpertEarningEscrowService, ExpertEarningEscrowService>();
+builder.Services.AddScoped<IProjectCompletionService, ProjectCompletionService>();
+builder.Services.AddScoped<IContractFailureRollbackService, ContractFailureRollbackService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
-builder.Services.AddHostedService<AITasker.Infrastructure.Projects.MilestoneDeadlineHostedService>();
-builder.Services.AddHostedService<AITasker.Infrastructure.Projects.PendingEscrowDeadlineHostedService>();
+builder.Services.AddHostedService<MilestoneDeadlineHostedService>();
+builder.Services.AddHostedService<PendingEscrowDeadlineHostedService>();
+builder.Services.AddHostedService<ContractSignDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
 // =========================
@@ -331,8 +355,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 // BE3 - Wallet / Escrow / PayOS / Withdrawal
 // =========================
 builder.Services.AddHttpClient<IWalletService, WalletService>();
-// TODO Production: replace MockBankAccountVerificationService with VietQrBankAccountVerificationService if real bank verification is required.
-builder.Services.AddHttpClient<IBankAccountVerificationService, MockBankAccountVerificationService>();
+builder.Services.AddHttpClient<IPayOsPayoutService, PayOsPayoutService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
 
@@ -403,6 +426,12 @@ builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(clie
 // App pipeline
 // =========================
 var app = builder.Build();
+
+// IMPORTANT:
+// This must run before HTTPS redirection, routing, CORS, authentication.
+// It fixes Google OAuth redirect_uri from http://... to https://...
+// when the app is deployed behind Render / Cloudflare.
+app.UseForwardedHeaders();
 
 if (app.Environment.IsDevelopment())
 {

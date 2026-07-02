@@ -10,8 +10,7 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
 {
     private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqExpertSkillAiProvider(
-        IGroqChatCompletionService groqChatCompletionService)
+    public GroqExpertSkillAiProvider(IGroqChatCompletionService groqChatCompletionService)
     {
         _groqChatCompletionService = groqChatCompletionService;
     }

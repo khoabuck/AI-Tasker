@@ -23,8 +23,6 @@ namespace AITasker.Infrastructure.Proposals
         private const string ProposalCreditUsageFree = "FREE";
         private const string ProposalCreditUsagePaid = "PAID";
 
-        private const string JobStatusActive = "ACTIVE";
-
         private const string ContractStatusDraft = "DRAFT";
         private const string ContractSourceProposal = "PROPOSAL";
 
@@ -101,8 +99,6 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("You already have a draft or submitted proposal for this job.");
             }
 
-            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
-
             var proposal = new Proposal
             {
                 JobId = request.JobId,
@@ -118,6 +114,10 @@ namespace AITasker.Infrastructure.Proposals
                 Status = StatusSubmitted,
                 CreatedAt = DateTime.UtcNow
             };
+
+            var proposalCreditUsageType = ChargeProposalSubmitCredit(
+                expert,
+                policy);
 
             _context.Proposals.Add(proposal);
 
@@ -437,9 +437,11 @@ namespace AITasker.Infrastructure.Proposals
                 milestoneDrafts,
                 policy.ProposalMilestoneLimit);
 
-            var proposalCreditUsageType = ConsumeProposalSubmitCredit(expert, policy);
-
             proposal.Status = StatusSubmitted;
+
+            var proposalCreditUsageType = ChargeProposalSubmitCredit(
+                expert,
+                policy);
 
             await _context.SaveChangesAsync();
 
@@ -572,7 +574,6 @@ namespace AITasker.Infrastructure.Proposals
             if (normalizedDecision == "REJECT")
             {
                 proposal.Status = StatusRejected;
-
                 await _context.SaveChangesAsync();
 
                 var rejectedExpert = await GetExpertProfileByIdAsync(proposal.ExpertId);
@@ -594,8 +595,8 @@ namespace AITasker.Infrastructure.Proposals
             var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
 
             proposal.Status = StatusAccepted;
-            job.Status = JobStatusActive;
             job.UpdatedAt = DateTime.UtcNow;
+
 
             var competingProposals = await _context.Proposals
                 .Where(x =>
@@ -610,6 +611,17 @@ namespace AITasker.Infrastructure.Proposals
             foreach (var competingProposal in competingProposals)
             {
                 competingProposal.Status = StatusRejected;
+                var competingExpert = await GetExpertProfileByIdAsync(competingProposal.ExpertId);
+
+                await _notificationService.CreateNotificationAsync(
+                    competingExpert.UserId,
+                    "Proposal rejected",
+                    $"Your proposal for job '{job.Title}' was rejected because another proposal was accepted. Proposal submission credits are not refunded after submission.",
+                    NotificationTypes.ProposalRejected,
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: competingProposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: competingProposal.ProposalId);
             }
 
             await _context.SaveChangesAsync();
@@ -638,6 +650,43 @@ namespace AITasker.Infrastructure.Proposals
                 relatedProposalId: proposal.ProposalId);
 
             return await MapToProposalResponseAsync(proposal);
+        }
+
+        public async Task<ProposalWithdrawWarningResponse> GetWithdrawWarningAsync(
+            int userId,
+            int proposalId)
+        {
+            var proposal = await GetProposalByIdAsync(proposalId);
+
+            await EnsureExpertOwnsProposalAsync(userId, proposal);
+
+            if (proposal.Status == StatusDraft)
+            {
+                throw new InvalidOperationException("Draft proposal can be deleted without losing proposal credit.");
+            }
+
+            if (proposal.Status == StatusAccepted)
+            {
+                throw new InvalidOperationException("Accepted proposal cannot be withdrawn.");
+            }
+
+            if (proposal.Status == StatusRejected)
+            {
+                throw new InvalidOperationException("Rejected proposal cannot be withdrawn.");
+            }
+
+            if (proposal.Status == StatusWithdrawn)
+            {
+                throw new InvalidOperationException("Proposal already withdrawn.");
+            }
+
+            return new ProposalWithdrawWarningResponse
+            {
+                ProposalId = proposal.ProposalId,
+                CanWithdraw = true,
+                WillLoseProposalCredit = true,
+                Message = "If you withdraw this proposal, the proposal submission credit used for this proposal will not be refunded."
+            };
         }
 
         public async Task<ProposalResponse> WithdrawProposalAsync(
@@ -760,17 +809,17 @@ namespace AITasker.Infrastructure.Proposals
             }
         }
 
-        private static string ConsumeProposalSubmitCredit(
+        private static string ChargeProposalSubmitCredit(
             ExpertProfile expert,
             MarketplaceWorkflowPolicyResponse policy)
         {
-            var hasFreeSubmitAvailable =
-                policy.FreeProposalSubmitCount > 0 &&
-                !expert.FreeProposalSubmitUsed;
+            var freeSubmitRemaining = Math.Max(
+                policy.FreeProposalSubmitCount - expert.FreeProposalSubmitUsedCount,
+                0);
 
-            if (hasFreeSubmitAvailable)
+            if (freeSubmitRemaining > 0)
             {
-                expert.FreeProposalSubmitUsed = true;
+                expert.FreeProposalSubmitUsedCount += 1;
                 return ProposalCreditUsageFree;
             }
 
@@ -781,7 +830,6 @@ namespace AITasker.Infrastructure.Proposals
             }
 
             expert.ProposalSubmitCredits -= 1;
-
             return ProposalCreditUsagePaid;
         }
 
@@ -789,22 +837,22 @@ namespace AITasker.Infrastructure.Proposals
             ExpertProfile expert,
             MarketplaceWorkflowPolicyResponse policy)
         {
-            var freeSubmitRemaining =
-                policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                    ? 1
-                    : 0;
+            var freeSubmitTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+            var usedCount = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeSubmitTotal);
+            var freeSubmitRemaining = Math.Max(freeSubmitTotal - usedCount, 0);
 
             var canSubmit = freeSubmitRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
             return new ProposalCreditResponse
             {
-                FreeSubmitUsed = expert.FreeProposalSubmitUsed,
+                FreeSubmitTotal = freeSubmitTotal,
+                FreeSubmitUsedCount = usedCount,
                 FreeSubmitRemaining = freeSubmitRemaining,
                 AvailableProposalSubmitCredits = expert.ProposalSubmitCredits,
                 CanSubmitNewProposal = canSubmit,
                 Reason = canSubmit
                     ? freeSubmitRemaining > 0
-                        ? "Free proposal submit is still available."
+                        ? $"You have {freeSubmitRemaining} free proposal submissions remaining."
                         : "Proposal submit credit is available."
                     : "You need ProposalSubmitCredit to submit a new proposal. Please buy a proposal credit package."
             };
@@ -1050,7 +1098,8 @@ namespace AITasker.Infrastructure.Proposals
                 RemainingResubmitsInWindow = int.MaxValue,
                 LatestVersion = latestVersion,
 
-                CreatedAt = proposal.CreatedAt
+                CreatedAt = proposal.CreatedAt,
+
             };
         }
 
@@ -1527,11 +1576,11 @@ namespace AITasker.Infrastructure.Proposals
                 await _notificationService.CreateNotificationAsync(
                     userId,
                     isFreeUsage
-                        ? "The free proposal submission attempt has been used."
-                        : "Used 1 ProposalSubmitCredit",
+                        ? "Free proposal submission used"
+                        : "ProposalSubmitCredit used",
                     isFreeUsage
-                        ? $"You have used your free proposal submission for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}."
-                        : $"You have used 1 ProposalSubmitCredit for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}.",
+                        ? $"A free proposal submission has been used for job '{job.Title}'. Free submissions used: {expert.FreeProposalSubmitUsedCount}."
+                        : $"1 ProposalSubmitCredit has been used for job '{job.Title}'. Remaining proposal credits: {expert.ProposalSubmitCredits}.",
                     NotificationTypes.ProposalCreditUsed,
                     relatedEntityType: "PROPOSAL",
                     relatedEntityId: proposal.ProposalId,

@@ -12,9 +12,7 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
 
     private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqExpertProfileReviewProvider(
-        IGroqChatCompletionService groqChatCompletionService
-    )
+    public GroqExpertProfileReviewProvider(IGroqChatCompletionService groqChatCompletionService)
     {
         _groqChatCompletionService = groqChatCompletionService;
     }
@@ -73,6 +71,13 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
                 },
                 cancellationToken
             );
+
+            if (string.IsNullOrWhiteSpace(aiResponse.Content))
+            {
+                return NeedsCorrection(
+                    "AI provider returned empty response. Please update the profile with stronger evidence."
+                );
+            }
 
             var result = ParseAiResult(aiResponse.Content);
 
@@ -401,20 +406,5 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
             MissingInformation =
                 "Please update your profile with valid proof URLs and certificate evidence."
         };
-    }
-
-    private class GroqChatCompletionResponse
-    {
-        public List<GroqChoice>? Choices { get; set; }
-    }
-
-    private class GroqChoice
-    {
-        public GroqMessage? Message { get; set; }
-    }
-
-    private class GroqMessage
-    {
-        public string? Content { get; set; }
     }
 }

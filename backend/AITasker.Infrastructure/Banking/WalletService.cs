@@ -48,8 +48,6 @@ namespace AITasker.Infrastructure.Banking
 
         private const string DisputeStatusOpen = "OPEN";
 
-        private const string DepositProviderSimulation = "SIMULATION";
-
         private const string TransactionStatusSuccess = "SUCCESS";
 
         private const string TxDeposit = "DEPOSIT";
@@ -57,6 +55,7 @@ namespace AITasker.Infrastructure.Banking
         private const string TxEscrowLock = "ESCROW_LOCK";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxEscrowReceive = "ESCROW_RECEIVE";
+        private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
         private const string TxPlatformFee = "PLATFORM_FEE";
 
         private const string DepositProviderPayOs = "PAYOS";
@@ -70,19 +69,25 @@ namespace AITasker.Infrastructure.Banking
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
         private readonly IPlatformWalletService _platformWalletService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IContractFailureRollbackService _contractFailureRollbackService;
 
         public WalletService(
                 AITaskerDbContext context,
                 INotificationService notificationService,
                 IConfiguration configuration,
                 HttpClient httpClient,
-                IPlatformWalletService platformWalletService)
+                IPlatformWalletService platformWalletService,
+                IMarketplaceWorkflowPolicyService workflowPolicyService,
+                IContractFailureRollbackService contractFailureRollbackService)
         {
             _context = context;
             _notificationService = notificationService;
             _configuration = configuration;
             _httpClient = httpClient;
             _platformWalletService = platformWalletService;
+            _workflowPolicyService = workflowPolicyService;
+            _contractFailureRollbackService = contractFailureRollbackService;
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)
@@ -185,7 +190,13 @@ namespace AITasker.Infrastructure.Banking
             int userId,
             CreateDepositOrderRequest request)
         {
-            ValidateCreateDepositOrderRequest(request);
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
+            ValidateCreateDepositOrderRequest(
+                request,
+                workflowPolicy.MinimumDepositAmount,
+                workflowPolicy.MaximumDepositAmount);
+
             EnsurePayOsConfigured();
 
             var userExists = await _context.Users.AnyAsync(x => x.UserId == userId);
@@ -265,6 +276,7 @@ namespace AITasker.Infrastructure.Banking
             var reference = GetStringFromJson(request.Data, "reference");
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -299,6 +311,7 @@ namespace AITasker.Infrastructure.Banking
                     order.Status = DepositOrderExpired;
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
 
                     throw new InvalidOperationException("Deposit order expired.");
                 }
@@ -339,6 +352,7 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     order.UserId,
@@ -350,95 +364,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
-                throw;
-            }
-        }
-
-        public async Task<DepositOrderResponse> SimulateDepositPaidAsync(
-            int currentUserId,
-            int depositOrderId)
-        {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var order = await _context.DepositOrders
-                    .FirstOrDefaultAsync(x => x.DepositOrderId == depositOrderId);
-
-                if (order == null)
+                if (!dbTransactionCompleted)
                 {
-                    throw new InvalidOperationException("Deposit order not found.");
+                    await dbTransaction.RollbackAsync();
                 }
 
-                await EnsureUserCanAccessDepositOrderAsync(currentUserId, order);
-
-                if (string.Equals(order.Status, DepositOrderPaid, StringComparison.OrdinalIgnoreCase))
-                {
-                    var paidWallet = await GetOrCreateWalletAsync(order.UserId);
-                    return MapDepositOrder(order, MapWallet(paidWallet));
-                }
-
-                if (!string.Equals(order.Status, DepositOrderPending, StringComparison.OrdinalIgnoreCase))
-                {
-                    throw new InvalidOperationException("Only PENDING deposit orders can be paid.");
-                }
-
-                if (order.ExpiresAt < DateTime.UtcNow)
-                {
-                    order.Status = DepositOrderExpired;
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-
-                    throw new InvalidOperationException("Deposit order expired.");
-                }
-
-                var existingDepositTransaction = await _context.Transactions.AnyAsync(x =>
-                    x.UserId == order.UserId &&
-                    x.Type == TxDeposit &&
-                    x.Status == TransactionStatusSuccess &&
-                    x.ReferenceId == order.OrderCode);
-
-                var wallet = await GetOrCreateWalletAsync(order.UserId);
-
-                if (!existingDepositTransaction)
-                {
-                    wallet.AvailableBalance += order.Amount;
-                    wallet.UpdatedAt = DateTime.UtcNow;
-
-                    _context.Transactions.Add(new Transaction
-                    {
-                        UserId = order.UserId,
-                        ProjectId = null,
-                        MilestoneId = null,
-                        EscrowId = null,
-                        Amount = order.Amount,
-                        Type = TxDeposit,
-                        Status = TransactionStatusSuccess,
-                        Description = $"[Deposit] Simulated payment for deposit order {order.OrderCode}",
-                        ReferenceId = order.OrderCode,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-
-                order.Status = DepositOrderPaid;
-                order.PaidAt = DateTime.UtcNow;
-                order.ProviderReference = $"SIM_PAID_{order.OrderCode}";
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    order.UserId,
-                    "Wallet deposit successful",
-                    $"Your wallet has been credited with {order.Amount:N0}.",
-                    "WALLET_DEPOSIT_SUCCESS");
-
-                return MapDepositOrder(order, MapWallet(wallet));
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
                 throw;
             }
         }
@@ -486,6 +416,7 @@ namespace AITasker.Infrastructure.Banking
             }
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -510,63 +441,17 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 return true;
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
-                return false;
-            }
-        }
-
-        public async Task<bool> WithdrawAsync(
-            int userId,
-            decimal amount,
-            string description)
-        {
-            if (amount <= 0)
-            {
-                return false;
-            }
-
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                var wallet = await _context.Wallets
-                    .FirstOrDefaultAsync(w => w.UserId == userId);
-
-                if (wallet == null || wallet.AvailableBalance < amount)
+                if (!dbTransactionCompleted)
                 {
-                    return false;
+                    await dbTransaction.RollbackAsync();
                 }
 
-                wallet.AvailableBalance -= amount;
-                wallet.UpdatedAt = DateTime.UtcNow;
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = userId,
-                    ProjectId = null,
-                    MilestoneId = null,
-                    EscrowId = null,
-                    Amount = -amount,
-                    Type = TxWithdraw,
-                    Status = TransactionStatusSuccess,
-                    Description = description,
-                    ReferenceId = "INTERNAL",
-                    CreatedAt = DateTime.UtcNow
-                });
-
-                await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-
-                return true;
-            }
-            catch
-            {
-                await dbTransaction.RollbackAsync();
                 return false;
             }
         }
@@ -576,6 +461,7 @@ namespace AITasker.Infrastructure.Banking
             int projectId)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -628,13 +514,11 @@ namespace AITasker.Infrastructure.Banking
 
                     await _context.SaveChangesAsync();
                     await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
 
                     throw new InvalidOperationException(
                         "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
                 }
-
-                var proposal = await GetProposalAsync(contract.ProposalId);
-                var job = await GetJobAsync(proposal.JobId);
 
                 var milestones = await _context.Milestones
                     .Where(m => m.ProjectId == project.ProjectId)
@@ -749,24 +633,6 @@ namespace AITasker.Infrastructure.Banking
                 project.StartDate = now;
                 project.EscrowLockedAt = now;
 
-                proposal.Status = ProposalStatusAccepted;
-
-                job.Status = JobStatusActive;
-                job.UpdatedAt = now;
-
-                var competingProposals = await _context.Proposals
-                    .Where(p =>
-                        p.JobId == job.JobPostingId &&
-                        p.ProposalId != proposal.ProposalId &&
-                        p.Status != ProposalStatusRejected &&
-                        p.Status != ProposalStatusWithdrawn)
-                    .ToListAsync();
-
-                foreach (var competingProposal in competingProposals)
-                {
-                    competingProposal.Status = ProposalStatusRejected;
-                }
-
                 _context.Transactions.Add(new Transaction
                 {
                     UserId = clientProfile.UserId,
@@ -810,6 +676,7 @@ namespace AITasker.Infrastructure.Banking
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
@@ -836,7 +703,11 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
         }
@@ -846,6 +717,7 @@ namespace AITasker.Infrastructure.Banking
             int milestoneId)
         {
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var dbTransactionCompleted = false;
 
             try
             {
@@ -914,7 +786,7 @@ namespace AITasker.Infrastructure.Banking
                 clientWallet.LockedBalance -= escrow.Amount;
                 clientWallet.UpdatedAt = DateTime.UtcNow;
 
-                expertWallet.AvailableBalance += escrow.Amount;
+                expertWallet.PendingEarningsBalance += escrow.Amount;
                 expertWallet.TotalEarning += escrow.Amount;
                 expertWallet.UpdatedAt = DateTime.UtcNow;
 
@@ -948,20 +820,21 @@ namespace AITasker.Infrastructure.Banking
                     MilestoneId = milestone.MilestoneId,
                     EscrowId = escrow.EscrowId,
                     Amount = escrow.Amount,
-                    Type = TxEscrowReceive,
+                    Type = TxExpertPendingEarningHold,
                     Status = TransactionStatusSuccess,
-                    Description = $"[Escrow Receive] Received funds for Milestone ID {milestone.MilestoneId}",
+                    Description = $"[Expert Pending Earning] Held funds for Milestone ID {milestone.MilestoneId} until project completion",
                     ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
                     CreatedAt = DateTime.UtcNow
                 });
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
+                dbTransactionCompleted = true;
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Escrow released",
-                    $"Escrow for milestone '{milestone.Title}' has been released to your wallet.",
+                    "Milestone earning held",
+                    $"Milestone '{milestone.Title}' has been approved. The earning is held in pending earnings until the project is completed.",
                     "ESCROW_RELEASED",
                     relatedEntityType: "MILESTONE",
                     relatedEntityId: milestone.MilestoneId,
@@ -985,25 +858,13 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                await dbTransaction.RollbackAsync();
+                if (!dbTransactionCompleted)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
                 throw;
             }
-        }
-
-        public Task<EscrowOperationResponse> RefundEscrowAsync(
-            int currentUserId,
-            int milestoneId)
-        {
-            throw new InvalidOperationException(
-                "Direct escrow refund is disabled. Use the Admin dispute resolution flow so dispute records, escrow status, and project status stay consistent.");
-        }
-
-        public Task<EscrowOperationResponse> FreezeEscrowAsync(
-            int currentUserId,
-            int milestoneId)
-        {
-            throw new InvalidOperationException(
-                "Direct escrow freeze is disabled. Open a dispute so the dispute record and escrow freeze are created together.");
         }
 
         public async Task<bool> ReleaseEscrowAsync(int milestoneId)
@@ -1025,11 +886,6 @@ namespace AITasker.Infrastructure.Banking
             {
                 return false;
             }
-        }
-
-        public Task<bool> RefundEscrowAsync(int milestoneId)
-        {
-            return Task.FromResult(false);
         }
 
         private async Task<Wallet> GetOrCreateWalletAsync(int userId)
@@ -1055,6 +911,7 @@ namespace AITasker.Infrastructure.Banking
                 UserId = userId,
                 AvailableBalance = 0m,
                 LockedBalance = 0m,
+                PendingEarningsBalance = 0m,
                 TotalEarning = 0m,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -1266,6 +1123,8 @@ namespace AITasker.Infrastructure.Banking
                 UserId = wallet.UserId,
                 AvailableBalance = wallet.AvailableBalance,
                 LockedBalance = wallet.LockedBalance,
+                PendingEarningsBalance = wallet.PendingEarningsBalance,
+                WithdrawableBalance = wallet.AvailableBalance,
                 TotalEarning = wallet.TotalEarning,
                 UpdatedAt = wallet.UpdatedAt
             };
@@ -1321,7 +1180,10 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static void ValidateCreateDepositOrderRequest(CreateDepositOrderRequest request)
+        private static void ValidateCreateDepositOrderRequest(
+            CreateDepositOrderRequest request,
+            decimal minimumDepositAmount,
+            decimal maximumDepositAmount)
         {
             if (request == null)
             {
@@ -1333,14 +1195,14 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("Deposit amount must be greater than 0.");
             }
 
-            if (request.Amount < 1000)
+            if (request.Amount < minimumDepositAmount)
             {
-                throw new InvalidOperationException("Minimum deposit amount is 1,000.");
+                throw new InvalidOperationException($"Minimum deposit amount is {minimumDepositAmount:N0} VND.");
             }
 
-            if (request.Amount > 500000000)
+            if (request.Amount > maximumDepositAmount)
             {
-                throw new InvalidOperationException("Maximum deposit amount is 500,000,000.");
+                throw new InvalidOperationException($"Maximum deposit amount is {maximumDepositAmount:N0} VND.");
             }
         }
 
@@ -1370,19 +1232,10 @@ namespace AITasker.Infrastructure.Banking
             var proposal = await GetProposalAsync(contract.ProposalId);
             var job = await GetJobAsync(proposal.JobId);
 
-            contract.Status = ContractStatusCancelled;
-            contract.ClientConfirmed = false;
-            contract.ExpertConfirmed = false;
-            contract.ConfirmedAt = null;
-
-            project.Status = ProjectStatusCancelled;
-            project.EndDate = now;
-            project.EscrowExpiredAt = now;
-
-            proposal.Status = ProposalStatusRejected;
-
-            job.Status = JobStatusOpen;
-            job.UpdatedAt = now;
+            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
+                contract,
+                "ESCROW_TIMEOUT",
+                now);
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(
@@ -1703,27 +1556,34 @@ namespace AITasker.Infrastructure.Banking
 
         private string GetPayOsClientId()
         {
-            return _configuration["Payment:PayOs:ClientId"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ClientId");
         }
 
         private string GetPayOsApiKey()
         {
-            return _configuration["Payment:PayOs:ApiKey"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ApiKey");
         }
 
         private string GetPayOsChecksumKey()
         {
-            return _configuration["Payment:PayOs:ChecksumKey"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ChecksumKey");
         }
 
         private string GetPayOsReturnUrl()
         {
-            return _configuration["Payment:PayOs:ReturnUrl"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("ReturnUrl");
         }
 
         private string GetPayOsCancelUrl()
         {
-            return _configuration["Payment:PayOs:CancelUrl"]?.Trim() ?? string.Empty;
+            return GetPayOsDepositValue("CancelUrl");
+        }
+
+        private string GetPayOsDepositValue(string key)
+        {
+            return _configuration[$"Payment:PayOs:Deposit:{key}"]?.Trim()
+                ?? _configuration[$"Payment:PayOs:{key}"]?.Trim()
+                ?? string.Empty;
         }
 
         private sealed class PayOsCreatePaymentResult
