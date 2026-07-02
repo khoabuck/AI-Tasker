@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
@@ -23,7 +23,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.HttpOverrides;
-
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
 
@@ -74,7 +73,7 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     // Required for cloud proxies like Render/Cloudflare.
     // Without this, ASP.NET Core may ignore forwarded headers
     // and generate http:// redirect_uri instead of https://.
-    options.KnownNetworks.Clear();
+    options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
@@ -256,7 +255,7 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<IEmailSender, MailtrapEmailSender>();
+builder.Services.AddScoped<IEmailSender, GmailSmtpEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================
@@ -277,8 +276,6 @@ builder.Services.AddScoped<IPlatformFeePolicyService, PlatformFeePolicyService>(
 builder.Services.AddScoped<IExpertProfileScoringPolicyService, ExpertProfileScoringPolicyService>();
 
 builder.Services.AddScoped<IJobPostingAiPolicyService, JobPostingAiPolicyService>();
-builder.Services.AddScoped<IAIUsageCostService, AIUsageCostService>();
-
 // =========================
 // Admin AI Management / Groq Runtime Config
 // =========================

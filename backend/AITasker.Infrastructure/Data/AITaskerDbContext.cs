@@ -20,8 +20,6 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
 
-    public DbSet<AIModelPricingPolicy> AIModelPricingPolicies => Set<AIModelPricingPolicy>();
-
     public DbSet<AiSettings> AiSettings => Set<AiSettings>();
 
     public DbSet<AiAllowedModel> AiAllowedModels => Set<AiAllowedModel>();
@@ -266,60 +264,6 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.IsActive);
 
             entity.HasIndex(x => x.UpdatedByAdminId);
-        });
-
-        // =========================
-        // AIModelPricingPolicies
-        // =========================
-        modelBuilder.Entity<AIModelPricingPolicy>(entity =>
-        {
-            entity.ToTable("AIModelPricingPolicies", table =>
-            {
-                table.HasCheckConstraint(
-                    "CK_AIModelPricingPolicies_Prices",
-                    "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0");
-
-                table.HasCheckConstraint(
-                    "CK_AIModelPricingPolicies_ExchangeRate",
-                    "[ExchangeRateToVnd] > 0");
-            });
-
-            entity.HasKey(x => x.AIModelPricingPolicyId);
-
-            entity.Property(x => x.Provider)
-                .HasMaxLength(50)
-                .IsRequired();
-
-            entity.Property(x => x.ModelName)
-                .HasMaxLength(100)
-                .IsRequired();
-
-            entity.Property(x => x.InputPricePerMillionTokensUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.OutputPricePerMillionTokensUsd)
-                .HasColumnType("decimal(18,8)");
-
-            entity.Property(x => x.ExchangeRateToVnd)
-                .HasColumnType("decimal(18,4)");
-
-            entity.Property(x => x.UpdateReason)
-                .HasMaxLength(500);
-
-            entity.HasOne(x => x.UpdatedByAdmin)
-                .WithMany()
-                .HasForeignKey(x => x.UpdatedByAdminId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            entity.HasIndex(x => x.UpdatedByAdminId);
-
-            entity.HasIndex(x => new
-            {
-                x.Provider,
-                x.ModelName,
-                x.IsActive,
-                x.EffectiveFrom
-            });
         });
 
         // =========================
@@ -576,7 +520,7 @@ public class AITaskerDbContext : DbContext
 
         modelBuilder.Entity<AiUsageLog>(entity =>
         {
-            entity.ToTable("AiUsageLogs");
+            entity.ToTable("AIUsageLogs");
 
             entity.HasKey(x => x.AiUsageLogId);
 
@@ -589,23 +533,10 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.Provider)
                 .HasMaxLength(50)
-                .HasDefaultValue("Groq")
                 .IsRequired();
 
             entity.Property(x => x.Model)
                 .HasMaxLength(100)
-                .IsRequired();
-
-            entity.Property(x => x.PromptTokens)
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.CompletionTokens)
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.TotalTokens)
-                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(x => x.Status)
@@ -618,18 +549,15 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.ErrorMessage)
                 .HasMaxLength(1000);
 
-            entity.Property(x => x.CreatedAt)
-                .IsRequired();
-
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)
-                .OnDelete(DeleteBehavior.Restrict);
+                .OnDelete(DeleteBehavior.SetNull);
 
             entity.HasIndex(x => x.UserId);
             entity.HasIndex(x => x.Feature);
+            entity.HasIndex(x => x.Provider);
             entity.HasIndex(x => x.Model);
-            entity.HasIndex(x => x.Status);
             entity.HasIndex(x => x.CreatedAt);
         });
 
@@ -1099,6 +1027,46 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.ProfileScore)
                 .HasColumnType("decimal(5,2)")
+                .IsRequired();
+
+            entity.Property(x => x.ProfileCompletenessScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.AiSkillRelevanceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ExperienceCredibilityScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.PortfolioEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.GitHubEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.LinkedInEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.CertificateEvidenceScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.TrustRiskScore)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(x => x.Level)
