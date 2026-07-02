@@ -6,9 +6,9 @@
 // GET  /api/wallets/deposit-orders/me                      → lịch sử các deposit order
 // GET  /api/wallets/deposit-orders/{id}                    → poll trạng thái 1 order
 // POST /api/wallets/deposit-orders/{id}/simulate-paid      → giả lập thanh toán (dev/test only)
-//
-// Withdraw vẫn dùng /withdrawals (giữ nguyên flow cũ, không có trong API list mới nhưng
-// chưa thấy yêu cầu đổi — nếu BE đã đổi endpoint này, báo lại để sửa)
+// POST /api/withdrawals                        {amount, bankName, bankAccountNumber,
+//                                                bankAccountHolder} → tạo yêu cầu rút tiền
+// GET  /api/withdrawals/me                                → lịch sử yêu cầu rút tiền
 //
 // FIX (so với bản cũ):
 // 1) fetchAll() trước đây gọi walletService.getEscrows(selectedProjectId) với biến
@@ -21,6 +21,11 @@
 //    khi freelancer được release tiền milestone) → đã bỏ ESCROW_RELEASE ra khỏi danh sách.
 // 3) metrics[] trước đây thiếu field icon/iconBg/iconColor khiến ô icon luôn trống →
 //    đã bổ sung đầy đủ cho cả 3 ô Balance / Escrow / Withdrawable.
+// 4) POST /api/withdrawals đã được xác nhận hoạt động thật qua Swagger (trả 200 kèm
+//    feeAmount/netAmount) → bỏ nhánh xử lý lỗi 404 giả "tính năng đang nâng cấp"
+//    (comment cũ nói API "chưa có trong list mới" là sai).
+// 5) Thêm GET /api/withdrawals/me để hiển thị lịch sử rút tiền (trước đây hoàn toàn
+//    chưa được gọi ở đâu trong trang).
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +33,7 @@ import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
 
 // ── Deposit Modal (PayOS flow — production: poll status thật, không tự nạp tiền) ──
-function DepositModal({ onClose, onSuccess, existingOrder }) {
+function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [step, setStep] = useState(existingOrder ? "qr" : "input"); // input | qr | expired
   const [amount, setAmount] = useState("");
   const [order, setOrder] = useState(existingOrder || null);
@@ -103,8 +108,22 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
     try {
       const res = await walletService.createDepositOrder(amount);
       const orderData = res.data?.data || res.data;
-      setOrder(orderData);
-      setStep("qr");
+
+      const clientCreatedAt = Date.now();
+
+    localStorage.setItem(
+      `deposit_created_at_${orderData.depositOrderId}`,
+      String(clientCreatedAt)
+    );
+
+    const createdOrder = {
+      ...orderData,
+      clientCreatedAt,
+    };
+
+    setOrder(createdOrder);
+    onOrderCreated?.(createdOrder);
+    setStep("qr");
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to create deposit order. Please try again.");
     } finally { setLoading(false); }
@@ -259,18 +278,18 @@ function WithdrawModal({ onClose, onSuccess }) {
     if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
     setLoading(true); setError("");
     try {
-      await walletService.createWithdrawal(form);
-      onSuccess();
+      const res = await walletService.createWithdrawal(form);
+      // Response thật: { success, message, data: { withdrawalRequestId, amount,
+      // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
+      // status: "PENDING", createdAt, ... } }
+      const created = res.data?.data ?? res.data;
+      onSuccess(created);
       onClose();
     } catch (err) {
-      const status = err?.response?.status;
-      if (status === 404) {
-        // API /withdrawals chưa được BE triển khai — báo rõ cho user thay vì
-        // để lộ lỗi kỹ thuật "404 Not Found" khó hiểu.
-        setError("The withdrawal feature is currently being upgraded. Please try again later.");
-      } else {
-        setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
-      }
+      // API /withdrawals đã được xác nhận hoạt động thật qua Swagger (trả 200
+      // kèm feeAmount/netAmount) — không còn che giấu lỗi bằng thông báo giả
+      // "tính năng đang nâng cấp" nữa, chỉ hiển thị message thật từ BE.
+      setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
     } finally { setLoading(false); }
   };
 
@@ -301,6 +320,9 @@ function WithdrawModal({ onClose, onSuccess }) {
                 style={{ ...inputStyle("amount"), paddingLeft: 28 }} />
             </div>
             {fieldErrors.amount && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.amount}</p>}
+            <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
+              A processing fee will be deducted by the platform. The exact fee and net amount will be shown after you submit the request.
+            </p>
           </div>
 
           <div>
@@ -369,11 +391,11 @@ function StatusBadge({ status }) {
     COMPLETED: { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     SUCCESS:   { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     PAID:      { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
+    APPROVED:  { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     PENDING:   { bg: "rgba(250,204,21,0.1)", color: "#facc15" },
     FAILED:    { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
     EXPIRED:   { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
     CANCELLED: { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
-    APPROVED:  { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     REJECTED:  { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
   };
   const cfg = map[status?.toUpperCase()] || { bg: "rgba(140,144,160,0.1)", color: "#8c90a0" };
@@ -384,34 +406,75 @@ function StatusBadge({ status }) {
   );
 }
 
+const DEPOSIT_PENDING_CLICK_LIMIT_MS = 2 * 60 * 1000; // 2 phút
+
+const isDepositClickBlocked = (order, now) => {
+  if (order?.status !== "PENDING") return false;
+
+  const savedCreatedAt = order.depositOrderId
+    ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
+    : null;
+
+  const createdTime = savedCreatedAt
+    ? Number(savedCreatedAt)
+    : order.clientCreatedAt
+      ? Number(order.clientCreatedAt)
+      : order.createdAt
+        ? new Date(order.createdAt).getTime()
+        : null;
+
+  if (!createdTime || Number.isNaN(createdTime)) return false;
+
+  const elapsed = now - createdTime;
+  return elapsed > DEPOSIT_PENDING_CLICK_LIMIT_MS;
+};
+
 export default function WalletPage() {
   const navigate = useNavigate();
   const [balance, setBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [depositOrders, setDepositOrders] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [now, setNow] = useState(() => Date.now());
 
-  // FIX #1: bỏ walletService.getEscrows(selectedProjectId) — biến selectedProjectId
-  // chưa từng được khai báo (ReferenceError), khiến Promise.all reject toàn bộ và
-  // balance/transactions/depositOrders không bao giờ được set dù các API đó vẫn
-  // trả 200 OK bình thường. Escrow giờ lấy trực tiếp từ balance.lockedBalance
-  // (đã có sẵn trong response GET /api/wallets/me).
+  useEffect(() => {
+    const hasPending = depositOrders.some((o) => o.status === "PENDING");
+    if (!hasPending) return;
+
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, [depositOrders]);
+
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [wallet, tx, deposit] = await Promise.all([
+      const [wallet, tx, deposit, withdrawalList] = await Promise.all([
         walletService.getWallet(),
         walletService.getTransactions(),
         walletService.getDepositOrders(),
+        walletService.getWithdrawals(),
       ]);
 
       setBalance(wallet);
       setTransactions(tx);
-      setDepositOrders(deposit);
+      setDepositOrders(
+      deposit.map((order) => {
+        const savedCreatedAt = order.depositOrderId
+          ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
+          : null;
+
+        return {
+          ...order,
+          clientCreatedAt: savedCreatedAt ? Number(savedCreatedAt) : undefined,
+        };
+      })
+    );
+      setWithdrawals(withdrawalList);
     } catch (err) {
       console.error(err);
     } finally {
@@ -427,7 +490,6 @@ export default function WalletPage() {
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  // FIX #3: bổ sung icon/iconBg/iconColor cho từng ô để icon hiển thị đúng thay vì trống.
   const metrics = balance
     ? [
         {
@@ -532,7 +594,7 @@ export default function WalletPage() {
             </div>
 
             {/* Lower section */}
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, marginBottom: 24 }}>
 
               {/* Transactions */}
               <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
@@ -596,24 +658,80 @@ export default function WalletPage() {
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     {depositOrders
-                      .filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED")
-                      .slice(0, 8)
-                      .map((order, i) => {
+                    .filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED")
+                    .slice(0, 8)
+                    .map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
                       const isPending = order.status === "PENDING";
+                      const isBlocked = isDepositClickBlocked(order, now);
+                      const isClickable = isPending && !isBlocked;
+
+                      const createdTime = order.clientCreatedAt
+                        ? Number(order.clientCreatedAt)
+                        : order.createdAt
+                          ? new Date(order.createdAt).getTime()
+                          : null;
+
+                      const remainingMs = createdTime
+                        ? Math.max(0, DEPOSIT_PENDING_CLICK_LIMIT_MS - (now - createdTime))
+                        : 0;
+
+                      const remainingSeconds = Math.ceil(remainingMs / 1000);
+
                       return (
-                        <div key={order.depositOrderId ?? i}
-                          onClick={() => isPending && setSelectedOrder(order)}
-                          style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s", cursor: isPending ? "pointer" : "default" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                        <div
+                          key={order.depositOrderId ?? i}
+                          onClick={() => isClickable && setSelectedOrder(order)}
+                          style={{
+                            padding: "14px 20px",
+                            borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            transition: "background 0.2s",
+                            cursor: isClickable ? "pointer" : "default",
+                            opacity: isBlocked ? 0.55 : 1,
+                          }}
+                          onMouseEnter={(e) =>
+                            isClickable && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")
+                          }
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
                           <div>
-                            <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>{(order.amount ?? 0).toLocaleString()}₫</p>
-                            <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>{order.provider ?? "PAYOS"} • {date}</p>
+                            <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>
+                              {(order.amount ?? 0).toLocaleString()}₫
+                            </p>
+                            <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
+                              {order.provider ?? "PAYOS"} • {date}
+                            </p>
+
+                            {isPending && !isBlocked && remainingSeconds > 0 && (
+                              <p style={{ fontSize: 11, color: "#facc15", margin: "2px 0 0" }}>
+                                QR available for {formatRemainingMinutes(remainingSeconds)} minute(s)
+                              </p>
+                            )}
+
+                            {isBlocked && (
+                              <p style={{ fontSize: 11, color: "#f87171", margin: "2px 0 0" }}>
+                                Expired — please create a new deposit request
+                              </p>
+                            )}
                           </div>
+
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <StatusBadge status={order.status} />
-                            {isPending && <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#8c90a0" }}>qr_code_2</span>}
+
+                            {isPending && !isBlocked && (
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#8c90a0" }}>
+                                qr_code_2
+                              </span>
+                            )}
+
+                            {isBlocked && (
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#f87171" }}>
+                                block
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -623,11 +741,80 @@ export default function WalletPage() {
               </div>
 
             </div>
+
+            {/* Withdrawal History — full width, tách riêng để không phải sửa layout grid 2 cột phía trên */}
+            <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Withdrawal History</h4>
+              </div>
+              {withdrawals.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 24px", color: "#8c90a0" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>outbox</span>
+                  No withdrawal requests yet.
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                      {["Amount", "Fee", "Net Amount", "Bank", "Date", "Status"].map((h) => (
+                        <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", fontWeight: 500 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withdrawals.slice(0, 10).map((w, i) => {
+                      const date = w.createdAt ? new Date(w.createdAt).toLocaleDateString("vi-VN") : "—";
+                      return (
+                        <tr key={w.withdrawalRequestId ?? i}
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#e1e2eb" }}>
+                            {Number(w.amount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8c90a0" }}>
+                            {Number(w.feeAmount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#00F0FF" }}>
+                            {Number(w.netAmount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>
+                            {w.bankName ?? "—"} • {w.bankAccountNumber ?? "—"}
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
+                          <td style={{ padding: "14px 20px" }}>
+                            <StatusBadge status={w.status} />
+                            {w.status === "REJECTED" && w.failureReason && (
+                              <p style={{ fontSize: 11, color: "#f87171", margin: "4px 0 0" }}>{w.failureReason}</p>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </>
         )}
       </div>
 
-      {showDeposit && <DepositModal onClose={() => setShowDeposit(false)} onSuccess={() => showSuccess("Deposit successful!")} />}
+      {showDeposit && (
+        <DepositModal
+          onClose={() => {
+            setShowDeposit(false);
+            setNow(Date.now());
+          }}
+          onSuccess={() => showSuccess("Deposit successful!")}
+          onOrderCreated={(createdOrder) => {
+            setDepositOrders((prev) => [
+              createdOrder,
+              ...prev.filter(
+                (o) => o.depositOrderId !== createdOrder.depositOrderId
+              ),
+            ]);
+            setNow(Date.now());
+          }}
+        />
+      )}
       {selectedOrder && (
         <DepositModal
           existingOrder={selectedOrder}
@@ -635,7 +822,18 @@ export default function WalletPage() {
           onSuccess={() => showSuccess("Deposit successful!")}
         />
       )}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} onSuccess={() => showSuccess("Withdrawal request submitted!")}/>}
+      {showWithdraw && (
+        <WithdrawModal
+          onClose={() => setShowWithdraw(false)}
+          onSuccess={(created) =>
+            showSuccess(
+              created
+                ? `Withdrawal request submitted! You will receive ${Number(created.netAmount ?? 0).toLocaleString()}₫ after a ${Number(created.feeAmount ?? 0).toLocaleString()}₫ fee.`
+                : "Withdrawal request submitted!"
+            )
+          }
+        />
+      )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>

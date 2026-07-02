@@ -34,6 +34,19 @@ export const walletService = {
     return Array.isArray(data) ? data : [];
   },
 
+  // Lịch sử yêu cầu rút tiền — GET /api/withdrawals/me
+  // Response thật (đã test qua Swagger):
+  // { success: true, data: [ { withdrawalRequestId, userId, amount, feeAmount,
+  //   netAmount, bankCode, bankBin, bankName, bankAccountNumber,
+  //   bankAccountHolder, bankVerificationStatus, bankVerificationMessage,
+  //   payoutReferenceCode, status, adminNote, failureReason, createdAt,
+  //   processedAt, processedByAdminId, ... } ] }
+  async getWithdrawals() {
+    const res = await walletApi.getMyWithdrawals();
+    const data = unwrap(res);
+    return Array.isArray(data) ? data : [];
+  },
+
   createDepositOrder(amount) {
     return walletApi.createDepositOrder(Number(amount));
   },

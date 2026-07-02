@@ -25,4 +25,7 @@ export const walletApi = {
 
   createWithdrawal: (payload) =>
     axiosInstance.post("/withdrawals", payload),
+
+  getMyWithdrawals: () =>
+    axiosInstance.get("/withdrawals/me"),
 };
