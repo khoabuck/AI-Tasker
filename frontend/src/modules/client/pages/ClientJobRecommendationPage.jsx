@@ -234,13 +234,13 @@ export default function ClientJobRecommendationPage() {
 
         {/* Back */}
         <button
-          onClick={() => navigate(`/client/projects/${id}`)}
+          onClick={() => navigate(-1)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
           onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
           onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}
         >
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to Job Details
+          Back
         </button>
 
         {/* Header */}

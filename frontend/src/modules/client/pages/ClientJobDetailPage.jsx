@@ -1,5 +1,5 @@
 // src/modules/client/pages/ClientJobDetailPage.jsx
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -151,8 +151,17 @@ export default function ClientJobDetailPage() {
   const [actionLoading, setActionLoading] = useState(null);
   const [messagingProposal, setMessagingProposal] = useState(null);
 
+  // Đánh dấu đã load lần đầu chưa. Từ lần refetch thứ 2 trở đi (khi quay lại
+  // trang) sẽ fetch ngầm, giữ nguyên nội dung cũ trên màn hình → không nháy trắng.
+  const hasLoadedOnce = useRef(false);
+
   const fetchData = useCallback(async (signal) => {
-    setLoading(true); setError("");
+    // Chỉ bật spinner khi CHƯA có data (lần đầu). Refetch nền thì không bật,
+    // để nội dung hiện tại ở nguyên trên màn hình trong lúc tải.
+    if (!hasLoadedOnce.current) {
+      setLoading(true);
+    }
+    setError("");
     try {
       const [jobRes, proposalsRes] = await Promise.all([
         axiosInstance.get(`/jobs/${id}`, { signal }),
@@ -161,6 +170,7 @@ export default function ClientJobDetailPage() {
       setJob(jobRes.data);
       const raw = proposalsRes.data;
       setProposals(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
+      hasLoadedOnce.current = true;
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(err?.response?.status === 404 ? "No job found for this position." : err?.response?.status === 403 ? "You are not allowed to view it." : err?.response?.data?.message || "An error has occurred.");
@@ -193,9 +203,12 @@ export default function ClientJobDetailPage() {
     finally { setActionLoading(null); }
   };
 
-  if (loading) return (
+  // Chỉ hiện spinner toàn trang ở lần load đầu (chưa có job nào).
+  const showFullLoading = loading && !job;
+
+  if (showFullLoading) return (
     <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
+      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
         <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
         Loading job details...
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -203,9 +216,9 @@ export default function ClientJobDetailPage() {
     </ClientLayout>
   );
 
-  if (error) return (
+  if (error && !job) return (
     <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 24px" }}>
+      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
@@ -225,194 +238,196 @@ export default function ClientJobDetailPage() {
 
   return (
     <ClientLayout>
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
-        <button onClick={() => navigate("/client/jobs")}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back to Jobs
-        </button>
+      <div style={{ minHeight: "100vh", background: "#0b0e14" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
+          <button onClick={() => navigate("/client/jobs")}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
+            onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
+            Back to Jobs
+          </button>
 
-        <div style={{ ...cardStyle, marginBottom: 24 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 26, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>{job.title}</h1>
-                {job.isAiAssisted && (
-                  <span style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 10, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 12 }}>auto_awesome</span>AI Assisted
-                  </span>
-                )}
+          <div style={{ ...cardStyle, marginBottom: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 26, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>{job.title}</h1>
+                  {job.isAiAssisted && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 10, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap" }}>
+                      <span className="material-symbols-outlined" style={{ fontSize: 12 }}>auto_awesome</span>AI Assisted
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+                  <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: statusCfg.color, background: statusCfg.bg, border: `1px solid ${statusCfg.border}` }}>{statusCfg.label}</span>
+                  <span style={{ fontSize: 13, color: "#8c90a0" }}>Posted {createdAt}</span>
+                  {job.projectType && <span style={{ fontSize: 13, color: "#c2c6d6" }}>{job.projectType}</span>}
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-                <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: statusCfg.color, background: statusCfg.bg, border: `1px solid ${statusCfg.border}` }}>{statusCfg.label}</span>
-                <span style={{ fontSize: 13, color: "#8c90a0" }}>Posted {createdAt}</span>
-                {job.projectType && <span style={{ fontSize: 13, color: "#c2c6d6" }}>{job.projectType}</span>}
+              <div style={{ display: "flex", gap: 28 }}>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}</div>
+                  <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>USD/month</div>
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#facc15" }}>{proposals.length}</div>
+                  <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>Proposals</div>
+                </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 28 }}>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}</div>
-                <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>USD/month</div>
-              </div>
-              <div style={{ textAlign: "center" }}>
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#facc15" }}>{proposals.length}</div>
-                <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>Proposals</div>
-              </div>
-            </div>
-          </div>
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <button onClick={() => navigate(`/client/jobs/${id}/recommendations`)}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.15)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.3)"; }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
-              View AI Recommendation
-            </button>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <div style={cardStyle}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Description</h3>
-            <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.description}</p>
-          </div>
-
-          {job.aiGeneratedDescription && (
-            <div style={{ ...cardStyle, border: "1px solid rgba(0,240,255,0.15)", background: "rgba(0,240,255,0.02)" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(0,240,255,0.1)" }}>
-                <span className="material-symbols-outlined" style={{ color: "#00F0FF", fontSize: 18 }}>auto_awesome</span>
-                <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#00F0FF", margin: 0 }}>AI Generated Description</h3>
-              </div>
-              <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.aiGeneratedDescription}</p>
-            </div>
-          )}
-
-          <div style={cardStyle}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Project Details</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 20 }}>
-              <div><span style={labelStyle}>Budget</span><div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "#00F0FF", fontSize: 15 }}>${job.budgetMin?.toLocaleString()} — ${job.budgetMax?.toLocaleString()}</div><div style={{ fontSize: 11, color: "#8c90a0" }}>USD / month</div></div>
-              <div><span style={labelStyle}>Deadline</span><div style={{ color: "#e1e2eb", fontSize: 14, fontWeight: 600 }}>{deadline}</div></div>
-              <div><span style={labelStyle}>Project Type</span><div style={{ color: "#e1e2eb", fontSize: 14 }}>{job.projectType || "—"}</div></div>
-              <div><span style={labelStyle}>Complexity</span><div style={{ color: "#facc15", fontSize: 14, fontWeight: 600 }}>{job.complexity || "—"}</div></div>
+            <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <button onClick={() => navigate(`/client/jobs/${id}/recommendations`)}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 20px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.15)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.3)"; }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>auto_awesome</span>
+                View AI Recommendation
+              </button>
             </div>
           </div>
 
-          {job.expectedDeliverables && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={cardStyle}>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Expected Deliverables</h3>
-              <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.expectedDeliverables}</p>
+              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Description</h3>
+              <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.description}</p>
             </div>
-          )}
 
-          {job.skills?.length > 0 && (
+            {job.aiGeneratedDescription && (
+              <div style={{ ...cardStyle, border: "1px solid rgba(0,240,255,0.15)", background: "rgba(0,240,255,0.02)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(0,240,255,0.1)" }}>
+                  <span className="material-symbols-outlined" style={{ color: "#00F0FF", fontSize: 18 }}>auto_awesome</span>
+                  <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#00F0FF", margin: 0 }}>AI Generated Description</h3>
+                </div>
+                <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.aiGeneratedDescription}</p>
+              </div>
+            )}
+
             <div style={cardStyle}>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Required Skills</h3>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {job.skills.map((s) => (
-                  <span key={s.skillId} style={{ padding: "6px 14px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 12, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace" }}>{s.skillName}</span>
-                ))}
+              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Project Details</h3>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 20 }}>
+                <div><span style={labelStyle}>Budget</span><div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "#00F0FF", fontSize: 15 }}>${job.budgetMin?.toLocaleString()} — ${job.budgetMax?.toLocaleString()}</div><div style={{ fontSize: 11, color: "#8c90a0" }}>USD / month</div></div>
+                <div><span style={labelStyle}>Deadline</span><div style={{ color: "#e1e2eb", fontSize: 14, fontWeight: 600 }}>{deadline}</div></div>
+                <div><span style={labelStyle}>Project Type</span><div style={{ color: "#e1e2eb", fontSize: 14 }}>{job.projectType || "—"}</div></div>
+                <div><span style={labelStyle}>Complexity</span><div style={{ color: "#facc15", fontSize: 14, fontWeight: 600 }}>{job.complexity || "—"}</div></div>
               </div>
             </div>
-          )}
 
-          {/* Proposals */}
-          <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Proposals Received</h3>
-              <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(250,204,21,0.1)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", fontFamily: "JetBrains Mono, monospace" }}>{proposals.length} received</span>
-            </div>
-
-            {proposals.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#272a30", display: "block", marginBottom: 12 }}>inbox</span>
-                <p style={{ color: "#8c90a0", fontSize: 14 }}>No proposals yet. Experts will apply soon!</p>
+            {job.expectedDeliverables && (
+              <div style={cardStyle}>
+                <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Expected Deliverables</h3>
+                <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.8, whiteSpace: "pre-line", margin: 0 }}>{job.expectedDeliverables}</p>
               </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                {proposals.map((proposal) => {
-                  const pStatus = PROPOSAL_STATUS[proposal.status] || PROPOSAL_STATUS.PENDING;
-                  const level = LEVEL_CONFIG[proposal.level] || { label: proposal.level || "—", color: "#8c90a0" };
-                  const submittedDate = (proposal.createdAt || proposal.submittedAt)
-                    ? new Date(proposal.createdAt || proposal.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
-                    : "—";
-                  const isPending = proposal.status === "PENDING" || proposal.status === "SUBMITTED";
-                  const isAccepting = actionLoading === proposal.proposalId + "_accept";
-                  const isDeclining = actionLoading === proposal.proposalId + "_decline";
-                  const isProcessing = isAccepting || isDeclining;
-                  const expertName = proposal.expertName || proposal.fullName || "Expert";
+            )}
 
-                  // FIX: field thật từ BE là proposedPrice / proposedTimelineDays
-                  // (theo schema SubmitProposalRequest), không phải bidAmount/estimatedDays.
-                  // Giữ fallback cho cả 2 tên để không vỡ nếu BE đổi lại.
-                  const price = proposal.proposedPrice ?? proposal.bidAmount;
-                  const timelineDays = proposal.proposedTimelineDays ?? proposal.estimatedDays;
+            {job.skills?.length > 0 && (
+              <div style={cardStyle}>
+                <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Required Skills</h3>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {job.skills.map((s) => (
+                    <span key={s.skillId} style={{ padding: "6px 14px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 12, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace" }}>{s.skillName}</span>
+                  ))}
+                </div>
+              </div>
+            )}
 
-                  return (
-                    <div key={proposal.proposalId}
-                      style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: 20, transition: "border-color 0.2s" }}
-                      onMouseEnter={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = "rgba(0,240,255,0.2)"; }}
-                      onMouseLeave={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"; }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                        <img src={proposal.expertAvatar || proposal.avatarUrl || `https://i.pravatar.cc/100?u=${proposal.proposalId}`} alt={expertName}
-                          style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.1)", flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-                            <div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                                <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, color: "#e1e2eb", margin: 0 }}>{expertName}</h4>
-                                {proposal.level && (
-                                  <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>{level.label}</span>
-                                )}
+            {/* Proposals */}
+            <div style={cardStyle}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Proposals Received</h3>
+                <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(250,204,21,0.1)", color: "#facc15", border: "1px solid rgba(250,204,21,0.3)", fontFamily: "JetBrains Mono, monospace" }}>{proposals.length} received</span>
+              </div>
+
+              {proposals.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "40px 0" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#272a30", display: "block", marginBottom: 12 }}>inbox</span>
+                  <p style={{ color: "#8c90a0", fontSize: 14 }}>No proposals yet. Experts will apply soon!</p>
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {proposals.map((proposal) => {
+                    const pStatus = PROPOSAL_STATUS[proposal.status] || PROPOSAL_STATUS.PENDING;
+                    const level = LEVEL_CONFIG[proposal.level] || { label: proposal.level || "—", color: "#8c90a0" };
+                    const submittedDate = (proposal.createdAt || proposal.submittedAt)
+                      ? new Date(proposal.createdAt || proposal.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
+                      : "—";
+                    const isPending = proposal.status === "PENDING" || proposal.status === "SUBMITTED";
+                    const isAccepting = actionLoading === proposal.proposalId + "_accept";
+                    const isDeclining = actionLoading === proposal.proposalId + "_decline";
+                    const isProcessing = isAccepting || isDeclining;
+                    const expertName = proposal.expertName || proposal.fullName || "Expert";
+
+                    // FIX: field thật từ BE là proposedPrice / proposedTimelineDays
+                    // (theo schema SubmitProposalRequest), không phải bidAmount/estimatedDays.
+                    // Giữ fallback cho cả 2 tên để không vỡ nếu BE đổi lại.
+                    const price = proposal.proposedPrice ?? proposal.bidAmount;
+                    const timelineDays = proposal.proposedTimelineDays ?? proposal.estimatedDays;
+
+                    return (
+                      <div key={proposal.proposalId}
+                        style={{ background: "rgba(255,255,255,0.02)", border: `1px solid ${proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"}`, borderRadius: 12, padding: 20, transition: "border-color 0.2s" }}
+                        onMouseEnter={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = "rgba(0,240,255,0.2)"; }}
+                        onMouseLeave={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"; }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
+                          <img src={proposal.expertAvatar || proposal.avatarUrl || `https://i.pravatar.cc/100?u=${proposal.proposalId}`} alt={expertName}
+                            style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.1)", flexShrink: 0 }} />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+                              <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                                  <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, color: "#e1e2eb", margin: 0 }}>{expertName}</h4>
+                                  {proposal.level && (
+                                    <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>{level.label}</span>
+                                  )}
+                                </div>
+                                <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{proposal.expertTitle || proposal.professionalTitle}</p>
                               </div>
-                              <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{proposal.expertTitle || proposal.professionalTitle}</p>
-                            </div>
-                            <div style={{ textAlign: "right" }}>
-                              <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>
-                                {price != null ? `$${price.toLocaleString()}` : "—"}
+                              <div style={{ textAlign: "right" }}>
+                                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>
+                                  {price != null ? `$${price.toLocaleString()}` : "—"}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#8c90a0" }}>
+                                  {timelineDays != null ? `${timelineDays} days` : "—"}
+                                </div>
                               </div>
-                              <div style={{ fontSize: 11, color: "#8c90a0" }}>
-                                {timelineDays != null ? `${timelineDays} days` : "—"}
+                            </div>
+
+                            <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.6, margin: "0 0 12px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                              {proposal.coverLetter}
+                            </p>
+
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: pStatus.color, background: pStatus.color + "15", border: `1px solid ${pStatus.color}40` }}>{pStatus.label}</span>
+                                <span style={{ fontSize: 12, color: "#8c90a0" }}>{submittedDate}</span>
                               </div>
-                            </div>
-                          </div>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                                {/* View Full */}
+                                <button onClick={() => navigate(`/client/proposals/${proposal.proposalId}`)}
+                                  style={{ padding: "7px 14px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}>
+                                  View Full
+                                </button>
 
-                          <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.6, margin: "0 0 12px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                            {proposal.coverLetter}
-                          </p>
+                                {/* Message icon */}
+                                <button onClick={() => setMessagingProposal(proposal)} title="Send Message"
+                                  style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, cursor: "pointer", transition: "all 0.2s" }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.18)"; e.currentTarget.style.borderColor = "#c0c1ff"; e.currentTarget.style.boxShadow = "0 0 10px rgba(192,193,255,0.2)"; }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; e.currentTarget.style.boxShadow = "none"; }}>
+                                  <span className="material-symbols-outlined" style={{ fontSize: 17 }}>chat</span>
+                                </button>
 
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", color: pStatus.color, background: pStatus.color + "15", border: `1px solid ${pStatus.color}40` }}>{pStatus.label}</span>
-                              <span style={{ fontSize: 12, color: "#8c90a0" }}>{submittedDate}</span>
-                            </div>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              {/* View Full */}
-                              <button onClick={() => navigate(`/client/proposals/${proposal.proposalId}`)}
-                                style={{ padding: "7px 14px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.12)"; e.currentTarget.style.borderColor = "#00F0FF"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(0,240,255,0.05)"; e.currentTarget.style.borderColor = "rgba(0,240,255,0.25)"; }}>
-                                View Full
-                              </button>
-
-                              {/* Message icon */}
-                              <button onClick={() => setMessagingProposal(proposal)} title="Send Message"
-                                style={{ width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, cursor: "pointer", transition: "all 0.2s" }}
-                                onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.18)"; e.currentTarget.style.borderColor = "#c0c1ff"; e.currentTarget.style.boxShadow = "0 0 10px rgba(192,193,255,0.2)"; }}
-                                onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; e.currentTarget.style.boxShadow = "none"; }}>
-                                <span className="material-symbols-outlined" style={{ fontSize: 17 }}>chat</span>
-                              </button>
-
+                              </div>
                             </div>
                           </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

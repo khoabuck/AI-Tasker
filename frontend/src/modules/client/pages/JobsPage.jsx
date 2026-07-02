@@ -20,10 +20,21 @@ const STATUS_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.25)"   },
 };
 
+// Chuẩn hoá status job cho trang My Jobs. Chỉ có 3 nhóm: DRAFT / OPEN / CANCELLED.
+// ACTIVE là khái niệm của Project (sau khi lock escrow) → ở trang Job vẫn coi là OPEN.
+// Mọi status lạ khác cũng gộp về OPEN (job đã publish thì không quay lại DRAFT).
+function normalizeJobStatus(status) {
+  const s = (status || "").toUpperCase();
+  if (s === "DRAFT") return "DRAFT";
+  if (s === "CANCELLED") return "CANCELLED";
+  return "OPEN"; // OPEN, ACTIVE, và mọi status khác
+}
+
 function JobCard({ job, onStatusChange }) {
   const navigate = useNavigate();
   const [actionLoading, setActionLoading] = useState(false);
-  const cfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.DRAFT;
+  const normStatus = normalizeJobStatus(job.status);
+  const cfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.OPEN;
 
   const handleSubmit = async (e) => {
   e.stopPropagation();
@@ -86,7 +97,7 @@ function JobCard({ job, onStatusChange }) {
         </div>
 
         <div style={{ display: "flex", gap: 8 }}>
-          {job.status === "DRAFT" && (
+          {normStatus === "DRAFT" && (
             <>
               <button
                 onClick={(e) => {
@@ -115,7 +126,7 @@ function JobCard({ job, onStatusChange }) {
               </button>
             </>
           )}
-          {job.status === "OPEN" && (
+          {normStatus === "OPEN" && (
             <>
               <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}/recommendations`); }}
                 style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
@@ -194,16 +205,19 @@ export default function JobsPage() {
   }, [fetchJobs, location.key]); // refetch khi navigate quay lại trang
 
   const handleStatusChange = (jobId, newStatus) => {
-    setAllJobs((prev) => prev.map((j) => j.jobPostingId === jobId ? { ...j, status: newStatus } : j));
+    setAllJobs((prev) => {
+      const updated = prev.map((j) =>
+        j.jobPostingId === jobId ? { ...j, status: newStatus } : j
+      );
+      // Đưa job vừa thao tác lên đầu (nó là mới nhất) rồi giữ nguyên thứ tự còn lại.
+      const target = updated.find((j) => j.jobPostingId === jobId);
+      const rest = updated.filter((j) => j.jobPostingId !== jobId);
+      return target ? [target, ...rest] : updated;
+    });
   };
 
   const filteredJobs = allJobs.filter((j) => {
-    const status = j.status || "DRAFT";
-
-    if (activeStatus === "OPEN") {
-      return status === "OPEN" || status === "ACTIVE";
-    }
-
+    const status = normalizeJobStatus(j.status);
     return status === activeStatus;
   });
 
@@ -231,10 +245,9 @@ export default function JobsPage() {
           {/* Tabs */}
           <div style={{ display: "flex", gap: 8, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             {STATUS_TABS.map((tab) => {
-              const count =
-                tab.key === "OPEN"
-                  ? allJobs.filter((j) => j.status === "OPEN" || j.status === "ACTIVE").length
-                  : allJobs.filter((j) => j.status === tab.key).length;
+              const count = allJobs.filter(
+                (j) => normalizeJobStatus(j.status) === tab.key
+              ).length;
               const active = activeStatus === tab.key;
               return (
                 <button key={tab.key}
