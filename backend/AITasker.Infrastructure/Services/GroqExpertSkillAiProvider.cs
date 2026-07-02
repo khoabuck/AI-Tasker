@@ -1,24 +1,18 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
-using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Infrastructure.Services;
 
 public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
 {
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
+    private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqExpertSkillAiProvider(
-        HttpClient httpClient,
-        IConfiguration configuration)
+    public GroqExpertSkillAiProvider(IGroqChatCompletionService groqChatCompletionService)
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
+        _groqChatCompletionService = groqChatCompletionService;
     }
 
     public async Task<ExpertSkillAiAnalysisResult> AnalyzeAsync(
@@ -36,78 +30,29 @@ public class GroqExpertSkillAiProvider : IExpertSkillAiProvider
             };
         }
 
-        var apiKey =
-            _configuration["Groq:ApiKey"] ??
-            _configuration["BusinessVerification:Groq:ApiKey"];
-
-        var model =
-            _configuration["Groq:Model"] ??
-            _configuration["BusinessVerification:Groq:Model"] ??
-            "openai/gpt-oss-120b";
-
-        var baseUrl =
-            _configuration["Groq:BaseUrl"] ??
-            _configuration["BusinessVerification:Groq:BaseUrl"] ??
-            "https://api.groq.com/openai/v1";
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException("Groq API key is missing.");
-        }
-
         var prompt = BuildPrompt(input, availableSkills);
 
-        using var requestMessage = new HttpRequestMessage(
-            HttpMethod.Post,
-            $"{baseUrl.TrimEnd('/')}/chat/completions"
-        );
-
-        requestMessage.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", apiKey);
-
-        var payload = new
-        {
-            model,
-            temperature = 0.1,
-            response_format = new
+        var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(
+            new GroqChatCompletionRequest
             {
-                type = "json_object"
-            },
-            messages = new object[]
-            {
-                new
+                Feature = "ExpertSkillAnalysis",
+                Messages = new List<GroqChatMessage>
                 {
-                    role = "system",
-                    content = "You are an AI expert profile analyzer. You must return valid JSON only."
-                },
-                new
-                {
-                    role = "user",
-                    content = prompt
+                    new()
+                    {
+                        Role = "system",
+                        Content = "You are an AI expert profile analyzer. You must return valid JSON only."
+                    },
+                    new()
+                    {
+                        Role = "user",
+                        Content = prompt
+                    }
                 }
             }
-        };
-
-        requestMessage.Content = new StringContent(
-            JsonSerializer.Serialize(payload),
-            Encoding.UTF8,
-            "application/json"
         );
 
-        using var response = await _httpClient.SendAsync(requestMessage);
-
-        var responseText = await response.Content.ReadAsStringAsync();
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Groq expert skill analysis failed: {response.StatusCode} - {responseText}"
-            );
-        }
-
-        var content = ExtractContent(responseText);
-
-        var json = CleanJson(content);
+        var json = CleanJson(aiResponse.Content);
 
         var result = JsonSerializer.Deserialize<ExpertSkillAiAnalysisResult>(
             json,
@@ -195,29 +140,6 @@ Return JSON exactly in this structure:
   ]
 }
 """;
-    }
-
-    private static string ExtractContent(string responseText)
-    {
-        using var document = JsonDocument.Parse(responseText);
-
-        var root = document.RootElement;
-
-        var choices = root.GetProperty("choices");
-
-        if (choices.GetArrayLength() == 0)
-        {
-            throw new InvalidOperationException("Groq response contains no choices.");
-        }
-
-        var message = choices[0].GetProperty("message");
-
-        if (!message.TryGetProperty("content", out var contentElement))
-        {
-            throw new InvalidOperationException("Groq response contains no message content.");
-        }
-
-        return contentElement.GetString() ?? string.Empty;
     }
 
     private static string CleanJson(string content)

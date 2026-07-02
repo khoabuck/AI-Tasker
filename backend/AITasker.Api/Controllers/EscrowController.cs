@@ -90,39 +90,6 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("milestones/{milestoneId:int}/release")]
-        [Authorize(Roles = "CLIENT,ADMIN")]
-        public IActionResult ReleaseFunds(int milestoneId)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Use /api/deliverables/{deliverableId}/approve to approve work and release escrow. Direct escrow release is disabled to keep Deliverable -> Escrow flow consistent."
-            });
-        }
-
-        [HttpPost("milestones/{milestoneId:int}/refund")]
-        [Authorize(Roles = "CLIENT,ADMIN")]
-        public IActionResult RefundFunds(int milestoneId)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Use the Admin dispute resolution endpoint to refund escrow. Direct refund is disabled to keep Dispute -> Escrow flow consistent."
-            });
-        }
-
-        [HttpPost("milestones/{milestoneId:int}/freeze")]
-        [Authorize(Roles = "CLIENT,EXPERT,ADMIN")]
-        public IActionResult FreezeFunds(int milestoneId)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = "Use the dispute endpoint to freeze escrow. Direct freeze is disabled so Dispute and Escrow are created/updated together."
-            });
-        }
-
         private int GetCurrentUserId()
         {
             var userIdValue =

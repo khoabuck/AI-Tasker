@@ -479,6 +479,42 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpGet("{proposalId:int}/withdraw-warning")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> GetWithdrawWarning(int proposalId)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.GetWithdrawWarningAsync(
+                    userId,
+                    proposalId);
+
+                return Ok(new
+                {
+                    success = true,
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpPatch("{proposalId:int}/withdraw")]
         [Authorize(Roles = "EXPERT")]
         public async Task<IActionResult> Withdraw(int proposalId)
@@ -494,7 +530,7 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Proposal withdrawn successfully.",
+                    message = "Proposal withdrawn successfully. The proposal submission credit used for this proposal is not refundable.",
                     data = result
                 });
             }

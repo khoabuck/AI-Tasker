@@ -139,6 +139,7 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalWalletAvailableBalance = wallets.Sum(w => w.AvailableBalance),
                 TotalWalletLockedBalance = wallets.Sum(w => w.LockedBalance),
+                TotalExpertPendingEarningsBalance = wallets.Sum(w => w.PendingEarningsBalance),
                 TotalExpertEarnings = wallets.Sum(w => w.TotalEarning),
 
                 TotalContractValue = nonDraftContracts.Sum(c => c.FinalPrice),
@@ -226,6 +227,7 @@ namespace AITasker.Infrastructure.Dashboards
 
                 TotalExpertPayout = SumAbsTransactionsByType(
                     transactions,
+                    "EXPERT_PENDING_EARNING_RELEASE",
                     "ESCROW_RECEIVE",
                     "ESCROW_RECEIVED",
                     "DISPUTE_ESCROW_RECEIVED"),
@@ -233,6 +235,7 @@ namespace AITasker.Infrastructure.Dashboards
                 TotalClientRefund = SumAbsTransactionsByType(
                     transactions,
                     "REFUND",
+                    "EXPERT_PENDING_EARNING_REFUND",
                     "ESCROW_REFUNDED",
                     "DISPUTE_REFUND"),
 
@@ -240,10 +243,8 @@ namespace AITasker.Infrastructure.Dashboards
                     .Where(w => IsStatus(w.Status, "PENDING"))
                     .Sum(w => w.Amount),
 
-                ApprovedWithdrawalAmount = withdrawalRequests
-                    .Where(w =>
-                        IsStatus(w.Status, "APPROVED") ||
-                        IsStatus(w.Status, "COMPLETED"))
+                PaidWithdrawalAmount = withdrawalRequests
+                    .Where(w => IsStatus(w.Status, "PAID"))
                     .Sum(w => w.Amount),
 
                 RecentTransactions = transactions
@@ -415,18 +416,45 @@ namespace AITasker.Infrastructure.Dashboards
                 .AsNoTracking()
                 .ToListAsync();
 
+            var aiUsageLogs = await _context.AiUsageLogs
+                .AsNoTracking()
+                .ToListAsync();
+
+            var aiPricingPolicies = await _context.AIModelPricingPolicies
+                .AsNoTracking()
+                .ToListAsync();
+
+            var aiUsageCosts = aiUsageLogs
+                .Select(x => CalculateAiUsageCost(x, aiPricingPolicies))
+                .ToList();
+
+            var platformTotalRevenue = platformWallet?.TotalRevenue ?? 0;
+            var estimatedAiCostVnd = aiUsageCosts.Sum(x => x.EstimatedTotalCostVnd);
+            var actualAiCostVnd = aiUsageCosts.Sum(x => x.ActualTotalCostVnd);
+
             return new AdminFinanceOverviewResponse
             {
                 GeneratedAt = DateTime.UtcNow,
 
                 PlatformAvailableBalance = platformWallet?.AvailableBalance ?? 0,
-                PlatformTotalRevenue = platformWallet?.TotalRevenue ?? 0,
+                PlatformTotalRevenue = platformTotalRevenue,
                 PlatformFeeRevenue = platformWallet?.PlatformFeeRevenue ?? 0,
                 WithdrawalFeeRevenue = platformWallet?.WithdrawalFeeRevenue ?? 0,
                 AdjustmentBalance = platformWallet?.AdjustmentBalance ?? 0,
 
+                TotalAIRequests = aiUsageLogs.Count,
+                TotalAITokens = aiUsageLogs.Sum(x => (long)x.TotalTokens),
+                EstimatedAICostUsd = aiUsageCosts.Sum(x => x.EstimatedTotalCostUsd),
+                EstimatedAICostVnd = estimatedAiCostVnd,
+                ActualAICostUsd = aiUsageCosts.Sum(x => x.ActualTotalCostUsd),
+                ActualAICostVnd = actualAiCostVnd,
+                FreeTierAISavingsVnd = aiUsageCosts.Sum(x => x.FreeTierSavingsVnd),
+                EstimatedNetPlatformProfitVnd = platformTotalRevenue - estimatedAiCostVnd,
+                ActualNetPlatformProfitVnd = platformTotalRevenue - actualAiCostVnd,
+
                 TotalUserAvailableBalance = wallets.Sum(x => x.AvailableBalance),
                 TotalUserLockedBalance = wallets.Sum(x => x.LockedBalance),
+                TotalExpertPendingEarningsBalance = wallets.Sum(x => x.PendingEarningsBalance),
                 TotalExpertEarnings = wallets.Sum(x => x.TotalEarning),
 
                 TotalEscrowLocked = escrows
@@ -452,18 +480,25 @@ namespace AITasker.Infrastructure.Dashboards
                     .Where(x => IsStatus(x.Status, "PENDING"))
                     .Sum(x => x.Amount),
 
-                ApprovedWithdrawalCount = withdrawalRequests
-                    .Count(x => IsStatus(x.Status, "APPROVED")),
+                PaidWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "PAID")),
 
-                ApprovedWithdrawalAmount = withdrawalRequests
-                    .Where(x => IsStatus(x.Status, "APPROVED"))
+                PaidWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "PAID"))
                     .Sum(x => x.Amount),
 
-                PaidSimulatedWithdrawalCount = withdrawalRequests
-                    .Count(x => IsStatus(x.Status, "PAID_SIMULATED")),
+                RejectedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "REJECTED")),
 
-                PaidSimulatedWithdrawalAmount = withdrawalRequests
-                    .Where(x => IsStatus(x.Status, "PAID_SIMULATED"))
+                RejectedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "REJECTED"))
+                    .Sum(x => x.Amount),
+
+                FailedWithdrawalCount = withdrawalRequests
+                    .Count(x => IsStatus(x.Status, "FAILED")),
+
+                FailedWithdrawalAmount = withdrawalRequests
+                    .Where(x => IsStatus(x.Status, "FAILED"))
                     .Sum(x => x.Amount)
             };
         }
@@ -582,6 +617,8 @@ namespace AITasker.Infrastructure.Dashboards
                     UserStatus = x.User.Status,
                     AvailableBalance = x.Wallet.AvailableBalance,
                     LockedBalance = x.Wallet.LockedBalance,
+                    PendingEarningsBalance = x.Wallet.PendingEarningsBalance,
+                    WithdrawableBalance = x.Wallet.AvailableBalance,
                     TotalEarning = x.Wallet.TotalEarning,
                     UpdatedAt = x.Wallet.UpdatedAt
                 })
@@ -698,6 +735,72 @@ namespace AITasker.Infrastructure.Dashboards
             return transactions
                 .Where(t => normalizedTypes.Contains(Normalize(t.Type)))
                 .Sum(t => Math.Abs(t.Amount));
+        }
+
+
+        private static AdminAiUsageCostSnapshot CalculateAiUsageCost(
+            AiUsageLog log,
+            IReadOnlyCollection<AIModelPricingPolicy> pricingPolicies)
+        {
+            var policy = pricingPolicies
+                .Where(x =>
+                    Normalize(x.Provider) == Normalize(log.Provider) &&
+                    NormalizeModelName(x.ModelName) == NormalizeModelName(log.Model) &&
+                    x.EffectiveFrom <= log.CreatedAt)
+                .OrderByDescending(x => x.EffectiveFrom)
+                .FirstOrDefault();
+
+            var inputPrice = policy?.InputPricePerMillionTokensUsd ?? 0m;
+            var outputPrice = policy?.OutputPricePerMillionTokensUsd ?? 0m;
+            var exchangeRate = policy?.ExchangeRateToVnd ?? 25000m;
+            var isFreeTier = policy?.IsFreeTier ?? true;
+
+            var inputCostUsd = CalculateAiTokenCost(log.PromptTokens, inputPrice);
+            var outputCostUsd = CalculateAiTokenCost(log.CompletionTokens, outputPrice);
+            var estimatedTotalCostUsd = inputCostUsd + outputCostUsd;
+            var actualTotalCostUsd = isFreeTier ? 0m : estimatedTotalCostUsd;
+            var freeTierSavingsUsd = Math.Max(estimatedTotalCostUsd - actualTotalCostUsd, 0m);
+
+            return new AdminAiUsageCostSnapshot
+            {
+                EstimatedTotalCostUsd = estimatedTotalCostUsd,
+                ActualTotalCostUsd = actualTotalCostUsd,
+                EstimatedTotalCostVnd = estimatedTotalCostUsd * exchangeRate,
+                ActualTotalCostVnd = actualTotalCostUsd * exchangeRate,
+                FreeTierSavingsVnd = freeTierSavingsUsd * exchangeRate
+            };
+        }
+
+        private static decimal CalculateAiTokenCost(
+            int tokens,
+            decimal pricePerMillionTokensUsd)
+        {
+            if (tokens <= 0 || pricePerMillionTokensUsd <= 0)
+            {
+                return 0m;
+            }
+
+            return Math.Round(tokens / 1_000_000m * pricePerMillionTokensUsd, 8);
+        }
+
+        private static string NormalizeModelName(string? value)
+        {
+            return string.IsNullOrWhiteSpace(value)
+                ? string.Empty
+                : value.Trim().ToLowerInvariant();
+        }
+
+        private sealed class AdminAiUsageCostSnapshot
+        {
+            public decimal EstimatedTotalCostUsd { get; set; }
+
+            public decimal ActualTotalCostUsd { get; set; }
+
+            public decimal EstimatedTotalCostVnd { get; set; }
+
+            public decimal ActualTotalCostVnd { get; set; }
+
+            public decimal FreeTierSavingsVnd { get; set; }
         }
 
         private static int NormalizeTake(int take)

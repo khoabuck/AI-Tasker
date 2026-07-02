@@ -17,15 +17,15 @@ public class AuthController : ControllerBase
     private const string GoogleScheme = "Google";
     private const string ExternalCookieScheme = "External";
 
-    // FE đang chạy port 5173.
-    // Nếu Vite tự nhảy sang 5174 thì đổi dòng này thành http://localhost:5174
-    private const string FrontendBaseUrl = "http://localhost:5173";
-
     private readonly IAuthService _authService;
+    private readonly string _frontendBaseUrl;
 
-    public AuthController(IAuthService authService)
+    public AuthController(IAuthService authService, IConfiguration configuration)
     {
         _authService = authService;
+        _frontendBaseUrl = (configuration["AppUrls:FrontendBaseUrl"] ?? "http://localhost:5173")
+            .Trim()
+            .TrimEnd('/');
     }
 
     [AllowAnonymous]
@@ -98,7 +98,7 @@ public class AuthController : ControllerBase
 
         if (!authenticateResult.Succeeded || authenticateResult.Principal == null)
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=failed");
+            return Redirect($"{_frontendBaseUrl}/login?oauth=failed");
         }
 
         var principal = authenticateResult.Principal;
@@ -113,7 +113,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(googleId)
             || string.IsNullOrWhiteSpace(email))
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=missing_info");
+            return Redirect($"{_frontendBaseUrl}/login?oauth=missing_info");
         }
 
         try
@@ -129,7 +129,7 @@ public class AuthController : ControllerBase
             var status = result.User.Status ?? string.Empty;
 
             var redirectUrl =
-                $"{FrontendBaseUrl}/oauth/callback" +
+                $"{_frontendBaseUrl}/oauth/callback" +
                 $"?token={Uri.EscapeDataString(result.AccessToken)}" +
                 $"&status={Uri.EscapeDataString(status)}" +
                 $"&role={Uri.EscapeDataString(role)}" +
@@ -139,7 +139,7 @@ public class AuthController : ControllerBase
         }
         catch (InvalidOperationException)
         {
-            return Redirect($"{FrontendBaseUrl}/login?oauth=error");
+            return Redirect($"{_frontendBaseUrl}/login?oauth=error");
         }
     }
 
@@ -152,7 +152,7 @@ public class AuthController : ControllerBase
             var result = await _authService.VerifyEmailAsync(token);
 
             var redirectUrl =
-                $"{FrontendBaseUrl}/verify-email" +
+                $"{_frontendBaseUrl}/verify-email" +
                 $"?success=true" +
                 $"&message={Uri.EscapeDataString(result.Message)}";
 
@@ -161,7 +161,7 @@ public class AuthController : ControllerBase
         catch (InvalidOperationException ex)
         {
             var redirectUrl =
-                $"{FrontendBaseUrl}/verify-email" +
+                $"{_frontendBaseUrl}/verify-email" +
                 $"?success=false" +
                 $"&message={Uri.EscapeDataString(ex.Message)}";
 

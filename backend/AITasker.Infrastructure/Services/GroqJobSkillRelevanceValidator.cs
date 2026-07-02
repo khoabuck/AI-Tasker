@@ -1,103 +1,51 @@
-using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
+using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
-using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Infrastructure.Services;
 
 public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
 {
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
+    private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqJobSkillRelevanceValidator(
-        HttpClient httpClient,
-        IConfiguration configuration)
+    public GroqJobSkillRelevanceValidator(IGroqChatCompletionService groqChatCompletionService)
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
+        _groqChatCompletionService = groqChatCompletionService;
     }
 
     public async Task<JobSkillRelevanceValidationResult> ValidateAsync(
         JobSkillRelevanceValidationRequest request)
     {
-        var apiKey =
-            _configuration["Groq:ApiKey"] ??
-            _configuration["BusinessVerification:Groq:ApiKey"];
-
-        var model =
-            _configuration["Groq:Model"] ??
-            _configuration["BusinessVerification:Groq:Model"];
-
-        var baseUrl =
-            _configuration["Groq:BaseUrl"] ??
-            _configuration["BusinessVerification:Groq:BaseUrl"] ??
-            "https://api.groq.com/openai/v1";
-
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            throw new InvalidOperationException("Groq API key is missing.");
-        }
-
-        if (string.IsNullOrWhiteSpace(model))
-        {
-            throw new InvalidOperationException("Groq model is missing.");
-        }
-
         var prompt = BuildPrompt(request);
 
-        var body = new
-        {
-            model,
-            messages = new object[]
+        var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(
+            new GroqChatCompletionRequest
             {
-                new
+                Feature = "JobSkillRelevanceValidation",
+                Messages = new List<GroqChatMessage>
                 {
-                    role = "system",
-                    content = "You are an AI quality-control validator for an AI freelance marketplace. Return JSON only. Do not return markdown."
-                },
-                new
-                {
-                    role = "user",
-                    content = prompt
+                    new()
+                    {
+                        Role = "system",
+                        Content = "You are an AI quality-control validator for an AI freelance marketplace. Return exactly one valid JSON object only. Do not return markdown, code fences, comments, or explanation."
+                    },
+                    new()
+                    {
+                        Role = "user",
+                        Content = prompt
+                    }
                 }
-            },
-            temperature = 0.0,
-            max_tokens = 900
-        };
-
-        var jsonBody = JsonSerializer.Serialize(body);
-        var endpoint = $"{baseUrl.TrimEnd('/')}/chat/completions";
-
-        using var httpRequest = new HttpRequestMessage(
-            HttpMethod.Post,
-            endpoint
+            }
         );
 
-        httpRequest.Headers.Authorization =
-            new AuthenticationHeaderValue("Bearer", apiKey);
-
-        httpRequest.Content = new StringContent(
-            jsonBody,
-            Encoding.UTF8,
-            "application/json"
+        return ParseResult(
+            aiResponse.Content,
+            request.SelectedSkillNames,
+            request.AvailableSkillNames
         );
 
-        using var response = await _httpClient.SendAsync(httpRequest);
-        var responseContent = await response.Content.ReadAsStringAsync();
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(
-                $"Groq skill relevance validation failed: {responseContent}"
-            );
-        }
-
-        var aiText = ExtractAssistantText(responseContent);
-        return ParseResult(aiText, request.SelectedSkillNames, request.AvailableSkillNames);
     }
 
     private static string BuildPrompt(JobSkillRelevanceValidationRequest request)
@@ -158,24 +106,6 @@ public class GroqJobSkillRelevanceValidator : IJobSkillRelevanceValidator
           "reason": "string"
         }
         """;
-    }
-
-    private static string ExtractAssistantText(string responseContent)
-    {
-        using var document = JsonDocument.Parse(responseContent);
-
-        var content = document.RootElement
-            .GetProperty("choices")[0]
-            .GetProperty("message")
-            .GetProperty("content")
-            .GetString();
-
-        if (string.IsNullOrWhiteSpace(content))
-        {
-            throw new InvalidOperationException("AI skill relevance response is empty.");
-        }
-
-        return content;
     }
 
     private static JobSkillRelevanceValidationResult ParseResult(

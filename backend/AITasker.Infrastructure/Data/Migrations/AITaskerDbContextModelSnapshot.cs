@@ -22,6 +22,194 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.Entity("AITasker.Domain.Entities.AIModelPricingPolicy", b =>
+                {
+                    b.Property<int>("AIModelPricingPolicyId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AIModelPricingPolicyId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("ExchangeRateToVnd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("InputPricePerMillionTokensUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFreeTier")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("OutputPricePerMillionTokensUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("UpdateReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AIModelPricingPolicyId");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.HasIndex("Provider", "ModelName", "IsActive", "EffectiveFrom");
+
+                    b.ToTable("AIModelPricingPolicies", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AIModelPricingPolicies_ExchangeRate", "[ExchangeRateToVnd] > 0");
+
+                            t.HasCheckConstraint("CK_AIModelPricingPolicies_Prices", "[InputPricePerMillionTokensUsd] >= 0 AND [OutputPricePerMillionTokensUsd] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AIUsageLog", b =>
+                {
+                    b.Property<int>("AIUsageLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AIUsageLogId"));
+
+                    b.Property<int?>("AIModelPricingPolicyId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("ActualInputCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("ActualOutputCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("ActualTotalCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("ActualTotalCostVnd")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("EstimatedInputCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("EstimatedOutputCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("EstimatedTotalCostUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("EstimatedTotalCostVnd")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("ExchangeRateToVnd")
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<decimal>("FreeTierSavingsUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<decimal>("FreeTierSavingsVnd")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("InputPricePerMillionTokensUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<int>("InputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsChargedToPlatform")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsChargedToUser")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsFreeTier")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ModelName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ModuleName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<decimal>("OutputPricePerMillionTokensUsd")
+                        .HasColumnType("decimal(18,8)");
+
+                    b.Property<int>("OutputTokens")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("RequestPreview")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("ResponsePreview")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int>("TotalTokens")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AIUsageLogId");
+
+                    b.HasIndex("AIModelPricingPolicyId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("ModelName");
+
+                    b.HasIndex("ModuleName");
+
+                    b.HasIndex("Provider");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AIUsageLogs", (string)null);
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
                 {
                     b.Property<int>("AdminAuditLogId")
@@ -74,6 +262,252 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.HasIndex("EntityName");
 
                     b.ToTable("AdminAuditLogs", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiAllowedModel", b =>
+                {
+                    b.Property<int>("AiAllowedModelId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AiAllowedModelId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("MaxOutputTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(4096);
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Groq");
+
+                    b.Property<bool>("SupportsJsonObjectResponse")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AiAllowedModelId");
+
+                    b.HasIndex("IsEnabled");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.HasIndex("Provider", "Model")
+                        .IsUnique();
+
+                    b.ToTable("AiAllowedModels", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiSettings", b =>
+                {
+                    b.Property<int>("AiSettingsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AiSettingsId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DailyRequestLimitPerUser")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(50);
+
+                    b.Property<int>("ExpertSkillMaxTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1500);
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("IsEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("JobAssistantMaxTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(3000);
+
+                    b.Property<bool>("JsonObjectResponse")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasDefaultValue("openai/gpt-oss-120b");
+
+                    b.Property<int>("MonthlyRequestLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(50000);
+
+                    b.Property<int>("MonthlyTokenLimit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1000000);
+
+                    b.Property<int>("ProfileReviewMaxTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(2000);
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Groq");
+
+                    b.Property<int>("SkillValidatorMaxTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(1200);
+
+                    b.Property<double>("Temperature")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("float")
+                        .HasDefaultValue(0.10000000000000001);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("UpdatedByAdminId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AiSettingsId");
+
+                    b.HasIndex("IsActive");
+
+                    b.HasIndex("Provider");
+
+                    b.HasIndex("UpdatedByAdminId");
+
+                    b.ToTable("AiSettings", (string)null);
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiUsageLog", b =>
+                {
+                    b.Property<int>("AiUsageLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("AiUsageLogId"));
+
+                    b.Property<int>("CompletionTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("EntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ErrorCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
+                    b.Property<string>("Feature")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Model")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("PromptTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasDefaultValue("Groq");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TotalTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("AiUsageLogId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("Feature");
+
+                    b.HasIndex("Model");
+
+                    b.HasIndex("Status");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("AiUsageLogs", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
@@ -880,6 +1314,11 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ExpertProfileId"));
 
+                    b.Property<decimal>("AiSkillRelevanceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<bool>("AvailableForWork")
                         .HasColumnType("bit");
 
@@ -888,10 +1327,20 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
 
+                    b.Property<decimal>("CertificateEvidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
                     b.Property<decimal>("ExperienceConfidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("ExperienceCredibilityScore")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(5,2)")
                         .HasDefaultValue(0m);
@@ -912,10 +1361,15 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<bool>("FreeProposalSubmitUsed")
+                    b.Property<int>("FreeProposalSubmitUsedCount")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(false);
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("GitHubEvidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<string>("GitHubUrl")
                         .HasMaxLength(500)
@@ -926,6 +1380,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<decimal>("LinkedInEvidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("LinkedInUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
@@ -933,6 +1392,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<string>("MissingInformation")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
+
+                    b.Property<decimal>("PortfolioEvidenceScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<string>("PortfolioUrl")
                         .HasMaxLength(500)
@@ -942,6 +1406,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<decimal>("ProfileCompletenessScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime?>("ProfileReviewLockedUntil")
                         .HasColumnType("datetime2");
@@ -972,6 +1441,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
+
+                    b.Property<decimal>("TrustRiskScore")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("decimal(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2");
@@ -1181,47 +1655,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("JobCreditPackages", null, t =>
                         {
                             t.HasCheckConstraint("CK_JobCreditPackages_CreditsAndPrice", "[JobPostCredits] > 0 AND [AiGenerationCredits] >= 0 AND [Price] >= 0");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            JobCreditPackageId = 1,
-                            AiGenerationCredits = 10,
-                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "3 job posting credits and 10 AI generation credits.",
-                            DisplayOrder = 1,
-                            IsActive = true,
-                            JobPostCredits = 3,
-                            PackageName = "Basic",
-                            Price = 49000m
-                        },
-                        new
-                        {
-                            JobCreditPackageId = 2,
-                            AiGenerationCredits = 35,
-                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "10 job posting credits and 35 AI generation credits.",
-                            DisplayOrder = 2,
-                            IsActive = true,
-                            JobPostCredits = 10,
-                            PackageName = "Pro",
-                            Price = 149000m
-                        },
-                        new
-                        {
-                            JobCreditPackageId = 3,
-                            AiGenerationCredits = 120,
-                            CreatedAt = new DateTime(2026, 6, 24, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "30 job posting credits and 120 AI generation credits.",
-                            DisplayOrder = 3,
-                            IsActive = true,
-                            JobPostCredits = 30,
-                            PackageName = "Business",
-                            Price = 399000m
                         });
                 });
 
@@ -1499,6 +1932,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MarketplaceWorkflowPolicyId"));
 
+                    b.Property<int>("ContractSignWindowHours")
+                        .HasColumnType("int");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
@@ -1558,30 +1994,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("IsActive");
 
-                    b.ToTable("MarketplaceWorkflowPolicies", (string)null);
+                    b.HasIndex("UpdatedByAdminId");
 
-                    b.HasData(
-                        new
-                        {
-                            MarketplaceWorkflowPolicyId = 1,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            DeliverableAutoApproveGraceHours = 6,
-                            DeliverableReviewWindowHours = 24,
-                            DisputeLostWarningThreshold = 3,
-                            EscrowLockWindowHours = 24,
-                            ExpertMaxActiveProjects = 3,
-                            FreeProposalSubmitCount = 1,
-                            IsActive = true,
-                            MaximumDepositAmount = 500000000m,
-                            MinimumDepositAmount = 1000m,
-                            MinimumWithdrawalAmount = 1000m,
-                            ProposalDraftLimit = 10,
-                            ProposalMilestoneLimit = 10,
-                            ResubmitNoteMaxLength = 1000,
-                            UpdateReason = "Default marketplace workflow policy.",
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            WithdrawalFeeRate = 0.10m
-                        });
+                    b.ToTable("MarketplaceWorkflowPolicies", (string)null);
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Milestone", b =>
@@ -1896,6 +2311,8 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("Type");
 
+                    b.HasIndex("UserId");
+
                     b.HasIndex("WithdrawalRequestId");
 
                     b.ToTable("PlatformTransactions", null, t =>
@@ -1946,20 +2363,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("PlatformWallets", null, t =>
                         {
                             t.HasCheckConstraint("CK_PlatformWallets_Balances", "[AvailableBalance] >= 0 AND [TotalRevenue] >= 0 AND [PlatformFeeRevenue] >= 0 AND [WithdrawalFeeRevenue] >= 0");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            PlatformWalletId = 1,
-                            AdjustmentBalance = 0m,
-                            AvailableBalance = 0m,
-                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            PlatformFeeRevenue = 0m,
-                            TotalRevenue = 0m,
-                            UpdatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
-                            WalletCode = "MAIN",
-                            WithdrawalFeeRevenue = 0m
                         });
                 });
 
@@ -2089,6 +2492,12 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<int>("ProposalId")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("SignDeadlineAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("SignExpiredAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("SourceProposalVersionNumber")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -2110,6 +2519,8 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("ProposalId")
                         .IsUnique();
+
+                    b.HasIndex("SignDeadlineAt");
 
                     b.HasIndex("Status");
 
@@ -2254,44 +2665,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("ProposalCreditPackages", null, t =>
                         {
                             t.HasCheckConstraint("CK_ProposalCreditPackages_CreditsAndPrice", "[ProposalSubmitCredits] > 0 AND [Price] >= 0");
-                        });
-
-                    b.HasData(
-                        new
-                        {
-                            ProposalCreditPackageId = 1,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "5 proposal submit credits.",
-                            DisplayOrder = 1,
-                            IsActive = true,
-                            PackageName = "Basic",
-                            Price = 49000m,
-                            ProposalSubmitCredits = 5
-                        },
-                        new
-                        {
-                            ProposalCreditPackageId = 2,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "20 proposal submit credits.",
-                            DisplayOrder = 2,
-                            IsActive = true,
-                            PackageName = "Pro",
-                            Price = 149000m,
-                            ProposalSubmitCredits = 20
-                        },
-                        new
-                        {
-                            ProposalCreditPackageId = 3,
-                            CreatedAt = new DateTime(2026, 6, 28, 0, 0, 0, 0, DateTimeKind.Utc),
-                            Currency = "VND",
-                            Description = "60 proposal submit credits.",
-                            DisplayOrder = 3,
-                            IsActive = true,
-                            PackageName = "Business",
-                            Price = 399000m,
-                            ProposalSubmitCredits = 60
                         });
                 });
 
@@ -2734,6 +3107,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("LockedBalance")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<decimal>("PendingEarningsBalance")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<decimal>("TotalEarning")
                         .HasColumnType("decimal(18,2)");
 
@@ -2750,7 +3126,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.ToTable("Wallets", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Wallets_Balances", "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [TotalEarning] >= 0 AND [AvailableBalance] + [LockedBalance] >= 0");
+                            t.HasCheckConstraint("CK_Wallets_Balances", "[AvailableBalance] >= 0 AND [LockedBalance] >= 0 AND [PendingEarningsBalance] >= 0 AND [TotalEarning] >= 0");
                         });
                 });
 
@@ -2779,6 +3155,13 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
+                    b.Property<string>("BankBin")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasDefaultValue("");
+
                     b.Property<string>("BankCode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -2805,6 +3188,10 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
+
                     b.Property<decimal>("FeeAmount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("decimal(18,2)")
@@ -2815,9 +3202,46 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("decimal(18,2)")
                         .HasDefaultValue(0m);
 
+                    b.Property<string>("PayOsApprovalState")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("PayOsIdempotencyKey")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayOsPayoutId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayOsRawResponse")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("PayOsReferenceId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayOsTransactionId")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("PayOsTransactionState")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<DateTime?>("PayoutConfirmedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PayoutProvider")
+                        .HasMaxLength(30)
+                        .HasColumnType("nvarchar(30)");
+
                     b.Property<string>("PayoutReferenceCode")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<DateTime?>("PayoutRequestedAt")
+                        .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("ProcessedAt")
                         .HasColumnType("datetime2");
@@ -2839,6 +3263,20 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasIndex("CreatedAt");
 
+                    b.HasIndex("PayOsIdempotencyKey")
+                        .IsUnique()
+                        .HasFilter("[PayOsIdempotencyKey] IS NOT NULL");
+
+                    b.HasIndex("PayOsPayoutId")
+                        .IsUnique()
+                        .HasFilter("[PayOsPayoutId] IS NOT NULL");
+
+                    b.HasIndex("PayOsReferenceId")
+                        .IsUnique()
+                        .HasFilter("[PayOsReferenceId] IS NOT NULL");
+
+                    b.HasIndex("PayoutProvider");
+
                     b.HasIndex("PayoutReferenceCode");
 
                     b.HasIndex("ProcessedByAdminId");
@@ -2850,6 +3288,33 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.ToTable("WithdrawalRequests", (string)null);
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.AIModelPricingPolicy", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AIUsageLog", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.AIModelPricingPolicy", "AIModelPricingPolicy")
+                        .WithMany()
+                        .HasForeignKey("AIModelPricingPolicyId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AITasker.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("AIModelPricingPolicy");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.AdminAuditLog", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "Admin")
@@ -2858,6 +3323,36 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Admin");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiAllowedModel", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiSettings", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
+            modelBuilder.Entity("AITasker.Domain.Entities.AiUsageLog", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.BusinessProfile", b =>
@@ -3217,6 +3712,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("Skill");
                 });
 
+            modelBuilder.Entity("AITasker.Domain.Entities.MarketplaceWorkflowPolicy", b =>
+                {
+                    b.HasOne("AITasker.Domain.Entities.User", "UpdatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("UpdatedByAdmin");
+                });
+
             modelBuilder.Entity("AITasker.Domain.Entities.Milestone", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.Project", "Project")
@@ -3262,13 +3767,41 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.PlatformTransaction", b =>
                 {
+                    b.HasOne("AITasker.Domain.Entities.ProjectContract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("AITasker.Domain.Entities.PlatformWallet", "PlatformWallet")
                         .WithMany("Transactions")
                         .HasForeignKey("PlatformWalletId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("AITasker.Domain.Entities.Project", "Project")
+                        .WithMany()
+                        .HasForeignKey("ProjectId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AITasker.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("AITasker.Domain.Entities.WithdrawalRequest", "WithdrawalRequest")
+                        .WithMany()
+                        .HasForeignKey("WithdrawalRequestId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Contract");
+
                     b.Navigation("PlatformWallet");
+
+                    b.Navigation("Project");
+
+                    b.Navigation("User");
+
+                    b.Navigation("WithdrawalRequest");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Project", b =>

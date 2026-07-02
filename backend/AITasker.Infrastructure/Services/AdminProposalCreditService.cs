@@ -146,55 +146,11 @@ public class AdminProposalCreditService : IAdminProposalCreditService
         return MapToResponse(expert, policy);
     }
 
-    public async Task<AdminProposalCreditResponse?> SetFreeProposalSubmitAsync(
-        int adminId,
-        int expertProfileId,
-        AdminSetFreeProposalSubmitRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-        {
-            throw new InvalidOperationException("Reason is required.");
-        }
-
-        var expert = await _context.ExpertProfiles
-            .Include(x => x.User)
-            .FirstOrDefaultAsync(x => x.ExpertProfileId == expertProfileId);
-
-        if (expert == null)
-        {
-            return null;
-        }
-
-        var policy = await _workflowPolicyService.GetActivePolicyAsync();
-
-        var oldValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
-
-        expert.FreeProposalSubmitUsed = request.FreeProposalSubmitUsed;
-        expert.UpdatedAt = DateTime.UtcNow;
-
-        var newValue = JsonSerializer.Serialize(MapToResponse(expert, policy));
-
-        await _context.SaveChangesAsync();
-
-        await _adminAuditLogService.LogAsync(
-            adminId,
-            "SET_FREE_PROPOSAL_SUBMIT",
-            nameof(ExpertProfile),
-            expert.ExpertProfileId,
-            oldValue,
-            newValue,
-            request.Reason
-        );
-
-        return MapToResponse(expert, policy);
-    }
-
     private static AdminProposalCreditResponse MapToResponse(ExpertProfile expert, MarketplaceWorkflowPolicyResponse policy)
     {
-        var freeRemaining =
-            policy.FreeProposalSubmitCount > 0 && !expert.FreeProposalSubmitUsed
-                ? 1
-                : 0;
+        var freeTotal = Math.Max(policy.FreeProposalSubmitCount, 0);
+        var freeUsed = Math.Clamp(expert.FreeProposalSubmitUsedCount, 0, freeTotal);
+        var freeRemaining = Math.Max(freeTotal - freeUsed, 0);
 
         var canSubmit = freeRemaining > 0 || expert.ProposalSubmitCredits > 0;
 
@@ -207,7 +163,8 @@ public class AdminProposalCreditService : IAdminProposalCreditService
             ProfessionalTitle = expert.ProfessionalTitle,
             ProfileReviewStatus = expert.ProfileReviewStatus,
             AvailableForWork = expert.AvailableForWork,
-            FreeProposalSubmitUsed = expert.FreeProposalSubmitUsed,
+            FreeProposalSubmitTotal = freeTotal,
+            FreeProposalSubmitUsedCount = freeUsed,
             FreeProposalSubmitRemaining = freeRemaining,
             ProposalSubmitCredits = expert.ProposalSubmitCredits,
             CanSubmitProposal = canSubmit,

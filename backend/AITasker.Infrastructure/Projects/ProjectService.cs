@@ -29,20 +29,25 @@ namespace AITasker.Infrastructure.Projects
         private const string DisputeStatusOpen = "OPEN";
         private const string EscrowStatusLocked = "LOCKED";
         private const string EscrowStatusFrozen = "FROZEN";
-        
-        private const string PaymentStatusPending = "PENDING";
 
-        private const int EscrowLockWindowHours = 24;
+        private const string TransactionStatusSuccess = "SUCCESS";
+        private const string PaymentStatusPending = "PENDING";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
+        private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IProjectCompletionService _projectCompletionService;
 
         public ProjectService(
             AITaskerDbContext context,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IMarketplaceWorkflowPolicyService workflowPolicyService,
+            IProjectCompletionService projectCompletionService)
         {
             _context = context;
             _notificationService = notificationService;
+            _workflowPolicyService = workflowPolicyService;
+            _projectCompletionService = projectCompletionService;
         }
 
         public async Task<ProjectResponse> CreateProjectFromContractAsync(
@@ -72,7 +77,9 @@ namespace AITasker.Infrastructure.Projects
             {
                 return await MapToProjectResponseAsync(existingProject);
             }
-            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
+
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
 
             var project = new Project
             {
@@ -155,6 +162,8 @@ namespace AITasker.Infrastructure.Projects
                     $"Milestone total amount ({totalAmount}) must equal contract final price ({contract.FinalPrice}).");
             }
 
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+
             using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -164,7 +173,7 @@ namespace AITasker.Infrastructure.Projects
 
                 if (project == null)
                 {
-                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(EscrowLockWindowHours);
+                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
 
                     project = new Project
                     {
@@ -457,80 +466,14 @@ namespace AITasker.Infrastructure.Projects
 
             var canAccess = await CanAccessProjectAsync(currentUserId, project);
 
-            EnsureProjectReadyForCompleteCheck(project);
-
-            var hasOpenDispute = await _context.Disputes.AnyAsync(x =>
-                x.ProjectId == project.ProjectId &&
-                x.Status == DisputeStatusOpen);
-
-            if (hasOpenDispute)
+            if (!canAccess)
             {
-                throw new InvalidOperationException(
-                    "Project cannot be completed while an open dispute exists.");
+                throw new UnauthorizedAccessException("You do not have permission to complete this project.");
             }
 
-            var hasLockedOrFrozenEscrow = await _context.Escrows.AnyAsync(x =>
-                x.ProjectId == project.ProjectId &&
-                (
-                    x.Status == EscrowStatusLocked ||
-                    x.Status == EscrowStatusFrozen
-                ));
-
-            if (hasLockedOrFrozenEscrow)
-            {
-                throw new InvalidOperationException(
-                    "Project cannot be completed while escrow is still locked or frozen.");
-            }
-
-            var contract = await GetContractByIdAsync(project.ContractId);
-            var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
-            var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
-
-            var milestones = await _context.Milestones
-                .Where(x => x.ProjectId == projectId)
-                .ToListAsync();
-
-            if (!milestones.Any())
-            {
-                throw new InvalidOperationException("Project cannot be completed because it has no milestones.");
-            }
-
-            var allFinished = milestones.All(IsMilestoneFinished);
-
-            if (!allFinished)
-            {
-                throw new InvalidOperationException("Project still has unfinished milestones.");
-            }
-
-            if (!string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
-            {
-                project.Status = ProjectStatusCompleted;
-                project.EndDate = DateTime.UtcNow;
-
-                await UpdateJobStatusByProjectAsync(
-                    project,
-                    JobStatusCompleted);
-
-                await _context.SaveChangesAsync();
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Project completed",
-                    $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project completed",
-                    $"Project '{project.Title}' has been completed.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
-            }
+            await _projectCompletionService.TryCompleteProjectAsync(
+                project.ProjectId,
+                throwIfNotReady: true);
 
             return await MapToProjectResponseAsync(project);
         }
