@@ -513,10 +513,15 @@ function WithdrawModal({ onClose, onSuccess }) {
 const getTxType = (tx) =>
   (tx.type ?? tx.transactionType ?? "").toUpperCase();
 
-// FIX #2: bỏ "ESCROW_RELEASE" — đây là tiền VÀO ví (amount dương), không phải chi tiêu.
+// Trang này là ví CLIENT — với Client, ESCROW_RELEASE là lúc tiền trong escrow
+// được giải ngân trả cho Expert, tức tiền RỜI khỏi phía Client → phải tính là
+// chi tiêu (dấu trừ), không phải tiền vào. (Trước đây từng bỏ field này ra vì
+// nhầm dữ liệu quan sát từ phía Expert — với Expert thì đúng là tiền vào, nhưng
+// đây là trang Client nên phải tính ngược lại.)
 const isExpenseTx = (tx) => {
   return [
     "ESCROW_LOCK",
+    "ESCROW_RELEASE",
     "PLATFORM_FEE",
     "WITHDRAWAL",
     "WITHDRAW",
