@@ -1,4 +1,3 @@
-using System.Text;
 using AITasker.Application.Interfaces;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Auth.OAuth2.Flows;
@@ -32,6 +31,8 @@ public class GmailApiEmailSender : IEmailSender
 
     public async Task SendEmailAsync(string toEmail, string subject, string htmlBody)
     {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+
         var clientId = _configuration["GmailApi:ClientId"];
         var clientSecret = _configuration["GmailApi:ClientSecret"];
         var refreshToken = _configuration["GmailApi:RefreshToken"];
@@ -40,49 +41,50 @@ public class GmailApiEmailSender : IEmailSender
         var applicationName = _configuration["GmailApi:ApplicationName"] ?? "AITasker";
 
         if (string.IsNullOrWhiteSpace(clientId))
-        {
             throw new InvalidOperationException("Gmail API client id is missing.");
-        }
 
         if (string.IsNullOrWhiteSpace(clientSecret))
-        {
             throw new InvalidOperationException("Gmail API client secret is missing.");
-        }
 
         if (string.IsNullOrWhiteSpace(refreshToken))
-        {
             throw new InvalidOperationException("Gmail API refresh token is missing.");
-        }
 
         if (string.IsNullOrWhiteSpace(fromEmail))
-        {
             throw new InvalidOperationException("Gmail API from email is missing.");
-        }
-
-        var credential = CreateCredential(clientId, clientSecret, refreshToken);
-
-        var refreshed = await credential.RefreshTokenAsync(CancellationToken.None);
-
-        if (!refreshed)
-        {
-            throw new InvalidOperationException("Could not refresh Gmail API access token.");
-        }
-
-        using var gmailService = new GmailService(new BaseClientService.Initializer
-        {
-            HttpClientInitializer = credential,
-            ApplicationName = applicationName
-        });
-
-        var mimeMessage = BuildMimeMessage(fromName, fromEmail, toEmail, subject, htmlBody);
-
-        var gmailMessage = new Message
-        {
-            Raw = EncodeMessageToBase64Url(mimeMessage)
-        };
 
         try
         {
+            _logger.LogInformation(
+                "Preparing Gmail API email sender. From={FromEmail}, To={ToEmail}, Subject={Subject}",
+                fromEmail,
+                toEmail,
+                subject
+            );
+
+            var credential = CreateCredential(clientId, clientSecret, refreshToken);
+
+            _logger.LogInformation("Refreshing Gmail API access token...");
+
+            var refreshed = await credential.RefreshTokenAsync(cts.Token);
+
+            if (!refreshed)
+                throw new InvalidOperationException("Could not refresh Gmail API access token.");
+
+            _logger.LogInformation("Gmail API access token refreshed successfully.");
+
+            using var gmailService = new GmailService(new BaseClientService.Initializer
+            {
+                HttpClientInitializer = credential,
+                ApplicationName = applicationName
+            });
+
+            var mimeMessage = BuildMimeMessage(fromName, fromEmail, toEmail, subject, htmlBody);
+
+            var gmailMessage = new Message
+            {
+                Raw = EncodeMessageToBase64Url(mimeMessage)
+            };
+
             _logger.LogInformation(
                 "Sending email via Gmail API. From={FromEmail}, To={ToEmail}, Subject={Subject}",
                 fromEmail,
@@ -92,7 +94,7 @@ public class GmailApiEmailSender : IEmailSender
 
             var response = await gmailService.Users.Messages
                 .Send(gmailMessage, "me")
-                .ExecuteAsync();
+                .ExecuteAsync(cts.Token);
 
             _logger.LogInformation(
                 "Email sent successfully via Gmail API. MessageId={MessageId}, To={ToEmail}, Subject={Subject}",
@@ -100,6 +102,17 @@ public class GmailApiEmailSender : IEmailSender
                 toEmail,
                 subject
             );
+        }
+        catch (OperationCanceledException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Gmail API email sending timed out after 20 seconds. To={ToEmail}, Subject={Subject}",
+                toEmail,
+                subject
+            );
+
+            throw;
         }
         catch (Exception ex)
         {
@@ -163,11 +176,10 @@ public class GmailApiEmailSender : IEmailSender
     private static string EncodeMessageToBase64Url(MimeMessage mimeMessage)
     {
         using var memoryStream = new MemoryStream();
+
         mimeMessage.WriteTo(memoryStream);
 
-        var bytes = memoryStream.ToArray();
-
-        return Convert.ToBase64String(bytes)
+        return Convert.ToBase64String(memoryStream.ToArray())
             .Replace("+", "-")
             .Replace("/", "_")
             .Replace("=", string.Empty);
@@ -176,14 +188,10 @@ public class GmailApiEmailSender : IEmailSender
     private static string BuildPlainTextBody(string subject)
     {
         if (subject.Contains("reset", StringComparison.OrdinalIgnoreCase))
-        {
             return "Please use the password reset link in this email to reset your AITasker password.";
-        }
 
         if (subject.Contains("verify", StringComparison.OrdinalIgnoreCase))
-        {
             return "Please use the verification link in this email to verify your AITasker account.";
-        }
 
         return "Please open this email in an HTML-compatible email client.";
     }
