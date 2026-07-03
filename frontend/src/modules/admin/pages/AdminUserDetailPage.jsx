@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import axiosInstance from "../../../api/axiosInstance";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
@@ -8,7 +9,7 @@ const EMPTY_ACTION = {
 };
 
 const EMPTY_LOCK_FORM = {
-  durationMinutes: 60,
+  durationMinutes: "60",
   reason: "",
 };
 
@@ -25,12 +26,15 @@ export default function AdminUserDetailPage() {
   const navigate = useNavigate();
 
   const [user, setUser] = useState(null);
+  const [wallet, setWallet] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [action, setAction] = useState(EMPTY_ACTION);
   const [lockForm, setLockForm] = useState(EMPTY_LOCK_FORM);
@@ -46,6 +50,34 @@ export default function AdminUserDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const loadUserWallet = async () => {
+    try {
+      const response = await axiosInstance.get("/admin/dashboard/user-wallets", {
+        params: {
+          take: 500,
+        },
+      });
+
+      const raw = response?.data?.data || response?.data || [];
+      const wallets = Array.isArray(raw)
+        ? raw
+        : Array.isArray(raw?.items)
+        ? raw.items
+        : Array.isArray(raw?.Items)
+        ? raw.Items
+        : [];
+
+      const foundWallet = wallets.find(
+        (item) => String(item.userId || item.UserId) === String(userId)
+      );
+
+      setWallet(foundWallet || null);
+    } catch (err) {
+      console.error("LOAD USER WALLET ERROR:", err?.response?.data || err);
+      setWallet(null);
+    }
+  };
+
   const loadUser = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -55,7 +87,11 @@ export default function AdminUserDetailPage() {
         setSuccess("");
       }
 
-      const data = await adminUserService.getUserById(userId);
+      const [data] = await Promise.all([
+        adminUserService.getUserById(userId),
+        loadUserWallet(),
+      ]);
+
       setUser(data);
     } catch (err) {
       console.error("LOAD ADMIN USER DETAIL ERROR:", err?.response?.data || err);
@@ -68,6 +104,8 @@ export default function AdminUserDetailPage() {
   const openLockModal = () => {
     setAction({ type: "LOCK" });
     setLockForm(EMPTY_LOCK_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -75,6 +113,8 @@ export default function AdminUserDetailPage() {
   const openUnlockModal = () => {
     setAction({ type: "UNLOCK" });
     setUnlockForm(EMPTY_UNLOCK_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -82,6 +122,8 @@ export default function AdminUserDetailPage() {
   const openBanModal = () => {
     setAction({ type: "BAN" });
     setBanForm(EMPTY_BAN_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -93,29 +135,44 @@ export default function AdminUserDetailPage() {
     setLockForm(EMPTY_LOCK_FORM);
     setUnlockForm(EMPTY_UNLOCK_FORM);
     setBanForm(EMPTY_BAN_FORM);
+    setModalError("");
+    setFieldErrors({});
   };
 
   const handleLockUser = async () => {
     if (!user?.userId) return;
 
-    if (!Number(lockForm.durationMinutes) || Number(lockForm.durationMinutes) <= 0) {
-      setError("Lock duration must be greater than 0 minutes.");
-      return;
+    const errors = {};
+    const durationText = String(lockForm.durationMinutes ?? "").trim();
+
+    if (!durationText) {
+      errors.durationMinutes = "Duration Minutes is required.";
+    } else if (!/^\d+$/.test(durationText)) {
+      errors.durationMinutes = "Duration Minutes must be a number.";
+    } else if (Number(durationText) <= 0) {
+      errors.durationMinutes = "Duration Minutes must be greater than 0.";
     }
 
     if (!lockForm.reason.trim()) {
-      setError("Please enter a lock reason.");
+      errors.reason = "Lock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.lockUser(user.userId, {
-        durationMinutes: Number(lockForm.durationMinutes),
-        reason: lockForm.reason,
+        durationMinutes: Number(durationText),
+        reason: lockForm.reason.trim(),
       });
 
       closeActionModal();
@@ -123,7 +180,7 @@ export default function AdminUserDetailPage() {
       setSuccess("User has been locked successfully.");
     } catch (err) {
       console.error("LOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot lock user."));
+      setModalError(getFriendlyError(err, "Cannot lock user."));
     } finally {
       setActionLoading(false);
     }
@@ -132,18 +189,27 @@ export default function AdminUserDetailPage() {
   const handleUnlockUser = async () => {
     if (!user?.userId) return;
 
+    const errors = {};
+
     if (!unlockForm.reason.trim()) {
-      setError("Please enter an unlock reason.");
+      errors.reason = "Unlock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.unlockUser(user.userId, {
-        reason: unlockForm.reason,
+        reason: unlockForm.reason.trim(),
       });
 
       closeActionModal();
@@ -151,7 +217,7 @@ export default function AdminUserDetailPage() {
       setSuccess("User has been unlocked successfully.");
     } catch (err) {
       console.error("UNLOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot unlock user."));
+      setModalError(getFriendlyError(err, "Cannot unlock user."));
     } finally {
       setActionLoading(false);
     }
@@ -160,18 +226,27 @@ export default function AdminUserDetailPage() {
   const handleBanUser = async () => {
     if (!user?.userId) return;
 
+    const errors = {};
+
     if (!banForm.reason.trim()) {
-      setError("Please enter a ban reason.");
+      errors.reason = "Ban Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.banUser(user.userId, {
-        reason: banForm.reason,
+        reason: banForm.reason.trim(),
       });
 
       closeActionModal();
@@ -179,7 +254,7 @@ export default function AdminUserDetailPage() {
       setSuccess("User has been banned successfully.");
     } catch (err) {
       console.error("BAN USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot ban user."));
+      setModalError(getFriendlyError(err, "Cannot ban user."));
     } finally {
       setActionLoading(false);
     }
@@ -210,8 +285,8 @@ export default function AdminUserDetailPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review account status, role, profile links, security status, and
-              administrative restrictions.
+              Review account status, role, wallet balance, profile links,
+              security status, and administrative restrictions.
             </p>
           </div>
 
@@ -275,7 +350,7 @@ export default function AdminUserDetailPage() {
                   <div className="min-w-0">
                     <div className="mb-3 flex flex-wrap items-center gap-2">
                       <RoleBadge role={user.role} />
-                      <StatusBadge status={userStatus} />                     
+                      <StatusBadge status={userStatus} />
                     </div>
 
                     <h2 className="truncate text-2xl font-black text-white">
@@ -353,6 +428,72 @@ export default function AdminUserDetailPage() {
                 value={formatDateTime(user.createdAt)}
                 tone="cyan"
               />
+            </section>
+
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-xl font-bold text-white">
+                    Wallet Summary
+                  </h2>
+
+                  <p className="mt-1 text-sm text-gray-400">
+                    Current wallet balances from admin dashboard user-wallets
+                    API.
+                  </p>
+                </div>
+
+                <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                  {wallet ? "Wallet Found" : "No Wallet"}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+                <InfoCard
+                  icon="account_balance_wallet"
+                  label="Available Balance"
+                  value={formatMoney(getWalletValue(wallet, "availableBalance"))}
+                  tone="green"
+                />
+
+                <InfoCard
+                  icon="lock"
+                  label="Locked Balance"
+                  value={formatMoney(getWalletValue(wallet, "lockedBalance"))}
+                  tone="yellow"
+                />
+
+                <InfoCard
+                  icon="payments"
+                  label="Withdrawable"
+                  value={formatMoney(
+                    getWalletValue(wallet, "withdrawableBalance")
+                  )}
+                  tone="cyan"
+                />
+
+                <InfoCard
+                  icon="pending_actions"
+                  label="Pending Earnings"
+                  value={formatMoney(
+                    getWalletValue(wallet, "pendingEarningsBalance")
+                  )}
+                  tone="purple"
+                />
+
+                <InfoCard
+                  icon="savings"
+                  label="Total Earning"
+                  value={formatMoney(getWalletValue(wallet, "totalEarning"))}
+                  tone="green"
+                />
+              </div>
+
+              {!wallet && (
+                <p className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-200">
+                  No wallet data found for this user.
+                </p>
+              )}
             </section>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
@@ -466,31 +607,46 @@ export default function AdminUserDetailPage() {
             confirmLabel="Lock User"
             confirmTone="yellow"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleLockUser}
           >
             <div className="space-y-4">
               <NumberInput
                 label="Duration Minutes"
+                required
                 value={lockForm.durationMinutes}
-                onChange={(value) =>
+                error={fieldErrors.durationMinutes}
+                onChange={(value) => {
+                  setModalError("");
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    durationMinutes: "",
+                  }));
                   setLockForm((prev) => ({
                     ...prev,
                     durationMinutes: value,
-                  }))
-                }
+                  }));
+                }}
                 placeholder="60"
               />
 
               <TextArea
                 label="Lock Reason"
+                required
                 value={lockForm.reason}
-                onChange={(value) =>
+                error={fieldErrors.reason}
+                onChange={(value) => {
+                  setModalError("");
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    reason: "",
+                  }));
                   setLockForm((prev) => ({
                     ...prev,
                     reason: value,
-                  }))
-                }
+                  }));
+                }}
                 placeholder="Example: Suspicious activity detected."
               />
             </div>
@@ -504,18 +660,26 @@ export default function AdminUserDetailPage() {
             confirmLabel="Unlock User"
             confirmTone="green"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleUnlockUser}
           >
             <TextArea
               label="Unlock Reason"
+              required
               value={unlockForm.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  reason: "",
+                }));
                 setUnlockForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: User identity has been verified."
             />
           </ActionModal>
@@ -528,18 +692,26 @@ export default function AdminUserDetailPage() {
             confirmLabel="Ban User"
             confirmTone="red"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleBanUser}
           >
             <TextArea
               label="Ban Reason"
+              required
               value={banForm.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  reason: "",
+                }));
                 setBanForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: Repeated platform policy violation."
             />
           </ActionModal>
@@ -548,7 +720,6 @@ export default function AdminUserDetailPage() {
     </AdminLayout>
   );
 }
-
 function UserAvatar({ name, avatarUrl }) {
   if (avatarUrl) {
     return (
@@ -667,23 +838,6 @@ function StatusBadge({ status }) {
   );
 }
 
-function Badge({ label, tone = "default" }) {
-  const toneClass =
-    tone === "green"
-      ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : tone === "yellow"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : "border-white/10 bg-white/[0.04] text-gray-400";
-
-  return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-semibold ${toneClass}`}
-    >
-      {label}
-    </span>
-  );
-}
-
 function ActionModal({
   title,
   subtitle,
@@ -691,6 +845,7 @@ function ActionModal({
   confirmLabel,
   confirmTone = "cyan",
   loading,
+  error,
   onClose,
   onConfirm,
 }) {
@@ -711,7 +866,15 @@ function ActionModal({
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          {children}
+        </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
           <button
@@ -737,35 +900,58 @@ function ActionModal({
   );
 }
 
-function NumberInput({ label, value, onChange, placeholder }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="number"
-        min="1"
-        step="1"
+        type="text"
+        inputMode="numeric"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
 
-      <p className="mt-2 text-xs leading-5 text-gray-500">
-        Backend expects duration in minutes. Example: 60 means 1 hour.
-      </p>
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-gray-500">
+          Backend expects duration in minutes. Example: 60 means 1 hour.
+        </p>
+      )}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -773,8 +959,16 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
@@ -824,6 +1018,14 @@ function getUserStatus(user) {
   return rawStatus || "ACTIVE";
 }
 
+function getWalletValue(wallet, key) {
+  if (!wallet) return 0;
+
+  const pascalKey = key.charAt(0).toUpperCase() + key.slice(1);
+
+  return wallet[key] ?? wallet[pascalKey] ?? 0;
+}
+
 function getInitials(name) {
   if (!name) return "US";
 
@@ -835,6 +1037,16 @@ function getInitials(name) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
+}
+
+function formatMoney(value) {
+  const number = Number(value || 0);
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatLabel(value) {

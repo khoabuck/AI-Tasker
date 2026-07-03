@@ -12,7 +12,7 @@ const EMPTY_ACTION = {
 };
 
 const EMPTY_LOCK_FORM = {
-  durationMinutes: 60,
+  durationMinutes: "60",
   reason: "",
 };
 
@@ -37,6 +37,8 @@ export default function ManageUsersPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [action, setAction] = useState(EMPTY_ACTION);
   const [lockForm, setLockForm] = useState(EMPTY_LOCK_FORM);
@@ -124,6 +126,8 @@ export default function ManageUsersPage() {
     });
 
     setLockForm(EMPTY_LOCK_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -135,6 +139,8 @@ export default function ManageUsersPage() {
     });
 
     setUnlockForm(EMPTY_UNLOCK_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -146,6 +152,8 @@ export default function ManageUsersPage() {
     });
 
     setBanForm(EMPTY_BAN_FORM);
+    setModalError("");
+    setFieldErrors({});
     setError("");
     setSuccess("");
   };
@@ -157,29 +165,44 @@ export default function ManageUsersPage() {
     setLockForm(EMPTY_LOCK_FORM);
     setUnlockForm(EMPTY_UNLOCK_FORM);
     setBanForm(EMPTY_BAN_FORM);
+    setModalError("");
+    setFieldErrors({});
   };
 
   const handleLockUser = async () => {
     if (!action.user?.userId) return;
 
-    if (!Number(lockForm.durationMinutes) || Number(lockForm.durationMinutes) <= 0) {
-      setError("Lock duration must be greater than 0 minutes.");
-      return;
+    const errors = {};
+    const durationText = String(lockForm.durationMinutes ?? "").trim();
+
+    if (!durationText) {
+      errors.durationMinutes = "Duration Minutes is required.";
+    } else if (!/^\d+$/.test(durationText)) {
+      errors.durationMinutes = "Duration Minutes must be a number.";
+    } else if (Number(durationText) <= 0) {
+      errors.durationMinutes = "Duration Minutes must be greater than 0.";
     }
 
     if (!lockForm.reason.trim()) {
-      setError("Please enter a lock reason.");
+      errors.reason = "Lock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.lockUser(action.user.userId, {
-        durationMinutes: Number(lockForm.durationMinutes),
-        reason: lockForm.reason,
+        durationMinutes: Number(durationText),
+        reason: lockForm.reason.trim(),
       });
 
       const userLabel = action.user.email || action.user.fullName || "User";
@@ -189,7 +212,7 @@ export default function ManageUsersPage() {
       setSuccess(`${userLabel} has been locked successfully.`);
     } catch (err) {
       console.error("LOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot lock user."));
+      setModalError(getFriendlyError(err, "Cannot lock user."));
     } finally {
       setActionLoading(false);
     }
@@ -198,18 +221,27 @@ export default function ManageUsersPage() {
   const handleUnlockUser = async () => {
     if (!action.user?.userId) return;
 
+    const errors = {};
+
     if (!unlockForm.reason.trim()) {
-      setError("Please enter an unlock reason.");
+      errors.reason = "Unlock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.unlockUser(action.user.userId, {
-        reason: unlockForm.reason,
+        reason: unlockForm.reason.trim(),
       });
 
       const userLabel = action.user.email || action.user.fullName || "User";
@@ -219,7 +251,7 @@ export default function ManageUsersPage() {
       setSuccess(`${userLabel} has been unlocked successfully.`);
     } catch (err) {
       console.error("UNLOCK USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot unlock user."));
+      setModalError(getFriendlyError(err, "Cannot unlock user."));
     } finally {
       setActionLoading(false);
     }
@@ -228,18 +260,27 @@ export default function ManageUsersPage() {
   const handleBanUser = async () => {
     if (!action.user?.userId) return;
 
+    const errors = {};
+
     if (!banForm.reason.trim()) {
-      setError("Please enter a ban reason.");
+      errors.reason = "Ban Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setActionLoading(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
       await adminUserService.banUser(action.user.userId, {
-        reason: banForm.reason,
+        reason: banForm.reason.trim(),
       });
 
       const userLabel = action.user.email || action.user.fullName || "User";
@@ -249,7 +290,7 @@ export default function ManageUsersPage() {
       setSuccess(`${userLabel} has been banned successfully.`);
     } catch (err) {
       console.error("BAN USER ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot ban user."));
+      setModalError(getFriendlyError(err, "Cannot ban user."));
     } finally {
       setActionLoading(false);
     }
@@ -416,31 +457,46 @@ export default function ManageUsersPage() {
             confirmLabel="Lock User"
             confirmTone="yellow"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleLockUser}
           >
             <div className="space-y-4">
               <NumberInput
                 label="Duration Minutes"
+                required
                 value={lockForm.durationMinutes}
-                onChange={(value) =>
+                error={fieldErrors.durationMinutes}
+                onChange={(value) => {
+                  setModalError("");
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    durationMinutes: "",
+                  }));
                   setLockForm((prev) => ({
                     ...prev,
                     durationMinutes: value,
-                  }))
-                }
+                  }));
+                }}
                 placeholder="60"
               />
 
               <TextArea
                 label="Lock Reason"
+                required
                 value={lockForm.reason}
-                onChange={(value) =>
+                error={fieldErrors.reason}
+                onChange={(value) => {
+                  setModalError("");
+                  setFieldErrors((prev) => ({
+                    ...prev,
+                    reason: "",
+                  }));
                   setLockForm((prev) => ({
                     ...prev,
                     reason: value,
-                  }))
-                }
+                  }));
+                }}
                 placeholder="Example: Suspicious activity detected."
               />
             </div>
@@ -454,18 +510,26 @@ export default function ManageUsersPage() {
             confirmLabel="Unlock User"
             confirmTone="green"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleUnlockUser}
           >
             <TextArea
               label="Unlock Reason"
+              required
               value={unlockForm.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  reason: "",
+                }));
                 setUnlockForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: User identity has been verified."
             />
           </ActionModal>
@@ -478,18 +542,26 @@ export default function ManageUsersPage() {
             confirmLabel="Ban User"
             confirmTone="red"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleBanUser}
           >
             <TextArea
               label="Ban Reason"
+              required
               value={banForm.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  reason: "",
+                }));
                 setBanForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: Repeated platform policy violation."
             />
           </ActionModal>
@@ -527,7 +599,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
 
           <div className="flex flex-wrap gap-2">
             <Badge label={`ID: ${user.userId || "N/A"}`} />
-            <Badge label={user.authProvider || "Local"} />           
+            <Badge label={user.authProvider || "Local"} />
           </div>
         </div>
 
@@ -672,6 +744,7 @@ function ActionModal({
   confirmLabel,
   confirmTone = "cyan",
   loading,
+  error,
   onClose,
   onConfirm,
 }) {
@@ -692,7 +765,15 @@ function ActionModal({
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          {children}
+        </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
           <button
@@ -718,35 +799,58 @@ function ActionModal({
   );
 }
 
-function NumberInput({ label, value, onChange, placeholder }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="number"
-        min="1"
-        step="1"
+        type="text"
+        inputMode="numeric"
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
 
-      <p className="mt-2 text-xs leading-5 text-gray-500">
-        Backend expects duration in minutes. Example: 60 means 1 hour.
-      </p>
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        <p className="mt-2 text-xs leading-5 text-gray-500">
+          Backend expects duration in minutes. Example: 60 means 1 hour.
+        </p>
+      )}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -754,8 +858,16 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
