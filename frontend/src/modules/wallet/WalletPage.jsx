@@ -250,9 +250,41 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   );
 }
 
+const VIETNAM_BANKS = [
+  "Vietcombank",
+  "Techcombank",
+  "BIDV",
+  "Agribank",
+  "VietinBank",
+  "MB Bank",
+  "ACB",
+  "Sacombank",
+  "VPBank",
+  "TPBank",
+  "VIB",
+  "HDBank",
+  "OCB",
+  "SHB",
+  "SeABank",
+  "MSB",
+  "Eximbank",
+  "Nam A Bank",
+  "PVcomBank",
+  "Other",
+];
+
 // ── Withdraw Modal ────────────────────────────────────────────────────
 function WithdrawModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ amount: "", bankName: "", bankAccountNumber: "", bankAccountHolder: "" });
+  const [form, setForm] = useState({
+    amount: "",
+    bankName: "",
+    bankAccountNumber: "",
+    bankAccountHolder: ""
+  });
+
+  const [isOtherBank, setIsOtherBank] = useState(false);
+  const [showBanks, setShowBanks] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
@@ -326,10 +358,124 @@ function WithdrawModal({ onClose, onSuccess }) {
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Bank Name</label>
-            <input type="text" name="bankName" value={form.bankName} onChange={handleChange} placeholder="Vietcombank, Techcombank..."
-              style={inputStyle("bankName")} />
-            {fieldErrors.bankName && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankName}</p>}
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>
+              Bank Name
+            </label>
+
+            <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBanks((prev) => !prev)}
+                  style={{
+                    ...inputStyle("bankName"),
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ color: form.bankName ? "#e1e2eb" : "#5b6470" }}>
+                    {isOtherBank ? "Other" : form.bankName || "Select bank"}
+                  </span>
+
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 20,
+                      color: "#8c90a0",
+                      transform: showBanks ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                    }}
+                  >
+                    expand_more
+                  </span>
+                </button>
+
+                {showBanks && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      background: "#101319",
+                      border: "1px solid rgba(0,240,255,0.25)",
+                      borderRadius: 10,
+                      boxShadow: "0 16px 40px rgba(0,0,0,0.55)",
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      scrollbarWidth: "none",
+                      msOverflowStyle: "none",
+                    }}
+                  >
+                    {VIETNAM_BANKS.map((bank) => (
+                      <button
+                        key={bank}
+                        type="button"
+                        onClick={() => {
+                          setShowBanks(false);
+
+                          if (bank === "Other") {
+                            setIsOtherBank(true);
+                            setForm((prev) => ({ ...prev, bankName: "" }));
+                          } else {
+                            setIsOtherBank(false);
+                            setForm((prev) => ({ ...prev, bankName: bank }));
+                          }
+
+                          if (fieldErrors.bankName) {
+                            setFieldErrors((prev) => ({ ...prev, bankName: null }));
+                          }
+
+                          setError("");
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "11px 14px",
+                          background: "transparent",
+                          border: "none",
+                          borderBottom: "1px solid rgba(255,255,255,0.06)",
+                          color: bank === "Other" ? "#00F0FF" : "#e1e2eb",
+                          fontSize: 14,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontFamily: "Inter, sans-serif",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(0,240,255,0.08)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        {bank}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            {isOtherBank && (
+              <input
+                type="text"
+                name="bankName"
+                value={form.bankName}
+                onChange={handleChange}
+                placeholder="Enter bank name"
+                style={{
+                  ...inputStyle("bankName"),
+                  marginTop: 10,
+                }}
+              />
+            )}
+
+            {fieldErrors.bankName && (
+              <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>
+                {fieldErrors.bankName}
+              </p>
+            )}
           </div>
 
           <div>

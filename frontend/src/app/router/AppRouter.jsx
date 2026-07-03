@@ -49,6 +49,7 @@ import ClientDisputeDetailPage from "../../modules/client/pages/ClientDisputeDet
 import TransactionDetailPage from "../../modules/transaction/pages/TransactionDetailPage";
 import ExpertProfileViewPage from "../../modules/client/pages/ExpertProfileViewPage";
 import ClientContractDetailPage from "../../modules/client/pages/ClientContractDetailPage";
+import ClientContractSignPage from "../../modules/client/pages/ClientContractSignPage";
 
 // Expert pages
 import ExpertDashboard from "../../modules/expert/pages/ExpertDashboard";
@@ -167,6 +168,8 @@ export default function AppRouter() {
       <Route path="/client/milestones/:milestoneId/deliverables" element={<ProtectedRoute allowedRoles={["CLIENT"]}><MilestoneDeliverablesPage /></ProtectedRoute>} />
       <Route path="/client/disputes" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientDisputeDetailPage /></ProtectedRoute>} />
       <Route path="/client/projects/:id/contract" element={ <ProtectedRoute allowedRoles={["CLIENT"]}><ClientContractDetailPage /> </ProtectedRoute>}/>
+      <Route path="/client/proposals/:proposalId/contract"element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientContractSignPage /></ProtectedRoute>}/>
+
 
       {/* Client proposals + notifications */}
       <Route path="/client/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProposalDetailPage /></ProtectedRoute>} />

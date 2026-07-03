@@ -177,6 +177,7 @@ export default function EditJobPage() {
   };
 
   // ── PUT /api/jobs/{id} — lưu thay đổi ─────────────────────────────
+  // ── PUT /api/jobs/{id} — lưu thay đổi, KHÔNG đổi status ────────────
   const handleSave = async () => {
     if (!form.title.trim()) {
       setSaveError("Job title cannot be empty.");
@@ -187,7 +188,10 @@ export default function EditJobPage() {
     setSaveSuccess(false);
     try {
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
-      navigate("/client/projects");
+      // Lưu xong quay về đúng tab của job trong JobsPage (không phải trang
+      // Projects — đó là màn hình khác). isDraft dựa vào originalStatus (status
+      // job LÚC BẮT ĐẦU edit), vì PUT /jobs/{id} không tự đổi status.
+      navigate(`/client/jobs?status=${isDraft ? "DRAFT" : "OPEN"}`);
     } catch (err) {
       setSaveError(err?.response?.data?.message || "Save failed. Please try again.");
     } finally {
@@ -196,6 +200,7 @@ export default function EditJobPage() {
   };
 
   // ── PUT /api/jobs/{id}/submit — submit draft lên OPEN ──────────────
+  // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
   const handleSubmit = async () => {
     if (!form.title.trim()) {
       setSaveError("Job title cannot be empty.");
@@ -208,7 +213,7 @@ export default function EditJobPage() {
       // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       await axiosInstance.put(`/jobs/${id}/submit`);
-      navigate("/client/projects");
+      navigate("/client/jobs?status=OPEN");
     } catch (err) {
       setSaveError(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
@@ -233,9 +238,9 @@ export default function EditJobPage() {
       <div style={{ textAlign: "center", padding: "120px 24px" }}>
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{fetchError}</p>
-        <button onClick={() => navigate("/client/projects")}
+        <button onClick={() => navigate(-1)}
           style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-          Back to Projects
+          Back 
         </button>
       </div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -251,13 +256,13 @@ export default function EditJobPage() {
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
           <button
-            onClick={() => navigate("/client/projects")}
+            onClick={() => navigate(-1)}
             style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 20, padding: 0 }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-            Back to Projects
+            Back 
           </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
@@ -495,13 +500,13 @@ export default function EditJobPage() {
           {/* Action buttons */}
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, flexWrap: "wrap", paddingTop: 8 }}>
 
-            {/* Cancel — về lại projects */}
-            <button type="button" onClick={() => navigate("/client/projects")}
+            {/* Cancel — không lưu gì, không đổi status, về đúng tab hiện tại của job */}
+            <button type="button" onClick={() => navigate(`/client/jobs?status=${originalStatus}`)}
               style={{ padding: "12px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "#c2c6d6", cursor: "pointer", fontFamily: "Inter, sans-serif", fontSize: 14 }}>
               Cancel
             </button>
 
-            {/* Save Changes — PUT /api/jobs/{id} */}
+            {/* Save — label đổi theo status: Save Draft (còn DRAFT) / Save Changes (đã OPEN) */}
             <button type="button" onClick={handleSave} disabled={saving || submitting}
               style={{ padding: "12px 24px", borderRadius: 8, border: "1px solid rgba(0,240,255,0.4)", background: "rgba(0,240,255,0.08)", color: "#00F0FF", cursor: saving ? "not-allowed" : "pointer", fontFamily: "Inter, sans-serif", fontSize: 14, fontWeight: 600, opacity: saving ? 0.6 : 1, display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s" }}
               onMouseEnter={(e) => { if (!saving && !submitting) e.currentTarget.style.background = "rgba(0,240,255,0.15)"; }}
@@ -509,10 +514,10 @@ export default function EditJobPage() {
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                 {saving ? "hourglass_empty" : "save"}
               </span>
-              {saving ? "Saving..." : "Save Changes"}
+              {saving ? "Saving..." : isDraft ? "Save Draft" : "Save Changes"}
             </button>
 
-            {/* Submit — chỉ hiện khi job đang là DRAFT */}
+            {/* Submit — chỉ hiện khi job đang là DRAFT, đổi status thành OPEN */}
             {isDraft && (
               <button type="button" onClick={handleSubmit} disabled={saving || submitting}
                 style={{ padding: "12px 28px", borderRadius: 8, background: submitting ? "#1d2026" : "#00F0FF", color: submitting ? "#8c90a0" : "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 14, border: "none", cursor: submitting ? "not-allowed" : "pointer", boxShadow: submitting ? "none" : "0 0 20px rgba(0,240,255,0.25)", display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s" }}>

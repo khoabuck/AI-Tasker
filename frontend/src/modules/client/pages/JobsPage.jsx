@@ -2,6 +2,11 @@
 // GET /api/jobs/my  ← lấy tất cả jobs, FE filter theo query param ?status=
 // PUT /api/jobs/{id}/submit  ← submit draft
 // PUT /api/jobs/{id}/cancel  ← cancel job
+// GET /api/jobs/{jobId}/proposals  ← job không tự biết proposal nào ACCEPTED
+//   (đã xác nhận response /jobs/my không có field này) → mỗi job đang OPEN tự
+//   check ngay khi render (không đợi click nữa) để: (1) ẩn 4 nút hành động nếu
+//   đã có proposal ACCEPTED (đang chờ ký / chờ đối phương ký), (2) khi bấm vào
+//   card thì nhảy thẳng vào trang ký hợp đồng của đúng proposal đó.
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
@@ -20,40 +25,75 @@ const STATUS_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#ef4444", bg: "rgba(239,68,68,0.08)",   border: "rgba(239,68,68,0.25)"   },
 };
 
-// Chuẩn hoá status job cho trang My Jobs. Chỉ có 3 nhóm: DRAFT / OPEN / CANCELLED.
-// ACTIVE là khái niệm của Project (sau khi lock escrow) → ở trang Job vẫn coi là OPEN.
-// Mọi status lạ khác cũng gộp về OPEN (job đã publish thì không quay lại DRAFT).
 function normalizeJobStatus(status) {
   const s = (status || "").toUpperCase();
   if (s === "DRAFT") return "DRAFT";
   if (s === "CANCELLED") return "CANCELLED";
-  return "OPEN"; // OPEN, ACTIVE, và mọi status khác
+  if (s === "ACTIVE") return "ACTIVE"; // Project đã active (escrow locked) → không
+    // thuộc về trang Job nữa (trang Job chỉ có 3 tab Draft/Open/Cancelled), nên
+    // KHÔNG map về OPEN. Vì STATUS_TABS không có tab "ACTIVE" nào, job này sẽ
+    // tự động không hiện ở tab nào cả → coi như đã "biến mất" khỏi trang Job.
+  return "OPEN"; // mọi status khác chưa xác định thì tạm coi là OPEN
 }
 
 function JobCard({ job, onStatusChange }) {
   const navigate = useNavigate();
   const [actionLoading, setActionLoading] = useState(false);
+  const [checkingProposal, setCheckingProposal] = useState(false);
+  const [acceptedProposalId, setAcceptedProposalId] = useState(null);
   const normStatus = normalizeJobStatus(job.status);
   const cfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.OPEN;
 
+  // Job OPEN không tự biết có proposal ACCEPTED hay chưa (response /jobs/my
+  // không có field này) → check ngay khi card render, để quyết định ẩn 4 nút
+  // hành động (AI Recommend/Proposals/Edit/Cancel) khi job đang trong quá
+  // trình ký hợp đồng dở dang.
+  useEffect(() => {
+    if (normStatus !== "OPEN") return;
+
+    let cancelled = false;
+    setCheckingProposal(true);
+
+    axiosInstance.get(`/jobs/${job.jobPostingId}/proposals`)
+      .then((res) => {
+        if (cancelled) return;
+        const raw = res.data?.data ?? res.data;
+        const list = Array.isArray(raw) ? raw : raw?.items ?? [];
+        const accepted = list.find((p) => (p.status || "").toUpperCase() === "ACCEPTED");
+        setAcceptedProposalId(accepted?.proposalId ?? null);
+      })
+      .catch((err) => {
+        console.error("Check accepted proposal failed:", err);
+        // Lỗi tra cứu → coi như không có proposal ACCEPTED, vẫn hiện job bình thường.
+      })
+      .finally(() => {
+        if (!cancelled) setCheckingProposal(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [job.jobPostingId, normStatus]);
+
+  const hasAcceptedProposal = !!acceptedProposalId;
+
   const handleSubmit = async (e) => {
-  e.stopPropagation();
+    e.stopPropagation();
 
-  setActionLoading(true);
-  try {
-    const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
+    setActionLoading(true);
+    try {
+      const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
 
-    const newStatus = res?.data?.data?.status || "OPEN";
+      const newStatus = res?.data?.data?.status || "OPEN";
 
-    onStatusChange(job.jobPostingId, newStatus);
+      onStatusChange(job.jobPostingId, newStatus);
 
-    navigate(`/client/jobs?status=OPEN`);
-  } catch (err) {
-    // silent
-  } finally {
-    setActionLoading(false);
-  }
-};
+      navigate(`/client/jobs?status=OPEN`);
+    } catch (err) {
+      console.error("Submit job failed:", err);
+      alert(err?.response?.data?.message || "Failed to submit job. Please try again.");
+    } finally {
+      setActionLoading(false);
+    }
+  };
 
   const handleCancel = async (e) => {
     e.stopPropagation();
@@ -68,10 +108,21 @@ function JobCard({ job, onStatusChange }) {
     } finally { setActionLoading(false); }
   };
 
+  const handleCardClick = () => {
+    if (checkingProposal || actionLoading) return;
+
+    if (hasAcceptedProposal) {
+      navigate(`/client/proposals/${acceptedProposalId}/contract`);
+      return;
+    }
+
+    navigate(`/client/jobs/${job.jobPostingId}`);
+  };
+
   return (
     <div
-      onClick={() => navigate(`/client/jobs/${job.jobPostingId}`)}
-      style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: 22, cursor: "pointer", transition: "all 0.2s" }}
+      onClick={handleCardClick}
+      style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: 22, cursor: checkingProposal ? "wait" : "pointer", transition: "all 0.2s", opacity: checkingProposal ? 0.7 : 1 }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(0,240,255,0.3)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.transform = "translateY(0)"; }}
     >
@@ -94,71 +145,80 @@ function JobCard({ job, onStatusChange }) {
             ${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}
           </span>
           {job.projectType && <span style={{ fontSize: 12, color: "#8c90a0" }}>{job.projectType}</span>}
-        </div>
-
-        <div style={{ display: "flex", gap: 8 }}>
-          {normStatus === "DRAFT" && (
-            <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/client/post-job?editId=${job.jobPostingId}&returnStatus=${job.status}`);
-                }}
-                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-              >
-                Edit
-              </button>
-
-              <button
-                onClick={handleSubmit}
-                disabled={actionLoading}
-                style={{ padding: "6px 12px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
-              >
-                {actionLoading ? "..." : "Submit"}
-              </button>
-
-              <button
-                onClick={handleCancel}
-                disabled={actionLoading}
-                style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
-              >
-                {actionLoading ? "..." : "Cancel"}
-              </button>
-            </>
+          {checkingProposal && (
+            <span style={{ fontSize: 12, color: "#8c90a0", display: "flex", alignItems: "center", gap: 4 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14, animation: "spin 1s linear infinite" }}>autorenew</span>
+              Checking...
+            </span>
           )}
-          {normStatus === "OPEN" && (
-            <>
-              <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}/recommendations`); }}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>auto_awesome</span>
-                AI Recommend
-              </button>
-              <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}`); }}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
-                Proposals
-                {job.proposalCount != null && job.proposalCount > 0 && (
-                  <span style={{ background: "#facc15", color: "#1d1500", borderRadius: 999, padding: "0 6px", fontSize: 10, fontWeight: 700 }}>
-                    {job.proposalCount}
-                  </span>
-                )}
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/client/post-job?editId=${job.jobPostingId}&returnStatus=${job.status}`);
-                }}
-                style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-              >
-                Edit
-              </button>
-              <button onClick={handleCancel} disabled={actionLoading}
-                style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}>
-                {actionLoading ? "..." : "Cancel"}
-              </button>
-            </>
+          {!checkingProposal && hasAcceptedProposal && (
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#00F0FF", fontWeight: 600 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>draw</span>
+              Awaiting contract signature
+            </span>
           )}
         </div>
+
+        {/* Ẩn toàn bộ 4 nút hành động (AI Recommend/Proposals/Edit/Cancel) khi
+            job đang có proposal ACCEPTED dở dang — click cả card sẽ đưa thẳng
+            vào trang ký hợp đồng, không cần các thao tác khác trên job nữa. */}
+        {!hasAcceptedProposal && (
+          <div style={{ display: "flex", gap: 8 }}>
+            {normStatus === "DRAFT" && (
+              <>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/client/jobs/${job.jobPostingId}/edit`);
+                  }}
+                  style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Edit
+                </button>
+
+                <button
+                  onClick={handleSubmit}
+                  disabled={actionLoading}
+                  style={{ padding: "6px 12px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
+                >
+                  {actionLoading ? "..." : "Submit"}
+                </button>
+
+                <button
+                  onClick={handleCancel}
+                  disabled={actionLoading}
+                  style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
+                >
+                  {actionLoading ? "..." : "Cancel"}
+                </button>
+              </>
+            )}
+            {normStatus === "OPEN" && (
+              <>
+                <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}/recommendations`); }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>auto_awesome</span>
+                  AI Recommend
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); navigate(`/client/jobs/${job.jobPostingId}`); }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>description</span>
+                  Proposals
+                  {job.proposalCount != null && job.proposalCount > 0 && (
+                    <span style={{ background: "#facc15", color: "#1d1500", borderRadius: 999, padding: "0 6px", fontSize: 10, fontWeight: 700 }}>
+                      {job.proposalCount}
+                    </span>
+                  )}
+                </button>
+                
+                <button onClick={handleCancel} disabled={actionLoading}
+                  style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}>
+                  {actionLoading ? "..." : "Cancel"}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -174,13 +234,9 @@ export default function JobsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Đánh dấu đã load lần đầu chưa. Từ lần refetch thứ 2 trở đi (khi quay lại
-  // trang) sẽ fetch ngầm, giữ nguyên list cũ trên màn hình → không nháy trắng.
   const hasLoadedOnce = useRef(false);
 
   const fetchJobs = useCallback(async (signal) => {
-    // Chỉ bật spinner khi CHƯA có data (lần đầu). Refetch nền thì không bật,
-    // để list hiện tại ở nguyên trên màn hình trong lúc tải.
     if (!hasLoadedOnce.current) {
       setLoading(true);
     }
@@ -202,14 +258,13 @@ export default function JobsPage() {
     const controller = new AbortController();
     fetchJobs(controller.signal);
     return () => controller.abort();
-  }, [fetchJobs, location.key]); // refetch khi navigate quay lại trang
+  }, [fetchJobs, location.key]);
 
   const handleStatusChange = (jobId, newStatus) => {
     setAllJobs((prev) => {
       const updated = prev.map((j) =>
         j.jobPostingId === jobId ? { ...j, status: newStatus } : j
       );
-      // Đưa job vừa thao tác lên đầu (nó là mới nhất) rồi giữ nguyên thứ tự còn lại.
       const target = updated.find((j) => j.jobPostingId === jobId);
       const rest = updated.filter((j) => j.jobPostingId !== jobId);
       return target ? [target, ...rest] : updated;
@@ -221,7 +276,6 @@ export default function JobsPage() {
     return status === activeStatus;
   });
 
-  // Chỉ hiện spinner toàn trang ở lần load đầu (chưa có job nào).
   const showFullLoading = loading && allJobs.length === 0;
 
   return (
@@ -229,7 +283,6 @@ export default function JobsPage() {
       <div style={{ minHeight: "100vh", background: "#0b0e14" }}>
         <div style={{ maxWidth: 1100, margin: "0 auto", padding: "48px 24px" }}>
 
-          {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
             <div>
               <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Jobs</h1>
@@ -242,7 +295,6 @@ export default function JobsPage() {
             </button>
           </div>
 
-          {/* Tabs */}
           <div style={{ display: "flex", gap: 8, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
             {STATUS_TABS.map((tab) => {
               const count = allJobs.filter(
@@ -263,7 +315,6 @@ export default function JobsPage() {
             })}
           </div>
 
-          {/* Loading (chỉ lần đầu) */}
           {showFullLoading && (
             <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
@@ -271,7 +322,6 @@ export default function JobsPage() {
             </div>
           )}
 
-          {/* Error */}
           {error && !showFullLoading && (
             <div style={{ textAlign: "center", padding: "60px 24px" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
@@ -283,7 +333,6 @@ export default function JobsPage() {
             </div>
           )}
 
-          {/* Empty */}
           {!showFullLoading && !error && filteredJobs.length === 0 && (
             <div style={{ textAlign: "center", padding: "80px 0" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 72, display: "block", marginBottom: 16, color: "#272a30" }}>inbox</span>
@@ -291,7 +340,6 @@ export default function JobsPage() {
             </div>
           )}
 
-          {/* List */}
           {!showFullLoading && !error && filteredJobs.length > 0 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {filteredJobs.map((job) => (

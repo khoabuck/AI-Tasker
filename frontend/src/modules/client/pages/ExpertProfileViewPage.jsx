@@ -16,6 +16,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { clientExpertService } from "../../../services/clientExpert.service";
+import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const SKILL_LEVEL_COLOR = {
   BEGINNER:     "text-gray-400",
@@ -83,19 +85,30 @@ export default function ExpertProfileViewPage() {
     return () => controller.abort();
   }, [fetchExpert]);
 
-  const handleConnect = async () => {
-    if (!expert) return;
-    try {
-      const conversationId =
-        await clientExpertService.createConversationWithExpert(
-            expert
-        );
+  // Đổi hành vi: KHÔNG còn tự tạo conversation + gửi tin nhắn soạn sẵn nữa
+// (giống Connect ở AIMatchingPage / Invite ở ClientJobRecommendationPage).
+// Có hội thoại cũ với expert này thì vào thẳng, chưa có thì đưa sang Messages
+// kèm thông tin expert để user tự gõ và gửi tin đầu tiên.
+const handleConnect = async () => {
+  if (!expert) return;
+  try {
+    const existing = await findExistingConversationWithExpert(axiosInstance, {
+      expertUserId: expert.userId,
+    });
 
-      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
-    } catch (err) {
-      alert(err?.response?.data?.message || "Unable to start a conversation with the expert.");
+    if (existing?.conversationId) {
+      navigate(`/client/messages?conversationId=${existing.conversationId}`);
+      return;
     }
-  };
+
+    navigate(
+      `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+    );
+  } catch (err) {
+    console.error("Find conversation failed:", err);
+    alert("Unable to open conversation with the expert.");
+  }
+};
 
   if (loading) {
     return (

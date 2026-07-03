@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const SENIORITY_OPTIONS = [
   { label: "Junior", value: "JUNIOR" },
@@ -121,26 +122,36 @@ export default function ExpertSearchPage() {
   const navigate = useNavigate();
 
   const handleConnect = async (expert) => {
-    try {
-      const res = await axiosInstance.post("/conversations", {
-        type: "DIRECT",
-        expertUserId: expert.userId,
-        expertProfileId: expert.expertProfileId,
-        initialMessage: `Hi ${expert.fullName}, I want to discuss a project with you.`,
-      });
+  try {
+    const existing = await findExistingConversationWithExpert(axiosInstance, {
+      expertUserId: expert.userId,
+      expertProfileId: expert.expertProfileId,
+    });
 
-      const conversationId =
-        res.data?.conversationId ||
-        res.data?.id ||
-        res.data?.data?.conversationId ||
-        res.data?.data?.id;
-
-      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
-    } catch (err) {
-      console.error("Create conversation failed:", err);
-      alert("Unable to start a conversation with the expert.");
+    if (existing?.conversationId) {
+      navigate(`/client/messages?conversationId=${existing.conversationId}`);
+      return;
     }
-  };
+
+    const res = await axiosInstance.post("/conversations", {
+      type: "DIRECT",
+      expertUserId: expert.userId,
+      expertProfileId: expert.expertProfileId,
+      initialMessage: `Hi ${expert.fullName}, I want to discuss a project with you.`,
+    });
+
+    const conversationId =
+      res.data?.conversationId ||
+      res.data?.id ||
+      res.data?.data?.conversationId ||
+      res.data?.data?.id;
+
+    navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
+  } catch (err) {
+    console.error("Create conversation failed:", err);
+    alert("Unable to start a conversation with the expert.");
+  }
+};
 
   const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val)); };
 

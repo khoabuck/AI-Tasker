@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance"; // ← adjust path nếu khác
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const LEVEL_CONFIG = {
   JUNIOR: { label: "Junior", color: "#94a3b8" },
@@ -35,40 +36,42 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
 
   const handleSend = async () => {
   if (!message.trim()) return;
-
   setSending(true);
   setSendError("");
-
   try {
-    const res = await axiosInstance.post("/conversations", {
-      conversationType: "JOB_INQUIRY",
+    const existing = await findExistingConversationWithExpert(axiosInstance, {
       expertProfileId: expert.expertProfileId,
-      relatedJobId: Number(jobId),
-      initialMessage: message,
     });
 
-    const conversation = res.data?.data ?? res.data;
-    const conversationId =
-      conversation?.conversationId ?? conversation?.id;
+    let conversationId = existing?.conversationId ?? null;
+
+    if (conversationId) {
+      // Đã có hội thoại với expert này → gửi tiếp vào đó, không tạo mới.
+      await axiosInstance.post(`/conversations/${conversationId}/messages`, {
+        content: message,
+        messageType: "TEXT",
+        attachmentUrl: null,
+      });
+    } else {
+      const res = await axiosInstance.post("/conversations", {
+        conversationType: "JOB_INQUIRY",
+        expertProfileId: expert.expertProfileId,
+        relatedJobId: Number(jobId),
+        initialMessage: message,
+      });
+      const conversation = res.data?.data ?? res.data;
+      conversationId = conversation?.conversationId ?? conversation?.id;
+    }
 
     setSent(true);
-
     setTimeout(() => {
       setSent(false);
       setMessage("");
       onClose();
-
-      if (conversationId) {
-        navigate(`/client/messages?conversationId=${conversationId}`);
-      } else {
-        navigate("/client/messages");
-      }
+      navigate(conversationId ? `/client/messages?conversationId=${conversationId}` : "/client/messages");
     }, 800);
   } catch (err) {
-    setSendError(
-      err?.response?.data?.message ||
-      "Message sending failed. Please try again."
-    );
+    setSendError(err?.response?.data?.message || "Message sending failed. Please try again.");
   } finally {
     setSending(false);
   }
@@ -391,7 +394,7 @@ export default function ClientJobRecommendationPage() {
 
                           {/* Invite — green */}
                           <button
-                            onClick={() => handleInvite(expert.expertProfileId)}
+                            onClick={() => handleInvite(expert)}
                             style={{ flex: 1, padding: "9px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(34,197,94,0.2)"; e.currentTarget.style.borderColor = "#22c55e"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(34,197,94,0.25)"; }}
@@ -467,45 +470,31 @@ export default function ClientJobRecommendationPage() {
   );
 
   // ── Invite handler ─────────────────────────────────────────────────
-  async function handleInvite(expertProfileId) {
-    try {
-      const jobName = jobTitle || "Job opportunity";
+  // Đổi hành vi: KHÔNG còn tự tạo conversation + gửi tin nhắn mời soạn sẵn nữa.
+// Chỉ điều hướng sang Messages — giống hệt Connect ở AIMatchingPage: có hội
+// thoại cũ với expert này thì vào thẳng, chưa có thì đưa sang Messages kèm
+// thông tin expert để user tự gõ và gửi tin đầu tiên.
+async function handleInvite(expert) {
+  try {
+    const existing = await findExistingConversationWithExpert(axiosInstance, {
+      expertUserId: expert.userId,
+    });
 
-      const res = await axiosInstance.post("/conversations", {
-        conversationType: "JOB_INQUIRY",
-        expertProfileId,
-        relatedJobId: Number(id),
-        initialMessage: `Invitation to Apply
-
-  Job: ${jobName}
-
-  You have been invited because your profile matches this job.
-
-  Please review the job details and submit a proposal if you are interested.`,
-      });
-
-      const conversation = res.data?.data ?? res.data;
-      const conversationId = conversation?.conversationId ?? conversation?.id;
-
-      setInvitePopup({
-        open: true,
-        type: "success",
-        message: "Invitation sent successfully!",
-      });
-
-      if (conversationId) {
-        setTimeout(() => {
-          navigate(`/client/messages?conversationId=${conversationId}`);
-        }, 1000);
-      }
-    } catch (err) {
-      setInvitePopup({
-        open: true,
-        type: "error",
-        message:
-          err?.response?.data?.message ||
-          "Failed to send invitation.",
-      });
+    if (existing?.conversationId) {
+      navigate(`/client/messages?conversationId=${existing.conversationId}`);
+      return;
     }
+
+    navigate(
+      `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+    );
+  } catch (err) {
+    console.error("Find conversation failed:", err);
+    setInvitePopup({
+      open: true,
+      type: "error",
+      message: "Unable to open conversation with the Expert.",
+    });
   }
+}
 }
