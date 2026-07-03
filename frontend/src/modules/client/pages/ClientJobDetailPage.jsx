@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const STATUS_CONFIG = {
   DRAFT:     { label: "Draft",     color: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.25)" },
@@ -47,17 +48,13 @@ function MessageModal({ proposal, onClose, navigate }) {
     if (!message.trim()) return;
     setSending(true); setSendError("");
     try {
-      // Kiểm tra đã có conversation nào gắn với proposal này chưa, tránh tạo trùng.
-      let conversationId = null;
-      try {
-        const listRes = await axiosInstance.get("/conversations/me");
-        const listRaw = listRes.data?.data ?? listRes.data;
-        const list = Array.isArray(listRaw) ? listRaw : listRaw?.items ?? [];
-        const existing = list.find((c) => c.relatedProposalId === proposal.proposalId);
-        if (existing) conversationId = existing.conversationId;
-      } catch {
-        // tiếp tục thử tạo mới nếu check lỗi
-      }
+      // Kiểm tra đã có conversation nào với đúng expert này chưa (theo
+      // expertUserId, không phải relatedProposalId — vì cùng 1 expert có
+      // thể có nhiều proposal khác nhau nhưng chỉ nên dùng chung 1 conversation).
+      const existing = await findExistingConversationWithExpert(axiosInstance, {
+        expertUserId: proposal.expertUserId,
+      });
+      let conversationId = existing?.conversationId ?? null;
 
       if (conversationId) {
         await axiosInstance.post(`/conversations/${conversationId}/messages`, {
@@ -83,7 +80,7 @@ function MessageModal({ proposal, onClose, navigate }) {
       setSent(true);
       setTimeout(() => {
         setSent(false); setMessage(""); onClose();
-        if (conversationId) navigate(`/client/messages?conversationId=${conversationId}`);
+        if (conversationId) navigate(`/client/messages/${conversationId}`);
       }, 1200);
     } catch (err) {
       setSendError(err?.response?.data?.message || "Message sent failed.");

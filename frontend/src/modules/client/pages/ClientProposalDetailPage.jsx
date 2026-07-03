@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const PROPOSAL_STATUS = {
   SUBMITTED: { label: "Submitted", color: "#facc15" },
@@ -68,9 +69,8 @@ function MessageModal({ proposal, onClose, navigate }) {
     setSendError("");
     try {
       const existing = await findExistingConversationWithExpert(axiosInstance, {
-      expertUserId: proposal.expertUserId,
-      expertProfileId: proposal.expertProfileId,
-    });
+        expertUserId: proposal.expertUserId,
+      });
     let conversationId = existing?.conversationId ?? null;
 
       if (conversationId) {
@@ -100,7 +100,8 @@ function MessageModal({ proposal, onClose, navigate }) {
         setMessage("");
         onClose();
         if (conversationId) {
-          navigate(`/client/messages?conversationId=${conversationId}`);
+          const jobTitleParam = proposal.jobTitle ? `?jobTitle=${encodeURIComponent(proposal.jobTitle)}` : "";
+          navigate(`/client/messages/${conversationId}${jobTitleParam}`);
         }
       }, 1200);
     } catch (err) {

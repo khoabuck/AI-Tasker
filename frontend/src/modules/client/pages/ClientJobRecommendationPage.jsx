@@ -35,47 +35,47 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
   const [sendError, setSendError] = useState("");
 
   const handleSend = async () => {
-  if (!message.trim()) return;
-  setSending(true);
-  setSendError("");
-  try {
-    const existing = await findExistingConversationWithExpert(axiosInstance, {
-      expertProfileId: expert.expertProfileId,
-    });
-
-    let conversationId = existing?.conversationId ?? null;
-
-    if (conversationId) {
-      // Đã có hội thoại với expert này → gửi tiếp vào đó, không tạo mới.
-      await axiosInstance.post(`/conversations/${conversationId}/messages`, {
-        content: message,
-        messageType: "TEXT",
-        attachmentUrl: null,
+    if (!message.trim()) return;
+    setSending(true);
+    setSendError("");
+    try {
+      const existing = await findExistingConversationWithExpert(axiosInstance, {
+        expertUserId: expert.userId,
       });
-    } else {
-      const res = await axiosInstance.post("/conversations", {
-        conversationType: "JOB_INQUIRY",
-        expertProfileId: expert.expertProfileId,
-        relatedJobId: Number(jobId),
-        initialMessage: message,
-      });
-      const conversation = res.data?.data ?? res.data;
-      conversationId = conversation?.conversationId ?? conversation?.id;
+
+      let conversationId = existing?.conversationId ?? null;
+
+      if (conversationId) {
+        // Đã có hội thoại với expert này → gửi tiếp vào đó, không tạo mới.
+        await axiosInstance.post(`/conversations/${conversationId}/messages`, {
+          content: message,
+          messageType: "TEXT",
+          attachmentUrl: null,
+        });
+      } else {
+        const res = await axiosInstance.post("/conversations", {
+          conversationType: "JOB_INQUIRY",
+          expertProfileId: expert.expertProfileId,
+          relatedJobId: Number(jobId),
+          initialMessage: message,
+        });
+        const conversation = res.data?.data ?? res.data;
+        conversationId = conversation?.conversationId ?? conversation?.id;
+      }
+
+      setSent(true);
+      setTimeout(() => {
+        setSent(false);
+        setMessage("");
+        onClose();
+        navigate(conversationId ? `/client/messages/${conversationId}` : "/client/messages");
+      }, 800);
+    } catch (err) {
+      setSendError(err?.response?.data?.message || "Message sending failed. Please try again.");
+    } finally {
+      setSending(false);
     }
-
-    setSent(true);
-    setTimeout(() => {
-      setSent(false);
-      setMessage("");
-      onClose();
-      navigate(conversationId ? `/client/messages?conversationId=${conversationId}` : "/client/messages");
-    }, 800);
-  } catch (err) {
-    setSendError(err?.response?.data?.message || "Message sending failed. Please try again.");
-  } finally {
-    setSending(false);
-  }
-};
+  };
 
   return (
     <div
@@ -481,7 +481,7 @@ async function handleInvite(expert) {
     });
 
     if (existing?.conversationId) {
-      navigate(`/client/messages?conversationId=${existing.conversationId}`);
+      navigate(`/client/messages/${existing.conversationId}`);
       return;
     }
 

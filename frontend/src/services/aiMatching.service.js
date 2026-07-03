@@ -19,27 +19,13 @@ export const aiMatchingService = {
     };
   },
 
-  async createConversationWithExpert(expert) {
-    // Không tạo mới nếu đã có sẵn hội thoại với đúng expert này (theo
-    // expertUserId — field duy nhất response /conversations/me trả về để
-    // nhận diện expert), tránh cùng 1 người bị tách thành nhiều thread.
+  // Đổi tên + đổi hành vi: chỉ TÌM conversation cũ, KHÔNG tự tạo mới +
+  // gửi tin nhắn soạn sẵn nữa. AIMatchingPage.handleConnect sẽ tự điều
+  // hướng sang Messages với thông tin expert nếu hàm này trả về null.
+  async findConversationWithExpert(expert) {
     const existing = await findExistingConversationWithExpert(axiosInstance, {
       expertUserId: expert.userId,
     });
-
-    if (existing?.conversationId) {
-      return existing.conversationId;
-    }
-
-    const res = await aiMatchingApi.createConversation({
-      type: "DIRECT",
-      expertUserId: expert.userId,
-      expertProfileId: expert.expertProfileId,
-      initialMessage: `Hi ${expert.fullName}, I want to discuss a project with you.`,
-    });
-
-    const data = unwrap(res);
-
-    return data?.conversationId || data?.id || null;
+    return existing?.conversationId ?? null;
   },
-};
+}

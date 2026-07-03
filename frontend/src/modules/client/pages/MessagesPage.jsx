@@ -9,7 +9,7 @@
 // và field phân biệt "tin nhắn của tôi" trong messages[].
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ClientNavbar from "../../../components/layout/ClientNavbar";
 import axiosInstance from "../../../api/axiosInstance";
 import authService from "../../../services/auth.service";
@@ -170,6 +170,12 @@ export default function MessagesPage() {
   const navigate = useNavigate();
   const { conversationId } = useParams();
   const initialConvId = conversationId;
+  const [searchParams] = useSearchParams();
+  const newExpertUserId = searchParams.get("newExpertUserId");
+  const newExpertProfileId = searchParams.get("newExpertProfileId");
+  const newExpertName = searchParams.get("newExpertName");
+  const overrideJobTitle = searchParams.get("jobTitle");
+  const isNewChatDraft = !conversationId && !!newExpertUserId;
   const currentUser = authService.getCurrentUser();
   const currentUserId = currentUser?.userId ?? currentUser?.id;
 
@@ -249,10 +255,19 @@ export default function MessagesPage() {
       if (normalized.length > 0) {
       const target = initialConvId
         ? normalized.find((c) => String(c.id) === String(initialConvId))
+        : isNewChatDraft
+        ? null // đang tạo draft chat mới — không tự chọn conversation nào khác
         : normalized[0];
 
-      setActiveChat(target ?? normalized[0]);
-    } else {
+      if (!isNewChatDraft) {
+        const resolved = target ?? normalized[0];
+        setActiveChat(
+          resolved && overrideJobTitle
+            ? { ...resolved, relatedJobTitle: overrideJobTitle }
+            : resolved
+        );
+      }
+    } else if (!isNewChatDraft) {
       setActiveChat(null);
     }
     } catch (err) {
@@ -263,6 +278,30 @@ export default function MessagesPage() {
   }, [initialConvId, pinnedIds, deletedIds]);
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
+
+  useEffect(() => {
+  if (!isNewChatDraft) return;
+
+  setActiveChat({
+    id: null,
+    name: newExpertName ? decodeURIComponent(newExpertName) : "Expert",
+    avatar: "/default-avatar.png",
+    online: false,
+    lastMessage: "",
+    time: "",
+    unread: 0,
+    relatedProposalId: null,
+    relatedJobId: null,
+    relatedJobTitle: null,
+    pinned: false,
+    raw: {
+      expertUserId: Number(newExpertUserId),
+      expertProfileId: newExpertProfileId ? Number(newExpertProfileId) : null,
+    },
+  });
+  setMessages([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [isNewChatDraft, newExpertUserId, newExpertProfileId, newExpertName]);
 
   // ── Load messages khi chọn conversation ──────────────────────────
   const fetchMessages = useCallback(async (convId, silent = false) => {
@@ -319,35 +358,50 @@ useEffect(() => {
 
   // ── Gửi tin nhắn ──────────────────────────────────────────────────
   const handleSend = async () => {
-    const content = input.trim();
-    if (!content || !activeChat?.id) return;
+  const content = input.trim();
+  if (!content || !activeChat) return;
 
-    setInput("");
-    // Optimistic UI: hiện tin nhắn ngay, rollback nếu lỗi
-    const tempId = `temp-${Date.now()}`;
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: tempId,
-        text: content,
-        isMe: true,
-        time: formatMessageTime(new Date()),
-      },
-    ]);
+  setInput("");
+  const tempId = `temp-${Date.now()}`;
+  setMessages((prev) => [
+    ...prev,
+    { id: tempId, text: content, isMe: true, time: formatMessageTime(new Date()) },
+  ]);
 
-    try {
-      await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
+  try {
+    let convId = activeChat.id;
+
+    if (!convId) {
+      // Draft chưa có conversation thật — tạo mới ngay lúc gửi tin đầu tiên.
+      const res = await axiosInstance.post("/conversations", {
+        type: "DIRECT",
+        expertUserId: activeChat.raw.expertUserId,
+        expertProfileId: activeChat.raw.expertProfileId,
+        initialMessage: content,
+      });
+      const conv = res.data?.data ?? res.data;
+      convId = conv?.conversationId ?? conv?.id;
+
+      if (!convId) throw new Error("Conversation was not created.");
+
+      setActiveChat((prev) => ({ ...prev, id: convId }));
+      navigate(`/client/messages/${convId}`, { replace: true });
+      await fetchConversations();
+    } else {
+      await axiosInstance.post(`/conversations/${convId}/messages`, {
         content,
         messageType: "TEXT",
         attachmentUrl: null,
       });
-      await fetchMessages(activeChat.id, true);
-    } catch (err) {
-      setError(err?.response?.data?.message || "Send message failed.");
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      setInput(content);
     }
-  };
+
+    await fetchMessages(convId, true);
+  } catch (err) {
+    setError(err?.response?.data?.message || "Send message failed.");
+    setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    setInput(content);
+  }
+};
 
   const handleUploadFile = async (file, type) => {
     if (!file || !activeChat?.id) return;
@@ -659,12 +713,6 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                 </div>
                 <div>
                   <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{activeChat.name}</h3>
-                  {activeChat.relatedJobTitle && (
-                    <p style={{ fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#00F0FF", display: "flex", alignItems: "center", gap: 4, margin: 0 }}>
-                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#00F0FF", animation: "pulse 2s infinite", flexShrink: 0 }} />
-                      {activeChat.relatedJobTitle}
-                    </p>
-                  )}
                 </div>
               </div>
 

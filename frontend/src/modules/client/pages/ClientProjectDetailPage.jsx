@@ -15,6 +15,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 import { clientContractApi } from "../../../api/clientContract.api";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 const STATUS_CONFIG = {
   ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
@@ -396,7 +397,23 @@ export default function ClientProjectDetailPage() {
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
             </div>
 
-            <button onClick={() => navigate(project.conversationId ? `/client/messages?conversationId=${project.conversationId}` : "/client/messages")}
+            <button onClick={async () => {
+              if (project.conversationId) {
+                navigate(`/client/messages/${project.conversationId}`);
+                return;
+              }
+              // project.conversationId không có sẵn — tìm theo expertUserId
+              // trước khi coi như chưa từng nhắn tin với expert này.
+              const expertUserId = project.expertUserId ?? project.expert?.userId;
+              try {
+                const existing = expertUserId != null
+                  ? await findExistingConversationWithExpert(axiosInstance, { expertUserId })
+                  : null;
+                navigate(existing?.conversationId ? `/client/messages/${existing.conversationId}` : "/client/messages");
+              } catch {
+                navigate("/client/messages");
+              }
+            }}
               style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chat</span>
               Message

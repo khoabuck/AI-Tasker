@@ -89,26 +89,26 @@ export default function ExpertProfileViewPage() {
 // (giống Connect ở AIMatchingPage / Invite ở ClientJobRecommendationPage).
 // Có hội thoại cũ với expert này thì vào thẳng, chưa có thì đưa sang Messages
 // kèm thông tin expert để user tự gõ và gửi tin đầu tiên.
-const handleConnect = async () => {
-  if (!expert) return;
-  try {
-    const existing = await findExistingConversationWithExpert(axiosInstance, {
-      expertUserId: expert.userId,
-    });
+  const handleConnect = async () => {
+    if (!expert) return;
+    try {
+      const existing = await findExistingConversationWithExpert(axiosInstance, {
+        expertUserId: expert.userId,
+      });
 
-    if (existing?.conversationId) {
-      navigate(`/client/messages?conversationId=${existing.conversationId}`);
-      return;
+      if (existing?.conversationId) {
+        navigate(`/client/messages/${existing.conversationId}`);
+        return;
+      }
+
+      navigate(
+        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+      );
+    } catch (err) {
+      console.error("Find conversation failed:", err);
+      alert("Unable to open conversation with the expert.");
     }
-
-    navigate(
-      `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
-    );
-  } catch (err) {
-    console.error("Find conversation failed:", err);
-    alert("Unable to open conversation with the expert.");
-  }
-};
+  };
 
   if (loading) {
     return (

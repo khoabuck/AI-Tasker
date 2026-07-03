@@ -111,6 +111,8 @@ function JobCard({ job, onStatusChange }) {
   const handleCardClick = () => {
     if (checkingProposal || actionLoading) return;
 
+    if (normStatus === "CANCELLED") return;
+
     if (hasAcceptedProposal) {
       navigate(`/client/proposals/${acceptedProposalId}/contract`);
       return;
@@ -121,11 +123,27 @@ function JobCard({ job, onStatusChange }) {
 
   return (
     <div
-      onClick={handleCardClick}
-      style={{ background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: 22, cursor: checkingProposal ? "wait" : "pointer", transition: "all 0.2s", opacity: checkingProposal ? 0.7 : 1 }}
-      onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(0,240,255,0.3)"; e.currentTarget.style.transform = "translateY(-2px)"; }}
-      onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.transform = "translateY(0)"; }}
-    >
+        onClick={handleCardClick}
+        style={{
+          background: "rgba(16,19,25,0.85)",
+          backdropFilter: "blur(20px)",
+          border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 14,
+          padding: 22,
+          cursor: normStatus === "CANCELLED" ? "default" : checkingProposal ? "wait" : "pointer",
+          transition: "all 0.2s",
+          opacity: checkingProposal ? 0.7 : 1,
+        }}
+        onMouseEnter={(e) => {
+          if (normStatus === "CANCELLED") return;
+          e.currentTarget.style.borderColor = "rgba(0,240,255,0.3)";
+          e.currentTarget.style.transform = "translateY(-2px)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
+          e.currentTarget.style.transform = "translateY(0)";
+        }}
+      >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, gap: 12 }}>
         <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#e1e2eb", margin: 0, flex: 1 }}>
           {job.title}

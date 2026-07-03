@@ -70,6 +70,18 @@ export default function EditJobPage() {
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Danh sách skill GỐC của job lúc mới tải trang — đóng vai trò baseline để
+  // so sánh, giống hệt aiSuggestedSkills bên PostJobPage. Skill nào job vốn
+  // đã có thì không bị cảnh báo; skill nào user tự thêm thêm trong lúc edit
+  // (không nằm trong baseline này) sẽ bị đánh dấu "outside original skills".
+  const [originalSkillNames, setOriginalSkillNames] = useState([]);
+  const [irrelevantSkills, setIrrelevantSkills] = useState([]);
+
+  // Chỉ hiện cảnh báo khi job GỐC được tạo bằng AI Assistant (có
+  // aiGeneratedDescription) — đồng bộ với PostJobPage chỉ cảnh báo ở mode
+  // "ai", không cảnh báo ở job tạo thủ công hoàn toàn.
+  const wasAiAssisted = !!form?.aiGeneratedDescription;
+
   // ── Fetch job data để prefill ──────────────────────────────────────
   useEffect(() => {
     const controller = new AbortController();
@@ -104,6 +116,9 @@ export default function EditJobPage() {
           deadline:              deadlineDate,
           skills:                mappedSkills,
         });
+
+        setOriginalSkillNames(mappedSkills.map((s) => s.name.toLowerCase()));
+        setIrrelevantSkills([]);
       })
       .catch((err) => {
         if (err?.code === "ERR_CANCELED") return;
@@ -153,14 +168,40 @@ export default function EditJobPage() {
     setSaveSuccess(false);
   };
 
-  const toggleSkill = (skill) => {
-    const exists = form.skills.find((s) => s.id === skill.id);
+  const removeSkill = (skill) => {
     setForm((prev) => ({
       ...prev,
-      skills: exists
-        ? prev.skills.filter((s) => s.id !== skill.id)
-        : [...prev.skills, skill],
+      skills: prev.skills.filter(
+        (s) => Number(s.id) !== Number(skill.id) && s.name.toLowerCase() !== skill.name.toLowerCase()
+      ),
     }));
+
+    setIrrelevantSkills((prev) =>
+      prev.filter((name) => name.toLowerCase() !== skill.name.toLowerCase())
+    );
+  };
+
+  const toggleSkill = (skill) => {
+    const exists = form.skills.some(
+      (s) => Number(s.id) === Number(skill.id) || s.name.toLowerCase() === skill.name.toLowerCase()
+    );
+
+    if (exists) {
+      removeSkill(skill);
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      skills: [...prev.skills, skill],
+    }));
+
+    const isOriginal = originalSkillNames.includes(skill.name.toLowerCase());
+    if (wasAiAssisted && !isOriginal) {
+      setIrrelevantSkills((prev) =>
+        prev.includes(skill.name) ? prev : [...prev, skill.name]
+      );
+    }
   };
 
   const addCustomSkill = () => {
@@ -172,11 +213,15 @@ export default function EditJobPage() {
         ...prev,
         skills: [...prev.skills, { id: -(Date.now()), name: s }],
       }));
+
+      const isOriginal = originalSkillNames.includes(s.toLowerCase());
+      if (wasAiAssisted && !isOriginal) {
+        setIrrelevantSkills((prev) => (prev.includes(s) ? prev : [...prev, s]));
+      }
     }
     setCustomSkill("");
   };
 
-  // ── PUT /api/jobs/{id} — lưu thay đổi ─────────────────────────────
   // ── PUT /api/jobs/{id} — lưu thay đổi, KHÔNG đổi status ────────────
   const handleSave = async () => {
     if (!form.title.trim()) {
@@ -199,7 +244,6 @@ export default function EditJobPage() {
     }
   };
 
-  // ── PUT /api/jobs/{id}/submit — submit draft lên OPEN ──────────────
   // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
   const handleSubmit = async () => {
     if (!form.title.trim()) {
@@ -419,6 +463,9 @@ export default function EditJobPage() {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
               {skillOptions.map((skill) => {
                 const selected = !!form.skills.find((s) => s.id === skill.id);
+                const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
+                  (name) => name.toLowerCase() === skill.name.toLowerCase()
+                );
                 return (
                   <button
                     key={skill.id}
@@ -431,9 +478,17 @@ export default function EditJobPage() {
                       fontFamily: "JetBrains Mono, monospace",
                       cursor: "pointer",
                       transition: "all 0.15s",
-                      background: selected ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)",
-                      color: selected ? "#00F0FF" : "#8c90a0",
-                      border: selected ? "1px solid rgba(0,240,255,0.4)" : "1px solid rgba(255,255,255,0.1)",
+                      background: isIrrelevant
+                        ? "rgba(245,158,11,0.12)"
+                        : selected
+                        ? "rgba(0,240,255,0.12)"
+                        : "rgba(255,255,255,0.04)",
+                      color: isIrrelevant ? "#fbbf24" : selected ? "#00F0FF" : "#8c90a0",
+                      border: isIrrelevant
+                        ? "1px solid rgba(245,158,11,0.45)"
+                        : selected
+                        ? "1px solid rgba(0,240,255,0.4)"
+                        : "1px solid rgba(255,255,255,0.1)",
                       fontWeight: selected ? 700 : 400,
                     }}
                   >
@@ -465,13 +520,49 @@ export default function EditJobPage() {
             {/* Custom skills đã thêm (id âm) */}
             {form.skills.filter((s) => s.id < 0).length > 0 && (
               <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {form.skills.filter((s) => s.id < 0).map((s) => (
-                  <span key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 999, fontSize: 11, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace" }}>
+                {form.skills.filter((s) => s.id < 0).map((s) => {
+                const isIrrelevant = wasAiAssisted && irrelevantSkills.some(
+                  (name) => name.toLowerCase() === s.name.toLowerCase()
+                );
+                return (
+                  <span key={s.id} style={{
+                    display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 999, fontSize: 11, fontFamily: "JetBrains Mono, monospace",
+                    background: isIrrelevant ? "rgba(245,158,11,0.1)" : "rgba(0,240,255,0.08)",
+                    border: isIrrelevant ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(0,240,255,0.25)",
+                    color: isIrrelevant ? "#fbbf24" : "#00F0FF",
+                  }}>
+                    {isIrrelevant && <span className="material-symbols-outlined" style={{ fontSize: 13 }}>warning</span>}
                     {s.name}
-                    <button type="button" onClick={() => setForm((prev) => ({ ...prev, skills: prev.skills.filter((sk) => sk.id !== s.id) }))}
-                      style={{ background: "none", border: "none", color: "#00F0FF", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
+                    <button type="button" onClick={() => removeSkill(s)}
+                      style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0, fontSize: 13, lineHeight: 1 }}>×</button>
                   </span>
-                ))}
+                );
+              })}
+              </div>
+            )}
+
+            {/* Cảnh báo skill nằm ngoài baseline gốc — chỉ hiện khi job vốn
+                được tạo bằng AI Assistant, giống hệt PostJobPage. */}
+            {wasAiAssisted && irrelevantSkills.length > 0 && (
+              <div
+                style={{
+                  marginTop: 10,
+                  padding: "8px 12px",
+                  borderRadius: 8,
+                  background: "rgba(245,158,11,0.08)",
+                  border: "1px solid rgba(245,158,11,0.25)",
+                  color: "#fbbf24",
+                  fontSize: 12,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>warning</span>
+                <span>
+                  Warning: These skills were not in the original job's skill list:{" "}
+                  <strong>{irrelevantSkills.join(", ")}</strong>
+                </span>
               </div>
             )}
 
