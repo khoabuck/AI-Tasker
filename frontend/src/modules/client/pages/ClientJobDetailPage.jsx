@@ -152,13 +152,12 @@ export default function ClientJobDetailPage() {
   // trang) sẽ fetch ngầm, giữ nguyên nội dung cũ trên màn hình → không nháy trắng.
   const hasLoadedOnce = useRef(false);
 
-  const fetchData = useCallback(async (signal) => {
-    // Chỉ bật spinner khi CHƯA có data (lần đầu). Refetch nền thì không bật,
-    // để nội dung hiện tại ở nguyên trên màn hình trong lúc tải.
-    if (!hasLoadedOnce.current) {
+  const fetchData = useCallback(async (signal, silent = false) => {
+    // Chỉ bật spinner khi CHƯA có data (lần đầu) và không phải refetch nền.
+    if (!hasLoadedOnce.current && !silent) {
       setLoading(true);
     }
-    setError("");
+    if (!silent) setError("");
     try {
       const [jobRes, proposalsRes] = await Promise.all([
         axiosInstance.get(`/jobs/${id}`, { signal }),
@@ -170,8 +169,12 @@ export default function ClientJobDetailPage() {
       hasLoadedOnce.current = true;
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.status === 404 ? "No job found for this position." : err?.response?.status === 403 ? "You are not allowed to view it." : err?.response?.data?.message || "An error has occurred.");
-    } finally { setLoading(false); }
+      if (!silent) {
+        setError(err?.response?.status === 404 ? "No job found for this position." : err?.response?.status === 403 ? "You are not allowed to view it." : err?.response?.data?.message || "An error has occurred.");
+      }
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => {
@@ -179,6 +182,20 @@ export default function ClientJobDetailPage() {
     fetchData(controller.signal);
     return () => controller.abort();
   }, [fetchData]);
+
+  // Tự động làm mới danh sách proposal mỗi 5s khi job còn OPEN — để phát hiện
+  // proposal mới từ Expert mà không cần Client tự F5. Không polling khi job
+  // đã ACTIVE/COMPLETED/CANCELLED/DISPUTED vì lúc đó không còn ai nộp proposal
+  // mới nữa.
+  useEffect(() => {
+    if (job?.status !== "OPEN") return;
+
+    const intervalId = setInterval(() => {
+      fetchData(undefined, true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [job?.status, fetchData]);
 
   const handleAccept = async (proposalId) => {
     if (!confirm("Accept this proposal? The other proposals will be rejected.")) return;
@@ -219,7 +236,7 @@ export default function ClientJobDetailPage() {
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={() => fetchData(new AbortController().signal)} style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Thử lại</button>
+          <button onClick={() => fetchData(new AbortController().signal)} style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Retry</button>
           <button onClick={() => navigate("/client/jobs")} style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Back to Jobs</button>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>

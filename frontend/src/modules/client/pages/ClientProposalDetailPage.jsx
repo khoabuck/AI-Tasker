@@ -180,9 +180,11 @@ export default function ClientProposalDetailPage() {
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [acceptError, setAcceptError] = useState("");
 
-  const fetchProposal = useCallback(async (signal) => {
-    setLoading(true);
-    setError("");
+  const fetchProposal = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await axiosInstance.get(`/proposals/${proposalId}`, { signal });
       const raw = res.data;
@@ -193,20 +195,22 @@ export default function ClientProposalDetailPage() {
       }
 
       if (!proposalData) {
-        setError("Proposal not found.");
+        if (!silent) setError("Proposal not found.");
         return;
       }
 
       setProposal(proposalData);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(
-        err?.response?.status === 404 ? "Proposal not found." :
-        err?.response?.status === 403 ? "You do not have permission to view this proposal." :
-        err?.response?.data?.message || "An error occurred."
-      );
+      if (!silent) {
+        setError(
+          err?.response?.status === 404 ? "Proposal not found." :
+          err?.response?.status === 403 ? "You do not have permission to view this proposal." :
+          err?.response?.data?.message || "An error occurred."
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [proposalId]);
 

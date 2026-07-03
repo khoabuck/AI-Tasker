@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getMeApi } from "../api/auth.api";
-import { getAccessToken, saveAuth, clearAuth } from "../utils/auth.utils";
+import { getAccessToken, saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
 
 const AuthContext = createContext(null);
 
@@ -9,9 +9,31 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   // Khi reload trang: nếu có token thì gọi /auth/me để lấy user mới nhất
+  // code mới
   useEffect(() => {
     const restore = async () => {
       if (!getAccessToken()) {
+        setLoading(false);
+        return;
+      }
+
+      // Nếu user đã lưu sẵn trong localStorage cho biết họ đang ở trạng thái
+      // "chưa hoàn tất" (chưa chọn role, hoặc chưa xác thực email), thì KHÔNG
+      // gọi /auth/me để xác thực lại — vì:
+      // 1) Token vừa được cấp vài giây trước lúc login, chắc chắn còn hợp lệ.
+      // 2) BE có thể từ chối /auth/me (401) cho user chưa có role đầy đủ,
+      //    khiến effect này tự xóa mất token đúng lúc user đang đứng ở
+      //    SelectRolePage chuẩn bị bấm Confirm — đây chính là nguyên nhân
+      //    gây lỗi 401 "thỉnh thoảng mới bị" khi chọn role.
+      const storedUser = getUserFromStorage();
+      const storedStatus = String(storedUser?.status || "").toUpperCase();
+      const isIncompleteOnboarding = [
+        "PENDING_ROLE",
+        "PENDING_EMAIL_VERIFICATION",
+      ].includes(storedStatus);
+
+      if (isIncompleteOnboarding && storedUser) {
+        setUser(storedUser);
         setLoading(false);
         return;
       }
@@ -22,9 +44,15 @@ export function AuthProvider({ children }) {
 
         setUser(freshUser);
         saveAuth({ user: freshUser });
-      } catch {
-        clearAuth();
-        setUser(null);
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          clearAuth();
+          setUser(null);
+        } else {
+          const stored = getUserFromStorage();
+          if (stored) setUser(stored);
+        }
       } finally {
         setLoading(false);
       }

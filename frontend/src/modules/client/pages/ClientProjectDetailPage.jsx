@@ -147,7 +147,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
+      <div className="scrollbar-none" style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 520, maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div>
@@ -319,14 +319,12 @@ export default function ClientProjectDetailPage() {
   }, [fetchData]);
 
   useEffect(() => {
-    if (project?.status !== "ACTIVE") return;
-
     const intervalId = setInterval(() => {
-      fetchData(undefined, true);
+      fetchData(undefined, true); // silent = true, không hiện loading spinner
     }, 3000);
 
     return () => clearInterval(intervalId);
-  }, [project?.status, fetchData]);
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -584,9 +582,17 @@ export default function ClientProjectDetailPage() {
           project={project}
           milestone={disputeModal.milestone}
           onClose={() => setDisputeModal(null)}
-          onSubmitted={() => setBannerMsg("The complaint has been submitted. The administrator will review it and respond as soon as possible.")}
+          onSubmitted={() => {
+            setBannerMsg("The complaint has been submitted. The administrator will review it and respond as soon as possible.");
+            fetchData(undefined, true); // cập nhật status/milestones ngay, không cần đợi vòng poll tiếp theo
+          }}
         />
       )}
+
+      <style>{`
+        .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+      `}</style>
     </ClientLayout>
   );
 }

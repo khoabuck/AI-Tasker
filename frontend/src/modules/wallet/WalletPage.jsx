@@ -580,6 +580,12 @@ const isDepositClickBlocked = (order, now) => {
   return elapsed > DEPOSIT_PENDING_CLICK_LIMIT_MS;
 };
 
+// Đổi số giây còn lại thành text "X minute(s)" — làm tròn lên để không hiện
+// "0 minute(s)" khi còn vài giây cuối cùng.
+const formatRemainingMinutes = (seconds) => {
+  return Math.max(1, Math.ceil(seconds / 60));
+};
+
 export default function WalletPage() {
   const navigate = useNavigate();
   const [balance, setBalance] = useState(null);

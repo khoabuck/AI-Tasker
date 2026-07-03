@@ -286,8 +286,8 @@ export default function ClientJobRecommendationPage() {
         {!loading && !error && experts.length === 0 && (
           <div style={{ textAlign: "center", padding: "80px 0", color: "#8c90a0" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#3d4050" }}>person_search</span>
-            <p style={{ fontSize: 15, marginBottom: 6 }}>Chưa có gợi ý nào cho job này.</p>
-            <p style={{ fontSize: 13 }}>Hãy thử lại sau khi job được AI phân tích.</p>
+            <p style={{ fontSize: 15, marginBottom: 6 }}>No recommendations yet for this job.</p>
+            <p style={{ fontSize: 13 }}>Please try again after the job has been analyzed by AI.</p>
           </div>
         )}
 

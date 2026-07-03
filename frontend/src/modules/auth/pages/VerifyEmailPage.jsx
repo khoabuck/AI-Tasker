@@ -30,7 +30,7 @@ export default function VerifyEmailPage() {
   // Xác thực thành công → chuyển sang /login ngay lập tức, không chờ.
   useEffect(() => {
     if (isSuccess) {
-      navigate("/login");
+      navigate("/login", { replace: true });
     }
   }, [isSuccess, navigate]);
 

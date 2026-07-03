@@ -72,9 +72,12 @@ export default function ClientContractSignPage() {
 
   const pollRef = useRef(null);
 
-  const fetchAll = useCallback(async (signal) => {
-    setLoading(true);
-    setLoadError("");
+  // code mới
+  const fetchAll = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError("");
+    }
     try {
       const [proposalRes, contractRes] = await Promise.all([
         axiosInstance.get(`/proposals/${proposalId}`, { signal }),
@@ -88,13 +91,15 @@ export default function ClientContractSignPage() {
       setContract(contractData);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      if (err?.response?.status === 404) {
-        setLoadError("No contract has been created for this proposal yet.");
-      } else {
-        setLoadError(err?.response?.data?.message || "Failed to load contract.");
+      if (!silent) {
+        if (err?.response?.status === 404) {
+          setLoadError("No contract has been created for this proposal yet.");
+        } else {
+          setLoadError(err?.response?.data?.message || "Failed to load contract.");
+        }
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [proposalId]);
 
@@ -195,7 +200,7 @@ export default function ClientContractSignPage() {
       if (isExpired || status === 410 || status === 400) {
         // Contract có thể đã bị BE hủy do quá hạn ký — refetch để lấy đúng
         // trạng thái mới nhất (status: CANCELLED) thay vì chỉ báo lỗi suông.
-        await fetchAll();
+        await fetchAll(undefined, true);
       }
       setPageError(message);
     } finally {
@@ -239,10 +244,13 @@ export default function ClientContractSignPage() {
     const contractId = getContractId(contract);
     if (!contractId) return;
 
+    
     const createProject = async () => {
       try {
         await axiosInstance.post(`/projects/from-contract/${contractId}`);
-        await fetchAll();
+        // silent=true — chạy ngầm sau khi tự động tạo project (vd phát hiện
+        // qua polling khi resume trang), không làm gián đoạn UI đang hiển thị.
+        await fetchAll(undefined, true);
       } catch (err) {
         const status = err?.response?.status;
         const message = err?.response?.data?.message || "";

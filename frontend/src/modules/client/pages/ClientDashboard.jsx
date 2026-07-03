@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
 
 // ─── Component con: 1 Expert Card ─────────────────────
@@ -234,7 +235,9 @@ export default function ClientDashboard() {
           },
         });
 
-        setExperts(res.data?.items || []);
+        const raw = res.data;
+        const items = Array.isArray(raw) ? raw : raw?.items || raw?.data || [];
+        setExperts(items);
       } catch (err) {
         setError(
           err?.response?.data?.message ||
@@ -248,28 +251,24 @@ export default function ClientDashboard() {
     fetchExperts();
   }, []);
 
+  // code mới
   const handleConnect = async (expert) => {
     try {
-      const res = await axiosInstance.post("/conversations", {
-        type: "DIRECT",
+      const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,
-        expertProfileId: expert.expertProfileId,
       });
 
-      const conversationId =
-        res.data?.conversationId ||
-        res.data?.id ||
-        res.data?.data?.conversationId ||
-        res.data?.data?.id;
+      if (existing?.conversationId) {
+        navigate(`/client/messages/${existing.conversationId}`);
+        return;
+      }
 
       navigate(
-        `/client/messages${
-          conversationId ? `?conversationId=${conversationId}` : ""
-        }`
+        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
     } catch (err) {
-      console.error("Create conversation failed:", err);
-      alert("Unable to start a conversation with the expert.");
+      console.error("Find conversation failed:", err);
+      alert("Unable to open conversation with the expert.");
     }
   };
 

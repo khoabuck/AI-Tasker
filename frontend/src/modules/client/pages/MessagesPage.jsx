@@ -154,7 +154,7 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
                 <button onClick={() => setShowRevisionForm(true)}
                   style={{ flex: 1, padding: "12px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                   <span className="material-symbols-outlined" style={{ fontSize: 16 }}>edit_note</span>
-                  Yêu cầu sửa
+                  Request Revision
                 </button>
                 
               </div>
@@ -604,7 +604,7 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
             <div className="msg-scroll" style={{ flex: 1, overflowY: "auto", padding: 8 }}>
               {conversations.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "40px 12px", color: "#8c90a0" }}>
-                  <p style={{ fontSize: 13 }}>Chưa có cuộc trò chuyện.</p>
+                  <p style={{ fontSize: 13 }}>No conversations yet.</p>
                 </div>
               ) : (
                 conversations.map((conv) => (
@@ -726,7 +726,7 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                 </div>
               ) : messages.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "60px 0", color: "#8c90a0" }}>
-                  <p style={{ fontSize: 13 }}>Chưa có tin nhắn. Hãy bắt đầu trò chuyện!</p>
+                  <p style={{ fontSize: 13 }}>No messages yet. Start the conversation!</p>
                 </div>
               ) : (
                 messages.map((msg) => (
@@ -799,7 +799,7 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                             image
                           </span>
                           <span className="text-sm font-medium text-slate-300">
-                            Hình ảnh
+                            Image
                           </span>
                         </button>
 

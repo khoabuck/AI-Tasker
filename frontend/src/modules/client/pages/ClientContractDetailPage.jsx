@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { clientContractApi } from "../../../api/clientContract.api";
@@ -21,47 +21,67 @@ export default function ClientContractDetailPage() {
   }, [proposalId]);
 
   // fetch contract + milestones
-  useEffect(() => {
+  // code mới
+  // fetch contract + milestones. silent=true dùng cho polling nền — không bật
+  // spinner/không xóa error đang hiện, tránh nháy màn hình mỗi lần refetch.
+  const fetchData = useCallback(async (silent = false) => {
     if (!proposalId) return;
-
-    const fetchData = async () => {
-      try {
+    try {
+      if (!silent) {
         setLoading(true);
         setError(null);
+      }
 
-        // 1. CONTRACT
-        const res = await clientContractApi.getContractByProposal(proposalId);
-        const data = res?.data?.data;
+      // 1. CONTRACT
+      const res = await clientContractApi.getContractByProposal(proposalId);
+      const data = res?.data?.data;
 
-        if (!data) {
-          setContract(null);
-          setMilestones([]);
-          return;
-        }
+      if (!data) {
+        setContract(null);
+        setMilestones([]);
+        return;
+      }
 
-        setContract(data);
+      setContract(data);
 
-        // 2. MILESTONES
-        const contractId = data.contractId;
+      // 2. MILESTONES
+      const contractId = data.contractId;
 
-        if (contractId) {
-          const milestoneRes = await clientContractApi.getMilestoneDrafts(contractId);
-          setMilestones(milestoneRes?.data?.data || []);
-        } else {
-          setMilestones([]);
-        }
-      } catch (err) {
-        console.error("LOAD CONTRACT ERROR:", err);
+      if (contractId) {
+        const milestoneRes = await clientContractApi.getMilestoneDrafts(contractId);
+        setMilestones(milestoneRes?.data?.data || []);
+      } else {
+        setMilestones([]);
+      }
+    } catch (err) {
+      console.error("LOAD CONTRACT ERROR:", err);
+      if (!silent) {
         setError("Failed to load contract");
         setContract(null);
         setMilestones([]);
-      } finally {
-        setLoading(false);
       }
-    };
-
-    fetchData();
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, [proposalId]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Tự động làm mới hợp đồng + milestone mỗi 5s khi hợp đồng chưa CANCELLED —
+  // để phát hiện thay đổi (đối phương ký, milestone được thêm...) mà không
+  // cần Client tự F5. Dừng poll khi hợp đồng đã bị hủy vì lúc đó không còn gì
+  // thay đổi thêm.
+  useEffect(() => {
+    if (!contract || contract.status === "CANCELLED") return;
+
+    const intervalId = setInterval(() => {
+      fetchData(true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [contract?.status, fetchData]);
 
   // loading
   if (loading && !contract) {

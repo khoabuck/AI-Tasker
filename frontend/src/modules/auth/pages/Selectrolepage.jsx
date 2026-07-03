@@ -195,7 +195,7 @@ export default function SelectRolePage() {
 
         if (!loginResult.success) {
           setError(
-            "Chọn vai trò thành công nhưng không thể làm mới token. Vui lòng đăng nhập lại."
+            "Role selection succeeded but unable to refresh token. Please log in again."
           );
           return;
         }
@@ -219,7 +219,7 @@ export default function SelectRolePage() {
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
-        "Đã có lỗi xảy ra khi chọn vai trò.";
+        "An error occurred during role selection.";
 
       if (message === "User is not in pending role status.") {
         redirectExistingUser();

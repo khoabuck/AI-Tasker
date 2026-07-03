@@ -346,7 +346,7 @@ export default function JobsPage() {
               <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
               <button onClick={() => fetchJobs(new AbortController().signal)}
                 style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>
-                Thử lại
+                Retry
               </button>
             </div>
           )}

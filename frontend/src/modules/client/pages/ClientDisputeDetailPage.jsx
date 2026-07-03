@@ -63,9 +63,12 @@ export default function ClientDisputeDetailPage() {
   // Tìm dispute đúng theo projectId truyền qua query param — vì hiện tại điều hướng
   // tới trang này chỉ biết projectId (không biết sẵn disputeId), nên phải lấy list
   // GET /disputes/me rồi lọc ra đúng dispute khớp projectId.
-  const fetchDispute = useCallback(async (signal) => {
-    setLoading(true);
-    setError("");
+  // code mới
+  const fetchDispute = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await axiosInstance.get("/disputes/me", { signal });
       const raw = res.data?.data ?? res.data;
@@ -76,7 +79,7 @@ export default function ClientDisputeDetailPage() {
         : list[0];
 
       if (!match) {
-        setError("No complaints were found for this project.");
+        if (!silent) setError("No complaints were found for this project.");
         return;
       }
 
@@ -86,9 +89,11 @@ export default function ClientDisputeDetailPage() {
       setDispute(detail ?? match);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Unable to load complaint information.");
+      if (!silent) {
+        setError(err?.response?.data?.message || "Unable to load complaint information.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [projectId]);
 
@@ -97,6 +102,20 @@ export default function ClientDisputeDetailPage() {
     fetchDispute(controller.signal);
     return () => controller.abort();
   }, [fetchDispute]);
+
+  // Tự động làm mới dispute mỗi 5s khi chưa CLOSED — để phát hiện khi Admin
+  // xử lý xong (Resolved/Rejected) mà không cần Client tự F5.
+  useEffect(() => {
+    if (!dispute) return;
+    const isClosed = ["RESOLVED", "REJECTED", "CLOSED"].includes(dispute.status);
+    if (isClosed) return;
+
+    const intervalId = setInterval(() => {
+      fetchDispute(undefined, true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [dispute?.status, fetchDispute]);
 
   
 
@@ -113,7 +132,7 @@ export default function ClientDisputeDetailPage() {
       setEvidenceSent(true);
       setEvidenceText("");
       setEvidenceFileUrl("");
-      await fetchDispute();
+      await fetchDispute(undefined, true);
       setTimeout(() => setEvidenceSent(false), 3000);
     } catch (err) {
       setEvidenceError(err?.response?.data?.message || "Submit proof of failure.");
