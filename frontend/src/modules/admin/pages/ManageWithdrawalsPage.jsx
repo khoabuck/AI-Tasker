@@ -31,9 +31,13 @@ export default function ManageWithdrawalsPage() {
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [balanceLoading, setBalanceLoading] = useState(false);
+  const [balanceChecked, setBalanceChecked] = useState(false);
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [action, setAction] = useState(EMPTY_ACTION);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -121,16 +125,9 @@ export default function ManageWithdrawalsPage() {
         setSuccess("");
       }
 
-      const [withdrawalData, balanceData] = await Promise.all([
-        adminWithdrawalService.getWithdrawals(),
-        adminWithdrawalService.getPayosBalance().catch((err) => {
-          console.warn("LOAD PAYOS BALANCE WARNING:", err?.response?.data || err);
-          return null;
-        }),
-      ]);
+      const withdrawalData = await adminWithdrawalService.getWithdrawals();
 
       setWithdrawals(Array.isArray(withdrawalData) ? withdrawalData : []);
-      setPayosBalance(balanceData);
     } catch (err) {
       console.error("LOAD WITHDRAWALS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load withdrawal requests."));
@@ -139,7 +136,54 @@ export default function ManageWithdrawalsPage() {
     }
   };
 
+  const handleCheckPayosBalance = async () => {
+    try {
+      setBalanceLoading(true);
+      setError("");
+      setSuccess("");
+      setModalError("");
+      setFieldErrors({});
+
+      const data = await adminWithdrawalService.getPayosBalance();
+
+      setPayosBalance(data);
+      setBalanceChecked(true);
+      setSuccess("PayOS balance has been checked successfully.");
+    } catch (err) {
+      console.error("CHECK PAYOS BALANCE ERROR:", err?.response?.data || err);
+      setPayosBalance(null);
+      setBalanceChecked(false);
+      setError(getFriendlyError(err, "Cannot check PayOS balance."));
+    } finally {
+      setBalanceLoading(false);
+    }
+  };
+
   const openApproveModal = (withdrawal) => {
+    const balance = Number(
+      payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
+    );
+    const withdrawalAmount = Number(withdrawal?.amount || 0);
+    const currency = payosBalance?.currency || withdrawal?.currency || "VND";
+
+    if (!balanceChecked) {
+      setError("Please check PayOS balance before approving this withdrawal.");
+      return;
+    }
+
+    if (withdrawalAmount > balance) {
+      setError(
+        `PayOS balance is insufficient. Current balance: ${formatMoney(
+          balance,
+          currency
+        )}. Withdrawal amount: ${formatMoney(
+          withdrawalAmount,
+          withdrawal?.currency || currency
+        )}.`
+      );
+      return;
+    }
+
     setAction({
       type: "APPROVE_PAYOS",
       withdrawal,
@@ -151,6 +195,8 @@ export default function ManageWithdrawalsPage() {
 
     setError("");
     setSuccess("");
+    setModalError("");
+    setFieldErrors({});
   };
 
   const openRejectModal = (withdrawal) => {
@@ -162,6 +208,8 @@ export default function ManageWithdrawalsPage() {
     setForm(EMPTY_FORM);
     setError("");
     setSuccess("");
+    setModalError("");
+    setFieldErrors({});
   };
 
   const closeActionModal = () => {
@@ -169,13 +217,42 @@ export default function ManageWithdrawalsPage() {
 
     setAction(EMPTY_ACTION);
     setForm(EMPTY_FORM);
+    setModalError("");
+    setFieldErrors({});
   };
 
   const handleApprovePayos = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    if (!form.reason.trim()) {
-      setError("Please enter an approval reason.");
+    const validation = validateActionForm(form, "Approval Reason");
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    const balanceValue = Number(
+      payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
+    );
+
+    if (!balanceChecked) {
+      setFieldErrors({});
+      setModalError("Please check PayOS balance before approving this withdrawal.");
+      return;
+    }
+
+    if (Number(action.withdrawal.amount || 0) > balanceValue) {
+      setFieldErrors({});
+      setModalError(
+        `PayOS balance is insufficient. Current balance: ${formatMoney(
+          balanceValue,
+          payosBalance?.currency || action.withdrawal.currency || "VND"
+        )}. Withdrawal amount: ${formatMoney(
+          action.withdrawal.amount,
+          action.withdrawal.currency || "VND"
+        )}.`
+      );
       return;
     }
 
@@ -183,6 +260,8 @@ export default function ManageWithdrawalsPage() {
       setActionLoading(true);
       setError("");
       setSuccess("");
+      setModalError("");
+      setFieldErrors({});
 
       await adminWithdrawalService.approveWithdrawalPayos(
         action.withdrawal.withdrawalRequestId,
@@ -194,8 +273,10 @@ export default function ManageWithdrawalsPage() {
       const id = action.withdrawal.withdrawalRequestId;
 
       closeActionModal();
+      setBalanceChecked(false);
+      setPayosBalance(null);
       await loadWithdrawals({ keepMessage: true });
-      setSuccess(`Withdrawal request #${id} has been approved via PayOS.`);
+      setSuccess(`Withdrawal request #${id} has been approved via PayOS. Please check PayOS balance again before approving another withdrawal.`);
     } catch (err) {
       console.error("APPROVE PAYOS WITHDRAWAL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot approve withdrawal via PayOS."));
@@ -211,6 +292,8 @@ export default function ManageWithdrawalsPage() {
       setActionLoading(true);
       setError("");
       setSuccess("");
+      setModalError("");
+      setFieldErrors({});
 
       await adminWithdrawalService.syncWithdrawalPayos(
         withdrawal.withdrawalRequestId
@@ -231,8 +314,11 @@ export default function ManageWithdrawalsPage() {
   const handleReject = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    if (!form.reason.trim()) {
-      setError("Please enter a rejection reason.");
+    const validation = validateActionForm(form, "Rejection Reason");
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
@@ -280,14 +366,25 @@ export default function ManageWithdrawalsPage() {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={() => loadWithdrawals()}
-            disabled={loading || actionLoading}
-            className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Loading..." : "Refresh"}
-          </button>
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={handleCheckPayosBalance}
+              disabled={loading || actionLoading || balanceLoading}
+              className="w-fit rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {balanceLoading ? "Checking..." : "Check your PayOS balance"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => loadWithdrawals()}
+              disabled={loading || actionLoading || balanceLoading}
+              className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Loading..." : "Refresh"}
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -312,12 +409,22 @@ export default function ManageWithdrawalsPage() {
           <StatCard
             icon="account_balance"
             label="PayOS Balance"
-            value={formatMoney(
-              payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0,
-              payosBalance?.currency || "VND"
-            )}
-            description="Available payout balance"
-            tone="green"
+            value={
+              balanceChecked
+                ? formatMoney(
+                    payosBalance?.availableBalance ??
+                      payosBalance?.currentBalance ??
+                      0,
+                    payosBalance?.currency || "VND"
+                  )
+                : "Not checked"
+            }
+            description={
+              balanceChecked
+                ? "Available payout balance"
+                : "Check balance before approval"
+            }
+            tone={balanceChecked ? "green" : "yellow"}
           />
 
           <StatCard
@@ -428,6 +535,7 @@ export default function ManageWithdrawalsPage() {
             confirmLabel="Approve via PayOS"
             confirmTone="green"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleApprovePayos}
           >
@@ -435,13 +543,17 @@ export default function ManageWithdrawalsPage() {
 
             <TextArea
               label="Approval Reason"
+              required
               value={form.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({ ...prev, reason: "" }));
                 setForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: Payment details verified. Approve via PayOS."
             />
           </ActionModal>
@@ -454,6 +566,7 @@ export default function ManageWithdrawalsPage() {
             confirmLabel="Reject Request"
             confirmTone="red"
             loading={actionLoading}
+            error={modalError}
             onClose={closeActionModal}
             onConfirm={handleReject}
           >
@@ -461,13 +574,17 @@ export default function ManageWithdrawalsPage() {
 
             <TextArea
               label="Rejection Reason"
+              required
               value={form.reason}
-              onChange={(value) =>
+              error={fieldErrors.reason}
+              onChange={(value) => {
+                setModalError("");
+                setFieldErrors((prev) => ({ ...prev, reason: "" }));
                 setForm((prev) => ({
                   ...prev,
                   reason: value,
-                }))
-              }
+                }));
+              }}
               placeholder="Example: Bank account information is invalid."
             />
           </ActionModal>
@@ -674,6 +791,7 @@ function ActionModal({
   confirmLabel,
   confirmTone = "cyan",
   loading,
+  error = "",
   onClose,
   onConfirm,
 }) {
@@ -692,7 +810,15 @@ function ActionModal({
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
         </div>
 
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-6 py-5">
+          {error && (
+            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {error}
+            </div>
+          )}
+
+          {children}
+        </div>
 
         <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
           <button
@@ -718,11 +844,19 @@ function ActionModal({
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -730,8 +864,14 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>}
     </div>
   );
 }
@@ -862,6 +1002,22 @@ function formatLabel(value) {
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function validateActionForm(form, label = "Reason") {
+  const errors = {};
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = `${label} is required.`;
+  } else if (reason.length < 10) {
+    errors.reason = `${label} must be at least 10 characters.`;
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function getFriendlyError(err, fallback = "Something went wrong.") {
