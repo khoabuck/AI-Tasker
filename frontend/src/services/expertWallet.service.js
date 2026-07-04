@@ -28,12 +28,14 @@ const unwrapData = (response) => {
 
   if (data?.data?.wallet) return data.data.wallet;
   if (data?.data?.depositOrder) return data.data.depositOrder;
+  if (data?.data?.withdrawal) return data.data.withdrawal;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
   if (data?.data) return data.data;
 
   if (data?.wallet) return data.wallet;
   if (data?.depositOrder) return data.depositOrder;
+  if (data?.withdrawal) return data.withdrawal;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
 
@@ -64,11 +66,13 @@ const unwrapListData = (response) => {
   if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.transactions)) return data.transactions;
   if (Array.isArray(data?.depositOrders)) return data.depositOrders;
+  if (Array.isArray(data?.withdrawals)) return data.withdrawals;
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
   if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
   if (Array.isArray(data?.data?.depositOrders)) return data.data.depositOrders;
+  if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
 
   return [];
 };
@@ -93,15 +97,57 @@ export const normalizeWallet = (wallet) => {
     0
   );
 
+  const pendingEarningsBalance = toNumber(
+    getValue(
+      wallet.pendingEarningsBalance,
+      wallet.PendingEarningsBalance,
+      wallet.pendingEarnings,
+      wallet.PendingEarnings,
+      wallet.pendingBalance,
+      wallet.PendingBalance,
+      raw.pendingEarningsBalance,
+      raw.PendingEarningsBalance,
+      raw.pendingEarnings,
+      raw.PendingEarnings,
+      raw.pendingBalance,
+      raw.PendingBalance,
+      0
+    ),
+    0
+  );
+
   const lockedBalance = toNumber(
     getValue(
       wallet.lockedBalance,
       wallet.LockedBalance,
+      wallet.escrowBalance,
+      wallet.EscrowBalance,
       raw.lockedBalance,
       raw.LockedBalance,
+      raw.escrowBalance,
+      raw.EscrowBalance,
       0
     ),
     0
+  );
+
+  const withdrawableBalance = toNumber(
+    getValue(
+      wallet.withdrawableBalance,
+      wallet.WithdrawableBalance,
+      wallet.availableBalance,
+      wallet.AvailableBalance,
+      wallet.balance,
+      wallet.Balance,
+      raw.withdrawableBalance,
+      raw.WithdrawableBalance,
+      raw.availableBalance,
+      raw.AvailableBalance,
+      raw.balance,
+      raw.Balance,
+      availableBalance
+    ),
+    availableBalance
   );
 
   const totalEarning = toNumber(
@@ -110,13 +156,17 @@ export const normalizeWallet = (wallet) => {
       wallet.TotalEarning,
       wallet.totalEarnings,
       wallet.TotalEarnings,
+      wallet.totalEarned,
+      wallet.TotalEarned,
       raw.totalEarning,
       raw.TotalEarning,
       raw.totalEarnings,
       raw.TotalEarnings,
-      availableBalance + lockedBalance
+      raw.totalEarned,
+      raw.TotalEarned,
+      availableBalance + pendingEarningsBalance
     ),
-    availableBalance + lockedBalance
+    availableBalance + pendingEarningsBalance
   );
 
   const walletId = getValue(
@@ -139,9 +189,13 @@ export const normalizeWallet = (wallet) => {
 
     availableBalance,
     balance: availableBalance,
+    withdrawableBalance,
+    pendingEarningsBalance,
     lockedBalance,
+
     totalEarning,
-    totalBalance: availableBalance + lockedBalance,
+    totalEarnings: totalEarning,
+    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
 
     currency: "VND",
 
@@ -161,8 +215,12 @@ export const normalizeBalance = (balanceData) => {
   if (balanceData === undefined || balanceData === null) {
     return {
       availableBalance: 0,
+      balance: 0,
+      withdrawableBalance: 0,
+      pendingEarningsBalance: 0,
       lockedBalance: 0,
       totalEarning: 0,
+      totalEarnings: 0,
       totalBalance: 0,
       currency: "VND",
     };
@@ -171,8 +229,12 @@ export const normalizeBalance = (balanceData) => {
   if (typeof balanceData === "number") {
     return {
       availableBalance: balanceData,
+      balance: balanceData,
+      withdrawableBalance: balanceData,
+      pendingEarningsBalance: 0,
       lockedBalance: 0,
       totalEarning: balanceData,
+      totalEarnings: balanceData,
       totalBalance: balanceData,
       currency: "VND",
     };
@@ -182,14 +244,33 @@ export const normalizeBalance = (balanceData) => {
 
   const availableBalance = toNumber(
     getValue(
-      balanceData.balance,
-      balanceData.Balance,
       balanceData.availableBalance,
       balanceData.AvailableBalance,
-      raw.balance,
-      raw.Balance,
+      balanceData.balance,
+      balanceData.Balance,
       raw.availableBalance,
       raw.AvailableBalance,
+      raw.balance,
+      raw.Balance,
+      0
+    ),
+    0
+  );
+
+  const pendingEarningsBalance = toNumber(
+    getValue(
+      balanceData.pendingEarningsBalance,
+      balanceData.PendingEarningsBalance,
+      balanceData.pendingEarnings,
+      balanceData.PendingEarnings,
+      balanceData.pendingBalance,
+      balanceData.PendingBalance,
+      raw.pendingEarningsBalance,
+      raw.PendingEarningsBalance,
+      raw.pendingEarnings,
+      raw.PendingEarnings,
+      raw.pendingBalance,
+      raw.PendingBalance,
       0
     ),
     0
@@ -199,30 +280,64 @@ export const normalizeBalance = (balanceData) => {
     getValue(
       balanceData.lockedBalance,
       balanceData.LockedBalance,
+      balanceData.escrowBalance,
+      balanceData.EscrowBalance,
       raw.lockedBalance,
       raw.LockedBalance,
+      raw.escrowBalance,
+      raw.EscrowBalance,
       0
     ),
     0
+  );
+
+  const withdrawableBalance = toNumber(
+    getValue(
+      balanceData.withdrawableBalance,
+      balanceData.WithdrawableBalance,
+      balanceData.availableBalance,
+      balanceData.AvailableBalance,
+      balanceData.balance,
+      balanceData.Balance,
+      raw.withdrawableBalance,
+      raw.WithdrawableBalance,
+      raw.availableBalance,
+      raw.AvailableBalance,
+      raw.balance,
+      raw.Balance,
+      availableBalance
+    ),
+    availableBalance
   );
 
   const totalEarning = toNumber(
     getValue(
       balanceData.totalEarning,
       balanceData.TotalEarning,
+      balanceData.totalEarnings,
+      balanceData.TotalEarnings,
+      balanceData.totalEarned,
+      balanceData.TotalEarned,
       raw.totalEarning,
       raw.TotalEarning,
-      availableBalance + lockedBalance
+      raw.totalEarnings,
+      raw.TotalEarnings,
+      raw.totalEarned,
+      raw.TotalEarned,
+      availableBalance + pendingEarningsBalance
     ),
-    availableBalance + lockedBalance
+    availableBalance + pendingEarningsBalance
   );
 
   return {
     availableBalance,
     balance: availableBalance,
+    withdrawableBalance,
+    pendingEarningsBalance,
     lockedBalance,
     totalEarning,
-    totalBalance: availableBalance + lockedBalance,
+    totalEarnings: totalEarning,
+    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
     currency: "VND",
     raw: balanceData,
   };
@@ -581,6 +696,96 @@ export const normalizeDepositOrder = (order) => {
   };
 };
 
+export const normalizeWithdrawal = (withdrawal) => {
+  if (!withdrawal) return null;
+
+  const raw = withdrawal.raw || withdrawal.Raw || withdrawal;
+
+  const withdrawalId = getValue(
+    withdrawal.withdrawalId,
+    withdrawal.WithdrawalId,
+    withdrawal.withdrawalRequestId,
+    withdrawal.WithdrawalRequestId,
+    withdrawal.id,
+    withdrawal.Id,
+    raw.withdrawalId,
+    raw.WithdrawalId,
+    raw.withdrawalRequestId,
+    raw.WithdrawalRequestId,
+    raw.id,
+    raw.Id,
+    ""
+  );
+
+  return {
+    withdrawalId,
+    id: withdrawalId,
+
+    amount: toNumber(
+      getValue(withdrawal.amount, withdrawal.Amount, raw.amount, raw.Amount, 0),
+      0
+    ),
+
+    status: String(
+      getValue(withdrawal.status, withdrawal.Status, raw.status, raw.Status, "PENDING")
+    ).toUpperCase(),
+
+    bankName: getValue(
+      withdrawal.bankName,
+      withdrawal.BankName,
+      raw.bankName,
+      raw.BankName,
+      ""
+    ),
+
+    bankAccountNumber: getValue(
+      withdrawal.bankAccountNumber,
+      withdrawal.BankAccountNumber,
+      raw.bankAccountNumber,
+      raw.BankAccountNumber,
+      ""
+    ),
+
+    bankAccountHolder: getValue(
+      withdrawal.bankAccountHolder,
+      withdrawal.BankAccountHolder,
+      raw.bankAccountHolder,
+      raw.BankAccountHolder,
+      ""
+    ),
+
+    rejectReason: getValue(
+      withdrawal.rejectReason,
+      withdrawal.RejectReason,
+      withdrawal.rejectionReason,
+      withdrawal.RejectionReason,
+      raw.rejectReason,
+      raw.RejectReason,
+      raw.rejectionReason,
+      raw.RejectionReason,
+      ""
+    ),
+
+    createdAt: getValue(
+      withdrawal.createdAt,
+      withdrawal.CreatedAt,
+      raw.createdAt,
+      raw.CreatedAt,
+      ""
+    ),
+
+    updatedAt: getValue(
+      withdrawal.updatedAt,
+      withdrawal.UpdatedAt,
+      raw.updatedAt,
+      raw.UpdatedAt,
+      ""
+    ),
+
+    raw: withdrawal,
+  };
+};
+
 function getTransactionDirection(type, amount) {
   const value = String(type || "").toUpperCase();
 
@@ -591,6 +796,7 @@ function getTransactionDirection(type, amount) {
     value.includes("EARNING") ||
     value.includes("CREDIT") ||
     value.includes("DEPOSIT") ||
+    value.includes("REFUND") ||
     amount > 0
   ) {
     return "IN";
@@ -601,6 +807,7 @@ function getTransactionDirection(type, amount) {
     value.includes("DEBIT") ||
     value.includes("FEE") ||
     value.includes("PAYMENT") ||
+    value.includes("PURCHASE") ||
     amount < 0
   ) {
     return "OUT";
@@ -646,14 +853,33 @@ const expertWalletService = {
       });
   },
 
+  async getMyWithdrawals() {
+    const response = await expertWalletApi.getMyWithdrawals();
+
+    return unwrapListData(response)
+      .map(normalizeWithdrawal)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const dateA = new Date(a.createdAt || 0).getTime();
+        const dateB = new Date(b.createdAt || 0).getTime();
+        return dateB - dateA;
+      });
+  },
+
   async getWalletOverview() {
-    const [walletResult, balanceResult, transactionResult, depositOrderResult] =
-      await Promise.allSettled([
-        this.getMyWallet(),
-        this.getBalance(),
-        this.getMyTransactions(),
-        this.getMyDepositOrders(),
-      ]);
+    const [
+      walletResult,
+      balanceResult,
+      transactionResult,
+      depositOrderResult,
+      withdrawalResult,
+    ] = await Promise.allSettled([
+      this.getMyWallet(),
+      this.getBalance(),
+      this.getMyTransactions(),
+      this.getMyDepositOrders(),
+      this.getMyWithdrawals(),
+    ]);
 
     const wallet =
       walletResult.status === "fulfilled" ? walletResult.value : null;
@@ -669,23 +895,63 @@ const expertWalletService = {
     const depositOrders =
       depositOrderResult.status === "fulfilled" ? depositOrderResult.value : [];
 
+    const withdrawals =
+      withdrawalResult.status === "fulfilled" ? withdrawalResult.value : [];
+
     return {
       wallet,
       balance: {
         ...balance,
+
         availableBalance:
           balance.availableBalance || wallet?.availableBalance || 0,
+
+        balance: balance.availableBalance || wallet?.availableBalance || 0,
+
+        withdrawableBalance:
+          balance.withdrawableBalance ||
+          wallet?.withdrawableBalance ||
+          balance.availableBalance ||
+          wallet?.availableBalance ||
+          0,
+
+        pendingEarningsBalance:
+          balance.pendingEarningsBalance ||
+          wallet?.pendingEarningsBalance ||
+          0,
+
         lockedBalance: wallet?.lockedBalance || balance.lockedBalance || 0,
-        totalEarning: wallet?.totalEarning || balance.totalEarning || 0,
+
+        totalEarning:
+          wallet?.totalEarning ||
+          balance.totalEarning ||
+          wallet?.totalEarnings ||
+          balance.totalEarnings ||
+          0,
+
+        totalEarnings:
+          wallet?.totalEarnings ||
+          balance.totalEarnings ||
+          wallet?.totalEarning ||
+          balance.totalEarning ||
+          0,
+
         totalBalance:
           wallet?.totalBalance ||
           balance.totalBalance ||
-          Number(wallet?.availableBalance || 0) +
-            Number(wallet?.lockedBalance || 0),
+          Number(wallet?.availableBalance || balance.availableBalance || 0) +
+            Number(wallet?.lockedBalance || balance.lockedBalance || 0) +
+            Number(
+              wallet?.pendingEarningsBalance ||
+                balance.pendingEarningsBalance ||
+                0
+            ),
+
         currency: "VND",
       },
       transactions,
       depositOrders,
+      withdrawals,
     };
   },
 
@@ -707,6 +973,31 @@ const expertWalletService = {
 
     const response = await expertWalletApi.getDepositOrderById(depositOrderId);
     return normalizeDepositOrder(unwrapData(response));
+  },
+
+  async createWithdrawal(form) {
+    const amount = toNumber(form?.amount, 0);
+
+    if (amount <= 0) {
+      throw new Error("Withdrawal amount must be greater than 0.");
+    }
+
+    const bankName = String(form?.bankName || "").trim();
+    const bankAccountNumber = String(form?.bankAccountNumber || "").trim();
+    const bankAccountHolder = String(form?.bankAccountHolder || "").trim();
+
+    if (!bankName || !bankAccountNumber || !bankAccountHolder) {
+      throw new Error("Please fill in all bank information.");
+    }
+
+    const response = await expertWalletApi.createWithdrawal({
+      amount,
+      bankName,
+      bankAccountNumber,
+      bankAccountHolder,
+    });
+
+    return normalizeWithdrawal(unwrapData(response));
   },
 };
 

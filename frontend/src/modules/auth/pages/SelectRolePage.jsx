@@ -13,11 +13,11 @@ const ROLES = [
     key: "CLIENT",
     icon: "corporate_fare",
     title: "Client",
-    desc: "Tôi muốn thuê AI Expert để thực hiện dự án",
+    desc: "I want to hire an AI Expert to handle the project.",
     features: [
-      "Đăng job tuyển dụng",
-      "AI Matching chuyên gia",
-      "Quản lý dự án & thanh toán",
+      "Post a job opening.",
+      "AI Matching Experts",
+      "Project Management & Payments",
     ],
     color: "#00F0FF",
   },
@@ -25,11 +25,11 @@ const ROLES = [
     key: "EXPERT",
     icon: "psychology",
     title: "AI Expert",
-    desc: "Tôi là chuyên gia AI muốn nhận dự án",
+    desc: "I am an AI expert looking to take on projects.",
     features: [
-      "Nhận job phù hợp",
-      "AI gợi ý công việc",
-      "Xây dựng portfolio",
+      "Receive suitable job offers",
+      "AI-powered job recommendations",
+      "Build a professional portfolio",
     ],
     color: "#adc6ff",
   },
@@ -166,7 +166,7 @@ export default function SelectRolePage() {
         responseData.data ||
         responseData;
 
-      const selectedUser = authService.normalizeUser(
+      const selectedUser = normalizeUser(
         {
           ...oldUser,
           ...userFromResponse,
@@ -195,7 +195,7 @@ export default function SelectRolePage() {
 
         if (!loginResult.success) {
           setError(
-            "Chọn vai trò thành công nhưng không thể làm mới token. Vui lòng đăng nhập lại."
+            "Role selection succeeded but unable to refresh token. Please log in again."
           );
           return;
         }
@@ -219,7 +219,7 @@ export default function SelectRolePage() {
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
-        "Đã có lỗi xảy ra khi chọn vai trò.";
+        "An error occurred during role selection.";
 
       if (message === "User is not in pending role status.") {
         redirectExistingUser();
@@ -299,11 +299,11 @@ export default function SelectRolePage() {
                 marginBottom: 12,
               }}
             >
-              Bạn là ai?
+              What is your role?
             </h1>
 
             <p style={{ color: "#c2c6d6", fontSize: 16 }}>
-              Chọn vai trò của bạn để cá nhân hóa trải nghiệm
+              Select your role to personalize your experience
             </p>
           </div>
 
@@ -451,7 +451,7 @@ export default function SelectRolePage() {
                       >
                         check_circle
                       </span>
-                      Đã chọn
+                      Selected
                     </div>
                   )}
                 </div>
@@ -503,11 +503,11 @@ export default function SelectRolePage() {
                 <span className="material-symbols-outlined">
                   progress_activity
                 </span>
-                <span>Đang xử lý...</span>
+                <span>Processing...</span>
               </>
             ) : (
               <>
-                <span>Xác nhận & Tiếp tục</span>
+                <span>Confirm & Continue</span>
                 <span className="material-symbols-outlined">arrow_forward</span>
               </>
             )}

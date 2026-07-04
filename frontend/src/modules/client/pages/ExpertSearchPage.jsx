@@ -3,12 +3,17 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
+import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+// "Mid" gộp cả 2 giá trị BE (MID và MID_LEVEL) vào 1 nút hiển thị duy nhất.
+// values.length > 1 → không gửi `level` lên API (BE chỉ nhận 1 giá trị đơn
+// theo code cũ `level: seniority`), thay vào đó tự lọc phía FE sau khi nhận
+// kết quả — tránh đoán sai việc BE có hỗ trợ multi-value hay không.
 const SENIORITY_OPTIONS = [
-  { label: "Junior", value: "JUNIOR" },
-  { label: "Mid", value: "MID" },
-  { label: "Mid Level", value: "MID_LEVEL" },
-  { label: "Senior", value: "SENIOR" },
+  { label: "Fresher", key: "FRESHER", values: ["FRESHER"] },
+  { label: "Junior",  key: "JUNIOR",  values: ["JUNIOR"] },
+  { label: "Mid",     key: "MID",     values: ["MID", "MID_LEVEL"] },
+  { label: "Senior",  key: "SENIOR",  values: ["SENIOR"] },
 ];
 
 // Khôi phục query + kết quả search khi quay lại trang này (vd: bấm Back từ
@@ -122,27 +127,25 @@ export default function ExpertSearchPage() {
 
   const handleConnect = async (expert) => {
     try {
-      const res = await axiosInstance.post("/conversations", {
-        type: "DIRECT",
+      const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,
-        expertProfileId: expert.expertProfileId,
-        initialMessage: `Hi ${expert.fullName}, I want to discuss a project with you.`,
       });
 
-      const conversationId =
-        res.data?.conversationId ||
-        res.data?.id ||
-        res.data?.data?.conversationId ||
-        res.data?.data?.id;
+      if (existing?.conversationId) {
+        navigate(`/client/messages/${existing.conversationId}`);
+        return;
+      }
 
-      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
+      navigate(
+        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+      );
     } catch (err) {
-      console.error("Create conversation failed:", err);
-      alert("Unable to start a conversation with the expert.");
+      console.error("Find conversation failed:", err);
+      alert("Unable to open conversation with the expert.");
     }
   };
 
-  const toggleSeniority = (val) => { setSeniority((prev) => (prev === val ? "" : val)); };
+  const toggleSeniority = (key) => { setSeniority((prev) => (prev === key ? "" : key)); };
 
   // Chỉ lưu lại state NGAY LÚC bấm "View Profile" — đây là điểm duy nhất đặt cờ
   // cho phép phục hồi data khi quay lại. Mọi cách khác để vào lại trang này
@@ -173,10 +176,19 @@ export default function ExpertSearchPage() {
   const handleSearch = async () => {
     setSearching(true);
     try {
+      const selectedOption = SENIORITY_OPTIONS.find((s) => s.key === seniority);
+      // Chỉ gửi `level` lên BE khi option đó ứng với đúng 1 giá trị enum thật
+      // (Fresher/Junior/Senior). Option "Mid" gộp 2 giá trị nên không gửi lên
+      // BE, để tránh đoán sai việc API có hỗ trợ multi-value hay không.
+      const levelParam =
+        selectedOption && selectedOption.values.length === 1
+          ? selectedOption.values[0]
+          : undefined;
+
       const res = await axiosInstance.get("/experts", {
         params: {
           keyword: query.trim() || undefined,
-          level: seniority || undefined,
+          level: levelParam,
           availableOnly: true,
           page: 1,
           pageSize: 100,
@@ -184,7 +196,12 @@ export default function ExpertSearchPage() {
       });
 
       const data = res.data;
-      const items = Array.isArray(data) ? data : (data?.items || data?.data || []);
+      let items = Array.isArray(data) ? data : (data?.items || data?.data || []);
+
+      // Lọc phía FE riêng cho "Mid" (gộp MID + MID_LEVEL).
+      if (selectedOption && selectedOption.values.length > 1) {
+        items = items.filter((e) => selectedOption.values.includes((e.level || "").toUpperCase()));
+      }
 
       setExperts(items);
       setHasSearched(true);
@@ -262,12 +279,12 @@ export default function ExpertSearchPage() {
                 <label className="mb-3 block font-mono text-[10px] uppercase tracking-wider text-gray-400">Seniority</label>
                 <div className="grid grid-cols-2 gap-2">
                   {SENIORITY_OPTIONS.map((s) => {
-                    const isSelected = seniority === s.value;
+                    const isSelected = seniority === s.key;
                     return (
                       <button
-                        key={s.value}
+                        key={s.key}
                         type="button"
-                        onClick={() => toggleSeniority(s.value)}
+                        onClick={() => toggleSeniority(s.key)}
                         className={`rounded-md px-2 py-2 text-xs transition-all ${
                           isSelected
                             ? "border border-cyan-400 bg-cyan-400/10 text-cyan-400 shadow-[0_0_12px_rgba(0,240,255,0.35)]"

@@ -196,7 +196,7 @@ export default function MyProposalDraftsPage() {
         if (price > balance) {
             navigate("/expert/wallet", {
                 state: {
-                    returnTo: "/expert/proposals/drafts",
+                    returnTo: "/expert/proposal/drafts",
                     reason: "BUY_PROPOSAL_CREDITS",
                     packageId,
                 },

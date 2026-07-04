@@ -13,9 +13,11 @@ export default function ProjectDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [milestoneLoading, setMilestoneLoading] = useState(false);
+  const [completionChecking, setCompletionChecking] = useState(false);
 
   const [error, setError] = useState("");
   const [milestoneError, setMilestoneError] = useState("");
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     loadProject();
@@ -34,10 +36,15 @@ export default function ProjectDetailPage() {
     return [];
   }, [milestones, project]);
 
+  const completionSummary = useMemo(() => {
+    return getCompletionSummary(displayedMilestones);
+  }, [displayedMilestones]);
+
   const loadProject = async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
       setMilestoneError("");
       setMilestones([]);
 
@@ -88,6 +95,36 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const handleCompleteCheck = async () => {
+    const realProjectId = getProjectId(project) || projectId;
+
+    if (!realProjectId) {
+      setError("Cannot run completion check because project id is missing.");
+      return;
+    }
+
+    try {
+      setCompletionChecking(true);
+      setError("");
+      setMessage("");
+
+      await projectService.completeCheck(realProjectId);
+
+      setMessage("Completion check finished. Project status has been updated.");
+      await loadProject();
+    } catch (err) {
+      console.error("COMPLETE CHECK ERROR:", err?.response?.data || err);
+      setError(
+        getFriendlyError(
+          err,
+          "Cannot run completion check right now. Please try again."
+        )
+      );
+    } finally {
+      setCompletionChecking(false);
+    }
+  };
+
   const openMilestone = (milestone) => {
     const milestoneId = getMilestoneId(milestone);
 
@@ -134,6 +171,10 @@ export default function ProjectDetailPage() {
   }
 
   const status = String(project.status || "ACTIVE").toUpperCase();
+  const canRunCompletionCheck =
+    displayedMilestones.length > 0 &&
+    completionSummary.completed === displayedMilestones.length &&
+    !isProjectCompleted(status);
 
   return (
     <ExpertLayout>
@@ -205,7 +246,7 @@ export default function ProjectDetailPage() {
                 <button
                   type="button"
                   onClick={loadProject}
-                  disabled={milestoneLoading}
+                  disabled={milestoneLoading || completionChecking}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {milestoneLoading ? "Refreshing..." : "Refresh"}
@@ -213,6 +254,10 @@ export default function ProjectDetailPage() {
               </div>
             </div>
           </section>
+
+          {message && (
+            <Alert type="success" title="Success" message={message} />
+          )}
 
           {error && (
             <Alert type="danger" title="Project error" message={error} />
@@ -282,18 +327,18 @@ export default function ProjectDetailPage() {
               <Card title="Quick Overview" icon="monitoring">
                 <Info label="Status" value={getProjectStatusLabel(status)} />
                 <Info label="Budget" value={formatMoney(project.totalBudget)} />
+                <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
-                  label="Milestones"
-                  value={displayedMilestones.length}
+                  label="Completed"
+                  value={`${completionSummary.completed}/${displayedMilestones.length}`}
                 />
                 <Info
                   label="Progress"
-                  value={`${Math.round(Number(project.progressPercent || 0))}%`}
+                  value={`${Math.round(
+                    Number(project.progressPercent || completionSummary.progress)
+                  )}%`}
                 />
-                <Info
-                  label="Start Date"
-                  value={formatDate(project.startDate)}
-                />
+                <Info label="Start Date" value={formatDate(project.startDate)} />
                 <Info
                   label="Deadline"
                   value={formatDate(project.deadline || project.endDate)}
@@ -314,6 +359,39 @@ export default function ProjectDetailPage() {
                       <li>Submit work directly inside milestone detail.</li>
                       <li>Track client feedback from your submissions.</li>
                     </ul>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-green-400/20 bg-green-400/10 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-green-300">
+                    task_alt
+                  </span>
+
+                  <div>
+                    <h3 className="font-bold text-white">Completion Check</h3>
+
+                    <p className="mt-2 text-sm leading-6 text-green-100/80">
+                      Run this check after all milestones are approved or
+                      completed. The system will verify whether the project can
+                      move to completed status.
+                    </p>
+
+                    <button
+                      type="button"
+                      disabled={!canRunCompletionCheck || completionChecking}
+                      onClick={handleCompleteCheck}
+                      className="mt-4 w-full rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {completionChecking
+                        ? "Checking..."
+                        : canRunCompletionCheck
+                        ? "Run Completion Check"
+                        : isProjectCompleted(status)
+                        ? "Project Completed"
+                        : "Complete all milestones first"}
+                    </button>
                   </div>
                 </div>
               </section>
@@ -378,7 +456,6 @@ function MilestoneProgressTimeline({ milestones, onSelect }) {
     .sort((a, b) => {
       const orderA = Number(a.orderIndex || a.order || 0);
       const orderB = Number(b.orderIndex || b.order || 0);
-
       return orderA - orderB;
     });
 
@@ -779,6 +856,24 @@ function isMilestoneCompleted(milestone) {
     "PAID",
     "RELEASED",
   ].includes(status);
+}
+
+function isProjectCompleted(status) {
+  return ["COMPLETED", "DONE", "FINISHED", "CLOSED"].includes(
+    String(status || "").toUpperCase()
+  );
+}
+
+function getCompletionSummary(milestones) {
+  const items = Array.isArray(milestones) ? milestones : [];
+  const completed = items.filter(isMilestoneCompleted).length;
+  const total = items.length;
+
+  return {
+    completed,
+    total,
+    progress: total > 0 ? Math.round((completed / total) * 100) : 0,
+  };
 }
 
 function getStepCircleClass(state) {

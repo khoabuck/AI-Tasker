@@ -5,6 +5,8 @@ import expertProfileService from "../../../services/expertProfile.service";
 import jobService from "../../../services/job.service";
 import { JobDetailModal } from "./JobDetailPage";
 
+const JOBS_PER_PAGE = 6;
+
 const BUDGET_FILTERS = [
   { key: "ALL", label: "Any budget" },
   { key: "NEGOTIABLE", label: "Negotiable" },
@@ -33,6 +35,7 @@ export default function BrowseJobsPage() {
   const [budgetFilter, setBudgetFilter] = useState("ALL");
   const [durationFilter, setDurationFilter] = useState("ALL");
   const [sortBy, setSortBy] = useState("NEWEST");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [selectedJobId, setSelectedJobId] = useState(null);
 
@@ -116,6 +119,23 @@ export default function BrowseJobsPage() {
     sortBy,
   ]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredJobs.length / JOBS_PER_PAGE));
+
+  const paginatedJobs = useMemo(() => {
+    const startIndex = (currentPage - 1) * JOBS_PER_PAGE;
+    return filteredJobs.slice(startIndex, startIndex + JOBS_PER_PAGE);
+  }, [filteredJobs, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [keyword, categoryFilter, budgetFilter, durationFilter, sortBy]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
+
   const hasActiveFilter =
     keyword ||
     categoryFilter !== "ALL" ||
@@ -167,6 +187,7 @@ export default function BrowseJobsPage() {
     setBudgetFilter("ALL");
     setDurationFilter("ALL");
     setSortBy("NEWEST");
+    setCurrentPage(1);
   };
 
   const handleViewDetail = (job) => {
@@ -364,16 +385,26 @@ export default function BrowseJobsPage() {
           )}
 
           {!loading && !error && filteredJobs.length > 0 && (
-            <div className="grid grid-cols-1 gap-4">
-              {filteredJobs.map((job) => (
-                <JobRow
-                  key={job.id}
-                  job={job}
-                  onViewDetail={() => handleViewDetail(job)}
-                  onSubmit={() => navigate(`/expert/jobs/${job.id}/proposal`)}
+            <>
+              <div className="grid grid-cols-1 gap-4">
+                {paginatedJobs.map((job) => (
+                  <JobRow
+                    key={job.id}
+                    job={job}
+                    onViewDetail={() => handleViewDetail(job)}
+                    onSubmit={() => navigate(`/expert/jobs/${job.id}/proposal`)}
+                  />
+                ))}
+              </div>
+
+              {totalPages > 1 && (
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
                 />
-              ))}
-            </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -402,8 +433,7 @@ function JobRow({ job, onViewDetail, onSubmit }) {
             <Badge tone="green">Open</Badge>
             {job.complexity && <Badge tone="purple">{job.complexity}</Badge>}
           </div>
-
-          <h2 className="text-lg font-extrabold text-white">{job.title}</h2>
+                    <h2 className="text-lg font-extrabold text-white">{job.title}</h2>
 
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
             {job.description || "No description provided."}
@@ -489,6 +519,47 @@ function JobRow({ job, onViewDetail, onSubmit }) {
         </div>
       </div>
     </article>
+  );
+}
+
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  const pages = Array.from({ length: totalPages }, (_, index) => index + 1);
+
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+      <button
+        type="button"
+        disabled={currentPage === 1}
+        onClick={() => onPageChange(currentPage - 1)}
+        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Previous
+      </button>
+
+      {pages.map((page) => (
+        <button
+          key={page}
+          type="button"
+          onClick={() => onPageChange(page)}
+          className={`h-10 min-w-10 rounded-xl border px-3 text-sm font-extrabold transition ${
+            currentPage === page
+              ? "border-cyan-400 bg-cyan-400 text-black"
+              : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-cyan-400/50 hover:text-cyan-300"
+          }`}
+        >
+          {page}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        disabled={currentPage === totalPages}
+        onClick={() => onPageChange(currentPage + 1)}
+        className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Next
+      </button>
+    </div>
   );
 }
 
@@ -691,7 +762,9 @@ function calculateMatch(job, profile) {
   const reasons = [];
 
   if (jobSkills.length > 0 && matchedSkills.length > 0) {
-    const skillScore = Math.round((matchedSkills.length / jobSkills.length) * 55);
+    const skillScore = Math.round(
+      (matchedSkills.length / jobSkills.length) * 55
+    );
     score += Math.min(55, skillScore);
     reasons.push(
       `Your profile matches ${matchedSkills.length} required skill${
@@ -775,8 +848,12 @@ function matchesBudget(job, filter) {
   if (filter === "ALL") return true;
   if (filter === "NEGOTIABLE") return job.budgetMin === 0 && job.budgetMax === 0;
   if (filter === "UNDER_100") return job.budgetMax > 0 && job.budgetMax < 100000;
-  if (filter === "100_500") return job.budgetMax >= 100000 && job.budgetMin <= 500000;
-  if (filter === "500_1000") return job.budgetMax >= 500000 && job.budgetMin <= 1000000;
+  if (filter === "100_500") {
+    return job.budgetMax >= 100000 && job.budgetMin <= 500000;
+  }
+  if (filter === "500_1000") {
+    return job.budgetMax >= 500000 && job.budgetMin <= 1000000;
+  }
   if (filter === "OVER_1000") return job.budgetMax > 1000000;
 
   return true;

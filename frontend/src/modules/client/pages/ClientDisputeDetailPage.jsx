@@ -63,9 +63,12 @@ export default function ClientDisputeDetailPage() {
   // Tìm dispute đúng theo projectId truyền qua query param — vì hiện tại điều hướng
   // tới trang này chỉ biết projectId (không biết sẵn disputeId), nên phải lấy list
   // GET /disputes/me rồi lọc ra đúng dispute khớp projectId.
-  const fetchDispute = useCallback(async (signal) => {
-    setLoading(true);
-    setError("");
+  // code mới
+  const fetchDispute = useCallback(async (signal, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await axiosInstance.get("/disputes/me", { signal });
       const raw = res.data?.data ?? res.data;
@@ -76,7 +79,7 @@ export default function ClientDisputeDetailPage() {
         : list[0];
 
       if (!match) {
-        setError("No complaints were found for this project.");
+        if (!silent) setError("No complaints were found for this project.");
         return;
       }
 
@@ -86,9 +89,11 @@ export default function ClientDisputeDetailPage() {
       setDispute(detail ?? match);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
-      setError(err?.response?.data?.message || "Unable to load complaint information.");
+      if (!silent) {
+        setError(err?.response?.data?.message || "Unable to load complaint information.");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [projectId]);
 
@@ -97,6 +102,20 @@ export default function ClientDisputeDetailPage() {
     fetchDispute(controller.signal);
     return () => controller.abort();
   }, [fetchDispute]);
+
+  // Tự động làm mới dispute mỗi 5s khi chưa CLOSED — để phát hiện khi Admin
+  // xử lý xong (Resolved/Rejected) mà không cần Client tự F5.
+  useEffect(() => {
+    if (!dispute) return;
+    const isClosed = ["RESOLVED", "REJECTED", "CLOSED"].includes(dispute.status);
+    if (isClosed) return;
+
+    const intervalId = setInterval(() => {
+      fetchDispute(undefined, true);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [dispute?.status, fetchDispute]);
 
   
 
@@ -113,7 +132,7 @@ export default function ClientDisputeDetailPage() {
       setEvidenceSent(true);
       setEvidenceText("");
       setEvidenceFileUrl("");
-      await fetchDispute();
+      await fetchDispute(undefined, true);
       setTimeout(() => setEvidenceSent(false), 3000);
     } catch (err) {
       setEvidenceError(err?.response?.data?.message || "Submit proof of failure.");
@@ -139,7 +158,7 @@ export default function ClientDisputeDetailPage() {
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 24px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Không tìm thấy khiếu nại."}</p>
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Dispute not found."}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
             Back to Projects
@@ -252,7 +271,7 @@ export default function ClientDisputeDetailPage() {
               Resolution
             </h3>
             <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.9, whiteSpace: "pre-line", margin: "0 0 8px" }}>
-              {dispute.resolution || dispute.resolutionNote || "Khiếu nại đã được xử lý."}
+              {dispute.resolution || dispute.resolutionNote || "Dispute has been resolved."}
             </p>
             {resolvedAt && (
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>Resolved at: {resolvedAt}</p>
@@ -267,7 +286,7 @@ export default function ClientDisputeDetailPage() {
               Add More Evidence
             </h3>
             <textarea value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} rows={4}
-              placeholder="Bổ sung thêm thông tin, link tài liệu, mô tả chi tiết hơn..."
+              placeholder="Add more information, document links, detailed description..."
               style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box", marginBottom: 12 }} />
 
             {/* Upload ảnh bổ sung — chỉ hỗ trợ ảnh vì BE chỉ có /uploads/images */}
@@ -290,7 +309,7 @@ export default function ClientDisputeDetailPage() {
                 type="url"
                 value={evidenceFileUrl}
                 onChange={(e) => setEvidenceFileUrl(e.target.value)}
-                placeholder="https://drive.google.com/... hoặc https://example.com/evidence.pdf"
+                placeholder="https://drive.google.com/... or https://example.com/evidence.pdf"
                 style={{
                   width: "100%",
                   background: "#1d2026",

@@ -205,13 +205,19 @@ export default function AIMatchingPage() {
   // (type: "DIRECT") rồi điều hướng sang Messages, không cần qua bước review proposal.
   const handleConnect = async (expert) => {
     try {
-      const conversationId =
-        await aiMatchingService.createConversationWithExpert(expert);
+      const conversationId = await aiMatchingService.findConversationWithExpert(expert);
 
-      navigate(`/client/messages${conversationId ? `?conversationId=${conversationId}` : ""}`);
+      if (conversationId) {
+        navigate(`/client/messages/${conversationId}`);
+        return;
+      }
+
+      navigate(
+        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+      );
     } catch (err) {
-      console.error("Create conversation failed:", err);
-      alert("Unable to create a conversation with the Expert.");
+      console.error("Find conversation failed:", err);
+      alert("Unable to open conversation with the Expert.");
     }
   };
 
