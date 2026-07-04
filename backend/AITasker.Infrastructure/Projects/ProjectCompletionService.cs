@@ -1,6 +1,7 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Projects;
@@ -82,10 +83,6 @@ public class ProjectCompletionService : IProjectCompletionService
             return NotReady(throwIfNotReady, "Project cannot be completed because escrow was not locked.");
         }
 
-        if (project.EscrowExpiredAt != null)
-        {
-            return NotReady(throwIfNotReady, "Project cannot be completed because escrow lock deadline expired before project start.");
-        }
 
         if (await HasOpenDisputeAsync(project.ProjectId))
         {
@@ -158,9 +155,9 @@ public class ProjectCompletionService : IProjectCompletionService
         if (!wasCompleted)
         {
             project.Status = ProjectStatusCompleted;
-            project.EndDate = DateTime.UtcNow;
+            project.EndDate = VietnamDateTime.Now;
             job.Status = JobStatusCompleted;
-            job.UpdatedAt = DateTime.UtcNow;
+            job.UpdatedAt = VietnamDateTime.Now;
         }
 
         await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(

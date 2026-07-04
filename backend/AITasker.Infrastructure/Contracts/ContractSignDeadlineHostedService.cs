@@ -1,5 +1,6 @@
 using AITasker.Application.Interfaces;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -47,7 +48,7 @@ public class ContractSignDeadlineHostedService : BackgroundService
         var rollbackService = scope.ServiceProvider.GetRequiredService<IContractFailureRollbackService>();
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-        var now = DateTime.UtcNow;
+        var now = VietnamDateTime.Now;
 
         var expiredContracts = await context.ProjectContracts
             .Where(contract =>

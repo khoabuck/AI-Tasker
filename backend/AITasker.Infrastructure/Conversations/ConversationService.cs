@@ -4,6 +4,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Constants;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Conversations
@@ -110,7 +111,7 @@ namespace AITasker.Infrastructure.Conversations
                 RelatedMilestoneId = resolution.RelatedMilestoneId,
                 RelatedDisputeId = resolution.RelatedDisputeId,
                 Status = StatusActive,
-                CreatedAt = DateTime.UtcNow,
+                CreatedAt = VietnamDateTime.Now,
                 LastMessageAt = null
             };
 
@@ -265,7 +266,7 @@ namespace AITasker.Infrastructure.Conversations
                 Content = content,
                 MessageType = messageType,
                 AttachmentUrl = attachmentUrl,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
 
             _context.ConversationMessages.Add(message);

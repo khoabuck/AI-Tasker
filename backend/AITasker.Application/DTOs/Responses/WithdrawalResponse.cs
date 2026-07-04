@@ -52,6 +52,14 @@ namespace AITasker.Application.DTOs.Responses
 
         public string Status { get; set; } = string.Empty;
 
+        public DateTime? ApprovalDeadlineAt { get; set; }
+
+        public bool IsApprovalExpired { get; set; }
+
+        public DateTime? PayoutSyncWarningAt { get; set; }
+
+        public bool IsPayoutSyncOverdue { get; set; }
+
         public string? AdminNote { get; set; }
 
         public DateTime CreatedAt { get; set; }

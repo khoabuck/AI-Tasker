@@ -335,7 +335,6 @@ builder.Services.AddScoped<IContractFailureRollbackService, ContractFailureRollb
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<MilestoneDeadlineHostedService>();
-builder.Services.AddHostedService<PendingEscrowDeadlineHostedService>();
 builder.Services.AddHostedService<ContractSignDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
@@ -343,6 +342,7 @@ builder.Services.AddScoped<IConversationService, ConversationService>();
 // BE2 - Review Flow
 // =========================
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 // =========================
 // BE2 - Admin Dashboard
@@ -356,6 +356,8 @@ builder.Services.AddHttpClient<IWalletService, WalletService>();
 builder.Services.AddHttpClient<IPayOsPayoutService, PayOsPayoutService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
+builder.Services.AddHostedService<DepositOrderExpiryHostedService>();
+builder.Services.AddHostedService<WithdrawalExpiryHostedService>();
 
 // =========================
 // BE3 - Deliverables / Disputes

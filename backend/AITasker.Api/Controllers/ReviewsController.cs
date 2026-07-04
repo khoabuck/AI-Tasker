@@ -13,10 +13,14 @@ namespace AITasker.Api.Controllers
     public class ReviewsController : ControllerBase
     {
         private readonly IReviewService _reviewService;
+        private readonly IReviewReportService _reviewReportService;
 
-        public ReviewsController(IReviewService reviewService)
+        public ReviewsController(
+            IReviewService reviewService,
+            IReviewReportService reviewReportService)
         {
             _reviewService = reviewService;
+            _reviewReportService = reviewReportService;
         }
 
         [HttpPost("projects/{projectId:int}/reviews")]
@@ -38,6 +42,46 @@ namespace AITasker.Api.Controllers
                 {
                     success = true,
                     message = "Review submitted successfully.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("reviews/{reviewId:int}/report")]
+        [Authorize(Roles = "EXPERT")]
+        public async Task<IActionResult> ReportReview(
+            int reviewId,
+            [FromBody] ReportReviewRequest request)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+
+                var result = await _reviewReportService.ReportReviewAsync(
+                    currentUserId,
+                    reviewId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Review report submitted successfully.",
                     data = result
                 });
             }
