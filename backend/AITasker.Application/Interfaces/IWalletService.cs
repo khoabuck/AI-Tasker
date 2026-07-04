@@ -12,7 +12,7 @@ namespace AITasker.Application.Interfaces
 
         Task<WalletResponse> GetMyWalletAsync(int userId);
 
-        Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(int userId);
+        Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(int userId, string? category = null, string? statusGroup = null);
 
         Task<IReadOnlyList<DepositOrderResponse>> GetMyDepositOrdersAsync(
             int userId);

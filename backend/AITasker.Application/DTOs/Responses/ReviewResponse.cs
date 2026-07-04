@@ -32,6 +32,14 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? Comment { get; set; }
 
+        public string Status { get; set; } = "VISIBLE";
+
+        public string? HiddenReason { get; set; }
+
+        public DateTime? HiddenAt { get; set; }
+
+        public int? HiddenByAdminId { get; set; }
+
         public DateTime CreatedAt { get; set; }
     }
 }

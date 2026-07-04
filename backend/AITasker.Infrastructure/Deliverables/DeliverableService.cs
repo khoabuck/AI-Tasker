@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Deliverables
@@ -92,7 +93,7 @@ namespace AITasker.Infrastructure.Deliverables
                 .Where(d => d.MilestoneId == milestone.MilestoneId)
                 .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
 
-            var now = DateTime.UtcNow;
+            var now = VietnamDateTime.Now;
             var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
 
             var deliverable = new Deliverable
@@ -221,7 +222,7 @@ namespace AITasker.Infrastructure.Deliverables
                     "Milestone must be SUBMITTED before approving deliverable.");
             }
 
-            deliverable.ReviewedAt = DateTime.UtcNow;
+            deliverable.ReviewedAt = VietnamDateTime.Now;
             deliverable.ClientFeedback = null;
 
             var escrowResult = await _walletService.ReleaseEscrowAsync(
@@ -300,7 +301,7 @@ namespace AITasker.Infrastructure.Deliverables
                 deliverable.Status = DeliverableStatusRevisionRequested;
 
                 deliverable.ClientFeedback = request.Feedback.Trim();
-                deliverable.ReviewedAt = DateTime.UtcNow;
+                deliverable.ReviewedAt = VietnamDateTime.Now;
                 milestone.Status = MilestoneStatusRevisionRequested;
                 milestone.RevisionUsed += 1;
 
@@ -607,7 +608,7 @@ namespace AITasker.Infrastructure.Deliverables
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = DateTime.UtcNow;
+            job.UpdatedAt = VietnamDateTime.Now;
         }
     }
 }

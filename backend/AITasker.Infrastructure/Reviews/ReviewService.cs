@@ -10,6 +10,7 @@ namespace AITasker.Infrastructure.Reviews
     public class ReviewService : IReviewService
     {
         private const string ProjectStatusCompleted = "COMPLETED";
+        private const string ReviewStatusVisible = "VISIBLE";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -74,6 +75,7 @@ namespace AITasker.Infrastructure.Reviews
 
                 Rating = request.Rating,
                 Comment = comment,
+                Status = ReviewStatusVisible,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -121,7 +123,9 @@ namespace AITasker.Infrastructure.Reviews
 
             var reviewIds = await _context.Reviews
                 .AsNoTracking()
-                .Where(r => r.ExpertId == expertProfile.UserId)
+                .Where(r =>
+                    r.ExpertId == expertProfile.UserId &&
+                    r.Status == ReviewStatusVisible)
                 .OrderByDescending(r => r.CreatedAt)
                 .Select(r => r.ReviewId)
                 .ToListAsync();
@@ -374,6 +378,10 @@ namespace AITasker.Infrastructure.Reviews
 
                 Rating = review.Rating,
                 Comment = review.Comment,
+                Status = string.IsNullOrWhiteSpace(review.Status) ? ReviewStatusVisible : review.Status,
+                HiddenReason = review.HiddenReason,
+                HiddenAt = review.HiddenAt,
+                HiddenByAdminId = review.HiddenByAdminId,
                 CreatedAt = review.CreatedAt
             };
         }

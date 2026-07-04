@@ -70,13 +70,15 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpGet("/api/transactions/me")]
-        public async Task<IActionResult> GetMyTransactions()
+        public async Task<IActionResult> GetMyTransactions(
+            [FromQuery] string? category = null,
+            [FromQuery] string? statusGroup = null)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _walletService.GetMyTransactionsAsync(userId);
+                var result = await _walletService.GetMyTransactionsAsync(userId, category, statusGroup);
 
                 return Ok(new
                 {

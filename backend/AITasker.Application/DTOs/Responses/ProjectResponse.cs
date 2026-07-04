@@ -42,11 +42,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime? EndDate { get; set; }
 
-        public DateTime? EscrowLockDeadlineAt { get; set; }
-
         public DateTime? EscrowLockedAt { get; set; }
-
-        public DateTime? EscrowExpiredAt { get; set; }
 
         public DateTime CreatedAt { get; set; }
 

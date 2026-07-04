@@ -5,5 +5,7 @@ namespace AITasker.Application.DTOs.Requests
         public string EvidenceText { get; set; } = string.Empty;
 
         public string? FileUrl { get; set; }
+
+        public string? ImageUrl { get; set; }
     }
 }

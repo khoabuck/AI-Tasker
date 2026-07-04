@@ -2,6 +2,7 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Dashboards
@@ -79,7 +80,7 @@ namespace AITasker.Infrastructure.Dashboards
 
             return new AdminDashboardSummaryResponse
             {
-                GeneratedAt = DateTime.UtcNow,
+                GeneratedAt = VietnamDateTime.Now,
 
                 TotalUsers = users.Count,
                 ActiveUsers = users.Count(u => IsStatus(u.Status, "ACTIVE")),
@@ -199,7 +200,7 @@ namespace AITasker.Infrastructure.Dashboards
 
             return new AdminRevenueResponse
             {
-                GeneratedAt = DateTime.UtcNow,
+                GeneratedAt = VietnamDateTime.Now,
 
                 TotalContractValue = nonDraftContracts.Sum(c => c.FinalPrice),
                 TotalClientPaymentExpected = nonDraftContracts.Sum(c => c.TotalClientPayment),
@@ -420,7 +421,7 @@ namespace AITasker.Infrastructure.Dashboards
 
             return new AdminFinanceOverviewResponse
             {
-                GeneratedAt = DateTime.UtcNow,
+                GeneratedAt = VietnamDateTime.Now,
 
                 PlatformAvailableBalance = platformWallet?.AvailableBalance ?? 0,
                 PlatformTotalRevenue = platformTotalRevenue,
@@ -496,8 +497,8 @@ namespace AITasker.Infrastructure.Dashboards
                     PlatformFeeRevenue = 0,
                     WithdrawalFeeRevenue = 0,
                     AdjustmentBalance = 0,
-                    CreatedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow
+                    CreatedAt = VietnamDateTime.Now,
+                    UpdatedAt = VietnamDateTime.Now
                 };
             }
 
