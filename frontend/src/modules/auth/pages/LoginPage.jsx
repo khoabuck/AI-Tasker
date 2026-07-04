@@ -174,8 +174,7 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      console.log("=== LOGIN RESULT ===", result);
-      console.log("=== TOKEN IN STORAGE RIGHT AFTER LOGIN ===", localStorage.getItem("accessToken"));
+      
 
       if (!result.success || !result.accessToken) {
         console.log("LOGIN RESULT:", result);
@@ -206,7 +205,7 @@ export default function LoginPage() {
       sessionStorage.setItem("sessionId", sessionId);
       localStorage.setItem("activeSessionId", sessionId);
 
-      console.log("=== TOKEN RIGHT BEFORE NAVIGATE ===", localStorage.getItem("accessToken"));
+      
 
       goNextByRoleAndStatus({
         role: finalRole,

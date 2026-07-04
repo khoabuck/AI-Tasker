@@ -228,6 +228,16 @@ function JobCard({ job, onStatusChange }) {
                     </span>
                   )}
                 </button>
+
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/client/jobs/${job.jobPostingId}/edit`);
+                  }}
+                  style={{ padding: "6px 12px", background: "rgba(0,240,255,0.05)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Edit
+                </button>
                 
                 <button onClick={handleCancel} disabled={actionLoading}
                   style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}>
