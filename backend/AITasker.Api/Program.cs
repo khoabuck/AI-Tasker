@@ -255,7 +255,11 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
+<<<<<<< HEAD
 builder.Services.AddScoped<IEmailSender, GmailSmtpEmailSender>();
+=======
+builder.Services.AddScoped<IEmailSender, GmailApiEmailSender>();
+>>>>>>> origin/fe/minh
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================

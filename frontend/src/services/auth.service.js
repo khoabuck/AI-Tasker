@@ -235,18 +235,7 @@ const authService = {
 
       localStorage.setItem("accessToken", accessToken);
 
-      let user = normalizeUser(unwrapUserData(data));
-
-      try {
-        const freshUser = await getMeApi();
-        const freshNormalizedUser = normalizeUser(unwrapUserData(freshUser));
-
-        if (freshNormalizedUser) {
-          user = freshNormalizedUser;
-        }
-      } catch {
-        // Nếu /auth/me lỗi thì dùng user từ login response.
-      }
+      let user = normalizeUser(data?.user || data?.User || data?.data?.user || data?.data?.User);
 
       const tokenRole = getRoleFromToken(accessToken);
 
@@ -261,7 +250,7 @@ const authService = {
         user = normalizeUser({
           ...user,
           role: user?.role || tokenRole || "",
-          status: user?.status || "ACTIVE",
+          status: user?.status || "PENDING_ROLE",
         });
       }
 

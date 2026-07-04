@@ -1,7 +1,10 @@
 import axiosInstance from "./axiosInstance";
 
-const BACKEND_BASE_URL =
-  import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:5070";
+const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.replace(/\/+$/, "");
+
+if (!BACKEND_BASE_URL) {
+  throw new Error("Missing VITE_BACKEND_BASE_URL");
+}
 
 // POST /api/auth/register
 // Không trả accessToken — user phải verify email trước
