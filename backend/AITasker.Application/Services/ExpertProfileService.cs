@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Application.Common;
+using System.Text.RegularExpressions;
 
 namespace AITasker.Application.Services;
 
@@ -540,12 +541,14 @@ public class ExpertProfileService : IExpertProfileService
             expertFullName
         );
 
+        var aiReview = await ReviewByAiAsync(request, scoringPolicy);
+
         var experienceVerification = BuildExperienceVerification(
             request,
-            certificateVerificationResults
+            certificateVerificationResults,
+            aiReview.UrlInspectionResults
         );
 
-        var aiReview = await ReviewByAiAsync(request, scoringPolicy);
         var reviewResult = aiReview.ReviewResult;
 
         var hasSubmittedCertificates = request.Certificates.Count > 0;
@@ -758,7 +761,8 @@ public class ExpertProfileService : IExpertProfileService
 
     private static ExperienceVerificationSnapshot BuildExperienceVerification(
         CreateExpertProfileRequest request,
-        List<CertificateVerificationResult> certificateVerificationResults
+        List<CertificateVerificationResult> certificateVerificationResults,
+        IReadOnlyCollection<UrlInspectionResult> urlInspectionResults
     )
     {
         var claimedYears = Math.Clamp(request.YearsOfExperience, 0, 50);
@@ -766,95 +770,49 @@ public class ExpertProfileService : IExpertProfileService
         var proofUrlCount = CountProvidedProofUrls(request);
         var hasEvidenceUrl = proofUrlCount >= 2;
 
-        var hasVerifiedCertificate = certificateVerificationResults.Any(x =>
-            x.VerificationStatus == "VERIFIED"
+        var declaredEvidenceYears = ExtractDeclaredYearsOfExperience(
+            request.ProfessionalTitle,
+            request.Bio,
+            request.Skills,
+            request.PortfolioUrl,
+            request.GitHubUrl,
+            string.Join(
+                " ",
+                urlInspectionResults.Select(x =>
+                    $"{x.Label} {x.Url} {x.PageTitle} {x.MetaDescription} {x.TextSnippet}"
+                )
+            )
         );
+
+        var evidenceYearsForComparison = declaredEvidenceYears ?? 0;
+        var gap = claimedYears - evidenceYearsForComparison;
+
+        var confidence = CalculateExperienceConfidenceScore(
+            claimedYears,
+            declaredEvidenceYears
+        );
+
+        var verifiedYears = claimedYears <= evidenceYearsForComparison
+            ? claimedYears
+            : evidenceYearsForComparison;
 
         var hasSuspiciousOrInvalidCertificate = certificateVerificationResults.Any(x =>
             x.VerificationStatus is "NAME_MISMATCH" or "INVALID"
         );
 
-        var maxCertificateScore = certificateVerificationResults.Count == 0
-            ? 0m
-            : certificateVerificationResults.Max(x => x.VerificationScore);
-
-        var averageCertificateScore = certificateVerificationResults.Count == 0
-            ? 0m
-            : certificateVerificationResults.Average(x => x.VerificationScore);
-
-        var confidence = 20m;
-
-        if (hasEvidenceUrl)
+        if (hasSuspiciousOrInvalidCertificate && claimedYears >= 3)
         {
-            confidence += 30m;
+            confidence = Math.Min(confidence, 60m);
         }
 
-        if (hasVerifiedCertificate)
-        {
-            confidence += 35m;
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Bio)
-            && request.Bio.Trim().Length >= 120)
-        {
-            confidence += 10m;
-        }
-
-        if (maxCertificateScore >= 80m)
-        {
-            confidence += 15m;
-        }
-        else if (averageCertificateScore >= 50m)
-        {
-            confidence += 8m;
-        }
-
-        if (hasSuspiciousOrInvalidCertificate)
-        {
-            confidence -= 20m;
-        }
-
-        confidence = Math.Clamp(confidence, 0m, 100m);
-
-        var verifiedYears = claimedYears;
-
-        if (claimedYears >= 7 && confidence < 70m)
-        {
-            verifiedYears = Math.Min(claimedYears, 2);
-        }
-        else if (claimedYears >= 5 && confidence < 60m)
-        {
-            verifiedYears = Math.Min(claimedYears, 2);
-        }
-        else if (claimedYears >= 3 && confidence < 45m)
-        {
-            verifiedYears = Math.Min(claimedYears, 1);
-        }
-
-        var gap = claimedYears - verifiedYears;
-
-        var status = "NEEDS_REVIEW";
-
-        if (confidence >= 75m && gap <= 1)
-        {
-            status = "VERIFIED";
-        }
-        else if (gap >= 3 || (claimedYears >= 5 && confidence < 60m))
-        {
-            status = "NEEDS_REVIEW";
-        }
-        else if (hasSuspiciousOrInvalidCertificate && claimedYears >= 3)
-        {
-            status = "NEEDS_REVIEW";
-        }
-        else if (confidence >= 45m)
-        {
-            status = "NEEDS_REVIEW";
-        }
+        var status = declaredEvidenceYears.HasValue && gap <= 0
+            ? "VERIFIED"
+            : "NEEDS_REVIEW";
 
         var note = BuildExperienceVerificationNote(
             claimedYears,
             verifiedYears,
+            declaredEvidenceYears,
             confidence,
             status,
             certificateVerificationResults,
@@ -868,6 +826,66 @@ public class ExpertProfileService : IExpertProfileService
             ExperienceConfidenceScore = confidence,
             ExperienceVerificationStatus = status,
             ExperienceVerificationNote = note
+        };
+    }
+
+    private static int? ExtractDeclaredYearsOfExperience(params string?[] texts)
+    {
+        var combinedText = string.Join(
+            " ",
+            texts.Where(text => !string.IsNullOrWhiteSpace(text))
+        );
+
+        if (string.IsNullOrWhiteSpace(combinedText))
+        {
+            return null;
+        }
+
+        var matches = Regex.Matches(
+            combinedText,
+            @"(?<years>\d{1,2})\s*\+?\s*(years?|yrs?|year\s+experience|years\s+experience|năm|nam)",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+        );
+
+        var years = matches
+            .Select(match => int.TryParse(match.Groups["years"].Value, out var value)
+                ? value
+                : -1)
+            .Where(value => value >= 0 && value <= 50)
+            .ToList();
+
+        return years.Count == 0
+            ? null
+            : years.Max();
+    }
+
+    private static decimal CalculateExperienceConfidenceScore(
+        int claimedYears,
+        int? declaredEvidenceYears
+    )
+    {
+        if (claimedYears == 0)
+        {
+            return 100m;
+        }
+
+        if (!declaredEvidenceYears.HasValue)
+        {
+            return 50m;
+        }
+
+        if (claimedYears <= declaredEvidenceYears.Value)
+        {
+            return 100m;
+        }
+
+        var gap = claimedYears - declaredEvidenceYears.Value;
+
+        return gap switch
+        {
+            1 => 75m,
+            2 => 50m,
+            _ => 25m
         };
     }
 
@@ -1806,6 +1824,7 @@ public class ExpertProfileService : IExpertProfileService
     private static string BuildExperienceVerificationNote(
         int claimedYears,
         int verifiedYears,
+        int? declaredEvidenceYears,
         decimal confidence,
         string status,
         List<CertificateVerificationResult> certificateVerificationResults,
@@ -1815,7 +1834,9 @@ public class ExpertProfileService : IExpertProfileService
     {
         var notes = new List<string>
         {
-            $"Claimed years: {claimedYears}. Initial verified years: {verifiedYears}. Confidence score: {confidence:0.##}. Status: {status}. Required proof URL count: {proofUrlCount}/2."
+            declaredEvidenceYears.HasValue
+                ? $"Claimed years: {claimedYears}. Declared evidence years found in bio/portfolio/GitHub/proof: {declaredEvidenceYears.Value}. Initial verified years: {verifiedYears}. Confidence score: {confidence:0.##}. Status: {status}. Required proof URL count: {proofUrlCount}/2."
+                : $"Claimed years: {claimedYears}. No declared years were found in bio/portfolio/GitHub/proof. Initial verified years: {verifiedYears}. Confidence score: {confidence:0.##}. Status: {status}. Required proof URL count: {proofUrlCount}/2."
         };
 
         if (!hasEvidenceUrl)
@@ -1846,14 +1867,26 @@ public class ExpertProfileService : IExpertProfileService
             );
 
             notes.Add(
-              $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {nameMismatchCount} name mismatch, {invalidCount} invalid."
+                $"Certificate verification summary: {verifiedCount} verified, {needsReviewCount} needs review, {nameMismatchCount} name mismatch, {invalidCount} invalid."
             );
         }
 
-        if (claimedYears - verifiedYears >= 3)
+        if (!declaredEvidenceYears.HasValue && claimedYears > 0)
         {
             notes.Add(
-                "Claimed experience is much higher than the available evidence. Additional evidence is required."
+                "Claimed experience could not be matched against any declared years in the submitted bio, portfolio, GitHub, or proof evidence."
+            );
+        }
+        else if (declaredEvidenceYears.HasValue && claimedYears > declaredEvidenceYears.Value)
+        {
+            notes.Add(
+                $"Claimed experience is higher than declared evidence years by {claimedYears - declaredEvidenceYears.Value} year(s). Experience credibility score was reduced."
+            );
+        }
+        else
+        {
+            notes.Add(
+                "Claimed experience is less than or equal to the declared evidence years, so experience credibility can receive full score."
             );
         }
 
@@ -1941,8 +1974,10 @@ public class ExpertProfileService : IExpertProfileService
             AvatarUrl = expertProfile.User.AvatarUrl,
             ProfessionalTitle = expertProfile.ProfessionalTitle,
             Bio = expertProfile.Bio,
-            Skills = request.Skills,
-            YearsOfExperience = request.YearsOfExperience,
+            Skills = request.Skills is null
+                ? expertProfile.Skills
+                : request.Skills.Trim(),
+            YearsOfExperience = expertProfile.YearsOfExperience,
             AvailableForWork = expertProfile.AvailableForWork,
             PortfolioUrl = request.PortfolioUrl,
             LinkedInUrl = request.LinkedInUrl,
@@ -2218,22 +2253,25 @@ public class ExpertProfileService : IExpertProfileService
         ExpertProfileScoringPolicy scoringPolicy
     )
     {
-        if (string.IsNullOrWhiteSpace(request.Skills))
+        if (request.Skills is not null)
         {
-            throw new InvalidOperationException("Skills are required.");
+            if (string.IsNullOrWhiteSpace(request.Skills))
+            {
+                throw new InvalidOperationException("Skills cannot be empty.");
+            }
+
+            if (request.Skills.Trim().Length < scoringPolicy.SkillsMinimumLength)
+            {
+                throw new InvalidOperationException(
+                    $"Skills must be at least {scoringPolicy.SkillsMinimumLength} characters."
+                );
+            }
         }
 
-        if (request.Skills.Trim().Length < scoringPolicy.SkillsMinimumLength)
+        if (request.YearsOfExperience.HasValue)
         {
             throw new InvalidOperationException(
-                $"Skills must be at least {scoringPolicy.SkillsMinimumLength} characters."
-            );
-        }
-
-        if (request.YearsOfExperience < 0)
-        {
-            throw new InvalidOperationException(
-                "Years of experience must be greater than or equal to 0."
+                "Years of experience cannot be updated from verification update. Please resubmit the full expert profile to change years of experience."
             );
         }
 
@@ -2458,6 +2496,13 @@ public class ExpertProfileService : IExpertProfileService
         {
             throw new InvalidOperationException(
                 "Years of experience must be greater than or equal to 0."
+            );
+        }
+
+        if (request.YearsOfExperience > 50)
+        {
+            throw new InvalidOperationException(
+                "Years of experience must be less than or equal to 50."
             );
         }
 
