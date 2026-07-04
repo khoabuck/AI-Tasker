@@ -174,8 +174,12 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      if (!result.success) {
-        setError(result.message || "Login failed.");
+      console.log("=== LOGIN RESULT ===", result);
+      console.log("=== TOKEN IN STORAGE RIGHT AFTER LOGIN ===", localStorage.getItem("accessToken"));
+
+      if (!result.success || !result.accessToken) {
+        console.log("LOGIN RESULT:", result);
+        setError(result.message || "Login failed: missing access token.");
         return;
       }
 
@@ -202,6 +206,8 @@ export default function LoginPage() {
       sessionStorage.setItem("sessionId", sessionId);
       localStorage.setItem("activeSessionId", sessionId);
 
+      console.log("=== TOKEN RIGHT BEFORE NAVIGATE ===", localStorage.getItem("accessToken"));
+
       goNextByRoleAndStatus({
         role: finalRole,
         status: finalStatus,
@@ -217,12 +223,14 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = () => {
-    if (typeof authService.loginWithGoogle === "function") {
-      authService.loginWithGoogle();
+    const backendUrl = import.meta.env.VITE_BACKEND_BASE_URL;
+
+    if (!backendUrl) {
+      setError("Missing VITE_BACKEND_BASE_URL");
       return;
     }
 
-    window.location.href = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
+    window.location.href = `${backendUrl}/api/auth/google-login`;
   };
 
   return (

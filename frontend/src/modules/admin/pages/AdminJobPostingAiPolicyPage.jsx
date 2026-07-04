@@ -17,49 +17,57 @@ const EMPTY_FORM = {
 const CREDIT_FIELDS = [
   {
     name: "initialFreeJobPostCredits",
-    label: "Initial Free Job Post Credits",
-    helper: "Free job posting credits given to a new client.",
+    label: "Free Job Post Credits",
+    helper: "Credits given to a new client for posting jobs.",
+    icon: "work",
   },
   {
     name: "initialFreeAiGenerationCredits",
-    label: "Initial Free AI Generation Credits",
-    helper: "Free AI generation credits given to a new client.",
+    label: "Free AI Generation Credits",
+    helper: "Credits given to a new client for using AI job generation.",
+    icon: "smart_toy",
   },
 ];
 
 const LIMIT_FIELDS = [
   {
     name: "maxDraftJobsPerClient",
-    label: "Max Draft Jobs Per Client",
-    helper: "Maximum draft jobs a client can keep.",
+    label: "Max Draft Jobs",
+    helper: "Maximum draft jobs a client can keep at the same time.",
+    icon: "inventory_2",
   },
   {
     name: "maxSkillsPerJob",
     label: "Max Skills Per Job",
-    helper: "Maximum skills that can be attached to one job.",
+    helper: "Maximum number of skills allowed on one job post.",
+    icon: "psychology",
   },
   {
     name: "maxSuggestedSkills",
     label: "Max Suggested Skills",
-    helper: "Maximum AI suggested skills returned to client.",
+    helper: "Maximum number of skills AI can suggest to the client.",
+    icon: "tips_and_updates",
   },
   {
     name: "maxRecommendationResults",
-    label: "Max Recommendation Results",
-    helper: "Maximum recommended jobs or experts returned by AI.",
+    label: "Max Recommendations",
+    helper: "Maximum number of AI recommendation results returned.",
+    icon: "recommend",
   },
 ];
 
 const SCORE_FIELDS = [
   {
     name: "minimumSkillRelevanceScore",
-    label: "Minimum Skill Relevance Score",
-    helper: "Minimum AI relevance score required for suggested skills.",
+    label: "Skill Relevance Score",
+    helper: "Minimum score required for AI suggested skills.",
+    icon: "rule",
   },
   {
     name: "minimumRecommendationMatchScore",
-    label: "Minimum Recommendation Match Score",
-    helper: "Minimum match score required for AI recommendations.",
+    label: "Recommendation Match Score",
+    helper: "Minimum score required for AI recommendations.",
+    icon: "verified",
   },
 ];
 
@@ -72,6 +80,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const hasChanged = useMemo(() => {
     if (!policy) return true;
@@ -94,6 +103,7 @@ export default function AdminJobPostingAiPolicyPage() {
       setLoading(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const data = await adminJobPostingAiPolicyService.getPolicy();
 
@@ -108,6 +118,13 @@ export default function AdminJobPostingAiPolicyPage() {
   };
 
   const handleChange = (name, value) => {
+    setError("");
+    setSuccess("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -118,15 +135,17 @@ export default function AdminJobPostingAiPolicyPage() {
     setForm(toFormState(policy));
     setError("");
     setSuccess("");
+    setFieldErrors({});
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm(form);
+    const validation = validateForm(form);
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
       return;
     }
 
@@ -134,6 +153,7 @@ export default function AdminJobPostingAiPolicyPage() {
       setSaving(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const updated = await adminJobPostingAiPolicyService.updatePolicy(
         buildPayload(form)
@@ -164,8 +184,8 @@ export default function AdminJobPostingAiPolicyPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure free credits, draft limits, skill suggestion limits, and
-              AI recommendation score thresholds for job posting flow.
+              Control free credits, draft limits, skill suggestions, and AI
+              recommendation quality for the client job posting flow.
             </p>
           </div>
 
@@ -182,7 +202,7 @@ export default function AdminJobPostingAiPolicyPage() {
         {error && (
           <Alert
             type="danger"
-            title="Action failed"
+            title="Please check your input"
             message={error}
             onClose={() => setError("")}
           />
@@ -191,7 +211,7 @@ export default function AdminJobPostingAiPolicyPage() {
         {success && (
           <Alert
             type="success"
-            title="Success"
+            title="Policy updated"
             message={success}
             onClose={() => setSuccess("")}
           />
@@ -205,135 +225,187 @@ export default function AdminJobPostingAiPolicyPage() {
             Loading job posting AI policy...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
-            <form
-              onSubmit={handleSubmit}
-              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
-            >
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-white">
-                  Update AI policy
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-gray-400">
-                  All numeric values must be greater than or equal to 0. The
-                  reason field is required when saving.
-                </p>
-              </div>
-
-              <PolicySection
-                title="Initial Credits"
-                description="Free credits for new clients."
-                fields={CREDIT_FIELDS}
-                form={form}
-                onChange={handleChange}
+          <>
+            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <TopMetricCard
+                icon="work"
+                label="Job Credits"
+                value={formatNumber(form.initialFreeJobPostCredits)}
+                helper="Free credits for new clients"
+                tone="cyan"
               />
 
-              <PolicySection
-                title="Job Posting Limits"
-                description="Limits applied to draft jobs, skills, and recommendations."
-                fields={LIMIT_FIELDS}
-                form={form}
-                onChange={handleChange}
+              <TopMetricCard
+                icon="smart_toy"
+                label="AI Credits"
+                value={formatNumber(form.initialFreeAiGenerationCredits)}
+                helper="Free AI generations"
+                tone="purple"
               />
 
-              <PolicySection
-                title="AI Score Thresholds"
-                description="Minimum score required for AI suggestions and recommendations."
-                fields={SCORE_FIELDS}
-                form={form}
-                onChange={handleChange}
-                step="0.0001"
+              <TopMetricCard
+                icon="inventory_2"
+                label="Draft Limit"
+                value={formatNumber(form.maxDraftJobsPerClient)}
+                helper="Draft jobs per client"
+                tone="yellow"
               />
 
-              <TextArea
-                label="Update Reason"
-                value={form.reason}
-                onChange={(value) => handleChange("reason", value)}
-                placeholder="Example: Adjust AI limits for new job posting workflow."
+              <TopMetricCard
+                icon="recommend"
+                label="Recommendations"
+                value={formatNumber(form.maxRecommendationResults)}
+                helper="AI results per request"
+                tone="green"
               />
+            </section>
 
-              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  disabled={saving}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Reset
-                </button>
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+              <form
+                onSubmit={handleSubmit}
+                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+              >
+                <div className="mb-6 border-b border-white/10 pb-5">
+                  <h2 className="text-xl font-bold text-white">
+                    AI policy configuration
+                  </h2>
 
-                <button
-                  type="submit"
-                  disabled={saving || !hasChanged}
-                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save Policy"}
-                </button>
-              </div>
-            </form>
-
-            <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Current summary
-                </h2>
-
-                <div className="space-y-4">
-                  <SummaryCard
-                    icon="work"
-                    label="Free Job Credits"
-                    value={policy?.initialFreeJobPostCredits}
-                    description="Initial job post credits"
-                    tone="cyan"
-                  />
-
-                  <SummaryCard
-                    icon="smart_toy"
-                    label="Free AI Credits"
-                    value={policy?.initialFreeAiGenerationCredits}
-                    description="Initial AI generation credits"
-                    tone="purple"
-                  />
-
-                  <SummaryCard
-                    icon="inventory_2"
-                    label="Max Draft Jobs"
-                    value={policy?.maxDraftJobsPerClient}
-                    description="Draft jobs per client"
-                    tone="yellow"
-                  />
-
-                  <SummaryCard
-                    icon="recommend"
-                    label="Max Recommendations"
-                    value={policy?.maxRecommendationResults}
-                    description="AI result limit"
-                    tone="green"
-                  />
+                  <p className="mt-2 text-sm leading-6 text-gray-400">
+                    All numeric fields must be whole numbers greater than or
+                    equal to 0. An update reason is required for audit tracking.
+                  </p>
                 </div>
-              </section>
 
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Metadata
-                </h2>
+                <PolicySection
+                  icon="redeem"
+                  title="Initial Credits"
+                  description="Credits automatically granted to new clients."
+                  fields={CREDIT_FIELDS}
+                  form={form}
+                  fieldErrors={fieldErrors}
+                  onChange={handleChange}
+                />
 
-                <div className="space-y-4">
-                  <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
-                  <InfoBox
-                    label="Created At"
-                    value={formatDateTime(policy?.createdAt)}
-                  />
-                  <InfoBox
-                    label="Updated At"
-                    value={formatDateTime(policy?.updatedAt)}
-                  />
-                  <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
+                <PolicySection
+                  icon="tune"
+                  title="Job Posting Limits"
+                  description="Limits for draft jobs, job skills, suggested skills, and recommendation results."
+                  fields={LIMIT_FIELDS}
+                  form={form}
+                  fieldErrors={fieldErrors}
+                  onChange={handleChange}
+                />
+
+                <PolicySection
+                  icon="analytics"
+                  title="AI Quality Thresholds"
+                  description="Minimum scores required before AI suggestions or recommendations are accepted."
+                  fields={SCORE_FIELDS}
+                  form={form}
+                  fieldErrors={fieldErrors}
+                  onChange={handleChange}
+                />
+
+                <TextArea
+                  label="Update Reason"
+                  required
+                  value={form.reason}
+                  error={fieldErrors.reason}
+                  onChange={(value) => handleChange("reason", value)}
+                  placeholder="Example: Increase AI recommendation quality threshold for better matching."
+                />
+
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    disabled={saving}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Reset Changes
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={saving || !hasChanged}
+                    className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Policy"}
+                  </button>
                 </div>
-              </section>
-            </aside>
-          </div>
+              </form>
+
+              <aside className="space-y-6">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <h2 className="mb-5 text-xl font-bold text-white">
+                    Current Summary
+                  </h2>
+
+                  <div className="space-y-4">
+                    <SummaryCard
+                      icon="work"
+                      label="Free Job Credits"
+                      value={form.initialFreeJobPostCredits}
+                      description="Initial job post credits"
+                      tone="cyan"
+                    />
+
+                    <SummaryCard
+                      icon="smart_toy"
+                      label="Free AI Credits"
+                      value={form.initialFreeAiGenerationCredits}
+                      description="Initial AI generation credits"
+                      tone="purple"
+                    />
+
+                    <SummaryCard
+                      icon="psychology"
+                      label="Max Skills"
+                      value={form.maxSkillsPerJob}
+                      description="Skills allowed per job"
+                      tone="yellow"
+                    />
+
+                    <SummaryCard
+                      icon="verified"
+                      label="Match Score"
+                      value={form.minimumRecommendationMatchScore}
+                      description="Minimum recommendation score"
+                      tone="green"
+                    />
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <h2 className="mb-5 text-xl font-bold text-white">
+                    Policy Metadata
+                  </h2>
+
+                  <div className="space-y-4">
+                    <InfoBox label="Policy ID" value={getPolicyId(policy)} />
+                    <InfoBox
+                      label="Created At"
+                      value={formatDateTime(policy?.createdAt)}
+                    />
+                    <InfoBox
+                      label="Updated At"
+                      value={formatDateTime(policy?.updatedAt)}
+                    />
+                    <InfoBox
+                      label="Updated By"
+                      value={
+                        policy?.updatedByAdminEmail ||
+                        policy?.updatedByAdminFullName ||
+                        policy?.raw?.UpdatedByAdminEmail ||
+                        policy?.raw?.UpdatedByAdminFullName ||
+                        "N/A"
+                      }
+                    />
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </>
         )}
       </div>
     </AdminLayout>
@@ -341,19 +413,17 @@ export default function AdminJobPostingAiPolicyPage() {
 }
 
 function PolicySection({
+  icon,
   title,
   description,
   fields,
   form,
+  fieldErrors,
   onChange,
-  step = "1",
 }) {
   return (
     <section className="mb-8">
-      <div className="mb-4 border-b border-white/10 pb-3">
-        <h3 className="font-bold text-white">{title}</h3>
-        <p className="mt-1 text-sm text-gray-500">{description}</p>
-      </div>
+      <SectionHeader icon={icon} title={title} description={description} />
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         {fields.map((field) => (
@@ -363,7 +433,8 @@ function PolicySection({
             value={form[field.name]}
             onChange={(value) => onChange(field.name, value)}
             helper={field.helper}
-            step={step}
+            required
+            error={fieldErrors[field.name]}
           />
         ))}
       </div>
@@ -371,32 +442,70 @@ function PolicySection({
   );
 }
 
-function NumberInput({ label, value, onChange, helper, step = "1" }) {
+function SectionHeader({ icon, title, description }) {
   return (
-    <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-        {label}
-      </label>
+    <div className="mb-5 flex gap-3 border-b border-white/10 pb-4">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
 
-      <input
-        type="number"
-        min="0"
-        step={step}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
-      />
-
-      {helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>}
+      <div>
+        <h3 className="font-bold text-white">{title}</h3>
+        <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
+      </div>
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  helper,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
+      </label>
+
+      <input
+        type="text"
+        inputMode="numeric"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
+      />
+
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>
+      )}
+    </div>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -404,8 +513,45 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>}
+    </div>
+  );
+}
+
+function TopMetricCard({ icon, label, value, helper, tone = "cyan" }) {
+  const toneClass = {
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+    yellow: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    green: "border-green-400/20 bg-green-400/10 text-green-300",
+  };
+
+  return (
+    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
+          toneClass[tone] || toneClass.cyan
+        }`}
+      >
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
+
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-2 text-3xl font-black tracking-tight text-white">
+        {value}
+      </p>
+
+      <p className="mt-auto pt-3 text-sm text-gray-400">{helper}</p>
     </div>
   );
 }
@@ -429,7 +575,7 @@ function SummaryCard({ icon, label, value, description, tone = "cyan" }) {
           <span className="material-symbols-outlined text-[20px]">{icon}</span>
         </div>
 
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-bold text-white">{label}</p>
           <p className="text-xs text-gray-500">{description}</p>
         </div>
@@ -514,25 +660,49 @@ function buildPayload(form) {
 }
 
 function validateForm(form) {
+  const errors = {};
   const fields = Object.keys(EMPTY_FORM).filter((field) => field !== "reason");
 
-  for (const field of fields) {
-    const value = Number(form[field]);
+  fields.forEach((field) => {
+    const rawValue = String(form[field] ?? "").trim();
 
-    if (Number.isNaN(value) || value < 0) {
-      return `${formatLabel(field)} must be a valid number greater than or equal to 0.`;
+    if (!rawValue) {
+      errors[field] = `${formatLabel(field)} is required.`;
+      return;
     }
+
+    if (!/^\d+$/.test(rawValue)) {
+      errors[field] = `${formatLabel(field)} must be a whole number.`;
+      return;
+    }
+
+    if (Number(rawValue) < 0) {
+      errors[field] = `${formatLabel(field)} must be greater than or equal to 0.`;
+    }
+  });
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Update Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Update Reason must be at least 10 characters.";
   }
 
-  if (!String(form.reason || "").trim()) {
-    return "Please enter update reason.";
-  }
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
 
-  if (String(form.reason || "").trim().length < 10) {
-    return "Update reason must be at least 10 characters.";
-  }
-
-  return "";
+function getPolicyId(policy) {
+  return (
+    policy?.policyId ||
+    policy?.jobPostingAiPolicyId ||
+    policy?.raw?.jobPostingAiPolicyId ||
+    policy?.raw?.JobPostingAiPolicyId ||
+    "N/A"
+  );
 }
 
 function formatNumber(value) {
@@ -541,17 +711,6 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(
     Number.isNaN(number) ? 0 : number
   );
-}
-
-function formatLabel(value) {
-  if (!value) return "N/A";
-
-  return String(value)
-    .replace(/([A-Z])/g, " $1")
-    .replaceAll("_", " ")
-    .trim()
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatDateTime(value) {
@@ -568,6 +727,17 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatLabel(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replace(/([A-Z])/g, " $1")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getFriendlyError(err, fallback = "Something went wrong.") {

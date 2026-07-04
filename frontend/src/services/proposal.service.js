@@ -315,6 +315,60 @@ export const normalizeProposal = (proposal) => {
   };
 };
 
+export const normalizeWithdrawWarning = (warning) => {
+  const raw = warning?.raw || warning?.Raw || warning || {};
+
+  return {
+    canWithdraw: Boolean(
+      getValue(
+        raw.canWithdraw,
+        raw.CanWithdraw,
+        raw.allowed,
+        raw.Allowed,
+        raw.isAllowed,
+        raw.IsAllowed,
+        true
+      )
+    ),
+
+    title: getValue(
+      raw.title,
+      raw.Title,
+      "Withdraw proposal?"
+    ),
+
+    message: getValue(
+      raw.message,
+      raw.Message,
+      raw.warningMessage,
+      raw.WarningMessage,
+      raw.detail,
+      raw.Detail,
+      "Withdrawing this proposal may affect your chance to work on this job."
+    ),
+
+    consequences: getValue(
+      raw.consequences,
+      raw.Consequences,
+      raw.notes,
+      raw.Notes,
+      []
+    ),
+
+    requiresReason: Boolean(
+      getValue(
+        raw.requiresReason,
+        raw.RequiresReason,
+        raw.reasonRequired,
+        raw.ReasonRequired,
+        false
+      )
+    ),
+
+    raw,
+  };
+};
+
 const buildMilestonePayload = (milestone, options = {}) => {
   const isDraft = options.draft === true;
 
@@ -463,6 +517,11 @@ const proposalService = {
     );
   },
 
+  async getMyProposalCredits() {
+    const response = await proposalApi.getMyProposalCredits();
+    return unwrapData(response);
+  },
+
   async getMyDraftProposals() {
     const response = await proposalApi.getMyDraftProposals();
 
@@ -558,7 +617,8 @@ const proposalService = {
     }
 
     const currentProposal = await this.getProposalById(proposalId);
-    const jobId = currentProposal?.jobId || formData?.jobId || formData?.jobPostingId;
+    const jobId =
+      currentProposal?.jobId || formData?.jobId || formData?.jobPostingId;
 
     const response = await proposalApi.resubmitProposal(
       proposalId,
@@ -568,12 +628,24 @@ const proposalService = {
     return normalizeProposal(unwrapData(response));
   },
 
+  async getWithdrawWarning(proposalId) {
+    if (isInvalidId(proposalId)) {
+      throw new Error("Invalid proposal id.");
+    }
+
+    const response = await proposalApi.getWithdrawWarning(proposalId);
+    return normalizeWithdrawWarning(unwrapData(response));
+  },
+
   async withdrawProposal(proposalId, reason = "") {
     if (isInvalidId(proposalId)) {
       throw new Error("Invalid proposal id.");
     }
 
-    const response = await proposalApi.withdrawProposal(proposalId, { reason });
+    const response = await proposalApi.withdrawProposal(proposalId, {
+      reason: String(reason || "").trim(),
+    });
+
     return unwrapData(response);
   },
 };

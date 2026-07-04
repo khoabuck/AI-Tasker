@@ -526,7 +526,7 @@ const suggestedSkills = (data.suggestedSkills || [])
               Post an AI Job
             </h1>
             <p className="m-0 text-[15px] text-[#8c90a0]">
-              Tạo job bằng Job Credit. Dùng AI Assistant sẽ trừ thêm AI Generation Credit.
+              Create a job using Job Credit. Using AI Assistant will deduct additional AI Generation Credit.
             </p>
           </div>
 
@@ -586,7 +586,7 @@ const suggestedSkills = (data.suggestedSkills || [])
                 Manual Post
               </h3>
               <p className="m-0 text-[13px] text-[#8c90a0]">
-                Dùng 1 Job Credit khi publish. Save Draft không trừ credit.
+                Uses 1 Job Credit when publishing. Save Draft does not deduct credit.
               </p>
             </button>
 
@@ -641,7 +641,7 @@ const suggestedSkills = (data.suggestedSkills || [])
 
                     {/* Budget */}
                     <div>
-                      <label style={labelStyle}>Budget Range (USD/Month) <span style={{ color: "#f87171" }}>*</span></label>
+                      <label style={labelStyle}>Budget Range (VND) <span style={{ color: "#f87171" }}>*</span></label>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto 1fr", gap: 12, alignItems: "center" }}>
                         <div style={{ position: "relative" }}>
                           <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>$</span>

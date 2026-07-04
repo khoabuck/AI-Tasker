@@ -53,6 +53,10 @@ const proposalApi = {
     return axiosInstance.post(`/proposals/${proposalId}/decision`, data);
   },
 
+  getWithdrawWarning(proposalId) {
+    return axiosInstance.get(`/proposals/${proposalId}/withdraw-warning`);
+  },
+
   withdrawProposal(proposalId, data = {}) {
     return axiosInstance.patch(`/proposals/${proposalId}/withdraw`, data);
   },

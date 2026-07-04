@@ -6,51 +6,14 @@ import { getErrorMessage } from "../../../utils/auth.utils";
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-export default function ResetPasswordPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const token = searchParams.get("token");
-
-  const [form, setForm] = useState({
-    newPassword: "",
-    confirmPassword: "",
-  });
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    setError("");
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (form.newPassword !== form.confirmPassword) {
-      setError("Confirm password does not match.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setError("");
-
-      await resetPasswordApi({
-        token,
-        newPassword: form.newPassword,
-        confirmPassword: form.confirmPassword,
-      });
-
-      setSuccess(true);
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const Shell = ({ children }) => (
+// FIX (root cause of "type 1 character → kicked out of input"):
+// `Shell` trước đây được định nghĩa BÊN TRONG component ResetPasswordPage,
+// nên mỗi lần setForm() chạy (mỗi lần gõ phím) → component re-render →
+// Shell bị tạo lại thành 1 function MỚI mỗi lần → React coi là component
+// khác loại → unmount + remount toàn bộ cây con → input mất focus ngay khi
+// gõ ký tự đầu tiên. Đưa Shell ra ngoài, định nghĩa 1 lần duy nhất là hết bug.
+function Shell({ children }) {
+  return (
     <div className="min-h-screen bg-[#12151B] text-[#e1e2eb] font-sans">
       <nav className="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[#12151B]/80 backdrop-blur-2xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center px-6 lg:px-12">
@@ -75,6 +38,110 @@ export default function ResetPasswordPage() {
       </main>
     </div>
   );
+}
+
+// Field mật khẩu tái sử dụng: icon con mắt để show/hide, icon + border sáng
+// lên (đổi màu cyan) khi field đang được focus.
+function PasswordField({ label, name, value, onChange, onFocus, onBlur, placeholder, focused, showPassword, onToggleShow }) {
+  return (
+    <div>
+      <label className="mb-2 block text-sm font-medium text-[#e1e2eb]">
+        {label}
+      </label>
+      <div className="relative">
+        <span
+          className={`material-symbols-outlined pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-lg transition-colors ${
+            focused ? "text-[#00F0FF]" : "text-[#8c90a0]"
+          }`}
+        >
+          lock
+        </span>
+
+        <input
+          type={showPassword ? "text" : "password"}
+          name={name}
+          value={value}
+          onChange={onChange}
+          onFocus={onFocus}
+          onBlur={onBlur}
+          required
+          placeholder={placeholder}
+          className={`w-full rounded-xl border bg-white/5 py-3 pl-11 pr-11 text-sm text-[#e1e2eb] outline-none transition placeholder:text-[#8c90a0] focus:ring-2 focus:ring-[#00F0FF]/20 ${
+            focused ? "border-[#00F0FF]/60" : "border-white/10"
+          }`}
+        />
+
+        <button
+          type="button"
+          onClick={onToggleShow}
+          tabIndex={-1}
+          className={`absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1 transition-colors ${
+            focused ? "text-[#00F0FF]" : "text-[#8c90a0] hover:text-[#c2c6d6]"
+          }`}
+        >
+          <span className="material-symbols-outlined text-lg">
+            {showPassword ? "visibility_off" : "visibility"}
+          </span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+const MIN_PASSWORD_LENGTH = 6;
+
+export default function ResetPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get("token");
+
+  const [form, setForm] = useState({
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [focusedField, setFocusedField] = useState(null); // "newPassword" | "confirmPassword" | null
+
+  const handleChange = (e) => {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setError("");
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    if (form.newPassword.length <= MIN_PASSWORD_LENGTH) {
+      setError(`Password must be longer than ${MIN_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+
+    if (form.newPassword !== form.confirmPassword) {
+      setError("Confirm password does not match.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      await resetPasswordApi({
+        token,
+        newPassword: form.newPassword,
+        confirmPassword: form.confirmPassword,
+      });
+
+      setSuccess(true);
+    } catch (err) {
+      setError(getErrorMessage(err));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (!token) {
     return (
@@ -155,35 +222,31 @@ export default function ResetPasswordPage() {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#e1e2eb]">
-              New password
-            </label>
-            <input
-              type="password"
-              name="newPassword"
-              value={form.newPassword}
-              onChange={handleChange}
-              required
-              placeholder="Minimum 6 characters"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-[#8c90a0] focus:border-[#00F0FF]/60 focus:ring-2 focus:ring-[#00F0FF]/20"
-            />
-          </div>
+          <PasswordField
+            label="New password"
+            name="newPassword"
+            value={form.newPassword}
+            onChange={handleChange}
+            onFocus={() => setFocusedField("newPassword")}
+            onBlur={() => setFocusedField((f) => (f === "newPassword" ? null : f))}
+            placeholder={`More than ${MIN_PASSWORD_LENGTH} characters`}
+            focused={focusedField === "newPassword"}
+            showPassword={showNewPassword}
+            onToggleShow={() => setShowNewPassword((s) => !s)}
+          />
 
-          <div>
-            <label className="mb-2 block text-sm font-medium text-[#e1e2eb]">
-              Confirm new password
-            </label>
-            <input
-              type="password"
-              name="confirmPassword"
-              value={form.confirmPassword}
-              onChange={handleChange}
-              required
-              placeholder="Re-enter new password"
-              className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-[#8c90a0] focus:border-[#00F0FF]/60 focus:ring-2 focus:ring-[#00F0FF]/20"
-            />
-          </div>
+          <PasswordField
+            label="Confirm new password"
+            name="confirmPassword"
+            value={form.confirmPassword}
+            onChange={handleChange}
+            onFocus={() => setFocusedField("confirmPassword")}
+            onBlur={() => setFocusedField((f) => (f === "confirmPassword" ? null : f))}
+            placeholder="Re-enter new password"
+            focused={focusedField === "confirmPassword"}
+            showPassword={showConfirmPassword}
+            onToggleShow={() => setShowConfirmPassword((s) => !s)}
+          />
 
           {error && (
             <div className="rounded-lg border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">

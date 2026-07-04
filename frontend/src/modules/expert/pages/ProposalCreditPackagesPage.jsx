@@ -15,6 +15,8 @@ export default function ProposalCreditPackagesPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [purchasingId, setPurchasingId] = useState("");
 
+  const [confirmPackage, setConfirmPackage] = useState(null);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -49,7 +51,9 @@ export default function ProposalCreditPackagesPage() {
         ]);
 
       if (packageResult.status === "fulfilled") {
-        setPackages(Array.isArray(packageResult.value) ? packageResult.value : []);
+        setPackages(
+          Array.isArray(packageResult.value) ? packageResult.value : []
+        );
       } else {
         throw packageResult.reason;
       }
@@ -102,24 +106,30 @@ export default function ProposalCreditPackagesPage() {
           returnTo: "/expert/proposal-credit-packages",
           reason: "BUY_PROPOSAL_CREDITS",
           packageId,
+          depositAmount: packagePrice,
+          autoOpenDeposit: true,
         },
       });
 
       return;
     }
 
-    const confirmed = window.confirm(
-      `Buy ${pkg.packageName} for ${formatMoney(pkg.price)}?`
-    );
+    setConfirmPackage(pkg);
+  };
 
-    if (!confirmed) return;
+  const confirmPurchasePackage = async () => {
+    if (!confirmPackage?.packageId) return;
 
     try {
-      setPurchasingId(String(packageId));
+      setPurchasingId(String(confirmPackage.packageId));
       setError("");
       setMessage("");
 
-      await proposalCreditPackageService.purchasePackage(packageId);
+      await proposalCreditPackageService.purchasePackage(
+        confirmPackage.packageId
+      );
+
+      setConfirmPackage(null);
       await loadPage({ silent: true });
 
       setMessage(
@@ -145,7 +155,9 @@ export default function ProposalCreditPackagesPage() {
           state: {
             returnTo: "/expert/proposal-credit-packages",
             reason: "BUY_PROPOSAL_CREDITS",
-            packageId,
+            packageId: confirmPackage.packageId,
+            depositAmount: Number(confirmPackage.price || 0),
+            autoOpenDeposit: true,
           },
         });
       }
@@ -220,24 +232,14 @@ export default function ProposalCreditPackagesPage() {
               </p>
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={() => navigate("/expert/wallet")}
-                className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
-              >
-                Add Money
-              </button>
-
-              <button
-                type="button"
-                onClick={() => loadPage({ silent: true })}
-                disabled={refreshing}
-                className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {refreshing ? "Refreshing..." : "Refresh"}
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => loadPage({ silent: true })}
+              disabled={refreshing}
+              className="w-fit rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
           </section>
 
           {visiblePackages.length === 0 ? (
@@ -252,33 +254,26 @@ export default function ProposalCreditPackagesPage() {
                   walletBalance={walletBalance}
                   purchasing={String(purchasingId) === String(pkg.packageId)}
                   onPurchase={() => handlePurchase(pkg)}
-                  onGoWallet={() =>
-                    navigate("/expert/wallet", {
-                      state: {
-                        returnTo: "/expert/proposal-credit-packages",
-                        reason: "BUY_PROPOSAL_CREDITS",
-                        packageId: pkg.packageId,
-                      },
-                    })
-                  }
                 />
               ))}
             </section>
           )}
         </div>
       </div>
+
+      {confirmPackage && (
+        <PurchaseConfirmModal
+          pkg={confirmPackage}
+          purchasing={String(purchasingId) === String(confirmPackage.packageId)}
+          onClose={() => setConfirmPackage(null)}
+          onConfirm={confirmPurchasePackage}
+        />
+      )}
     </ExpertLayout>
   );
 }
 
-function PackageCard({
-  pkg,
-  index,
-  walletBalance,
-  purchasing,
-  onPurchase,
-  onGoWallet,
-}) {
+function PackageCard({ pkg, index, walletBalance, purchasing, onPurchase }) {
   const notEnoughBalance = Number(pkg.price || 0) > Number(walletBalance || 0);
   const isPopular = index === 1 || pkg.isPopular || pkg.popular;
   const pricePerCredit =
@@ -343,43 +338,78 @@ function PackageCard({
         </div>
 
         <div className="mt-auto">
-          {notEnoughBalance && (
-            <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-3">
-              <p className="text-sm font-bold text-yellow-200">
-                Not enough wallet balance
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-yellow-100/80">
-                Add money to your wallet to purchase this package.
-              </p>
-            </div>
-          )}
-
-          {notEnoughBalance ? (
-            <button
-              type="button"
-              onClick={onGoWallet}
-              className="w-full rounded-2xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3.5 text-sm font-black text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
-            >
-              Add Money
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onPurchase}
-              disabled={purchasing}
-              className={`w-full rounded-2xl px-5 py-3.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                isPopular
-                  ? "bg-cyan-400 text-black hover:bg-cyan-300"
-                  : "border border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
-              }`}
-            >
-              {purchasing ? "Purchasing..." : "Buy Now"}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={onPurchase}
+            disabled={purchasing}
+            className={`w-full rounded-2xl px-5 py-3.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              isPopular
+                ? "bg-cyan-400 text-black hover:bg-cyan-300"
+                : "border border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
+            }`}
+          >
+            {purchasing ? "Purchasing..." : "Buy"}
+          </button>
         </div>
       </div>
     </article>
+  );
+}
+
+function PurchaseConfirmModal({ pkg, purchasing, onClose, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[1.5rem] border border-cyan-400/30 bg-[#111823] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.75)]">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-300">
+          Confirm Purchase
+        </p>
+
+        <h2 className="mt-3 text-2xl font-black text-white">
+          Buy {pkg.packageName}?
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-gray-400">
+          This will use your wallet balance to add proposal submissions to your
+          account.
+        </p>
+
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-400">Price</span>
+            <span className="font-black text-white">
+              {formatMoney(pkg.price)}
+            </span>
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <span className="text-sm text-gray-400">Credits</span>
+            <span className="font-black text-cyan-300">
+              {formatNumber(pkg.proposalCredits)}
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={purchasing}
+            className="flex-1 rounded-2xl border border-white/10 px-5 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/[0.05] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={purchasing}
+            className="flex-1 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:opacity-50"
+          >
+            {purchasing ? "Buying..." : "Confirm Buy"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

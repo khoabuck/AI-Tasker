@@ -28,6 +28,9 @@ export default function AdminProposalCreditPackagesPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [reasonError, setReasonError] = useState("");
 
   const [action, setAction] = useState(EMPTY_ACTION);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -111,6 +114,9 @@ export default function AdminProposalCreditPackagesPage() {
     });
 
     setForm(EMPTY_FORM);
+    setFieldErrors({});
+    setModalError("");
+    setReasonError("");
     setError("");
     setSuccess("");
   };
@@ -132,6 +138,9 @@ export default function AdminProposalCreditPackagesPage() {
       reason: "",
     });
 
+    setFieldErrors({});
+    setModalError("");
+    setReasonError("");
     setError("");
     setSuccess("");
   };
@@ -145,6 +154,9 @@ export default function AdminProposalCreditPackagesPage() {
     setReason(
       type === "ACTIVATE" ? "Activate package." : "Deactivate package."
     );
+    setModalError("");
+    setReasonError("");
+    setFieldErrors({});
 
     setError("");
     setSuccess("");
@@ -156,9 +168,18 @@ export default function AdminProposalCreditPackagesPage() {
     setAction(EMPTY_ACTION);
     setForm(EMPTY_FORM);
     setReason("");
+    setModalError("");
+    setFieldErrors({});
+    setReasonError("");
   };
 
   const handleFormChange = (name, value) => {
+    setModalError("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -166,15 +187,18 @@ export default function AdminProposalCreditPackagesPage() {
   };
 
   const handleCreateOrUpdate = async () => {
-    const validationError = validateForm(form, action.type === "EDIT");
+    const validation = validateForm(form, action.type === "EDIT");
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setSaving(true);
+      setModalError("");
+      setFieldErrors({});
       setError("");
       setSuccess("");
 
@@ -210,12 +234,21 @@ export default function AdminProposalCreditPackagesPage() {
     if (!action.packageItem?.packageId) return;
 
     if (!reason.trim()) {
-      setError("Please enter reason.");
+      setReasonError("Reason is required.");
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    if (reason.trim().length < 10) {
+      setReasonError("Reason must be at least 10 characters.");
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setSaving(true);
+      setModalError("");
+      setReasonError("");
       setError("");
       setSuccess("");
 
@@ -410,6 +443,8 @@ export default function AdminProposalCreditPackagesPage() {
             form={form}
             loading={saving}
             isEdit={action.type === "EDIT"}
+            errors={fieldErrors}
+            modalError={modalError}
             onClose={closeModal}
             onConfirm={handleCreateOrUpdate}
             onChange={handleFormChange}
@@ -430,7 +465,13 @@ export default function AdminProposalCreditPackagesPage() {
             confirmTone={action.type === "ACTIVATE" ? "green" : "red"}
             reason={reason}
             loading={saving}
-            onReasonChange={setReason}
+            error={reasonError}
+            modalError={modalError}
+            onReasonChange={(value) => {
+              setReason(value);
+              setReasonError("");
+              setModalError("");
+            }}
             onClose={closeModal}
             onConfirm={handleToggleActive}
           />
@@ -555,6 +596,8 @@ function PackageFormModal({
   form,
   loading,
   isEdit,
+  errors = {},
+  modalError = "",
   onClose,
   onConfirm,
   onChange,
@@ -570,8 +613,16 @@ function PackageFormModal({
         </div>
 
         <div className="hide-modal-scrollbar max-h-[68vh] space-y-4 overflow-y-auto px-5 py-4">
+          {modalError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {modalError}
+            </div>
+          )}
+
           <TextInput
             label="Package Name"
+            required
+            error={errors.packageName}
             value={form.packageName}
             onChange={(value) => onChange("packageName", value)}
             placeholder="Starter Package"
@@ -579,6 +630,8 @@ function PackageFormModal({
 
           <TextArea
             label="Description"
+            required
+            error={errors.description}
             value={form.description}
             onChange={(value) => onChange("description", value)}
             placeholder="Describe what this package includes."
@@ -588,12 +641,16 @@ function PackageFormModal({
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <NumberInput
               label="Proposal Submit Credits"
+              required
+              error={errors.proposalSubmitCredits}
               value={form.proposalSubmitCredits}
               onChange={(value) => onChange("proposalSubmitCredits", value)}
             />
 
             <NumberInput
               label="Price"
+              required
+              error={errors.price}
               value={form.price}
               onChange={(value) => onChange("price", value)}
               step="1"
@@ -601,6 +658,8 @@ function PackageFormModal({
 
             <TextInput
               label="Currency"
+              required
+              error={errors.currency}
               value={form.currency}
               onChange={(value) => onChange("currency", value)}
               placeholder="VND"
@@ -608,6 +667,8 @@ function PackageFormModal({
 
             <NumberInput
               label="Display Order"
+              required
+              error={errors.displayOrder}
               value={form.displayOrder}
               onChange={(value) => onChange("displayOrder", value)}
             />
@@ -633,6 +694,8 @@ function PackageFormModal({
           {isEdit && (
             <TextArea
               label="Reason"
+              required
+              error={errors.reason}
               value={form.reason}
               onChange={(value) => onChange("reason", value)}
               placeholder="Example: Update package price for new policy."
@@ -672,6 +735,8 @@ function ReasonModal({
   confirmTone,
   reason,
   loading,
+  error = "",
+  modalError = "",
   onReasonChange,
   onClose,
   onConfirm,
@@ -690,8 +755,16 @@ function ReasonModal({
         </div>
 
         <div className="px-5 py-4">
+          {modalError && (
+            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {modalError}
+            </div>
+          )}
+
           <TextArea
             label="Reason"
+            required
+            error={error}
             value={reason}
             onChange={onReasonChange}
             placeholder="Enter admin reason."
@@ -770,47 +843,86 @@ function FilterSelect({ label, value, options, onChange }) {
   );
 }
 
-function TextInput({ label, value, onChange, placeholder }) {
+function TextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`h-10 w-full rounded-xl border bg-white/[0.04] px-3 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
 
-function NumberInput({ label, value, onChange, step = "1" }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="number"
-        min="0"
-        step={step}
+        type="text"
+        inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-10 w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-cyan-400/50"
+        className={`h-10 w-full rounded-xl border bg-white/[0.04] px-3 text-sm text-white outline-none ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 4,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -818,8 +930,16 @@ function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
         onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-3 py-2.5 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
@@ -889,31 +1009,57 @@ function EmptyState() {
 }
 
 function validateForm(form, isEdit = false) {
+  const errors = {};
+
   if (!String(form.packageName || "").trim()) {
-    return "Package name is required.";
+    errors.packageName = "Package Name is required.";
   }
 
   if (!String(form.description || "").trim()) {
-    return "Description is required.";
-  }
-
-  if (Number(form.proposalSubmitCredits) <= 0) {
-    return "Proposal submit credits must be greater than 0.";
-  }
-
-  if (Number(form.price) < 0) {
-    return "Price must be greater than or equal to 0.";
+    errors.description = "Description is required.";
   }
 
   if (!String(form.currency || "").trim()) {
-    return "Currency is required.";
+    errors.currency = "Currency is required.";
   }
 
-  if (isEdit && !String(form.reason || "").trim()) {
-    return "Reason is required when updating.";
+  ["proposalSubmitCredits", "price", "displayOrder"].forEach((field) => {
+    const value = String(form[field] ?? "").trim();
+
+    if (!value) {
+      errors[field] = `${formatLabel(field)} is required.`;
+      return;
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(value)) {
+      errors[field] = `${formatLabel(field)} must be a valid number.`;
+      return;
+    }
+
+    const number = Number(value);
+
+    if (field === "proposalSubmitCredits" && number <= 0) {
+      errors[field] = "Proposal Submit Credits must be greater than 0.";
+      return;
+    }
+
+    if (number < 0) {
+      errors[field] = `${formatLabel(field)} must be greater than or equal to 0.`;
+    }
+  });
+
+  const reason = String(form.reason || "").trim();
+
+  if (isEdit && !reason) {
+    errors.reason = "Reason is required when updating.";
+  } else if (isEdit && reason.length < 10) {
+    errors.reason = "Reason must be at least 10 characters.";
   }
 
-  return "";
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function formatMoney(value, currency = "VND") {

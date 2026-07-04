@@ -21,6 +21,9 @@ export default function AdminProposalCreditsPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [modalError, setModalError] = useState("");
+  const [adjustErrors, setAdjustErrors] = useState({});
+  const [freeSubmitError, setFreeSubmitError] = useState("");
 
   useEffect(() => {
     loadExperts();
@@ -85,6 +88,9 @@ export default function AdminProposalCreditsPage() {
       setActionLoading(true);
       setError("");
       setMessage("");
+      setModalError("");
+      setAdjustErrors({});
+      setFreeSubmitError("");
 
       const data = await adminProposalCreditService.getExpertCreditById(
         expert.expertProfileId
@@ -110,6 +116,9 @@ export default function AdminProposalCreditsPage() {
     setCreditDelta(1);
     setReason("");
     setFreeSubmitReason("");
+    setModalError("");
+    setAdjustErrors({});
+    setFreeSubmitError("");
   };
 
   const handleAdjustCredits = async (e) => {
@@ -117,13 +126,24 @@ export default function AdminProposalCreditsPage() {
 
     if (!selectedExpert) return;
 
-    if (Number(creditDelta) === 0) {
-      setError("Credit delta must be different from 0.");
-      return;
+    const errors = {};
+    const creditText = String(creditDelta ?? "").trim();
+
+    if (!creditText) {
+      errors.creditDelta = "Credit delta is required.";
+    } else if (!/^-?\d+$/.test(creditText)) {
+      errors.creditDelta = "Credit delta must be a whole number.";
+    } else if (Number(creditText) === 0) {
+      errors.creditDelta = "Credit delta must be different from 0.";
     }
 
     if (!reason.trim()) {
-      setError("Reason is required.");
+      errors.reason = "Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setAdjustErrors(errors);
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
@@ -134,13 +154,15 @@ export default function AdminProposalCreditsPage() {
 
       const updated = await adminProposalCreditService.adjustCredits(
         selectedExpert.expertProfileId,
-        creditDelta,
+        Number(creditText),
         reason
       );
 
       setSelectedExpert(updated);
       setMessage("Proposal credits updated successfully.");
       setReason("");
+      setAdjustErrors({});
+      setModalError("");
       await loadExperts();
     } catch (err) {
       setError(err?.response?.data?.message || "Cannot adjust credits.");
@@ -153,7 +175,8 @@ export default function AdminProposalCreditsPage() {
     if (!selectedExpert) return;
 
     if (!freeSubmitReason.trim()) {
-      setError("Reason is required for free submit update.");
+      setFreeSubmitError("Reason is required for free submit update.");
+      setModalError("Please fix the highlighted fields.");
       return;
     }
 
@@ -171,6 +194,8 @@ export default function AdminProposalCreditsPage() {
       setSelectedExpert(updated);
       setMessage("Free submit status updated successfully.");
       setFreeSubmitReason("");
+      setFreeSubmitError("");
+      setModalError("");
       await loadExperts();
     } catch (err) {
       setError(
@@ -426,6 +451,12 @@ export default function AdminProposalCreditsPage() {
                 </style>
 
                 <div className="admin-proposal-credit-modal space-y-6">
+                  {modalError && (
+                    <div className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm font-semibold text-red-200">
+                      {modalError}
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                     <MiniInfo
                       label="Current Credits"
@@ -454,21 +485,60 @@ export default function AdminProposalCreditsPage() {
                     </h3>
 
                     <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr]">
-                      <input
-                        type="number"
-                        value={creditDelta}
-                        onChange={(e) => setCreditDelta(e.target.value)}
-                        placeholder="Example: 5 or -2"
-                        className="rounded-2xl border border-white/10 bg-[#070b10] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
-                      />
+                      <div>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={creditDelta}
+                          onChange={(e) => {
+                            setCreditDelta(e.target.value);
+                            setModalError("");
+                            setAdjustErrors((prev) => ({
+                              ...prev,
+                              creditDelta: "",
+                            }));
+                          }}
+                          placeholder="Example: 5 or -2"
+                          className={`w-full rounded-2xl border bg-[#070b10] px-4 py-3 text-sm text-white outline-none ${
+                            adjustErrors.creditDelta
+                              ? "border-red-400/70 focus:border-red-400"
+                              : "border-white/10 focus:border-cyan-400/50"
+                          }`}
+                        />
 
-                      <textarea
-                        value={reason}
-                        onChange={(e) => setReason(e.target.value)}
-                        rows={3}
-                        placeholder="Reason for audit log"
-                        className="rounded-2xl border border-white/10 bg-[#070b10] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
-                      />
+                        {adjustErrors.creditDelta && (
+                          <p className="mt-2 text-xs font-semibold text-red-300">
+                            {adjustErrors.creditDelta}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <textarea
+                          value={reason}
+                          onChange={(e) => {
+                            setReason(e.target.value);
+                            setModalError("");
+                            setAdjustErrors((prev) => ({
+                              ...prev,
+                              reason: "",
+                            }));
+                          }}
+                          rows={3}
+                          placeholder="Reason for audit log"
+                          className={`w-full rounded-2xl border bg-[#070b10] px-4 py-3 text-sm text-white outline-none ${
+                            adjustErrors.reason
+                              ? "border-red-400/70 focus:border-red-400"
+                              : "border-white/10 focus:border-cyan-400/50"
+                          }`}
+                        />
+
+                        {adjustErrors.reason && (
+                          <p className="mt-2 text-xs font-semibold text-red-300">
+                            {adjustErrors.reason}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     <button
@@ -487,11 +557,25 @@ export default function AdminProposalCreditsPage() {
 
                     <textarea
                       value={freeSubmitReason}
-                      onChange={(e) => setFreeSubmitReason(e.target.value)}
+                      onChange={(e) => {
+                        setFreeSubmitReason(e.target.value);
+                        setModalError("");
+                        setFreeSubmitError("");
+                      }}
                       rows={3}
                       placeholder="Reason for audit log"
-                      className="mt-4 w-full rounded-2xl border border-white/10 bg-[#070b10] px-4 py-3 text-sm text-white outline-none focus:border-cyan-400/50"
+                      className={`mt-4 w-full rounded-2xl border bg-[#070b10] px-4 py-3 text-sm text-white outline-none ${
+                        freeSubmitError
+                          ? "border-red-400/70 focus:border-red-400"
+                          : "border-white/10 focus:border-cyan-400/50"
+                      }`}
                     />
+
+                    {freeSubmitError && (
+                      <p className="mt-2 text-xs font-semibold text-red-300">
+                        {freeSubmitError}
+                      </p>
+                    )}
 
                     <div className="mt-4 grid gap-3 md:grid-cols-2">
                       <button
