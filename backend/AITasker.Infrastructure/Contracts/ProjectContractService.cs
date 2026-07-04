@@ -4,6 +4,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Contracts
@@ -29,18 +30,24 @@ namespace AITasker.Infrastructure.Contracts
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private readonly IPlatformFeePolicyService _platformFeePolicyService;
         private readonly IContractFailureRollbackService _contractFailureRollbackService;
+        private readonly IWalletService _walletService;
 
         public ProjectContractService(
             AITaskerDbContext context,
             INotificationService notificationService,
             IMarketplaceWorkflowPolicyService workflowPolicyService,
-            IContractFailureRollbackService contractFailureRollbackService)
+            IPlatformFeePolicyService platformFeePolicyService,
+            IContractFailureRollbackService contractFailureRollbackService,
+            IWalletService walletService)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
+            _platformFeePolicyService = platformFeePolicyService;
             _contractFailureRollbackService = contractFailureRollbackService;
+            _walletService = walletService;
         }
 
         public async Task<ProjectContractResponse> CreateContractFromProposalAsync(
@@ -65,6 +72,7 @@ namespace AITasker.Infrastructure.Contracts
             ValidateProposalPriceWithinJobBudget(proposal.ProposedPrice, job);
 
             var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var expertFeeRate = await _platformFeePolicyService.GetExpertFeeRateAsync();
 
             var existingContract = await _context.ProjectContracts
                 .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
@@ -77,9 +85,9 @@ namespace AITasker.Infrastructure.Contracts
                     existingContract.ClientConfirmed = false;
                     existingContract.ExpertConfirmed = false;
                     existingContract.ConfirmedAt = null;
-                    existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
+                    existingContract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicy.ContractSignWindowHours);
                     existingContract.SignExpiredAt = null;
-                    existingContract.CreatedAt = DateTime.UtcNow;
+                    existingContract.CreatedAt = VietnamDateTime.Now;
                 }
 
                 if (string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
@@ -95,6 +103,15 @@ namespace AITasker.Infrastructure.Contracts
                     existingContract.PlatformFeeRate = ResolvePlatformFeeRate(clientProfile);
                     existingContract.PlatformFeeAmount = existingContract.FinalPrice * existingContract.PlatformFeeRate / 100m;
                     existingContract.TotalClientPayment = existingContract.FinalPrice + existingContract.PlatformFeeAmount;
+                    ApplyExpertFee(existingContract, expertFeeRate);
+
+                    if (!existingContract.ClientConfirmed &&
+                        !existingContract.ExpertConfirmed &&
+                        (existingContract.SignDeadlineAt == null || existingContract.SignDeadlineAt <= VietnamDateTime.Now))
+                    {
+                        existingContract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicy.ContractSignWindowHours);
+                        existingContract.SignExpiredAt = null;
+                    }
                 }
 
                 var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
@@ -136,7 +153,8 @@ namespace AITasker.Infrastructure.Contracts
                 "Milestone-based escrow payment managed through AITasker escrow.",
                 ContractSourceProposal,
                 null,
-                workflowPolicy.ContractSignWindowHours);
+                workflowPolicy.ContractSignWindowHours,
+                expertFeeRate);
 
             contract.SourceProposalVersionNumber = sourceProposalVersionNumber;
 
@@ -221,7 +239,17 @@ namespace AITasker.Infrastructure.Contracts
             var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
             var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
 
-            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= DateTime.UtcNow)
+            var workflowPolicyForDeadline = await _workflowPolicyService.GetActivePolicyAsync();
+
+            if (!contract.ClientConfirmed &&
+                !contract.ExpertConfirmed &&
+                (contract.SignDeadlineAt == null || contract.SignDeadlineAt.Value <= VietnamDateTime.Now))
+            {
+                contract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicyForDeadline.ContractSignWindowHours);
+                contract.SignExpiredAt = null;
+            }
+
+            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= VietnamDateTime.Now)
             {
                 throw new InvalidOperationException("Contract signing deadline has expired. The contract will be cancelled by the deadline job and the job will be reopened.");
             }
@@ -290,17 +318,23 @@ namespace AITasker.Infrastructure.Contracts
 
                 await EnsureContractMilestoneDraftsReadyAsync(contract);
 
+                // Client balance is checked once when Client signs and checked again here
+                // before Expert completes the contract. This prevents the project from
+                // becoming confirmed if Client spent the balance after signing.
+                await EnsureClientWalletCanCoverContractAsync(
+                    clientProfile.UserId,
+                    contract);
+
                 contract.ExpertConfirmed = true;
                 contract.Status = ContractStatusConfirmed;
-                contract.ConfirmedAt = DateTime.UtcNow;
+                contract.ConfirmedAt = VietnamDateTime.Now;
 
                 job.Status = JobStatusActive;
-                job.UpdatedAt = DateTime.UtcNow;
+                job.UpdatedAt = VietnamDateTime.Now;
 
-                var project = await EnsurePendingEscrowProjectExistsAsync(
+                var project = await EnsureProjectForAutomaticEscrowAsync(
                     contract,
-                    job,
-                    workflowPolicy.EscrowLockWindowHours);
+                    job);
 
                 await EnsureProjectMilestonesCreatedFromDraftsAsync(
                     contract,
@@ -308,11 +342,17 @@ namespace AITasker.Infrastructure.Contracts
 
                 await _context.SaveChangesAsync();
 
+                // New flow: after both parties have signed, escrow is locked automatically.
+                // FE no longer needs to call POST /api/escrows/projects/{projectId}/lock.
+                await _walletService.LockProjectEscrowAsync(
+                    clientProfile.UserId,
+                    project.ProjectId);
+
                 await _notificationService.CreateNotificationAsync(
                     clientProfile.UserId,
-                    "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Please lock escrow within {workflowPolicy.EscrowLockWindowHours} hours to start the project.",
-                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    "Contract fully confirmed and escrow locked",
+                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically and the project has started.",
+                    "CONTRACT_CONFIRMED_ESCROW_LOCKED",
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
                     relatedJobId: job.JobPostingId,
@@ -322,9 +362,9 @@ namespace AITasker.Infrastructure.Contracts
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Contract fully confirmed",
-                    $"The contract for job '{job.Title}' is fully confirmed. Waiting for Client to lock escrow before work starts.",
-                    "CONTRACT_CONFIRMED_PENDING_ESCROW",
+                    "Project started",
+                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically, so you can start working on milestones.",
+                    "CONTRACT_CONFIRMED_ESCROW_LOCKED",
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
                     relatedJobId: job.JobPostingId,
@@ -371,7 +411,7 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Cannot cancel contract after the project has started. Please use dispute or project cancellation flow.");
             }
 
-            var now = DateTime.UtcNow;
+            var now = VietnamDateTime.Now;
 
             await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
                 contract,
@@ -435,7 +475,8 @@ namespace AITasker.Infrastructure.Contracts
             string paymentTerms,
             string contractSource,
             string? chatSummary,
-            int contractSignWindowHours)
+            int contractSignWindowHours,
+            decimal expertFeeRate)
         {
             if (finalPrice <= 0)
             {
@@ -450,6 +491,8 @@ namespace AITasker.Infrastructure.Contracts
             var platformFeeRate = ResolvePlatformFeeRate(clientProfile);
             var platformFeeAmount = finalPrice * platformFeeRate / 100m;
             var totalClientPayment = finalPrice + platformFeeAmount;
+            var expertFeeAmount = CalculateExpertFee(finalPrice, expertFeeRate);
+            var expertReceivableAmount = finalPrice - expertFeeAmount;
 
             return new ProjectContract
             {
@@ -462,6 +505,9 @@ namespace AITasker.Infrastructure.Contracts
                 PlatformFeeRate = platformFeeRate,
                 PlatformFeeAmount = platformFeeAmount,
                 TotalClientPayment = totalClientPayment,
+                ExpertFeeRate = expertFeeRate,
+                ExpertFeeAmount = expertFeeAmount,
+                ExpertReceivableAmount = expertReceivableAmount,
                 FinalTimelineDays = finalTimelineDays,
 
                 Deliverables = deliverables,
@@ -473,30 +519,23 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = false,
                 ExpertConfirmed = false,
                 Status = ContractStatusDraft,
-                SignDeadlineAt = DateTime.UtcNow.AddHours(contractSignWindowHours),
+                SignDeadlineAt = VietnamDateTime.Now.AddHours(contractSignWindowHours),
                 SignExpiredAt = null,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
         }
 
-        private async Task<Project> EnsurePendingEscrowProjectExistsAsync(
+        private async Task<Project> EnsureProjectForAutomaticEscrowAsync(
             ProjectContract contract,
-            JobPosting job,
-            int escrowLockWindowHours)
+            JobPosting job)
         {
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
-            var now = DateTime.UtcNow;
-            var escrowDeadline = (contract.ConfirmedAt ?? now).AddHours(escrowLockWindowHours);
+            var now = VietnamDateTime.Now;
 
             if (existingProject != null)
             {
-                if (existingProject.EscrowLockDeadlineAt == null)
-                {
-                    existingProject.EscrowLockDeadlineAt = escrowDeadline;
-                }
-
                 return existingProject;
             }
 
@@ -509,9 +548,7 @@ namespace AITasker.Infrastructure.Contracts
                 Status = ProjectStatusPendingEscrow,
                 StartDate = null,
                 EndDate = null,
-                EscrowLockDeadlineAt = escrowDeadline,
                 EscrowLockedAt = null,
-                EscrowExpiredAt = null,
                 CreatedAt = now
             };
 
@@ -605,6 +642,24 @@ namespace AITasker.Infrastructure.Contracts
             {
                 throw new InvalidOperationException("Payment terms are required.");
             }
+        }
+
+
+        private static void ApplyExpertFee(ProjectContract contract, decimal expertFeeRate)
+        {
+            contract.ExpertFeeRate = expertFeeRate;
+            contract.ExpertFeeAmount = CalculateExpertFee(contract.FinalPrice, expertFeeRate);
+            contract.ExpertReceivableAmount = contract.FinalPrice - contract.ExpertFeeAmount;
+        }
+
+        private static decimal CalculateExpertFee(decimal amount, decimal expertFeeRate)
+        {
+            if (amount <= 0 || expertFeeRate <= 0)
+            {
+                return 0m;
+            }
+
+            return Math.Round(amount * expertFeeRate / 100m, 0, MidpointRounding.AwayFromZero);
         }
 
         private static decimal ResolvePlatformFeeRate(ClientProfile clientProfile)
@@ -851,7 +906,11 @@ namespace AITasker.Infrastructure.Contracts
                 PlatformFeeRate = contract.PlatformFeeRate,
                 PlatformFeeAmount = contract.PlatformFeeAmount,
                 TotalClientPayment = contract.TotalClientPayment,
-                ExpertReceivableAmount = contract.FinalPrice,
+                ExpertFeeRate = contract.ExpertFeeRate,
+                ExpertFeeAmount = contract.ExpertFeeAmount,
+                ExpertReceivableAmount = contract.ExpertReceivableAmount > 0
+                    ? contract.ExpertReceivableAmount
+                    : contract.FinalPrice - contract.ExpertFeeAmount,
                 FinalTimelineDays = contract.FinalTimelineDays,
                 Deliverables = contract.Deliverables,
                 AcceptanceCriteria = contract.AcceptanceCriteria,
@@ -867,9 +926,7 @@ namespace AITasker.Infrastructure.Contracts
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,
-                ProjectEscrowLockDeadlineAt = project?.EscrowLockDeadlineAt,
                 ProjectEscrowLockedAt = project?.EscrowLockedAt,
-                ProjectEscrowExpiredAt = project?.EscrowExpiredAt,
 
                 CreatedAt = contract.CreatedAt,
                 ConfirmedAt = contract.ConfirmedAt
@@ -981,7 +1038,7 @@ namespace AITasker.Infrastructure.Contracts
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            var now = DateTime.UtcNow;
+            var now = VietnamDateTime.Now;
             var previousDeadlineOffsetDays = 0;
             var milestones = new List<Milestone>();
 
@@ -1049,7 +1106,7 @@ namespace AITasker.Infrastructure.Contracts
                 ResubmitNote = "Initial proposal version generated before contract creation.",
                 CreatedByUserId = expertProfile.UserId,
                 CreatedAt = proposal.CreatedAt == default
-                    ? DateTime.UtcNow
+                    ? VietnamDateTime.Now
                     : proposal.CreatedAt
             };
 
@@ -1103,7 +1160,7 @@ namespace AITasker.Infrastructure.Contracts
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = VietnamDateTime.Now
                 })
                 .ToList();
 

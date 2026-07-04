@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
@@ -14,6 +15,7 @@ namespace AITasker.Infrastructure.Banking
         private const string WithdrawalStatusProcessing = "PROCESSING";
         private const string WithdrawalStatusPaid = "PAID";
         private const string WithdrawalStatusRejected = "REJECTED";
+        private const string WithdrawalStatusExpired = "EXPIRED";
 
         private const string BankVerificationStatusResolved = "BANK_NAME_RESOLVED";
 
@@ -23,16 +25,13 @@ namespace AITasker.Infrastructure.Banking
         private const string TransactionTypeWithdrawalFailed = "WITHDRAWAL_FAILED";
         private const string TransactionTypeWithdrawalHold = "WITHDRAWAL_HOLD";
         private const string TransactionTypeWithdrawalPaid = "WITHDRAWAL_PAID";
-        private const string TransactionTypeWithdrawalFee = "WITHDRAWAL_FEE";
         private const string TransactionTypeWithdrawalRejected = "WITHDRAWAL_REJECTED";
+        private const string TransactionTypeWithdrawalExpired = "WITHDRAWAL_EXPIRED";
         private const string TransactionTypeWithdrawalPayoutProcessing = "WITHDRAWAL_PAYOUT_PROCESSING";
         private const string TransactionTypeWithdrawalPayoutFailed = "WITHDRAWAL_PAYOUT_FAILED";
 
         private const string PayoutProviderManual = "MANUAL";
         private const string PayoutProviderPayOs = "PAYOS";
-
-        private const string PlatformWalletCodeMain = "MAIN";
-        private const string PlatformTransactionTypeWithdrawalFee = "WITHDRAWAL_FEE";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -82,7 +81,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Wallet not found.");
                 }
 
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
                 var bankResolveMessage = $"Bank name resolved to {resolvedBank.DisplayName} ({resolvedBank.Bin}) for PayOS payout. No external bank account verification is performed.";
 
                 if (wallet.AvailableBalance < request.Amount)
@@ -90,15 +89,8 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Insufficient available balance.");
                 }
 
-                var feeAmount = CalculateWithdrawalFee(
-                    request.Amount,
-                    workflowPolicy.WithdrawalFeeRate);
-                var netAmount = request.Amount - feeAmount;
-
-                if (netAmount <= 0)
-                {
-                    throw new InvalidOperationException("Net withdrawal amount must be greater than 0.");
-                }
+                var feeAmount = 0m;
+                var netAmount = request.Amount;
 
                 wallet.AvailableBalance -= request.Amount;
                 wallet.LockedBalance += request.Amount;
@@ -141,7 +133,7 @@ namespace AITasker.Infrastructure.Banking
                     Amount = -request.Amount,
                     Type = TransactionTypeWithdrawalHold,
                     Status = TransactionStatusSuccess,
-                    Description = $"[Withdrawal Hold] Held {request.Amount:N0} VND for Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}. Net payout: {netAmount:N0} VND. Fee: {feeAmount:N0} VND.",
+                    Description = $"[Withdrawal Hold] Held {request.Amount:N0} VND for Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}. Net payout: {netAmount:N0} VND.",
                     ReferenceId = referenceId,
                     CreatedAt = now
                 });
@@ -154,8 +146,10 @@ namespace AITasker.Infrastructure.Banking
                 await _notificationService.CreateNotificationAsync(
                     userId,
                     "Withdrawal request submitted",
-                    $"Your withdrawal request of {request.Amount:N0} VND has been submitted. Net payout: {netAmount:N0} VND. Fee: {feeAmount:N0} VND. The amount is held until admin processes the payout.",
-                    "WITHDRAWAL_REQUESTED");
+                    $"Your withdrawal request of {request.Amount:N0} VND has been submitted. Net payout: {netAmount:N0} VND. The amount is held until admin processes the payout.",
+                    "WITHDRAWAL_REQUESTED",
+                    relatedEntityType: "WITHDRAWAL",
+                    relatedEntityId: withdrawalRequest.WithdrawalRequestId);
 
                 return await BuildResponseAsync(withdrawalRequest.WithdrawalRequestId);
             }
@@ -172,15 +166,20 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<IReadOnlyList<WithdrawalResponse>> GetMyWithdrawalRequestsAsync(int userId)
         {
-            return await BuildWithdrawalQuery()
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var requests = await BuildWithdrawalQuery()
                 .Where(w => w.UserId == userId)
                 .OrderByDescending(w => w.CreatedAt)
-                .Select(w => MapWithdrawalResponse(w))
                 .ToListAsync();
+
+            return requests
+                .Select(w => MapWithdrawalResponse(w, workflowPolicy))
+                .ToList();
         }
 
         public async Task<IReadOnlyList<WithdrawalResponse>> GetAllWithdrawalRequestsAsync(string? status)
         {
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
             var query = BuildWithdrawalQuery();
 
             if (!string.IsNullOrWhiteSpace(status))
@@ -189,10 +188,13 @@ namespace AITasker.Infrastructure.Banking
                 query = query.Where(w => w.Status == normalizedStatus);
             }
 
-            return await query
+            var requests = await query
                 .OrderByDescending(w => w.CreatedAt)
-                .Select(w => MapWithdrawalResponse(w))
                 .ToListAsync();
+
+            return requests
+                .Select(w => MapWithdrawalResponse(w, workflowPolicy))
+                .ToList();
         }
 
         public async Task<WithdrawalResponse> ApproveWithdrawalAsync(
@@ -210,11 +212,12 @@ namespace AITasker.Infrastructure.Banking
                 var withdrawalRequest = await GetWithdrawalForUpdateAsync(withdrawalRequestId);
 
                 EnsurePending(withdrawalRequest, "Only pending withdrawal requests can be marked as paid.");
+                await EnsurePendingWithinApprovalWindowAsync(withdrawalRequest);
 
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
                 var payoutReferenceCode = request.PayoutReferenceCode!.Trim();
 
                 await FinalizePaidWithdrawalAsync(
@@ -234,8 +237,10 @@ namespace AITasker.Infrastructure.Banking
                 await _notificationService.CreateNotificationAsync(
                     withdrawalRequest.UserId,
                     "Withdrawal paid",
-                    $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been paid. Net payout: {withdrawalRequest.NetAmount:N0} VND. Fee: {withdrawalRequest.FeeAmount:N0} VND.",
-                    "WITHDRAWAL_PAID");
+                    $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been paid. Net payout: {withdrawalRequest.NetAmount:N0} VND.",
+                    "WITHDRAWAL_PAID",
+                    relatedEntityType: "WITHDRAWAL",
+                    relatedEntityId: withdrawalRequest.WithdrawalRequestId);
 
                 return await BuildResponseAsync(withdrawalRequestId);
             }
@@ -272,10 +277,14 @@ namespace AITasker.Infrastructure.Banking
                     var withdrawalRequest = await GetWithdrawalForUpdateAsync(withdrawalRequestId);
 
                     EnsurePending(withdrawalRequest, "Only pending withdrawal requests can be sent to PayOS payout.");
+                    await EnsurePendingWithinApprovalWindowAsync(withdrawalRequest);
 
                     var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                     EnsureHeldBalance(wallet, withdrawalRequest);
                     EnsurePayOsBankFieldsReady(withdrawalRequest);
+
+                    withdrawalRequest.FeeAmount = 0m;
+                    withdrawalRequest.NetAmount = withdrawalRequest.Amount;
 
                     referenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
                     idempotencyKey = string.IsNullOrWhiteSpace(withdrawalRequest.PayOsIdempotencyKey)
@@ -329,7 +338,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
 
                 withdrawalRequest.Status = WithdrawalStatusProcessing;
                 withdrawalRequest.PayoutProvider = PayoutProviderPayOs;
@@ -390,7 +399,9 @@ namespace AITasker.Infrastructure.Banking
                 response.UserId,
                 "Withdrawal payout processing",
                 $"Your withdrawal request of {response.Amount:N0} VND is being processed by PayOS. Net payout: {response.NetAmount:N0} VND.",
-                "WITHDRAWAL_PROCESSING");
+                "WITHDRAWAL_PROCESSING",
+                relatedEntityType: "WITHDRAWAL",
+                relatedEntityId: response.WithdrawalRequestId);
 
             return response;
         }
@@ -423,7 +434,7 @@ namespace AITasker.Infrastructure.Banking
 
                 var payout = await _payOsPayoutService.GetPayoutAsync(withdrawalRequest.PayOsPayoutId);
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
 
                 withdrawalRequest.PayOsApprovalState = payout.ApprovalState;
                 withdrawalRequest.PayOsRawResponse = payout.RawResponse;
@@ -465,8 +476,10 @@ namespace AITasker.Infrastructure.Banking
                     await _notificationService.CreateNotificationAsync(
                         withdrawalRequest.UserId,
                         "Withdrawal paid",
-                        $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been paid through PayOS. Net payout: {withdrawalRequest.NetAmount:N0} VND. Fee: {withdrawalRequest.FeeAmount:N0} VND.",
-                        "WITHDRAWAL_PAID");
+                        $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been paid through PayOS. Net payout: {withdrawalRequest.NetAmount:N0} VND.",
+                        "WITHDRAWAL_PAID",
+                        relatedEntityType: "WITHDRAWAL",
+                        relatedEntityId: withdrawalRequest.WithdrawalRequestId);
                 }
                 else if (IsPayOsFailedState(payoutState) || IsPayOsFailedState(transactionState))
                 {
@@ -508,7 +521,9 @@ namespace AITasker.Infrastructure.Banking
                         withdrawalRequest.UserId,
                         "Withdrawal failed",
                         $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND failed during PayOS payout. The held amount has been returned to your available balance. Reason: {failureReason}",
-                        "WITHDRAWAL_FAILED");
+                        "WITHDRAWAL_FAILED",
+                        relatedEntityType: "WITHDRAWAL",
+                        relatedEntityId: withdrawalRequest.WithdrawalRequestId);
                 }
                 else
                 {
@@ -544,11 +559,12 @@ namespace AITasker.Infrastructure.Banking
                 var withdrawalRequest = await GetWithdrawalForUpdateAsync(withdrawalRequestId);
 
                 EnsurePending(withdrawalRequest, "Only pending withdrawal requests can be rejected.");
+                await EnsurePendingWithinApprovalWindowAsync(withdrawalRequest);
 
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
                 var referenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
 
                 wallet.LockedBalance -= withdrawalRequest.Amount;
@@ -585,7 +601,9 @@ namespace AITasker.Infrastructure.Banking
                     string.IsNullOrWhiteSpace(withdrawalRequest.AdminNote)
                         ? $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been rejected. The held amount has been returned to your available balance."
                         : $"Your withdrawal request of {withdrawalRequest.Amount:N0} VND has been rejected. Reason: {withdrawalRequest.AdminNote}. The held amount has been returned to your available balance.",
-                    "WITHDRAWAL_REJECTED");
+                    "WITHDRAWAL_REJECTED",
+                    relatedEntityType: "WITHDRAWAL",
+                    relatedEntityId: withdrawalRequest.WithdrawalRequestId);
 
                 return await BuildResponseAsync(withdrawalRequestId);
             }
@@ -609,6 +627,9 @@ namespace AITasker.Infrastructure.Banking
             string payoutProvider,
             string? adminNote)
         {
+            withdrawalRequest.FeeAmount = 0m;
+            withdrawalRequest.NetAmount = withdrawalRequest.Amount;
+
             wallet.LockedBalance -= withdrawalRequest.Amount;
             wallet.UpdatedAt = now;
 
@@ -634,29 +655,6 @@ namespace AITasker.Infrastructure.Banking
                 CreatedAt = now
             });
 
-            if (withdrawalRequest.FeeAmount > 0)
-            {
-                var feeReferenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
-
-                _context.Transactions.Add(new Transaction
-                {
-                    UserId = withdrawalRequest.UserId,
-                    ProjectId = null,
-                    MilestoneId = null,
-                    EscrowId = null,
-                    Amount = -withdrawalRequest.FeeAmount,
-                    Type = TransactionTypeWithdrawalFee,
-                    Status = TransactionStatusSuccess,
-                    Description = $"[Withdrawal Fee] Collected {withdrawalRequest.FeeAmount:N0} VND withdrawal fee for Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}.",
-                    ReferenceId = feeReferenceId,
-                    CreatedAt = now
-                });
-
-                await RecordPlatformWithdrawalFeeAsync(
-                    withdrawalRequest,
-                    feeReferenceId,
-                    now);
-            }
         }
 
         private static VietnamBankInfo ResolveWithdrawalBank(CreateWithdrawalRequest request)
@@ -720,12 +718,6 @@ namespace AITasker.Infrastructure.Banking
             }
         }
 
-        private static decimal CalculateWithdrawalFee(
-            decimal amount,
-            decimal withdrawalFeeRate)
-        {
-            return Math.Round(amount * withdrawalFeeRate, 0, MidpointRounding.AwayFromZero);
-        }
 
         private static string? NormalizeOptionalText(string? value)
         {
@@ -807,6 +799,18 @@ namespace AITasker.Infrastructure.Banking
             withdrawalRequest.BankName = resolvedBank.DisplayName;
         }
 
+
+        private async Task EnsurePendingWithinApprovalWindowAsync(WithdrawalRequest withdrawalRequest)
+        {
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var approvalDeadlineAt = withdrawalRequest.CreatedAt.AddHours(workflowPolicy.WithdrawalApprovalWindowHours);
+
+            if (approvalDeadlineAt <= VietnamDateTime.Now)
+            {
+                throw new InvalidOperationException("Withdrawal request expired before admin processing. Wait for the expiry job to return the held amount, or run the expiry check first.");
+            }
+        }
+
         private async Task<WithdrawalRequest> GetWithdrawalForUpdateAsync(int withdrawalRequestId)
         {
             var withdrawalRequest = await _context.WithdrawalRequests
@@ -833,76 +837,6 @@ namespace AITasker.Infrastructure.Banking
             return wallet;
         }
 
-        private async Task RecordPlatformWithdrawalFeeAsync(
-            WithdrawalRequest withdrawalRequest,
-            string referenceId,
-            DateTime now)
-        {
-            if (withdrawalRequest.FeeAmount <= 0)
-            {
-                return;
-            }
-
-            var alreadyRecorded = await _context.PlatformTransactions.AnyAsync(x =>
-                x.Type == PlatformTransactionTypeWithdrawalFee &&
-                x.Status == TransactionStatusSuccess &&
-                x.ReferenceId == referenceId);
-
-            if (alreadyRecorded)
-            {
-                return;
-            }
-
-            var platformWallet = await GetOrCreateMainPlatformWalletAsync(now);
-
-            platformWallet.AvailableBalance += withdrawalRequest.FeeAmount;
-            platformWallet.TotalRevenue += withdrawalRequest.FeeAmount;
-            platformWallet.WithdrawalFeeRevenue += withdrawalRequest.FeeAmount;
-            platformWallet.UpdatedAt = now;
-
-            _context.PlatformTransactions.Add(new PlatformTransaction
-            {
-                PlatformWallet = platformWallet,
-                ProjectId = null,
-                ContractId = null,
-                WithdrawalRequestId = withdrawalRequest.WithdrawalRequestId,
-                UserId = withdrawalRequest.UserId,
-                Type = PlatformTransactionTypeWithdrawalFee,
-                Amount = withdrawalRequest.FeeAmount,
-                Status = TransactionStatusSuccess,
-                Description = $"[Withdrawal Fee] Collected withdrawal fee from Withdrawal Request ID {withdrawalRequest.WithdrawalRequestId}",
-                ReferenceId = referenceId,
-                CreatedAt = now
-            });
-        }
-
-        private async Task<PlatformWallet> GetOrCreateMainPlatformWalletAsync(DateTime now)
-        {
-            var platformWallet = await _context.PlatformWallets
-                .FirstOrDefaultAsync(x => x.WalletCode == PlatformWalletCodeMain);
-
-            if (platformWallet != null)
-            {
-                return platformWallet;
-            }
-
-            platformWallet = new PlatformWallet
-            {
-                WalletCode = PlatformWalletCodeMain,
-                AvailableBalance = 0,
-                TotalRevenue = 0,
-                PlatformFeeRevenue = 0,
-                WithdrawalFeeRevenue = 0,
-                AdjustmentBalance = 0,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-
-            _context.PlatformWallets.Add(platformWallet);
-
-            return platformWallet;
-        }
-
         private IQueryable<WithdrawalRequest> BuildWithdrawalQuery()
         {
             return _context.WithdrawalRequests
@@ -912,14 +846,23 @@ namespace AITasker.Infrastructure.Banking
 
         private async Task<WithdrawalResponse> BuildResponseAsync(int withdrawalRequestId)
         {
-            return await BuildWithdrawalQuery()
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var withdrawalRequest = await BuildWithdrawalQuery()
                 .Where(w => w.WithdrawalRequestId == withdrawalRequestId)
-                .Select(w => MapWithdrawalResponse(w))
                 .FirstAsync();
+
+            return MapWithdrawalResponse(withdrawalRequest, workflowPolicy);
         }
 
-        private static WithdrawalResponse MapWithdrawalResponse(WithdrawalRequest w)
+        private static WithdrawalResponse MapWithdrawalResponse(WithdrawalRequest w, MarketplaceWorkflowPolicyResponse policy)
         {
+            var approvalDeadlineAt = w.Status == WithdrawalStatusPending
+                ? w.CreatedAt.AddHours(policy.WithdrawalApprovalWindowHours)
+                : (DateTime?)null;
+            var payoutSyncWarningAt = w.Status == WithdrawalStatusProcessing && w.PayoutRequestedAt.HasValue
+                ? w.PayoutRequestedAt.Value.AddHours(policy.WithdrawalPayoutSyncWarningHours)
+                : (DateTime?)null;
+
             return new WithdrawalResponse
             {
                 WithdrawalRequestId = w.WithdrawalRequestId,
@@ -947,6 +890,10 @@ namespace AITasker.Infrastructure.Banking
                 PayoutConfirmedAt = w.PayoutConfirmedAt,
                 FailureReason = w.FailureReason,
                 Status = w.Status,
+                ApprovalDeadlineAt = approvalDeadlineAt,
+                IsApprovalExpired = approvalDeadlineAt.HasValue && approvalDeadlineAt.Value <= VietnamDateTime.Now,
+                PayoutSyncWarningAt = payoutSyncWarningAt,
+                IsPayoutSyncOverdue = payoutSyncWarningAt.HasValue && payoutSyncWarningAt.Value <= VietnamDateTime.Now,
                 AdminNote = w.AdminNote,
                 CreatedAt = w.CreatedAt,
                 ProcessedAt = w.ProcessedAt,

@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Projects
@@ -78,9 +79,6 @@ namespace AITasker.Infrastructure.Projects
                 return await MapToProjectResponseAsync(existingProject);
             }
 
-            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
-            var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
-
             var project = new Project
             {
                 ContractId = contract.ContractId,
@@ -90,10 +88,8 @@ namespace AITasker.Infrastructure.Projects
                 Status = ProjectStatusPendingEscrow,
                 StartDate = null,
                 EndDate = null,
-                EscrowLockDeadlineAt = escrowDeadline,
                 EscrowLockedAt = null,
-                EscrowExpiredAt = null,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
 
             _context.Projects.Add(project);
@@ -162,8 +158,6 @@ namespace AITasker.Infrastructure.Projects
                     $"Milestone total amount ({totalAmount}) must equal contract final price ({contract.FinalPrice}).");
             }
 
-            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
-
             using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -173,8 +167,6 @@ namespace AITasker.Infrastructure.Projects
 
                 if (project == null)
                 {
-                    var escrowDeadline = (contract.ConfirmedAt ?? DateTime.UtcNow).AddHours(workflowPolicy.EscrowLockWindowHours);
-
                     project = new Project
                     {
                         ContractId = contract.ContractId,
@@ -184,10 +176,8 @@ namespace AITasker.Infrastructure.Projects
                         Status = ProjectStatusPendingEscrow,
                         StartDate = null,
                         EndDate = null,
-                        EscrowLockDeadlineAt = escrowDeadline,
                         EscrowLockedAt = null,
-                        EscrowExpiredAt = null,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = VietnamDateTime.Now
                     };
 
                     _context.Projects.Add(project);
@@ -495,13 +485,13 @@ namespace AITasker.Infrastructure.Projects
                 Deadline = request.Deadline,
                 PaymentStatus = PaymentStatusPending,
                 Status = MilestoneStatusPending,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
         }
 
         private static int CalculateDurationDaysFromDeadline(DateTime deadline)
         {
-            var durationDays = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalDays);
+            var durationDays = (int)Math.Ceiling((deadline - VietnamDateTime.Now).TotalDays);
 
             return Math.Max(1, durationDays);
         }
@@ -563,7 +553,7 @@ namespace AITasker.Infrastructure.Projects
                 throw new InvalidOperationException("Milestone order index must be greater than 0.");
             }
 
-            if (request.Deadline <= DateTime.UtcNow)
+            if (request.Deadline <= VietnamDateTime.Now)
             {
                 throw new InvalidOperationException("Milestone deadline must be in the future.");
             }
@@ -590,11 +580,6 @@ namespace AITasker.Infrastructure.Projects
 
         private static void EnsureProjectCanEditMilestones(Project project)
         {
-            if (project.EscrowExpiredAt != null)
-            {
-                throw new InvalidOperationException(
-                    "Cannot edit milestones because escrow lock deadline already expired.");
-            }
 
             if (project.EscrowLockedAt != null)
             {
@@ -648,11 +633,6 @@ namespace AITasker.Infrastructure.Projects
                     "Project cannot be completed because escrow was not locked.");
             }
 
-            if (project.EscrowExpiredAt != null)
-            {
-                throw new InvalidOperationException(
-                    "Project cannot be completed because escrow lock deadline expired before project start.");
-            }
         }
 
         private static bool IsMilestoneFinished(Milestone milestone)
@@ -858,9 +838,7 @@ namespace AITasker.Infrastructure.Projects
                 ContractStatus = contract.Status,
                 StartDate = project.StartDate,
                 EndDate = project.EndDate,
-                EscrowLockDeadlineAt = project.EscrowLockDeadlineAt,
                 EscrowLockedAt = project.EscrowLockedAt,
-                EscrowExpiredAt = project.EscrowExpiredAt,
                 CreatedAt = project.CreatedAt,
                 Milestones = milestoneResponses
             };
@@ -921,7 +899,7 @@ namespace AITasker.Infrastructure.Projects
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = DateTime.UtcNow;
+            job.UpdatedAt = VietnamDateTime.Now;
         }
     }
 }

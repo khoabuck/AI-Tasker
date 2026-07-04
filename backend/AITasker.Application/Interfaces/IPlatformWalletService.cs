@@ -17,5 +17,13 @@ namespace AITasker.Application.Interfaces
             decimal amount,
             string referenceId,
             DateTime createdAt);
+
+        Task RecordExpertServiceFeeAsync(
+            int projectId,
+            int contractId,
+            int expertUserId,
+            decimal amount,
+            string referenceId,
+            DateTime createdAt);
     }
 }

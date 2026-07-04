@@ -25,6 +25,12 @@ namespace AITasker.Domain.Entities
 
         public decimal TotalClientPayment { get; set; }
 
+        public decimal ExpertFeeRate { get; set; }
+
+        public decimal ExpertFeeAmount { get; set; }
+
+        public decimal ExpertReceivableAmount { get; set; }
+
         public int FinalTimelineDays { get; set; }
 
         public string Deliverables { get; set; } = string.Empty;

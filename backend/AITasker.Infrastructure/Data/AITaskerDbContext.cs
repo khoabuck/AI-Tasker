@@ -90,6 +90,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<Review> Reviews { get; set; }
 
+    public DbSet<ReviewReport> ReviewReports { get; set; }
+
     public DbSet<Notification> Notifications { get; set; }
 
     public DbSet<JobCreditPackage> JobCreditPackages => Set<JobCreditPackage>();
@@ -282,13 +284,26 @@ public class AITaskerDbContext : DbContext
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(x => x.WithdrawalFeeRate)
-                .HasColumnType("decimal(18,4)");
+                .HasColumnType("decimal(18,4)")
+                .HasDefaultValue(0m);
 
             entity.Property(x => x.MinimumDepositAmount)
                 .HasColumnType("decimal(18,2)");
 
             entity.Property(x => x.MaximumDepositAmount)
                 .HasColumnType("decimal(18,2)");
+
+            entity.Property(x => x.DepositOrderExpireMinutes)
+                .HasDefaultValue(3)
+                .IsRequired();
+
+            entity.Property(x => x.WithdrawalApprovalWindowHours)
+                .HasDefaultValue(2)
+                .IsRequired();
+
+            entity.Property(x => x.WithdrawalPayoutSyncWarningHours)
+                .HasDefaultValue(24)
+                .IsRequired();
 
             entity.Property(x => x.UpdateReason)
                 .HasMaxLength(500);
@@ -1027,46 +1042,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(x => x.ProfileScore)
                 .HasColumnType("decimal(5,2)")
-                .IsRequired();
-
-            entity.Property(x => x.ProfileCompletenessScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.AiSkillRelevanceScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.ExperienceCredibilityScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.PortfolioEvidenceScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.GitHubEvidenceScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.LinkedInEvidenceScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.CertificateEvidenceScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
-                .IsRequired();
-
-            entity.Property(x => x.TrustRiskScore)
-                .HasColumnType("decimal(5,2)")
-                .HasDefaultValue(0)
                 .IsRequired();
 
             entity.Property(x => x.Level)
@@ -1900,7 +1875,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_ProjectContracts_Amounts",
-                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [FinalTimelineDays] > 0");
+                "[FinalPrice] > 0 AND [PlatformFeeRate] >= 0 AND [PlatformFeeAmount] >= 0 AND [TotalClientPayment] = [FinalPrice] + [PlatformFeeAmount] AND [ExpertFeeRate] >= 0 AND [ExpertFeeAmount] >= 0 AND [ExpertReceivableAmount] = [FinalPrice] - [ExpertFeeAmount] AND [FinalTimelineDays] > 0");
             });
 
             entity.HasKey(e => e.ContractId);
@@ -1935,6 +1910,21 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.TotalClientPayment)
                 .HasColumnType("decimal(18,2)")
+                .IsRequired();
+
+            entity.Property(e => e.ExpertFeeRate)
+                .HasColumnType("decimal(5,2)")
+                .HasDefaultValue(15.00m)
+                .IsRequired();
+
+            entity.Property(e => e.ExpertFeeAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(0m)
+                .IsRequired();
+
+            entity.Property(e => e.ExpertReceivableAmount)
+                .HasColumnType("decimal(18,2)")
+                .HasDefaultValue(0m)
                 .IsRequired();
 
             entity.Property(e => e.Deliverables)
@@ -2080,11 +2070,7 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
-            entity.Property(e => e.EscrowLockDeadlineAt);
-
             entity.Property(e => e.EscrowLockedAt);
-
-            entity.Property(e => e.EscrowExpiredAt);
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
@@ -2756,6 +2742,9 @@ public class AITaskerDbContext : DbContext
             entity.Property(e => e.FileUrl)
                 .HasMaxLength(500);
 
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(1000);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 
@@ -2795,6 +2784,18 @@ public class AITaskerDbContext : DbContext
             entity.Property(r => r.Comment)
                 .HasMaxLength(1000);
 
+            entity.Property(r => r.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("VISIBLE")
+                .IsRequired();
+
+            entity.Property(r => r.HiddenReason)
+                .HasMaxLength(1000);
+
+            entity.Property(r => r.HiddenAt);
+
+            entity.Property(r => r.HiddenByAdminId);
+
             entity.Property(r => r.CreatedAt)
                 .IsRequired();
 
@@ -2804,6 +2805,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(r => r.ExpertId);
 
             entity.HasIndex(r => r.ClientId);
+
+            entity.HasIndex(r => r.Status);
 
             entity.HasOne(r => r.Project)
                 .WithMany()
@@ -2818,6 +2821,70 @@ public class AITaskerDbContext : DbContext
             entity.HasOne(r => r.Expert)
                 .WithMany()
                 .HasForeignKey(r => r.ExpertId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(r => r.HiddenByAdmin)
+                .WithMany()
+                .HasForeignKey(r => r.HiddenByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // ReviewReport
+        // =========================
+        modelBuilder.Entity<ReviewReport>(entity =>
+        {
+            entity.ToTable("ReviewReports");
+
+            entity.HasKey(x => x.ReviewReportId);
+
+            entity.Property(x => x.Reason)
+                .HasMaxLength(1000)
+                .IsRequired();
+
+            entity.Property(x => x.Status)
+                .HasMaxLength(20)
+                .HasDefaultValue("OPEN")
+                .IsRequired();
+
+            entity.Property(x => x.AdminDecision)
+                .HasMaxLength(1000);
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.ResolvedAt);
+
+            entity.HasIndex(x => x.ReviewId);
+
+            entity.HasIndex(x => x.ProjectId);
+
+            entity.HasIndex(x => x.ExpertUserId);
+
+            entity.HasIndex(x => x.Status);
+
+            entity.HasIndex(x => new { x.ReviewId, x.Status })
+                .IsUnique()
+                .HasFilter("[Status] = 'OPEN'");
+
+            entity.HasOne(x => x.Review)
+                .WithMany(x => x.ReviewReports)
+                .HasForeignKey(x => x.ReviewId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.Project)
+                .WithMany()
+                .HasForeignKey(x => x.ProjectId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ExpertUser)
+                .WithMany()
+                .HasForeignKey(x => x.ExpertUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(x => x.ResolvedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.ResolvedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
