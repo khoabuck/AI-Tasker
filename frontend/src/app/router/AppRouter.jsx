@@ -12,7 +12,7 @@ import ForgotPasswordPage from "../../modules/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
-import SetupProfilePage from "../../modules/auth/pages/SetupProfilepage";
+import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
 import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
