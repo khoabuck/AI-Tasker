@@ -244,8 +244,8 @@ export default function SetupProfilePage() {
       const taxClean = business.taxCode.replace(/-/g, "");
       if (!business.taxCode.trim()) {
         errors.taxCode = "Tax code is required.";
-      } else if (!/^\d{10}$/.test(taxClean) && !/^\d{13}$/.test(taxClean)) {
-        errors.taxCode = "Tax code must have 10 or 13 digits.";
+      } else if (!/^\d{10}$/.test(taxClean)) {
+        errors.taxCode = "Tax code must have 10 digits.";
       }
 
       if (!business.industry.trim()) errors.industry = "Industry is required.";

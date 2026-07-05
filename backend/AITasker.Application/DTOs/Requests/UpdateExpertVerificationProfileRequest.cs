@@ -2,9 +2,9 @@ namespace AITasker.Application.DTOs.Requests;
 
 public class UpdateExpertVerificationProfileRequest
 {
-    public string Skills { get; set; } = string.Empty;
+    public string? Skills { get; set; }
 
-    public int YearsOfExperience { get; set; }
+    public int? YearsOfExperience { get; set; }
 
     public string? PortfolioUrl { get; set; }
 

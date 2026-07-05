@@ -2,6 +2,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
@@ -11,6 +12,7 @@ namespace AITasker.Infrastructure.Banking
         private const string MainWalletCode = "MAIN";
         private const string TransactionStatusSuccess = "SUCCESS";
         private const string TransactionTypePlatformFee = "PLATFORM_FEE";
+        private const string TransactionTypeExpertServiceFee = "EXPERT_SERVICE_FEE";
 
         private readonly AITaskerDbContext _context;
 
@@ -21,7 +23,7 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<PlatformWalletResponse> GetPlatformWalletAsync()
         {
-            var wallet = await GetOrCreateMainWalletAsync(DateTime.UtcNow);
+            var wallet = await GetOrCreateMainWalletAsync(VietnamDateTime.Now);
 
             await _context.SaveChangesAsync();
 
@@ -102,6 +104,60 @@ namespace AITasker.Infrastructure.Banking
                 Amount = amount,
                 Status = TransactionStatusSuccess,
                 Description = $"[Platform Fee] Collected platform fee for Project ID {projectId}",
+                ReferenceId = normalizedReferenceId,
+                CreatedAt = createdAt
+            });
+        }
+
+
+        public async Task RecordExpertServiceFeeAsync(
+            int projectId,
+            int contractId,
+            int expertUserId,
+            decimal amount,
+            string referenceId,
+            DateTime createdAt)
+        {
+            if (amount <= 0)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(referenceId))
+            {
+                throw new InvalidOperationException("Expert service fee reference id is required.");
+            }
+
+            var normalizedReferenceId = referenceId.Trim().ToUpperInvariant();
+
+            var alreadyRecorded = await _context.PlatformTransactions.AnyAsync(x =>
+                x.Type == TransactionTypeExpertServiceFee &&
+                x.Status == TransactionStatusSuccess &&
+                x.ReferenceId == normalizedReferenceId);
+
+            if (alreadyRecorded)
+            {
+                return;
+            }
+
+            var wallet = await GetOrCreateMainWalletAsync(createdAt);
+
+            wallet.AvailableBalance += amount;
+            wallet.TotalRevenue += amount;
+            wallet.PlatformFeeRevenue += amount;
+            wallet.UpdatedAt = createdAt;
+
+            _context.PlatformTransactions.Add(new PlatformTransaction
+            {
+                PlatformWallet = wallet,
+                ProjectId = projectId,
+                ContractId = contractId,
+                WithdrawalRequestId = null,
+                UserId = expertUserId,
+                Type = TransactionTypeExpertServiceFee,
+                Amount = amount,
+                Status = TransactionStatusSuccess,
+                Description = $"[Expert Service Fee] Collected expert service fee for Project ID {projectId}",
                 ReferenceId = normalizedReferenceId,
                 CreatedAt = createdAt
             });

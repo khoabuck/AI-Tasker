@@ -4,6 +4,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Services;
@@ -15,14 +16,16 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
     private const int DefaultFreeProposalSubmitCount = 5;
     private const int DefaultResubmitNoteMaxLength = 1000;
     private const int DefaultContractSignWindowHours = 24;
-    private const int DefaultEscrowLockWindowHours = 24;
     private const int DefaultExpertMaxActiveProjects = 3;
     private const int DefaultDeliverableReviewWindowHours = 24;
     private const int DefaultDeliverableAutoApproveGraceHours = 6;
     private const decimal DefaultMinimumWithdrawalAmount = 1000m;
-    private const decimal DefaultWithdrawalFeeRate = 0.10m;
+    private const decimal DefaultWithdrawalFeeRate = 0m;
     private const decimal DefaultMinimumDepositAmount = 1000m;
     private const decimal DefaultMaximumDepositAmount = 500000000m;
+    private const int DefaultDepositOrderExpireMinutes = 3;
+    private const int DefaultWithdrawalApprovalWindowHours = 2;
+    private const int DefaultWithdrawalPayoutSyncWarningHours = 24;
     private const int DefaultDisputeLostWarningThreshold = 3;
 
     private readonly AITaskerDbContext _context;
@@ -59,18 +62,21 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.FreeProposalSubmitCount = request.FreeProposalSubmitCount;
         policy.ResubmitNoteMaxLength = request.ResubmitNoteMaxLength;
         policy.ContractSignWindowHours = request.ContractSignWindowHours;
-        policy.EscrowLockWindowHours = request.EscrowLockWindowHours;
         policy.ExpertMaxActiveProjects = request.ExpertMaxActiveProjects;
         policy.DeliverableReviewWindowHours = request.DeliverableReviewWindowHours;
         policy.DeliverableAutoApproveGraceHours = request.DeliverableAutoApproveGraceHours;
         policy.MinimumWithdrawalAmount = request.MinimumWithdrawalAmount;
-        policy.WithdrawalFeeRate = request.WithdrawalFeeRate;
+        // Withdrawal fee is disabled by business rule. Keep the legacy field at 0.
+        policy.WithdrawalFeeRate = 0m;
         policy.MinimumDepositAmount = request.MinimumDepositAmount;
         policy.MaximumDepositAmount = request.MaximumDepositAmount;
+        policy.DepositOrderExpireMinutes = request.DepositOrderExpireMinutes ?? policy.DepositOrderExpireMinutes;
+        policy.WithdrawalApprovalWindowHours = request.WithdrawalApprovalWindowHours ?? policy.WithdrawalApprovalWindowHours;
+        policy.WithdrawalPayoutSyncWarningHours = request.WithdrawalPayoutSyncWarningHours ?? policy.WithdrawalPayoutSyncWarningHours;
         policy.DisputeLostWarningThreshold = request.DisputeLostWarningThreshold;
         policy.UpdatedByAdminId = adminId;
         policy.UpdateReason = request.Reason?.Trim();
-        policy.UpdatedAt = DateTime.UtcNow;
+        policy.UpdatedAt = VietnamDateTime.Now;
 
         var newValue = JsonSerializer.Serialize(MapToResponse(policy));
 
@@ -109,6 +115,8 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
 
     private static void NormalizeLegacyDefaultPolicy(MarketplaceWorkflowPolicy policy)
     {
+        var changed = false;
+
         // Older seed data used 1 free proposal submit while current service/entity defaults use 5.
         // Only normalize untouched default rows so an admin setting of 1 is never overwritten.
         if (policy.UpdatedByAdminId == null &&
@@ -116,7 +124,26 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             string.Equals(policy.UpdateReason, "Default marketplace workflow policy.", StringComparison.OrdinalIgnoreCase))
         {
             policy.FreeProposalSubmitCount = DefaultFreeProposalSubmitCount;
-            policy.UpdatedAt = DateTime.UtcNow;
+            changed = true;
+        }
+
+        if (policy.ProposalMilestoneLimit <= 0) { policy.ProposalMilestoneLimit = DefaultProposalMilestoneLimit; changed = true; }
+        if (policy.ResubmitNoteMaxLength <= 0) { policy.ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength; changed = true; }
+        if (policy.ContractSignWindowHours <= 0) { policy.ContractSignWindowHours = DefaultContractSignWindowHours; changed = true; }
+        if (policy.ExpertMaxActiveProjects <= 0) { policy.ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects; changed = true; }
+        if (policy.DeliverableReviewWindowHours <= 0) { policy.DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours; changed = true; }
+        if (policy.DeliverableAutoApproveGraceHours <= 0) { policy.DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours; changed = true; }
+        if (policy.MinimumDepositAmount <= 0) { policy.MinimumDepositAmount = DefaultMinimumDepositAmount; changed = true; }
+        if (policy.MaximumDepositAmount <= policy.MinimumDepositAmount) { policy.MaximumDepositAmount = DefaultMaximumDepositAmount; changed = true; }
+        if (policy.WithdrawalFeeRate != 0m) { policy.WithdrawalFeeRate = DefaultWithdrawalFeeRate; changed = true; }
+        if (policy.DepositOrderExpireMinutes <= 0) { policy.DepositOrderExpireMinutes = DefaultDepositOrderExpireMinutes; changed = true; }
+        if (policy.WithdrawalApprovalWindowHours <= 0) { policy.WithdrawalApprovalWindowHours = DefaultWithdrawalApprovalWindowHours; changed = true; }
+        if (policy.WithdrawalPayoutSyncWarningHours <= 0) { policy.WithdrawalPayoutSyncWarningHours = DefaultWithdrawalPayoutSyncWarningHours; changed = true; }
+        if (policy.DisputeLostWarningThreshold <= 0) { policy.DisputeLostWarningThreshold = DefaultDisputeLostWarningThreshold; changed = true; }
+
+        if (changed)
+        {
+            policy.UpdatedAt = VietnamDateTime.Now;
         }
     }
 
@@ -129,7 +156,6 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             FreeProposalSubmitCount = DefaultFreeProposalSubmitCount,
             ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength,
             ContractSignWindowHours = DefaultContractSignWindowHours,
-            EscrowLockWindowHours = DefaultEscrowLockWindowHours,
             ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
             DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours,
@@ -137,11 +163,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             WithdrawalFeeRate = DefaultWithdrawalFeeRate,
             MinimumDepositAmount = DefaultMinimumDepositAmount,
             MaximumDepositAmount = DefaultMaximumDepositAmount,
+            DepositOrderExpireMinutes = DefaultDepositOrderExpireMinutes,
+            WithdrawalApprovalWindowHours = DefaultWithdrawalApprovalWindowHours,
+            WithdrawalPayoutSyncWarningHours = DefaultWithdrawalPayoutSyncWarningHours,
             DisputeLostWarningThreshold = DefaultDisputeLostWarningThreshold,
             IsActive = true,
             UpdateReason = "Default marketplace workflow policy.",
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            CreatedAt = VietnamDateTime.Now,
+            UpdatedAt = VietnamDateTime.Now
         };
     }
 
@@ -172,10 +201,6 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Contract sign window hours must be between 1 and 720.");
         }
 
-        if (request.EscrowLockWindowHours <= 0 || request.EscrowLockWindowHours > 720)
-        {
-            throw new InvalidOperationException("Escrow lock window hours must be between 1 and 720.");
-        }
 
         if (request.ExpertMaxActiveProjects <= 0 || request.ExpertMaxActiveProjects > 50)
         {
@@ -197,10 +222,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Minimum withdrawal amount cannot be negative.");
         }
 
-        if (request.WithdrawalFeeRate < 0 || request.WithdrawalFeeRate > 1)
-        {
-            throw new InvalidOperationException("Withdrawal fee rate must be between 0 and 1.");
-        }
+        // Withdrawal fee is disabled by business rule. Ignore request.WithdrawalFeeRate.
 
         if (request.MinimumDepositAmount < 0)
         {
@@ -210,6 +232,24 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         if (request.MaximumDepositAmount <= request.MinimumDepositAmount)
         {
             throw new InvalidOperationException("Maximum deposit amount must be greater than minimum deposit amount.");
+        }
+
+        if (request.DepositOrderExpireMinutes.HasValue &&
+            (request.DepositOrderExpireMinutes.Value <= 0 || request.DepositOrderExpireMinutes.Value > 1440))
+        {
+            throw new InvalidOperationException("Deposit order expire minutes must be between 1 and 1440.");
+        }
+
+        if (request.WithdrawalApprovalWindowHours.HasValue &&
+            (request.WithdrawalApprovalWindowHours.Value <= 0 || request.WithdrawalApprovalWindowHours.Value > 720))
+        {
+            throw new InvalidOperationException("Withdrawal approval window hours must be between 1 and 720.");
+        }
+
+        if (request.WithdrawalPayoutSyncWarningHours.HasValue &&
+            (request.WithdrawalPayoutSyncWarningHours.Value <= 0 || request.WithdrawalPayoutSyncWarningHours.Value > 720))
+        {
+            throw new InvalidOperationException("Withdrawal payout sync warning hours must be between 1 and 720.");
         }
 
         if (request.DisputeLostWarningThreshold <= 0 || request.DisputeLostWarningThreshold > 20)
@@ -229,7 +269,6 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             FreeProposalSubmitCount = policy.FreeProposalSubmitCount,
             ResubmitNoteMaxLength = policy.ResubmitNoteMaxLength,
             ContractSignWindowHours = policy.ContractSignWindowHours,
-            EscrowLockWindowHours = policy.EscrowLockWindowHours,
             ExpertMaxActiveProjects = policy.ExpertMaxActiveProjects,
             DeliverableReviewWindowHours = policy.DeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = policy.DeliverableAutoApproveGraceHours,
@@ -237,6 +276,9 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             WithdrawalFeeRate = policy.WithdrawalFeeRate,
             MinimumDepositAmount = policy.MinimumDepositAmount,
             MaximumDepositAmount = policy.MaximumDepositAmount,
+            DepositOrderExpireMinutes = policy.DepositOrderExpireMinutes,
+            WithdrawalApprovalWindowHours = policy.WithdrawalApprovalWindowHours,
+            WithdrawalPayoutSyncWarningHours = policy.WithdrawalPayoutSyncWarningHours,
             DisputeLostWarningThreshold = policy.DisputeLostWarningThreshold,
             IsActive = policy.IsActive,
             UpdatedByAdminId = policy.UpdatedByAdminId,

@@ -2,7 +2,6 @@ using System.Security.Claims;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AITasker.Api.Controllers
@@ -15,7 +14,9 @@ namespace AITasker.Api.Controllers
         private readonly IDisputeService _disputeService;
         private readonly IImageUploadService _imageUploadService;
 
-        public DisputesController(IDisputeService disputeService, IImageUploadService imageUploadService)
+        public DisputesController(
+            IDisputeService disputeService,
+            IImageUploadService imageUploadService)
         {
             _disputeService = disputeService;
             _imageUploadService = imageUploadService;
@@ -23,20 +24,51 @@ namespace AITasker.Api.Controllers
 
         [HttpPost]
         [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> OpenDispute([FromBody] OpenDisputeRequest request)
+        [Consumes("multipart/form-data")]
+        [RequestSizeLimit(5 * 1024 * 1024)]
+        public async Task<IActionResult> OpenDispute([FromForm] OpenDisputeFormRequest request)
         {
             try
             {
                 var currentUserId = GetCurrentUserId();
 
+                string? uploadedImageUrl = null;
+                object? imagePayload = null;
+
+                if (request.Image != null && request.Image.Length > 0)
+                {
+                    await using var stream = request.Image.OpenReadStream();
+
+                    var uploadResult = await _imageUploadService.UploadImageAsync(
+                        stream,
+                        request.Image.FileName,
+                        request.Image.ContentType,
+                        request.Image.Length,
+                        $"dispute-evidences/opening/{request.ProjectId}");
+
+                    uploadedImageUrl = uploadResult.Url;
+                    imagePayload = uploadResult;
+                }
+
                 var result = await _disputeService.OpenDisputeAsync(
                     currentUserId,
-                    request);
+                    new OpenDisputeRequest
+                    {
+                        ProjectId = request.ProjectId,
+                        MilestoneId = request.MilestoneId,
+                        RespondentUserId = request.RespondentUserId,
+                        DisputedAmount = request.DisputedAmount,
+                        Reason = request.Reason ?? string.Empty,
+                        EvidenceText = request.EvidenceText,
+                        EvidenceFileUrl = request.EvidenceFileUrl,
+                        EvidenceImageUrl = uploadedImageUrl ?? request.EvidenceImageUrl
+                    });
 
                 return Ok(new
                 {
                     success = true,
                     message = "Dispute opened successfully. Related escrow has been frozen.",
+                    image = imagePayload,
                     data = result
                 });
             }
@@ -120,6 +152,7 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("{disputeId:int}/evidences")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
         public async Task<IActionResult> AddEvidence(
             int disputeId,
             [FromBody] CreateDisputeEvidenceRequest request)
@@ -159,6 +192,7 @@ namespace AITasker.Api.Controllers
         }
 
         [HttpPost("{disputeId:int}/evidences/image")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
         [Consumes("multipart/form-data")]
         [RequestSizeLimit(5 * 1024 * 1024)]
         public async Task<IActionResult> AddImageEvidence(
@@ -169,23 +203,33 @@ namespace AITasker.Api.Controllers
             {
                 var currentUserId = GetCurrentUserId();
 
-                if (request.Image == null || request.Image.Length == 0)
+                string? uploadedImageUrl = null;
+                object? imagePayload = null;
+
+                if (request.Image != null && request.Image.Length > 0)
+                {
+                    await using var stream = request.Image.OpenReadStream();
+
+                    var uploadResult = await _imageUploadService.UploadImageAsync(
+                        stream,
+                        request.Image.FileName,
+                        request.Image.ContentType,
+                        request.Image.Length,
+                        $"dispute-evidences/{disputeId}");
+
+                    uploadedImageUrl = uploadResult.Url;
+                    imagePayload = uploadResult;
+                }
+
+                if (string.IsNullOrWhiteSpace(uploadedImageUrl) &&
+                    string.IsNullOrWhiteSpace(request.ImageUrl))
                 {
                     return BadRequest(new
                     {
                         success = false,
-                        message = "Evidence image is required."
+                        message = "Evidence image or imageUrl is required."
                     });
                 }
-
-                await using var stream = request.Image.OpenReadStream();
-
-                var uploadResult = await _imageUploadService.UploadImageAsync(
-                    stream,
-                    request.Image.FileName,
-                    request.Image.ContentType,
-                    request.Image.Length,
-                    $"dispute-evidences/{disputeId}");
 
                 var result = await _disputeService.AddEvidenceAsync(
                     currentUserId,
@@ -193,14 +237,15 @@ namespace AITasker.Api.Controllers
                     new CreateDisputeEvidenceRequest
                     {
                         EvidenceText = request.EvidenceText ?? string.Empty,
-                        FileUrl = uploadResult.Url
+                        FileUrl = request.FileUrl,
+                        ImageUrl = uploadedImageUrl ?? request.ImageUrl
                     });
 
                 return Ok(new
                 {
                     success = true,
                     message = "Dispute image evidence submitted successfully.",
-                    image = uploadResult,
+                    image = imagePayload,
                     data = result
                 });
             }
@@ -237,11 +282,36 @@ namespace AITasker.Api.Controllers
             return userId;
         }
 
+        public class OpenDisputeFormRequest
+        {
+            public int ProjectId { get; set; }
+
+            public int? MilestoneId { get; set; }
+
+            public int? RespondentUserId { get; set; }
+
+            public decimal DisputedAmount { get; set; }
+
+            public string? Reason { get; set; }
+
+            public string? EvidenceText { get; set; }
+
+            public string? EvidenceFileUrl { get; set; }
+
+            public string? EvidenceImageUrl { get; set; }
+
+            public IFormFile? Image { get; set; }
+        }
+
         public class AddDisputeEvidenceImageFormRequest
         {
             public string? EvidenceText { get; set; }
 
-            public IFormFile Image { get; set; } = null!;
+            public string? FileUrl { get; set; }
+
+            public string? ImageUrl { get; set; }
+
+            public IFormFile? Image { get; set; }
         }
     }
 }
