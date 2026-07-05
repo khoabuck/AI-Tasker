@@ -326,7 +326,7 @@ export default function EditJobPage() {
             </span>
           </div>
           <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>
-            Chỉnh sửa thông tin job — mọi thay đổi sẽ được lưu khi bấm <span style={{ color: "#00F0FF" }}>Save Changes</span>.
+            Edit job information — all changes will be saved when you click. <span style={{ color: "#00F0FF" }}>Save Changes</span>.
           </p>
         </div>
 

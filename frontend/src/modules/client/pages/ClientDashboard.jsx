@@ -288,7 +288,7 @@ export default function ClientDashboard() {
         </div>
 
         {loading && (
-          <p className="text-gray-400">Đang tải danh sách expert...</p>
+          <p className="text-gray-400">Loading expert list...</p>
         )}
 
         {error && (
@@ -296,7 +296,7 @@ export default function ClientDashboard() {
         )}
 
         {!loading && !error && experts.length === 0 && (
-          <p className="text-gray-400">Chưa có expert nào.</p>
+          <p className="text-gray-400">No experts available.</p>
         )}
       {!loading && !error && experts.length > 0 && (
         <>

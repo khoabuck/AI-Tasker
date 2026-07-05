@@ -102,6 +102,7 @@ function NavItem({ label, to, dropdown, active }) {
 export default function ClientNavbar() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
+  const avatarUrl = user?.avatarUrl || "";
   const [avatarOpen, setAvatarOpen] = useState(false);
 
   const initials = user?.fullName
@@ -157,8 +158,16 @@ export default function ClientNavbar() {
             onClick={() => setAvatarOpen((prev) => !prev)}
             className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 transition-all hover:border-cyan-400/40 hover:shadow-[0_0_14px_rgba(0,240,255,0.2)]"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-gray-900">
-              {initials}
+            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-cyan-400 text-sm font-bold text-gray-900">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                initials
+              )}
             </div>
 
             <span

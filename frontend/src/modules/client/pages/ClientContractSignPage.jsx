@@ -67,8 +67,7 @@ export default function ClientContractSignPage() {
   const [walletLoading, setWalletLoading] = useState(true);
 
   const [actionLoading, setActionLoading] = useState(null); // "sign" | "lockEscrow"
-  const [showEscrowModal, setShowEscrowModal] = useState(false);
-  const [projectReadyForEscrow, setProjectReadyForEscrow] = useState(null);
+
 
   const pollRef = useRef(null);
 
@@ -124,23 +123,7 @@ export default function ClientContractSignPage() {
     fetchWallet();
   }, []);
 
-  // Sau khi cả 2 bên đã ký nhưng escrow chưa lock (dù vừa ký xong hay resume
-  // lại từ lần trước) → tự động mở modal lock escrow, vì đây là trang chuyên
-  // biệt cho việc ký hợp đồng nên không cần chờ user tự bấm gì thêm.
-  useEffect(() => {
-    if (!contract) return;
-    const { bothSigned } = readContractSignState(contract);
-
-    if (bothSigned && contract.projectId && !contract.projectEscrowLockedAt) {
-      setProjectReadyForEscrow({
-        projectId: contract.projectId,
-        totalClientPayment: contract.totalClientPayment,
-        finalPrice: contract.finalPrice,
-        platformFeeAmount: contract.platformFeeAmount,
-      });
-      setShowEscrowModal(true);
-    }
-  }, [contract]);
+ 
 
   const pollContract = useCallback(async () => {
     const contractId = getContractId(contract);
@@ -208,60 +191,84 @@ export default function ClientContractSignPage() {
     }
   };
 
-  const handleLockEscrow = async () => {
-    const projectId = projectReadyForEscrow?.projectId;
-    if (!projectId) {
-      setPageError("Project not found.");
-      return;
-    }
+ 
 
-    setActionLoading("lockEscrow");
+  // Tạo project ngay khi phát hiện bothSigned qua polling (không chỉ lúc mới ký),
+  // để trường hợp resume trang cũng tự tạo project nếu chưa có.
+  useEffect(() => {
+  if (!contract) return;
+
+  const { bothSigned } = readContractSignState(contract);
+  if (!bothSigned) return;
+
+  const contractId = getContractId(contract);
+  if (!contractId) return;
+
+  if (contract.projectEscrowLockedAt) {
+    navigate("/client/projects?status=ACTIVE");
+    return;
+  }
+
+  const activateProject = async () => {
+    setActionLoading("autoEscrow");
     setPageError("");
 
     try {
+      let projectId =
+        contract.projectId ??
+        contract.project?.projectId ??
+        contract.project?.id;
+
+      if (!projectId) {
+        const projectRes = await axiosInstance.post(`/projects/from-contract/${contractId}`);
+        const projectData = projectRes.data?.data ?? projectRes.data;
+
+        projectId =
+          projectData?.projectId ??
+          projectData?.id ??
+          projectData?.project?.projectId ??
+          projectData?.project?.id;
+      }
+
+      if (!projectId) {
+        const latestContractRes = await axiosInstance.get(`/contracts/${contractId}`);
+        const latestContract = latestContractRes.data?.data ?? latestContractRes.data;
+
+        projectId =
+          latestContract?.projectId ??
+          latestContract?.project?.projectId ??
+          latestContract?.project?.id;
+      }
+
+      if (!projectId) {
+        await fetchAll(undefined, true);
+        setPageError("Project was created but projectId was not returned by API.");
+        return;
+      }
+
       await axiosInstance.post(`/escrows/projects/${projectId}/lock`);
-      setShowEscrowModal(false);
-      setProjectReadyForEscrow(null);
 
       window.dispatchEvent(new Event("jobs:refresh"));
       window.dispatchEvent(new Event("projects:refresh"));
 
-      navigate("/client/projects?status=ACTIVE");
+      navigate("/client/projects?status=ACTIVE", { replace: true });
     } catch (err) {
-      setPageError(err?.response?.data?.message || err?.message || "Lock escrow failed.");
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message || err?.message || "";
+
+      if (status === 409 || message.toLowerCase().includes("already")) {
+        navigate("/client/projects?status=ACTIVE", { replace: true });
+        return;
+      }
+
+      setPageError(message || "Failed to activate project.");
     } finally {
       setActionLoading(null);
     }
   };
 
-  // Tạo project ngay khi phát hiện bothSigned qua polling (không chỉ lúc mới ký),
-  // để trường hợp resume trang cũng tự tạo project nếu chưa có.
-  useEffect(() => {
-    if (!contract) return;
-    const { bothSigned } = readContractSignState(contract);
-    if (!bothSigned || contract.projectId) return;
-
-    const contractId = getContractId(contract);
-    if (!contractId) return;
-
-    
-    const createProject = async () => {
-      try {
-        await axiosInstance.post(`/projects/from-contract/${contractId}`);
-        // silent=true — chạy ngầm sau khi tự động tạo project (vd phát hiện
-        // qua polling khi resume trang), không làm gián đoạn UI đang hiển thị.
-        await fetchAll(undefined, true);
-      } catch (err) {
-        const status = err?.response?.status;
-        const message = err?.response?.data?.message || "";
-        if (status !== 409 && !message.toLowerCase().includes("already")) {
-          setPageError(message || "Failed to activate project.");
-        }
-      }
-    };
-
-    createProject();
-  }, [contract, fetchAll]);
+  activateProject();
+}, [contract, fetchAll, navigate]);
 
   if (loading) {
     return (
@@ -477,6 +484,13 @@ export default function ClientContractSignPage() {
           </div>
         )}
 
+        {actionLoading === "autoEscrow" && (
+          <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 8, background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.25)", color: "#00F0FF", fontSize: 13 }}>
+            Both sides signed. Activating project and locking escrow automatically...
+          </div>
+        )}
+
+
         {pageError && (
           <div style={{ marginBottom: 20, padding: "12px 16px", borderRadius: 8, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", fontSize: 13 }}>
             {pageError}
@@ -500,32 +514,7 @@ export default function ClientContractSignPage() {
         )}
       </div>
 
-      {showEscrowModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
-          <div className="w-full max-w-[520px] rounded-2xl border border-cyan-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
-            <h2 className="mb-3 text-2xl font-bold text-cyan-400">Lock Project Escrow</h2>
-            <p className="mb-5 leading-relaxed text-slate-300">
-              Both sides have confirmed the contract. Do you want to lock escrow now to activate this project?
-            </p>
-            <div className="mb-5 rounded-xl bg-white/5 p-4 text-sm text-slate-300">
-              <div className="mb-2">Project ID: <span className="font-bold text-white">{projectReadyForEscrow?.projectId}</span></div>
-              <div className="mb-2">Project Price: <span className="font-bold text-white">${Number(projectReadyForEscrow?.finalPrice ?? 0).toLocaleString()}</span></div>
-              <div className="mb-2">Platform Fee: <span className="font-bold text-white">${Number(projectReadyForEscrow?.platformFeeAmount ?? 0).toLocaleString()}</span></div>
-              <div>Total Payment: <span className="font-bold text-cyan-400">${Number(projectReadyForEscrow?.totalClientPayment ?? 0).toLocaleString()}</span></div>
-            </div>
-            <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowEscrowModal(false)}
-                className="rounded-lg border border-white/15 px-5 py-2.5 text-slate-300 transition hover:bg-white/5">
-                Later
-              </button>
-              <button type="button" onClick={handleLockEscrow} disabled={actionLoading === "lockEscrow"}
-                className="rounded-lg bg-cyan-400 px-5 py-2.5 font-bold text-[#002022] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60">
-                {actionLoading === "lockEscrow" ? "Locking..." : "Agree & Lock Escrow"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+     
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>

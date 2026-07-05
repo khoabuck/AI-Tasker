@@ -48,18 +48,83 @@ export default function ClientProfilePage() {
     <ClientLayout>
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "48px 24px" }}>
 
+        
         {/* Header */}
-        <div style={{ marginBottom: 40 }}>
-          <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 8 }}>
-            My Profile
-          </h1>
-          <p style={{ color: "#c2c6d6" }}>Your account and profile information</p>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            marginBottom: 40,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="mb-5 flex w-fit items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-400"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              arrow_back
+            </span>
+            Back
+          </button>
+
+          <div>
+            <h1
+              style={{
+                fontFamily: "Hanken Grotesk, sans-serif",
+                fontSize: 32,
+                fontWeight: 700,
+                color: "#e1e2eb",
+                marginBottom: 8,
+              }}
+            >
+              My Profile
+            </h1>
+
+            <p style={{ color: "#c2c6d6" }}>
+              Your account and profile information
+            </p>
+          </div>
         </div>
 
         {/* User card */}
         <div style={{ background: "rgba(16,19,25,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 32, marginBottom: 24, display: "flex", alignItems: "center", gap: 24 }}>
-          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "#1772eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28, fontWeight: 700, color: "#fff", fontFamily: "Hanken Grotesk, sans-serif", flexShrink: 0 }}>
-            {(profile?.fullName || user?.fullName)?.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "CL"}
+          <div
+            style={{
+              width: 72,
+              height: 72,
+              borderRadius: "50%",
+              background: "#1772eb",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              fontSize: 28,
+              fontWeight: 700,
+              color: "#fff",
+              fontFamily: "Hanken Grotesk, sans-serif",
+              flexShrink: 0,
+              overflow: "hidden",
+            }}
+          >
+            {profile?.avatarUrl || user?.avatarUrl ? (
+              <img
+                src={profile?.avatarUrl || user?.avatarUrl}
+                alt="Avatar"
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                }}
+              />
+            ) : (
+              (profile?.fullName || user?.fullName)
+                ?.split(" ")
+                .map((n) => n[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase() || "CL"
+            )}
           </div>
           <div>
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>

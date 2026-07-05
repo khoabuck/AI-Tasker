@@ -277,7 +277,7 @@ export default function ClientJobRecommendationPage() {
               onClick={handleRetry}
               style={{ padding: "8px 20px", background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontSize: 13, cursor: "pointer" }}
             >
-              Thử lại
+              Retry
             </button>
           </div>
         )}

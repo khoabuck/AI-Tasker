@@ -48,6 +48,10 @@ export default function EditProfilePage() {
   const [globalError, setGlobalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [initialSnapshot, setInitialSnapshot] = useState(null);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
 
   // companyName chỉ để HIỂN THỊ readonly, không gửi lên BE
   const [companyNameDisplay, setCompanyNameDisplay] = useState("");
@@ -67,6 +71,8 @@ export default function EditProfilePage() {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
         const data = res.data;
+        setAvatarUrl(data.avatarUrl || "");
+        setAvatarPreview(data.avatarUrl || "");
         const businessProfile = data.businessProfile || null;
         const isBusiness = !!businessProfile;
 
@@ -171,6 +177,78 @@ export default function EditProfilePage() {
     return errors;
   };
 
+  const handleAvatarChange = (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  if (!file.type.startsWith("image/")) {
+    setGlobalError("Please select a valid image file.");
+    return;
+  }
+
+  if (file.size > 5 * 1024 * 1024) {
+    setGlobalError("Avatar image must be smaller than 5MB.");
+    return;
+  }
+
+  setAvatarFile(file);
+  setAvatarPreview(URL.createObjectURL(file));
+  setGlobalError("");
+};
+
+const uploadAvatarIfNeeded = async () => {
+  if (!avatarFile) return avatarUrl;
+
+  setUploadingAvatar(true);
+
+  const formData = new FormData();
+  formData.append("file", avatarFile);
+
+  const uploadRes = await axiosInstance.post("/uploads/images", formData, {
+    headers: {
+      "Content-Type": "multipart/form-data",
+    },
+  });
+
+  const uploadedUrl =
+    uploadRes.data?.image?.url ||
+    uploadRes.data?.url ||
+    uploadRes.data?.imageUrl ||
+    uploadRes.data?.avatarUrl ||
+    uploadRes.data?.data?.url ||
+    uploadRes.data?.data?.imageUrl;
+
+  if (!uploadedUrl) {
+    throw new Error("Upload image failed: missing image URL.");
+  }
+
+  const avatarRes = await axiosInstance.put("/auth/me/avatar", {
+    avatarUrl: uploadedUrl,
+  });
+
+  const newAvatarUrl =
+    avatarRes.data?.avatarUrl ||
+    avatarRes.data?.user?.avatarUrl ||
+    uploadedUrl;
+
+  setAvatarUrl(newAvatarUrl);
+  setAvatarPreview(newAvatarUrl);
+  setAvatarFile(null);
+
+  // cập nhật user trong localStorage để ClientNavbar hiện avatar mới
+  const currentUser = authService.getCurrentUser();
+
+  if (currentUser) {
+    const updatedUser = {
+      ...currentUser,
+      avatarUrl: newAvatarUrl,
+    };
+
+    localStorage.setItem("user", JSON.stringify(updatedUser));
+  }
+  return newAvatarUrl;
+};
+
   // ── Submit ────────────────────────────────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -181,7 +259,10 @@ export default function EditProfilePage() {
     clientType === "individual" ? individual : business
   );
 
-  if (initialSnapshot && currentSnapshot === initialSnapshot) {
+  const profileNotChanged = initialSnapshot && currentSnapshot === initialSnapshot;
+  const avatarNotChanged = !avatarFile;
+
+  if (profileNotChanged && avatarNotChanged) {
     navigate("/client/profile");
     return;
   }
@@ -189,12 +270,14 @@ export default function EditProfilePage() {
   const feErrors = validateForm();
   if (Object.keys(feErrors).length > 0) {
     setFieldErrors(feErrors);
-      setGlobalError("Invalid information. Please review the highlighted fields.");
+    setGlobalError("Invalid information. Please review the highlighted fields.");
+    return;
   }
 
   setLoading(true);
 
     try {
+      await uploadAvatarIfNeeded();
       let res;
       if (clientType === "individual") {
         res = await axiosInstance.put("/client-profiles/individual/me", {
@@ -250,6 +333,7 @@ export default function EditProfilePage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
+      setUploadingAvatar(false);
     }
   };
 
@@ -327,6 +411,73 @@ export default function EditProfilePage() {
           <form onSubmit={handleSubmit}>
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
+              {/* Avatar Upload */}
+              <div style={{ display: "flex", alignItems: "center", gap: 18, marginBottom: 8 }}>
+                <div
+                  style={{
+                    width: 88,
+                    height: 88,
+                    borderRadius: "50%",
+                    overflow: "hidden",
+                    background: "rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Avatar preview"
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined" style={{ fontSize: 42, color: "#8c90a0" }}>
+                      account_circle
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Avatar</label>
+
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      border: "1px solid rgba(0,240,255,0.35)",
+                      background: "rgba(0,240,255,0.06)",
+                      color: "#00F0FF",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontWeight: 600,
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                      upload
+                    </span>
+                    {avatarFile ? "Change selected image" : "Upload avatar"}
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarChange}
+                      style={{ display: "none" }}
+                    />
+                  </label>
+
+                  <p style={{ fontSize: 11, color: "#8c90a0", marginTop: 6 }}>
+                    JPG, PNG or WEBP. Max 5MB.
+                  </p>
+                </div>
+              </div>
+
+              
               {/* Full Name — readonly */}
               <div>
                 <label style={labelStyle}>Full Name</label>
@@ -462,7 +613,7 @@ export default function EditProfilePage() {
                 <button type="submit" disabled={loading}
                   style={{ flex: 2, background: loading ? "#1d2026" : "#00F0FF", color: loading ? "#8c90a0" : "#002022", fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, padding: "14px", borderRadius: 8, border: "none", cursor: loading ? "not-allowed" : "pointer", boxShadow: loading ? "none" : "0 0 20px rgba(0,240,255,0.3)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, transition: "all 0.2s" }}>
                   {loading ? (
-                    <><span className="material-symbols-outlined" style={{ animation: "spin 1s linear infinite" }}>autorenew</span><span>AI is verifying...</span></>
+                    <><span className="material-symbols-outlined" style={{ animation: "spin 1s linear infinite" }}>autorenew</span><span>{uploadingAvatar ? "Uploading avatar..." : "AI is verifying..."}</span></>
                   ) : (
                     <><span>Save & Verify</span><span className="material-symbols-outlined">verified</span></>
                   )}

@@ -23,4 +23,15 @@ export const transactionService = {
       (tx) => String(tx.transactionId) === String(id)
     );
   },
+
+  async getProjectMilestones(projectId, signal) {
+    const res = await transactionApi.getProjectMilestones(
+      projectId,
+      { signal }
+    );
+
+    const raw = unwrap(res);
+
+    return normalizeList(raw);
+  },
 };
