@@ -515,7 +515,7 @@ app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
 // =========================
 if (builder.Configuration.GetValue<bool>("PayOsDebug:Enabled"))
 {
-    app.MapGet("/debug/payos-network", async (HttpContext context, IConfiguration config) =>
+    app.MapGet("/api/debug/payos-network", async (HttpContext context, IConfiguration config) =>
     {
         var debugSecret = config["DEBUG_SECRET"];
 
