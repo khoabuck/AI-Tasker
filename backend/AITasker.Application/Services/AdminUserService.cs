@@ -230,10 +230,8 @@ public class AdminUserService : IAdminUserService
 
     private async Task UnlockExpiredSuspendedUsersAsync()
     {
-        var suspendedUsers = await _userRepository.GetAdminUsersAsync(
-            search: null,
-            role: null,
-            status: "SUSPENDED"
+        var suspendedUsers = await _userRepository.GetExpiredSuspendedUsersAsync(
+            DateTime.UtcNow
         );
 
         var hasChanged = false;

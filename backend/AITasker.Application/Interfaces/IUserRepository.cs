@@ -21,4 +21,6 @@ public interface IUserRepository
         string? role,
         string? status
     );
+
+    Task<List<User>> GetExpiredSuspendedUsersAsync(DateTime nowUtc);
 }
