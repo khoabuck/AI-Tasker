@@ -2782,6 +2782,9 @@ public class AITaskerDbContext : DbContext
             entity.Property(e => e.FileUrl)
                 .HasMaxLength(500);
 
+            entity.Property(e => e.ImageUrl)
+                .HasMaxLength(1000);
+
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
 

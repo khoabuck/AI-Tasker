@@ -824,10 +824,12 @@ namespace AITasker.Infrastructure.Projects
                 ClientProfileId = clientProfile.ClientProfileId,
                 ClientUserId = clientProfile.UserId,
                 ClientName = clientUser.FullName,
+                ClientAvatarUrl = clientUser.AvatarUrl,
 
                 ExpertProfileId = expertProfile.ExpertProfileId,
                 ExpertUserId = expertProfile.UserId,
                 ExpertName = expertUser.FullName,
+                ExpertAvatarUrl = expertUser.AvatarUrl,
 
                 Title = project.Title,
                 Description = project.Description,

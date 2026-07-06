@@ -18,11 +18,15 @@ namespace AITasker.Application.DTOs.Responses
 
         public string ClientName { get; set; } = string.Empty;
 
+        public string? ClientAvatarUrl { get; set; }
+
         public int ExpertProfileId { get; set; }
 
         public int ExpertUserId { get; set; }
 
         public string ExpertName { get; set; } = string.Empty;
+
+        public string? ExpertAvatarUrl { get; set; }
 
         public string Title { get; set; } = string.Empty;
 
