@@ -46,8 +46,8 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
   const [evidenceImageUrl, setEvidenceImageUrl] = useState("");
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -77,28 +77,30 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
       );
     };
 
-    const handleSelectImage = (file) => {
-  if (!file) return;
+    const handleSelectImages = (files) => {
+      if (!files?.length) return;
 
-  if (!file.type.startsWith("image/")) {
-    setError("Please select a valid image file.");
-    return;
-  }
+      const validFiles = Array.from(files).filter((file) =>
+        file.type.startsWith("image/")
+      );
 
-  if (imagePreviewUrl) {
-    URL.revokeObjectURL(imagePreviewUrl);
-  }
+      if (!validFiles.length) {
+        setError("Please select valid image files.");
+        return;
+      }
 
-  setImageFile(file);
-  setImagePreviewUrl(URL.createObjectURL(file));
-  setSubmitted(false);
-  setError("");
+      const previews = validFiles.map((file) =>
+        URL.createObjectURL(file)
+      );
 
-  setFieldErrors((prev) => ({
-    ...prev,
-    imageFile: "",
-  }));
-};
+      setImageFiles((prev) => [...prev, ...validFiles]);
+      setImagePreviewUrls((prev) => [...prev, ...previews]);
+
+      setFieldErrors((prev) => ({
+        ...prev,
+        imageFile: "",
+      }));
+    };
 
   // BE chỉ có /uploads/images — chỉ hỗ trợ ảnh làm bằng chứng (screenshot, ảnh chụp
   // sản phẩm lỗi...). Không có endpoint upload PDF/file thường, nên ô input giới
@@ -158,12 +160,14 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
       errors.evidenceText = "Evidence description is required.";
     }
 
-    if (!evidenceFileUrl.trim()) {
-      errors.evidenceFileUrl = "Evidence file URL is required.";
-    }
+    
 
-    if (!evidenceImageUrl.trim() && !imageFile) {
-      errors.imageFile = "Evidence image is required.";
+    if (
+      !evidenceFileUrl.trim() &&
+      imageFiles.length === 0
+    ) {
+      errors.imageFile =
+        "Provide a proof link or upload at least one image.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -221,12 +225,9 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
         evidenceImageUrl || ""
       );
 
-      if (imageFile) {
-        formData.append(
-          "Image",
-          imageFile
-        );
-      }
+      imageFiles.forEach((file) => {
+        formData.append("Images", file);
+      });
 
       await axiosInstance.post(
         "/disputes",
@@ -282,22 +283,18 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
               Amount in dispute (VND)
             </label>
             <input
-              type="number"
-              value={disputedAmount}
-              onChange={(e) => {
-                setDisputedAmount(e.target.value);
-                setFieldErrors((prev) => ({ ...prev, disputedAmount: "" }));
-              }}
+              type="text"
+              value={Number(disputedAmount || 0).toLocaleString()}
+              readOnly
               style={{
                 width: "100%",
-                background: "#1d2026",
+                background: "#161a20",
                 border: getFieldStyle("disputedAmount").border,
                 borderRadius: 10,
                 padding: "12px 14px",
-                color: "#e1e2eb",
+                color: "#8c90a0",
                 outline: "none",
-                fontFamily: "JetBrains Mono, monospace",
-                fontSize: 14,
+                cursor: "not-allowed",
                 boxSizing: "border-box",
               }}
             />
@@ -451,7 +448,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
                   <span
                     style={{
-                      color: imageFile ? "#e1e2eb" : "#8c90a0",
+                      color: imageFiles.length > 0 ? "#e1e2eb" : "#8c90a0",
                       fontSize: 13,
                       whiteSpace: "nowrap",
                       overflow: "hidden",
@@ -459,9 +456,9 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                       maxWidth: "250px",
                     }}
                   >
-                    {imageFile
-                      ? imageFile.name
-                      : "Choose evidence image"}
+                    {imageFiles.length > 0
+                      ? `${imageFiles.length} image(s) selected`
+                      : "Choose evidence images"}
                   </span>
                 </div>
 
@@ -482,12 +479,17 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                 <input
                   type="file"
                   accept="image/*"
+                  multiple
                   style={{ display: "none" }}
-                  onChange={(e) => handleSelectImage(e.target.files?.[0])}
+                  onChange={(e) =>
+                    handleSelectImages(
+                      e.target.files
+                    )
+                  }
                 />
               </label>
 
-              {imageFile && (
+              {imageFiles.length > 0 && (
                 <div
                   style={{
                     marginTop: 8,
@@ -510,47 +512,50 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
               {renderFieldError("imageFile")}
 
-              {imagePreviewUrl && (
-                <div style={{ marginTop: 12 }}>
-                  <p style={{ color: "#c2c6d6", fontSize: 13, marginBottom: 8 }}>
-                    {submitted ? "Submitted image" : "Image preview"}
-                  </p>
-
-                  <div
-                    style={{
-                      position: "relative",
-                      width: 160,
-                      borderRadius: 12,
-                      overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "#111827",
-                    }}
-                  >
-                    <img
-                      src={imagePreviewUrl}
-                      alt="Evidence preview"
-                      onClick={() => setPreviewOpen(true)}
+              {imagePreviewUrls.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginTop: 12,
+                  }}
+                >
+                  {imagePreviewUrls.map((url, index) => (
+                    <div
+                      key={index}
                       style={{
-                        width: "100%",
-                        height: 120,
-                        objectFit: "cover",
-                        display: "block",
-                        cursor: "zoom-in",
+                        position: "relative",
                       }}
-                    />
+                    >
+                      <img
+                        src={url}
+                        alt={`Evidence ${index + 1}`}
+                        style={{
+                          width: 120,
+                          height: 120,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                        }}
+                      />
 
-                    {!submitted && (
                       <button
                         type="button"
                         onClick={() => {
-                          URL.revokeObjectURL(imagePreviewUrl);
-                          setImageFile(null);
-                          setImagePreviewUrl("");
+                          const newFiles = [...imageFiles];
+                          const newPreviews = [...imagePreviewUrls];
+
+                          newFiles.splice(index, 1);
+                          newPreviews.splice(index, 1);
+
+                          setImageFiles(newFiles);
+                          setImagePreviewUrls(newPreviews);
                         }}
                         style={{
                           position: "absolute",
-                          top: 6,
-                          right: 6,
+                          top: 4,
+                          right: 4,
                           width: 24,
                           height: 24,
                           borderRadius: "50%",
@@ -562,71 +567,11 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                       >
                         ×
                       </button>
-                    )}
-                  </div>
-
-                  {submitted && (
-                    <p
-                      style={{
-                        marginTop: 8,
-                        color: "#22c55e",
-                        fontSize: 12,
-                      }}
-                    >
-                      Image submitted successfully.
-                    </p>
-                  )}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {previewOpen && imagePreviewUrl && (
-                <div
-                  onClick={() => setPreviewOpen(false)}
-                  style={{
-                    position: "fixed",
-                    inset: 0,
-                    zIndex: 99999,
-                    background: "rgba(0,0,0,0.9)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: 24,
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setPreviewOpen(false)}
-                    style={{
-                      position: "absolute",
-                      top: 24,
-                      right: 24,
-                      width: 40,
-                      height: 40,
-                      borderRadius: "50%",
-                      border: "1px solid rgba(255,255,255,0.2)",
-                      background: "rgba(0,0,0,0.7)",
-                      color: "#fff",
-                      fontSize: 20,
-                      cursor: "pointer",
-                    }}
-                  >
-                    ×
-                  </button>
-
-                  <img
-                    src={imagePreviewUrl}
-                    alt="Evidence Full Preview"
-                    onClick={(e) => e.stopPropagation()}
-                    style={{
-                      maxWidth: "90vw",
-                      maxHeight: "85vh",
-                      objectFit: "contain",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.15)",
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </div>
 
@@ -946,12 +891,33 @@ export default function ClientProjectDetailPage() {
 
                       {/* Open Dispute gắn theo milestone — chỉ khi project còn ACTIVE.
                           Khi đã COMPLETED, dispute chỉ mở ở cấp project (nút header phía trên). */}
-                      {project.status === "ACTIVE" && (
-                        <button onClick={() => setDisputeModal({ milestone: m })}
-                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>gavel</span>
-                          Dispute
-                        </button>
+                      {project.status === "ACTIVE" &&
+                        ["SUBMITTED", "REJECTED"].includes(normalizedStatus) && (
+                          <button
+                            onClick={() => setDisputeModal({ milestone: m })}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 5,
+                              padding: "6px 12px",
+                              background: "rgba(249,115,22,0.08)",
+                              color: "#f97316",
+                              border: "1px solid rgba(249,115,22,0.25)",
+                              borderRadius: 8,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              className="material-symbols-outlined"
+                              style={{ fontSize: 14 }}
+                            >
+                              gavel
+                            </span>
+                            Dispute
+                          </button>
                       )}
                     </div>
                   </div>
