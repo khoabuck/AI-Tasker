@@ -68,7 +68,6 @@ import ContractDetailPage from "../../modules/expert/pages/ContractDetailPage";
 import MyProjectsPage from "../../modules/expert/pages/MyProjectsPage";
 import ProjectDetailPage from "../../modules/expert/pages/ProjectDetailPage";
 import DeliverablesPage from "../../modules/expert/pages/DeliverablesPage";
-import DisputePage from "../../modules/expert/pages/DisputePage";
 import ExpertMessagesPage from "../../modules/expert/pages/MessagesPage";
 import RecommendedJobsPage from "../../modules/expert/pages/RecommendedJobsPage";
 import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
@@ -218,7 +217,6 @@ export default function AppRouter() {
       <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/milestones" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectMilestonesPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/deliverables" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverablesPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId/dispute" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputePage /></ProtectedRoute>} />
 
       {/* Expert milestones + deliverables */}
       <Route path="/expert/milestones/:milestoneId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MilestoneDetailPage /></ProtectedRoute>} />

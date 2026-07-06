@@ -12,6 +12,63 @@ const getApiBaseUrl = () => {
   return apiBaseUrl;
 };
 
+const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
+
+const isAccountBlockedError = (error) => {
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+
+  const message = String(
+    data?.message ||
+      data?.title ||
+      data?.detail ||
+      data?.error ||
+      data ||
+      error?.message ||
+      ""
+  ).toLowerCase();
+
+  if (![401, 403].includes(status)) return false;
+
+  return (
+    message.includes("locked") ||
+    message.includes("lock") ||
+    message.includes("banned") ||
+    message.includes("ban") ||
+    message.includes("suspended") ||
+    message.includes("inactive") ||
+    message.includes("disabled") ||
+    message.includes("blocked") ||
+    message.includes("account status") ||
+    message.includes("tài khoản")
+  );
+};
+
+const getAccountBlockedMessage = (error) => {
+  const data = error?.response?.data;
+
+  return (
+    data?.message ||
+    data?.title ||
+    data?.detail ||
+    data?.error ||
+    "Your account has been locked or banned. Please login again."
+  );
+};
+
+const dispatchAccountBlockedEvent = (error) => {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
+      detail: {
+        message: getAccountBlockedMessage(error),
+        status: error?.response?.status,
+      },
+    })
+  );
+};
+
 const axiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
   headers: {
@@ -41,4 +98,16 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (isAccountBlockedError(error)) {
+      dispatchAccountBlockedEvent(error);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export { ACCOUNT_BLOCKED_EVENT };
 export default axiosInstance;

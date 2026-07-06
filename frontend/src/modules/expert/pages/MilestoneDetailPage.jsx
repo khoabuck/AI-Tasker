@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import milestoneService from "../../../services/milestone.service";
 import deliverableService from "../../../services/deliverable.service";
+import disputeService from "../../../services/dispute.service";
 
 const emptySubmissionForm = {
   fileUrl: "",
@@ -12,13 +13,27 @@ const emptySubmissionForm = {
   handoverNotes: "",
 };
 
+const emptyDisputeForm = {
+  reason: "",
+  evidenceText: "",
+  evidenceFileUrl: "",
+  evidenceImageUrl: "",
+  image: null,
+};
+
 export default function MilestoneDetailPage() {
   const { milestoneId } = useParams();
   const navigate = useNavigate();
 
   const [milestone, setMilestone] = useState(null);
   const [submissions, setSubmissions] = useState([]);
+  const [activeDispute, setActiveDispute] = useState(null);
   const [submissionForm, setSubmissionForm] = useState(emptySubmissionForm);
+
+  const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [disputeForm, setDisputeForm] = useState(emptyDisputeForm);
+  const [creatingDispute, setCreatingDispute] = useState(false);
+  const [disputeError, setDisputeError] = useState("");
 
   const [loading, setLoading] = useState(true);
   const [submissionLoading, setSubmissionLoading] = useState(false);
@@ -41,10 +56,16 @@ export default function MilestoneDetailPage() {
       setSubmissionError("");
 
       const data = await milestoneService.getMilestoneById(milestoneId);
-
       setMilestone(data);
 
       const realMilestoneId = getMilestoneId(data) || milestoneId;
+      const projectId = getProjectIdFromMilestone(data);
+
+      if (projectId && realMilestoneId) {
+        await loadActiveDispute(projectId, realMilestoneId);
+      } else {
+        setActiveDispute(null);
+      }
 
       if (realMilestoneId) {
         await loadSubmissions(realMilestoneId);
@@ -53,9 +74,35 @@ export default function MilestoneDetailPage() {
       console.error("LOAD MILESTONE DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load milestone."));
       setMilestone(null);
+      setActiveDispute(null);
       setSubmissions([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadActiveDispute = async (projectId, realMilestoneId) => {
+    try {
+      const disputes = await disputeService.getMyDisputes();
+
+      const found = Array.isArray(disputes)
+        ? disputes.find((item) => {
+            const status = String(item.status || "").toUpperCase();
+            const isActive = ["OPEN", "UNDER_REVIEW"].includes(status);
+            const sameProject = String(item.projectId) === String(projectId);
+
+            const sameMilestone =
+              !item.milestoneId ||
+              String(item.milestoneId) === String(realMilestoneId);
+
+            return isActive && sameProject && sameMilestone;
+          })
+        : null;
+
+      setActiveDispute(found || null);
+    } catch (err) {
+      console.warn("LOAD ACTIVE DISPUTE ERROR:", err?.response?.data || err);
+      setActiveDispute(null);
     }
   };
 
@@ -100,11 +147,55 @@ export default function MilestoneDetailPage() {
     }));
   };
 
+  const updateDisputeField = (name, value) => {
+    setDisputeError("");
+
+    setDisputeForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleDisputeImageChange = (event) => {
+    const file = event.target.files?.[0] || null;
+
+    setDisputeError("");
+
+    setDisputeForm((prev) => ({
+      ...prev,
+      image: file,
+    }));
+  };
+
   const resetSubmissionForm = () => {
     setMessage("");
     setError("");
     setSubmissionError("");
     setSubmissionForm({ ...emptySubmissionForm });
+  };
+
+  const openDisputeModal = () => {
+    const activeDisputeId = getDisputeId(activeDispute);
+
+    if (activeDisputeId) {
+      navigate(`/expert/disputes/${activeDisputeId}`);
+      return;
+    }
+
+    setDisputeError("");
+    setDisputeForm({
+      ...emptyDisputeForm,
+      reason: buildDefaultDisputeReason(milestone),
+    });
+    setShowDisputeModal(true);
+  };
+
+  const closeDisputeModal = () => {
+    if (creatingDispute) return;
+
+    setShowDisputeModal(false);
+    setDisputeError("");
+    setDisputeForm(emptyDisputeForm);
   };
 
   const validateSubmission = () => {
@@ -127,11 +218,38 @@ export default function MilestoneDetailPage() {
     return "";
   };
 
+  const validateDispute = () => {
+    if (!disputeForm.reason.trim()) {
+      return "Reason is required.";
+    }
+
+    if (disputeForm.reason.trim().length < 10) {
+      return "Reason must be at least 10 characters.";
+    }
+
+    if (!disputeForm.evidenceText.trim()) {
+      return "Evidence text is required.";
+    }
+
+    if (disputeForm.evidenceText.trim().length < 20) {
+      return "Evidence text must be at least 20 characters.";
+    }
+
+    return "";
+  };
+
   const handleSubmitWork = async (event) => {
     event.preventDefault();
 
     const realMilestoneId = getMilestoneId(milestone) || milestoneId;
     const latestSubmission = getLatestSubmission(submissions);
+
+    if (activeDispute) {
+      setSubmissionError(
+        "This milestone already has an active dispute. Please wait for admin resolution."
+      );
+      return;
+    }
 
     const isResubmission =
       Boolean(latestSubmission) &&
@@ -187,6 +305,71 @@ export default function MilestoneDetailPage() {
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCreateDispute = async (event) => {
+    event.preventDefault();
+
+    const activeDisputeId = getDisputeId(activeDispute);
+
+    if (activeDisputeId) {
+      navigate(`/expert/disputes/${activeDisputeId}`);
+      return;
+    }
+
+    const projectId = getProjectIdFromMilestone(milestone);
+    const realMilestoneId = getMilestoneId(milestone) || milestoneId;
+    const disputedAmount = getMilestoneDisputableAmount(milestone);
+
+    if (!projectId || !realMilestoneId) {
+      setDisputeError(
+        "Cannot create dispute because project or milestone id is missing."
+      );
+      return;
+    }
+
+    if (!disputedAmount || disputedAmount <= 0) {
+      setDisputeError("Cannot detect locked escrow amount for this milestone.");
+      return;
+    }
+
+    const validationError = validateDispute();
+
+    if (validationError) {
+      setDisputeError(validationError);
+      return;
+    }
+
+    try {
+      setCreatingDispute(true);
+      setDisputeError("");
+
+      const createdDispute = await disputeService.createDispute(projectId, {
+        milestoneId: realMilestoneId,
+        disputedAmount,
+        reason: disputeForm.reason,
+        evidenceText: disputeForm.evidenceText,
+        evidenceFileUrl: disputeForm.evidenceFileUrl,
+        evidenceImageUrl: disputeForm.evidenceImageUrl,
+        image: disputeForm.image,
+      });
+
+      const disputeId = getDisputeId(createdDispute);
+
+      if (disputeId) {
+        navigate(`/expert/disputes/${disputeId}`, { replace: true });
+        return;
+      }
+
+      setShowDisputeModal(false);
+      setMessage("Dispute opened successfully.");
+      await loadMilestone();
+    } catch (err) {
+      console.error("CREATE DISPUTE ERROR:", err?.response?.data || err);
+      setDisputeError(getFriendlyError(err, "Cannot open dispute."));
+    } finally {
+      setCreatingDispute(false);
     }
   };
 
@@ -259,6 +442,7 @@ export default function MilestoneDetailPage() {
 
   const latestSubmission = getLatestSubmission(submissions);
   const hasSubmission = Boolean(getSubmissionId(latestSubmission));
+  const activeDisputeId = getDisputeId(activeDispute);
 
   const needsResubmission =
     hasSubmission &&
@@ -266,6 +450,7 @@ export default function MilestoneDetailPage() {
       isChangeRequested(milestoneStatus));
 
   const canSubmit =
+    !activeDisputeId &&
     canSubmitWorkForMilestone(milestoneStatus) &&
     (!hasSubmission || needsResubmission) &&
     !submissionLoading;
@@ -275,6 +460,7 @@ export default function MilestoneDetailPage() {
     latestSubmission,
     hasSubmission,
     needsResubmission,
+    activeDisputeId,
   });
 
   const formTitle = needsResubmission ? "Resubmit Work" : "Submit Work";
@@ -283,6 +469,13 @@ export default function MilestoneDetailPage() {
     : "Share your completed work with the client for review.";
 
   const latestClientFeedback = getClientFeedback(latestSubmission);
+  const canOpenDispute = canOpenMilestoneDispute(
+    milestoneStatus,
+    latestSubmission
+  );
+
+  const shouldShowOpenDispute = canOpenDispute && !activeDisputeId;
+  const shouldShowViewDispute = canOpenDispute && activeDisputeId;
 
   return (
     <ExpertLayout>
@@ -298,6 +491,14 @@ export default function MilestoneDetailPage() {
             </span>
             Back to project
           </button>
+
+          {activeDisputeId && (
+            <Alert
+              type="danger"
+              title="Active dispute found"
+              message="This milestone already has an active dispute. You can view the current dispute detail instead of opening a new one."
+            />
+          )}
 
           <section className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_50px_rgba(0,0,0,0.28)]">
             <div className="relative overflow-hidden border-b border-white/10 p-5 md:p-6">
@@ -315,26 +516,74 @@ export default function MilestoneDetailPage() {
                   </h1>
 
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-                    Review the brief, submit your work, and manage revisions in
-                    one clear workspace.
+                    Review the brief, submit your work, manage revisions, and
+                    open dispute when the client rejects or requests revision.
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     <FriendlyStatusBadge ui={milestoneUi} />
+
+                    {shouldShowOpenDispute && (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-xs font-bold text-red-300">
+                        <span className="material-symbols-outlined text-sm">
+                          gavel
+                        </span>
+                        Dispute Available
+                      </span>
+                    )}
+
+                    {shouldShowViewDispute && (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-xs font-bold text-red-300">
+                        <span className="material-symbols-outlined text-sm">
+                          report_problem
+                        </span>
+                        Active Dispute
+                      </span>
+                    )}
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => loadSubmissions(realMilestoneId)}
-                  disabled={submissionLoading}
-                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="material-symbols-outlined text-[18px]">
-                    refresh
-                  </span>
-                  {submissionLoading ? "Refreshing..." : "Refresh"}
-                </button>
+                <div className="flex shrink-0 flex-wrap gap-3">
+                  {shouldShowOpenDispute && (
+                    <button
+                      type="button"
+                      onClick={openDisputeModal}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        gavel
+                      </span>
+                      Open Dispute
+                    </button>
+                  )}
+
+                  {shouldShowViewDispute && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate(`/expert/disputes/${activeDisputeId}`)
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        visibility
+                      </span>
+                      View Current Dispute
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={loadMilestone}
+                    disabled={submissionLoading}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      refresh
+                    </span>
+                    {submissionLoading ? "Refreshing..." : "Refresh"}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -413,6 +662,13 @@ export default function MilestoneDetailPage() {
                   />
                 )}
 
+                {activeDisputeId && (
+                  <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm leading-6 text-red-100">
+                    This milestone is currently in dispute. You cannot submit or
+                    resubmit work until admin resolves the dispute.
+                  </div>
+                )}
+
                 {!canSubmitWorkForMilestone(milestoneStatus) && (
                   <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     This milestone is currently closed for submission.
@@ -439,8 +695,9 @@ export default function MilestoneDetailPage() {
                         </p>
 
                         <p className="mt-1">
-                          Please update the milestone submission below. This
-                          will send a new submission to the client.
+                          Please update the milestone submission below. If you
+                          disagree with the client feedback, you can open a
+                          dispute.
                         </p>
                       </div>
                     </div>
@@ -455,6 +712,34 @@ export default function MilestoneDetailPage() {
                           {latestClientFeedback}
                         </p>
                       </div>
+                    )}
+
+                    {shouldShowOpenDispute && (
+                      <button
+                        type="button"
+                        onClick={openDisputeModal}
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          gavel
+                        </span>
+                        Open Dispute Instead
+                      </button>
+                    )}
+
+                    {shouldShowViewDispute && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/expert/disputes/${activeDisputeId}`)
+                        }
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          visibility
+                        </span>
+                        View Current Dispute
+                      </button>
                     )}
                   </div>
                 )}
@@ -594,11 +879,15 @@ export default function MilestoneDetailPage() {
                 />
 
                 <Step
-                  active={needsResubmission}
+                  active={needsResubmission || Boolean(activeDisputeId)}
                   done={false}
                   number="3"
-                  title="Update if needed"
-                  description="If changes are requested, resubmit directly from this page."
+                  title={activeDisputeId ? "Admin dispute review" : "Update or dispute"}
+                  description={
+                    activeDisputeId
+                      ? "This milestone is waiting for admin dispute resolution."
+                      : "If changes are requested, resubmit or open a dispute if you disagree."
+                  }
                 />
               </Card>
 
@@ -618,7 +907,7 @@ export default function MilestoneDetailPage() {
                   </li>
                   <li className="flex gap-2">
                     <span className="text-cyan-300">•</span>
-                    When changes are requested, update the same form here.
+                    If the client requests changes unfairly, open a dispute.
                   </li>
                 </ul>
               </Card>
@@ -626,7 +915,208 @@ export default function MilestoneDetailPage() {
           </div>
         </div>
       </div>
+
+      {showDisputeModal && (
+        <DisputeModal
+          formData={disputeForm}
+          milestone={milestone}
+          error={disputeError}
+          creating={creatingDispute}
+          onClose={closeDisputeModal}
+          onChange={updateDisputeField}
+          onImageChange={handleDisputeImageChange}
+          onSubmit={handleCreateDispute}
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+function DisputeModal({
+  formData,
+  milestone,
+  error,
+  creating,
+  onClose,
+  onChange,
+  onImageChange,
+  onSubmit,
+}) {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <form
+        onSubmit={onSubmit}
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-red-300">
+              Open Dispute
+            </p>
+
+            <h2 className="text-2xl font-black text-white">
+              Milestone dispute
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-400">
+              Provide a clear reason and evidence. After submitting, you will be
+              redirected to the dispute detail page.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-gray-400 transition hover:text-white disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            Milestone
+          </p>
+          <p className="mt-1 font-bold text-white">
+            {milestone?.title || "Untitled Milestone"}
+          </p>
+          <p className="mt-2 text-sm text-gray-400">
+            Disputed amount:{" "}
+            {formatMoney(getMilestoneDisputableAmount(milestone))}
+          </p>
+        </div>
+
+        {error && (
+          <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-5">
+          <ModalTextArea
+            label="Reason"
+            value={formData.reason}
+            disabled={creating}
+            required
+            rows={4}
+            placeholder="Explain why you disagree with the client rejection or revision request..."
+            onChange={(value) => onChange("reason", value)}
+          />
+
+          <ModalTextArea
+            label="Evidence Text"
+            value={formData.evidenceText}
+            disabled={creating}
+            required
+            rows={5}
+            placeholder="Describe your evidence, timeline, links, messages, screenshots, or submitted work..."
+            onChange={(value) => onChange("evidenceText", value)}
+          />
+
+          <ModalInput
+            label="Evidence File URL"
+            value={formData.evidenceFileUrl}
+            disabled={creating}
+            placeholder="https://drive.google.com/..."
+            onChange={(value) => onChange("evidenceFileUrl", value)}
+          />
+
+          <ModalInput
+            label="Evidence Image URL"
+            value={formData.evidenceImageUrl}
+            disabled={creating}
+            placeholder="https://image-url..."
+            onChange={(value) => onChange("evidenceImageUrl", value)}
+          />
+
+          <label className="block">
+            <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+              Upload Image
+            </span>
+
+            <input
+              type="file"
+              accept="image/*"
+              disabled={creating}
+              onChange={onImageChange}
+              className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-red-400/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-red-300 disabled:cursor-not-allowed disabled:opacity-60"
+            />
+
+            {formData.image && (
+              <p className="mt-2 text-xs text-gray-500">
+                Selected: {formData.image.name}
+              </p>
+            )}
+          </label>
+        </div>
+
+        <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={creating}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={creating}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {creating ? "Opening..." : "Open Dispute"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function ModalInput({ label, value, disabled, placeholder, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+        {label}
+      </span>
+
+      <input
+        type="url"
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
+  );
+}
+
+function ModalTextArea({
+  label,
+  value,
+  disabled,
+  required,
+  rows,
+  placeholder,
+  onChange,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+        {label} {required && <span className="text-red-300">*</span>}
+      </span>
+
+      <textarea
+        rows={rows}
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+      />
+    </label>
   );
 }
 
@@ -898,6 +1388,25 @@ function buildFormFromSubmission(submission) {
   };
 }
 
+function buildDefaultDisputeReason(milestone) {
+  const title = milestone?.title || "this milestone";
+  return `I disagree with the client's rejection or revision request for ${title}.`;
+}
+
+function getDisputeId(dispute) {
+  return (
+    dispute?.disputeId ||
+    dispute?.DisputeId ||
+    dispute?.id ||
+    dispute?.Id ||
+    dispute?.raw?.disputeId ||
+    dispute?.raw?.DisputeId ||
+    dispute?.raw?.id ||
+    dispute?.raw?.Id ||
+    ""
+  );
+}
+
 function getMilestoneId(milestone) {
   return (
     milestone?.milestoneId ||
@@ -968,6 +1477,37 @@ function getLatestSubmission(submissions) {
   })[0];
 }
 
+function getMilestoneDisputableAmount(milestone) {
+  return firstPositiveNumber(
+    milestone?.lockedEscrowAmount,
+    milestone?.escrowLockedAmount,
+    milestone?.escrowAmount,
+    milestone?.lockedAmount,
+    milestone?.amount,
+    milestone?.price,
+    milestone?.budget,
+    milestone?.raw?.lockedEscrowAmount,
+    milestone?.raw?.escrowLockedAmount,
+    milestone?.raw?.escrowAmount,
+    milestone?.raw?.lockedAmount,
+    milestone?.raw?.amount,
+    milestone?.raw?.price,
+    milestone?.raw?.budget
+  );
+}
+
+function firstPositiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+
+    if (Number.isFinite(number) && number > 0) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
 function canSubmitWorkForMilestone(status) {
   const value = String(status || "").trim().toUpperCase();
 
@@ -1001,7 +1541,15 @@ function isChangeRequested(status) {
     "REWORK_REQUIRED",
     "REJECTED",
     "REJECTED_BY_CLIENT",
+    "CLIENT_REQUESTED_REVISION",
   ].includes(value);
+}
+
+function canOpenMilestoneDispute(milestoneStatus, latestSubmission) {
+  return (
+    isChangeRequested(milestoneStatus) ||
+    isChangeRequested(latestSubmission?.status)
+  );
 }
 
 function isApprovedStatus(status) {
@@ -1022,7 +1570,16 @@ function getMilestoneUiStatus({
   latestSubmission,
   hasSubmission,
   needsResubmission,
+  activeDisputeId,
 }) {
+  if (activeDisputeId) {
+    return {
+      label: "In Dispute",
+      icon: "gavel",
+      className: "border-red-400/30 bg-red-400/10 text-red-300",
+    };
+  }
+
   if (needsResubmission || isChangeRequested(milestoneStatus)) {
     return {
       label: "Changes Requested",
@@ -1128,5 +1685,11 @@ function getFriendlyError(err, fallback) {
 
   if (typeof data === "string") return data;
 
-  return data?.message || data?.title || err?.message || fallback;
+  return (
+    data?.message ||
+    data?.title ||
+    data?.detail ||
+    err?.message ||
+    fallback
+  );
 }

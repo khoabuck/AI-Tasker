@@ -11,6 +11,8 @@ import {
 const emptyEvidenceForm = {
   evidenceText: "",
   fileUrl: "",
+  imageUrl: "",
+  image: null,
 };
 
 export default function DisputeDetailPage() {
@@ -59,6 +61,18 @@ export default function DisputeDetailPage() {
     }));
   };
 
+  const handleEvidenceImageChange = (event) => {
+    const file = event.target.files?.[0] || null;
+
+    setError("");
+    setMessage("");
+
+    setEvidenceForm((prev) => ({
+      ...prev,
+      image: file,
+    }));
+  };
+
   const validateEvidence = () => {
     if (!evidenceForm.evidenceText.trim()) {
       return "Evidence text is required.";
@@ -90,7 +104,11 @@ export default function DisputeDetailPage() {
       setError("");
       setMessage("");
 
-      await disputeService.addDisputeEvidence(disputeId, evidenceForm);
+      if (evidenceForm.image) {
+        await disputeService.addDisputeImageEvidence(disputeId, evidenceForm);
+      } else {
+        await disputeService.addDisputeEvidence(disputeId, evidenceForm);
+      }
 
       setMessage("Evidence submitted successfully.");
       setEvidenceForm(emptyEvidenceForm);
@@ -230,15 +248,36 @@ export default function DisputeDetailPage() {
                   {dispute.evidenceText || "No evidence text."}
                 </p>
 
-                {dispute.fileUrl && (
-                  <a
-                    href={dispute.fileUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-4 inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                  >
-                    Open Evidence File
-                  </a>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  {dispute.fileUrl && (
+                    <a
+                      href={dispute.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    >
+                      Open Evidence File
+                    </a>
+                  )}
+
+                  {dispute.imageUrl && (
+                    <a
+                      href={dispute.imageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex rounded-lg border border-purple-400/40 bg-purple-400/10 px-4 py-2 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
+                    >
+                      Open Evidence Image
+                    </a>
+                  )}
+                </div>
+
+                {dispute.imageUrl && (
+                  <img
+                    src={dispute.imageUrl}
+                    alt="Evidence"
+                    className="mt-5 max-h-[360px] rounded-xl border border-white/10 object-contain"
+                  />
                 )}
               </Card>
 
@@ -260,10 +299,7 @@ export default function DisputeDetailPage() {
                 ) : (
                   <div className="space-y-4">
                     {dispute.evidences.map((item) => (
-                      <EvidenceItem
-                        key={item.evidenceId}
-                        evidence={item}
-                      />
+                      <EvidenceItem key={item.evidenceId} evidence={item} />
                     ))}
                   </div>
                 )}
@@ -328,8 +364,7 @@ export default function DisputeDetailPage() {
               <Card title="Add Evidence">
                 {resolved && (
                   <div className="mb-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm text-yellow-200">
-                    This dispute is resolved. You should not submit new
-                    evidence unless backend still allows it.
+                    This dispute is resolved. You should not submit new evidence.
                   </div>
                 )}
 
@@ -358,6 +393,35 @@ export default function DisputeDetailPage() {
                       placeholder="https://..."
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
                     />
+                  </Field>
+
+                  <Field label="Evidence Image URL">
+                    <input
+                      type="url"
+                      value={evidenceForm.imageUrl}
+                      disabled={submittingEvidence || resolved}
+                      onChange={(event) =>
+                        updateEvidenceField("imageUrl", event.target.value)
+                      }
+                      placeholder="https://image-url..."
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+                  </Field>
+
+                  <Field label="Upload Image">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      disabled={submittingEvidence || resolved}
+                      onChange={handleEvidenceImageChange}
+                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-cyan-400/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    />
+
+                    {evidenceForm.image && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Selected: {evidenceForm.image.name}
+                      </p>
+                    )}
                   </Field>
 
                   <button
@@ -394,15 +458,36 @@ function EvidenceItem({ evidence }) {
         {evidence.evidenceText || "No evidence text."}
       </p>
 
-      {evidence.fileUrl && (
-        <a
-          href={evidence.fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-4 inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-        >
-          Open File
-        </a>
+      <div className="mt-4 flex flex-wrap gap-3">
+        {evidence.fileUrl && (
+          <a
+            href={evidence.fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          >
+            Open File
+          </a>
+        )}
+
+        {evidence.imageUrl && (
+          <a
+            href={evidence.imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-purple-400/40 bg-purple-400/10 px-4 py-2 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
+          >
+            Open Image
+          </a>
+        )}
+      </div>
+
+      {evidence.imageUrl && (
+        <img
+          src={evidence.imageUrl}
+          alt="Evidence"
+          className="mt-5 max-h-[320px] rounded-xl border border-white/10 object-contain"
+        />
       )}
     </article>
   );
@@ -487,6 +572,7 @@ function getFriendlyError(err, fallback) {
   return (
     err?.response?.data?.message ||
     err?.response?.data?.title ||
+    err?.response?.data?.detail ||
     err?.response?.data ||
     err?.message ||
     fallback

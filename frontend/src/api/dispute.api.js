@@ -1,8 +1,14 @@
 import axiosInstance from "./axiosInstance";
 
+const multipartConfig = {
+  headers: {
+    "Content-Type": "multipart/form-data",
+  },
+};
+
 const disputeApi = {
   createDispute(data) {
-    return axiosInstance.post("/disputes", data);
+    return axiosInstance.post("/disputes", data, multipartConfig);
   },
 
   getMyDisputes() {
@@ -15,6 +21,14 @@ const disputeApi = {
 
   addDisputeEvidence(disputeId, data) {
     return axiosInstance.post(`/disputes/${disputeId}/evidences`, data);
+  },
+
+  addDisputeImageEvidence(disputeId, data) {
+    return axiosInstance.post(
+      `/disputes/${disputeId}/evidences/image`,
+      data,
+      multipartConfig
+    );
   },
 };
 

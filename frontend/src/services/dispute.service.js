@@ -93,8 +93,18 @@ const normalizeEvidence = (evidence) => {
     fileUrl: getValue(
       evidence.fileUrl,
       evidence.FileUrl,
+      evidence.evidenceFileUrl,
+      evidence.EvidenceFileUrl,
       evidence.evidenceUrl,
       evidence.EvidenceUrl,
+      ""
+    ),
+
+    imageUrl: getValue(
+      evidence.imageUrl,
+      evidence.ImageUrl,
+      evidence.evidenceImageUrl,
+      evidence.EvidenceImageUrl,
       ""
     ),
 
@@ -196,8 +206,18 @@ const normalizeDispute = (dispute) => {
     fileUrl: getValue(
       dispute.fileUrl,
       dispute.FileUrl,
+      dispute.evidenceFileUrl,
+      dispute.EvidenceFileUrl,
       dispute.evidenceUrl,
       dispute.EvidenceUrl,
+      ""
+    ),
+
+    imageUrl: getValue(
+      dispute.imageUrl,
+      dispute.ImageUrl,
+      dispute.evidenceImageUrl,
+      dispute.EvidenceImageUrl,
       ""
     ),
 
@@ -230,19 +250,41 @@ const normalizeDispute = (dispute) => {
   };
 };
 
-const buildCreateDisputePayload = (projectId, formData) => {
-  const payload = {
-    projectId: Number(projectId || formData.projectId),
-    milestoneId: formData.milestoneId ? Number(formData.milestoneId) : null,
-    reason: trim(formData.reason),
-    evidenceText: trim(formData.evidenceText),
-    fileUrl: trim(formData.fileUrl) || null,
-  };
+const appendIfHasValue = (formData, key, value) => {
+  if (value === undefined || value === null || value === "") return;
+  formData.append(key, value);
+};
+
+const buildCreateDisputeFormData = (projectId, formData) => {
+  const payload = new FormData();
+
+  appendIfHasValue(payload, "projectId", Number(projectId || formData.projectId));
+
+  if (formData.milestoneId) {
+    appendIfHasValue(payload, "milestoneId", Number(formData.milestoneId));
+  }
+
+  if (formData.respondentUserId) {
+    appendIfHasValue(
+      payload,
+      "respondentUserId",
+      Number(formData.respondentUserId)
+    );
+  }
 
   const disputedAmount = toNumberOrNull(formData.disputedAmount);
 
   if (disputedAmount !== null) {
-    payload.disputedAmount = disputedAmount;
+    appendIfHasValue(payload, "disputedAmount", disputedAmount);
+  }
+
+  appendIfHasValue(payload, "reason", trim(formData.reason));
+  appendIfHasValue(payload, "evidenceText", trim(formData.evidenceText));
+  appendIfHasValue(payload, "evidenceFileUrl", trim(formData.evidenceFileUrl));
+  appendIfHasValue(payload, "evidenceImageUrl", trim(formData.evidenceImageUrl));
+
+  if (formData.image instanceof File) {
+    payload.append("image", formData.image);
   }
 
   return payload;
@@ -251,17 +293,28 @@ const buildCreateDisputePayload = (projectId, formData) => {
 const buildEvidencePayload = (formData) => ({
   evidenceText: trim(formData.evidenceText),
   fileUrl: trim(formData.fileUrl) || null,
+  imageUrl: trim(formData.imageUrl) || null,
 });
+
+const buildEvidenceImageFormData = (formData) => {
+  const payload = new FormData();
+
+  appendIfHasValue(payload, "evidenceText", trim(formData.evidenceText));
+  appendIfHasValue(payload, "fileUrl", trim(formData.fileUrl));
+  appendIfHasValue(payload, "imageUrl", trim(formData.imageUrl));
+
+  if (formData.image instanceof File) {
+    payload.append("image", formData.image);
+  }
+
+  return payload;
+};
 
 const disputeService = {
   async createDispute(projectId, formData) {
-    const payload = buildCreateDisputePayload(projectId, formData);
-
-    console.log("CREATE DISPUTE PAYLOAD:", payload);
+    const payload = buildCreateDisputeFormData(projectId, formData);
 
     const response = await disputeApi.createDispute(payload);
-
-    console.log("CREATE DISPUTE RESPONSE:", response?.data);
 
     return normalizeDispute(unwrapData(response));
   },
@@ -269,9 +322,15 @@ const disputeService = {
   async getMyDisputes() {
     const response = await disputeApi.getMyDisputes();
 
-    console.log("GET MY DISPUTES RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeDispute).filter(Boolean);
+  },
+
+  async getDisputesByProject(projectId) {
+    const disputes = await this.getMyDisputes();
+
+    return disputes.filter(
+      (item) => String(item.projectId) === String(projectId)
+    );
   },
 
   async getDisputeById(disputeId) {
@@ -280,8 +339,6 @@ const disputeService = {
     }
 
     const response = await disputeApi.getDisputeById(disputeId);
-
-    console.log("GET DISPUTE DETAIL RESPONSE:", response?.data);
 
     return normalizeDispute(unwrapData(response));
   },
@@ -293,11 +350,22 @@ const disputeService = {
 
     const payload = buildEvidencePayload(formData);
 
-    console.log("ADD DISPUTE EVIDENCE PAYLOAD:", payload);
-
     const response = await disputeApi.addDisputeEvidence(disputeId, payload);
 
-    console.log("ADD DISPUTE EVIDENCE RESPONSE:", response?.data);
+    return normalizeDispute(unwrapData(response));
+  },
+
+  async addDisputeImageEvidence(disputeId, formData) {
+    if (!disputeId || disputeId === "undefined" || disputeId === "null") {
+      throw new Error("Invalid dispute id.");
+    }
+
+    const payload = buildEvidenceImageFormData(formData);
+
+    const response = await disputeApi.addDisputeImageEvidence(
+      disputeId,
+      payload
+    );
 
     return normalizeDispute(unwrapData(response));
   },

@@ -33,7 +33,7 @@ export default function ProjectMilestonesPage() {
       ]);
 
       setProject(projectData);
-      setMilestones(milestoneData);
+      setMilestones(Array.isArray(milestoneData) ? milestoneData : []);
     } catch (err) {
       console.error("LOAD PROJECT MILESTONES ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load project milestones."));
@@ -129,21 +129,22 @@ export default function ProjectMilestonesPage() {
 
           {milestones.length > 0 && (
             <div className="grid grid-cols-1 gap-5">
-              {milestones.map((milestone, index) => (
-                <MilestoneCard
-                  key={milestone.milestoneId || index}
-                  milestone={milestone}
-                  index={index}
-                  onDetail={() =>
-                    navigate(`/expert/milestones/${milestone.milestoneId}`)
-                  }
-                  onDeliverables={() =>
-                    navigate(
-                      `/expert/milestones/${milestone.milestoneId}/deliverables`
-                    )
-                  }
-                />
-              ))}
+              {milestones.map((milestone, index) => {
+                const milestoneId = getMilestoneId(milestone);
+
+                return (
+                  <MilestoneCard
+                    key={milestoneId || index}
+                    milestone={milestone}
+                    index={index}
+                    onDetail={() => navigate(`/expert/milestones/${milestoneId}`)}
+                    onDeliverables={() =>
+                      navigate(`/expert/milestones/${milestoneId}/deliverables`)
+                    }
+                    onDispute={() => navigate(`/expert/milestones/${milestoneId}`)}
+                  />
+                );
+              })}
             </div>
           )}
         </div>
@@ -152,8 +153,15 @@ export default function ProjectMilestonesPage() {
   );
 }
 
-function MilestoneCard({ milestone, index, onDetail, onDeliverables }) {
+function MilestoneCard({
+  milestone,
+  index,
+  onDetail,
+  onDeliverables,
+  onDispute,
+}) {
   const status = String(milestone.status || "").toUpperCase();
+  const canDispute = canOpenDisputeFromMilestoneStatus(status);
 
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 transition hover:border-cyan-400/40">
@@ -165,6 +173,12 @@ function MilestoneCard({ milestone, index, onDetail, onDeliverables }) {
             </span>
 
             <MilestoneStatusBadge status={status} />
+
+            {canDispute && (
+              <span className="rounded-full border border-red-400/30 bg-red-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-red-300">
+                Disputable
+              </span>
+            )}
           </div>
 
           <h2 className="text-xl font-bold text-white">
@@ -176,17 +190,20 @@ function MilestoneCard({ milestone, index, onDetail, onDeliverables }) {
           </p>
         </div>
 
-        <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-72">
+        <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-80">
           <div className="space-y-4">
             <Info label="Amount" value={formatMoney(milestone.amount)} />
             <Info label="Due Date" value={formatDate(milestone.dueDate)} />
-            <Info label="Status" value={MILESTONE_STATUS_LABEL[status] || status} />
+            <Info
+              label="Status"
+              value={MILESTONE_STATUS_LABEL[status] || formatStatusLabel(status)}
+            />
 
-            <div className="flex gap-2 pt-2">
+            <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
               <button
                 type="button"
                 onClick={onDetail}
-                className="flex-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
                 Detail
               </button>
@@ -194,11 +211,27 @@ function MilestoneCard({ milestone, index, onDetail, onDeliverables }) {
               <button
                 type="button"
                 onClick={onDeliverables}
-                className="flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-200 transition hover:border-cyan-400/50 hover:text-cyan-300"
+                className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-semibold text-gray-200 transition hover:border-cyan-400/50 hover:text-cyan-300"
               >
                 Deliverables
               </button>
+
+              {canDispute && (
+                <button
+                  type="button"
+                  onClick={onDispute}
+                  className="rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400 hover:text-black"
+                >
+                  Dispute
+                </button>
+              )}
             </div>
+
+            {canDispute && (
+              <p className="text-xs leading-5 text-gray-500">
+                Open this milestone to submit a dispute with reason and evidence.
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -227,7 +260,7 @@ function ProjectStatusBadge({ status }) {
     <span
       className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {PROJECT_STATUS_LABEL[status] || status}
+      {PROJECT_STATUS_LABEL[status] || formatStatusLabel(status)}
     </span>
   );
 }
@@ -236,9 +269,11 @@ function MilestoneStatusBadge({ status }) {
   const style =
     status === "COMPLETED" || status === "APPROVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "REVISION_REQUESTED"
+      : canOpenDisputeFromMilestoneStatus(status)
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "CANCELLED"
+      : status === "CANCELLED" ||
+        status === "CANCELED" ||
+        status === "DISPUTED"
       ? "border-red-400/30 bg-red-400/10 text-red-300"
       : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
 
@@ -246,7 +281,7 @@ function MilestoneStatusBadge({ status }) {
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {MILESTONE_STATUS_LABEL[status] || status}
+      {MILESTONE_STATUS_LABEL[status] || formatStatusLabel(status)}
     </span>
   );
 }
@@ -258,6 +293,38 @@ function Alert({ title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+function getMilestoneId(milestone) {
+  return (
+    milestone?.milestoneId ||
+    milestone?.MilestoneId ||
+    milestone?.milestoneID ||
+    milestone?.MilestoneID ||
+    milestone?.projectMilestoneId ||
+    milestone?.ProjectMilestoneId ||
+    milestone?.id ||
+    milestone?.Id ||
+    ""
+  );
+}
+
+function canOpenDisputeFromMilestoneStatus(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  return [
+    "REVISION_REQUESTED",
+    "REVISION_REQUIRED",
+    "NEEDS_REVISION",
+    "CHANGES_REQUESTED",
+    "REQUEST_REVISION",
+    "RESUBMISSION_REQUESTED",
+    "RESUBMIT_REQUESTED",
+    "REWORK_REQUIRED",
+    "REJECTED",
+    "REJECTED_BY_CLIENT",
+    "CLIENT_REQUESTED_REVISION",
+  ].includes(value);
 }
 
 function formatMoney(value) {
@@ -273,6 +340,13 @@ function formatDate(value) {
   if (Number.isNaN(date.getTime())) return "N/A";
 
   return date.toLocaleDateString();
+}
+
+function formatStatusLabel(status) {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getFriendlyError(err, fallback) {
