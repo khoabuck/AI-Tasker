@@ -3,6 +3,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 
 using AITasker.Application.DTOs.Requests;
@@ -16,13 +17,19 @@ public class AuthController : ControllerBase
 {
     private const string GoogleScheme = "Google";
     private const string ExternalCookieScheme = "External";
+    private const string AuthCookieName = "access_token";
 
     private readonly IAuthService _authService;
     private readonly string _frontendBaseUrl;
+    private readonly IWebHostEnvironment _environment;
 
-    public AuthController(IAuthService authService, IConfiguration configuration)
+    public AuthController(
+        IAuthService authService,
+        IConfiguration configuration,
+        IWebHostEnvironment environment)
     {
         _authService = authService;
+        _environment = environment;
         _frontendBaseUrl = (configuration["AppUrls:FrontendBaseUrl"] ?? "http://localhost:5173")
             .Trim()
             .TrimEnd('/');
@@ -64,7 +71,18 @@ public class AuthController : ControllerBase
         {
             var result = await _authService.LoginAsync(request);
 
-            return Ok(result);
+            SetAuthCookie(result.AccessToken, result.ExpiresAt);
+
+            return Ok(new
+            {
+                success = true,
+                message = "Login successful.",
+                data = new
+                {
+                    user = result.User,
+                    expiresAt = result.ExpiresAt
+                }
+            });
         }
         catch (InvalidOperationException ex)
         {
@@ -128,12 +146,14 @@ public class AuthController : ControllerBase
             var role = result.User.Role ?? string.Empty;
             var status = result.User.Status ?? string.Empty;
 
+            SetAuthCookie(result.AccessToken, result.ExpiresAt);
+
             var redirectUrl =
                 $"{_frontendBaseUrl}/oauth/callback" +
-                $"?token={Uri.EscapeDataString(result.AccessToken)}" +
-                $"&status={Uri.EscapeDataString(status)}" +
+                $"?status={Uri.EscapeDataString(status)}" +
                 $"&role={Uri.EscapeDataString(role)}" +
-                $"&userId={result.User.UserId}";
+                $"&userId={result.User.UserId}" +
+                $"&expiresAt={Uri.EscapeDataString(result.ExpiresAt.ToString("O"))}";
 
             return Redirect(redirectUrl);
         }
@@ -228,6 +248,19 @@ public class AuthController : ControllerBase
                 message = ex.Message
             });
         }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    public IActionResult Logout()
+    {
+        DeleteAuthCookie();
+
+        return Ok(new
+        {
+            success = true,
+            message = "Logout successful."
+        });
     }
 
     [Authorize]
@@ -358,16 +391,80 @@ public class AuthController : ControllerBase
             });
         }
 
-        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        if (user.Status == "SUSPENDED")
         {
             return Unauthorized(new
             {
                 success = false,
-                message = "Your account is not allowed to access this resource."
+                status = "SUSPENDED",
+                message = "Your account is temporarily locked."
+            });
+        }
+
+        if (user.Status == "BANNED")
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                status = "BANNED",
+                message = "Your account has been banned."
             });
         }
 
         return Ok(user);
+    }
+
+    private void SetAuthCookie(string accessToken, DateTime expiresAt)
+    {
+        Response.Cookies.Append(
+            AuthCookieName,
+            accessToken,
+            CreateAuthCookieOptions(expiresAt)
+        );
+    }
+
+    private void DeleteAuthCookie()
+    {
+        Response.Cookies.Delete(
+            AuthCookieName,
+            CreateDeleteAuthCookieOptions()
+        );
+    }
+
+    private CookieOptions CreateAuthCookieOptions(DateTime expiresAt)
+    {
+        var isProduction = _environment.IsProduction();
+
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
+            Expires = ToUtcDateTimeOffset(expiresAt),
+            Path = "/"
+        };
+    }
+
+    private CookieOptions CreateDeleteAuthCookieOptions()
+    {
+        var isProduction = _environment.IsProduction();
+
+        return new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = isProduction,
+            SameSite = isProduction ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/"
+        };
+    }
+
+    private static DateTimeOffset ToUtcDateTimeOffset(DateTime value)
+    {
+        var utcValue = value.Kind == DateTimeKind.Utc
+            ? value
+            : value.ToUniversalTime();
+
+        return new DateTimeOffset(utcValue);
     }
 
     private int? GetCurrentUserId()
