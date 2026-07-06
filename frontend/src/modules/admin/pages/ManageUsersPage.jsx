@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
-const ROLE_OPTIONS = ["ALL", "ADMIN", "CLIENT", "EXPERT", "USER"];
+const ROLE_OPTIONS = ["ALL", "CLIENT", "EXPERT", "USER"];
 const STATUS_OPTIONS = ["ALL", "ACTIVE", "LOCKED", "BANNED"];
 
 const EMPTY_ACTION = {
@@ -109,8 +109,13 @@ export default function ManageUsersPage() {
         setSuccess("");
       }
 
-      const data = await adminUserService.getAllUsers();
-      setUsers(Array.isArray(data) ? data : []);
+     const data = await adminUserService.getAllUsers();
+
+const visibleUsers = Array.isArray(data)
+  ? data.filter((user) => String(user.role || "").toUpperCase() !== "ADMIN")
+  : [];
+
+setUsers(visibleUsers);
     } catch (err) {
       console.error("LOAD ADMIN USERS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load users."));

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminDisputeService from "../../../services/adminDispute.service";
 
-const STATUS_OPTIONS = ["ALL", "OPEN", "PENDING", "IN_REVIEW", "RESOLVED", "CLOSED"];
+const STATUS_OPTIONS = ["ALL", "OPEN", "UNDER_REVIEW", "RESOLVED", "CLOSED"];
 
 const RESOLUTION_OPTIONS = [
   {
@@ -31,6 +31,7 @@ export default function ManageDisputesPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const [resolveForm, setResolveForm] = useState(EMPTY_RESOLVE_FORM);
+  const [resolveErrors, setResolveErrors] = useState({});
 
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -71,7 +72,7 @@ export default function ManageDisputesPage() {
 
         result.total += 1;
 
-        if (["OPEN", "PENDING", "IN_REVIEW"].includes(status)) {
+        if (["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(status)) {
           result.open += 1;
         }
 
@@ -132,6 +133,7 @@ export default function ManageDisputesPage() {
   const openResolveModal = (dispute) => {
     setResolveTarget(dispute);
     setResolveForm(EMPTY_RESOLVE_FORM);
+    setResolveErrors({});
     setError("");
     setSuccess("");
   };
@@ -141,28 +143,33 @@ export default function ManageDisputesPage() {
 
     setResolveTarget(null);
     setResolveForm(EMPTY_RESOLVE_FORM);
+    setResolveErrors({});
   };
 
   const handleResolveDispute = async () => {
     if (!resolveTarget?.disputeId) return;
 
+    const errors = {};
+
     if (!resolveForm.resolutionType) {
-      setError("Please select a resolution type.");
-      return;
+      errors.resolutionType = "Please select a resolution type.";
     }
 
     if (!resolveForm.adminDecision.trim()) {
-      setError("Please enter admin decision.");
-      return;
+      errors.adminDecision = "Please enter the reason for this decision.";
+    } else if (resolveForm.adminDecision.trim().length < 10) {
+      errors.adminDecision = "Reason must be at least 10 characters.";
     }
 
-    if (resolveForm.adminDecision.trim().length < 10) {
-      setError("Admin decision must be at least 10 characters.");
+    if (Object.keys(errors).length > 0) {
+      setResolveErrors(errors);
+      setError("Please check the highlighted fields before submitting.");
       return;
     }
 
     try {
       setResolving(true);
+      setResolveErrors({});
       setError("");
       setSuccess("");
 
@@ -171,11 +178,13 @@ export default function ManageDisputesPage() {
         adminDecision: resolveForm.adminDecision,
       });
 
+      const resolvedId = resolveTarget.disputeId;
+
       closeResolveModal();
       setSelectedDispute(null);
 
       await loadDisputes({ keepMessage: true });
-      setSuccess(`Dispute #${resolveTarget.disputeId} has been resolved.`);
+      setSuccess(`Dispute #${resolvedId} has been resolved.`);
     } catch (err) {
       console.error("RESOLVE DISPUTE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot resolve dispute."));
@@ -346,15 +355,23 @@ export default function ManageDisputesPage() {
           <ResolveDisputeModal
             dispute={resolveTarget}
             form={resolveForm}
+            errors={resolveErrors}
             loading={resolving}
             onClose={closeResolveModal}
             onConfirm={handleResolveDispute}
-            onChange={(name, value) =>
+            onChange={(name, value) => {
               setResolveForm((prev) => ({
                 ...prev,
                 [name]: value,
-              }))
-            }
+              }));
+
+              setResolveErrors((prev) => ({
+                ...prev,
+                [name]: "",
+              }));
+
+              setError("");
+            }}
           />
         )}
       </div>
@@ -364,7 +381,9 @@ export default function ManageDisputesPage() {
 
 function DisputeRow({ dispute, disabled, onView, onResolve }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
-  const canResolve = !["RESOLVED", "CLOSED"].includes(status);
+  const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
+    status
+  );
 
   return (
     <article className="p-5 transition hover:bg-white/[0.02]">
@@ -443,7 +462,9 @@ function DisputeRow({ dispute, disabled, onView, onResolve }) {
 
 function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
-  const canResolve = !["RESOLVED", "CLOSED"].includes(status);
+  const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
+    status
+  );
   const evidences = Array.isArray(dispute.evidences) ? dispute.evidences : [];
 
   return (
@@ -512,7 +533,7 @@ function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
                 <div className="space-y-3">
                   {evidences.map((evidence, index) => (
                     <EvidenceItem
-                      key={evidence.disputeEvidenceId || evidence.id || index}
+                      key={evidence.evidenceId || evidence.id || index}
                       evidence={evidence}
                     />
                   ))}
@@ -538,7 +559,15 @@ function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
   );
 }
 
-function ResolveDisputeModal({ dispute, form, loading, onClose, onConfirm, onChange }) {
+function ResolveDisputeModal({
+  dispute,
+  form,
+  errors = {},
+  loading,
+  onClose,
+  onConfirm,
+  onChange,
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
       <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
@@ -554,6 +583,12 @@ function ResolveDisputeModal({ dispute, form, loading, onClose, onConfirm, onCha
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
               Resolution Type
             </label>
+
+            {errors.resolutionType && (
+              <p className="mb-2 text-sm font-semibold text-red-300">
+                {errors.resolutionType}
+              </p>
+            )}
 
             <div className="grid grid-cols-1 gap-3">
               {RESOLUTION_OPTIONS.map((item) => (
@@ -577,13 +612,14 @@ function ResolveDisputeModal({ dispute, form, loading, onClose, onConfirm, onCha
           <TextArea
             label="Admin Decision"
             value={form.adminDecision}
+            error={errors.adminDecision}
             onChange={(value) => onChange("adminDecision", value)}
             placeholder="Explain the reason for this final decision."
           />
 
           <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
-            Backend expects only <b>resolutionType</b> and <b>adminDecision</b>.
-            No amount split is sent from this form.
+            Please explain your decision clearly. This note will help both sides
+            understand why the dispute was resolved this way.
           </div>
         </div>
 
@@ -673,13 +709,36 @@ function InfoBox({ label, value }) {
 
 function EvidenceItem({ evidence }) {
   const title =
-    evidence.title || evidence.Title || evidence.fileName || evidence.FileName || "Evidence";
+    evidence.title ||
+    evidence.Title ||
+    evidence.uploadedByName ||
+    evidence.UploadedByName ||
+    "Evidence";
 
   const description =
-    evidence.description || evidence.Description || evidence.note || evidence.Note || "";
+    evidence.evidenceText ||
+    evidence.EvidenceText ||
+    evidence.description ||
+    evidence.Description ||
+    evidence.note ||
+    evidence.Note ||
+    "";
 
   const fileUrl =
-    evidence.fileUrl || evidence.FileUrl || evidence.url || evidence.Url || "";
+    evidence.fileUrl ||
+    evidence.FileUrl ||
+    evidence.evidenceFileUrl ||
+    evidence.EvidenceFileUrl ||
+    evidence.url ||
+    evidence.Url ||
+    "";
+
+  const imageUrl =
+    evidence.imageUrl ||
+    evidence.ImageUrl ||
+    evidence.evidenceImageUrl ||
+    evidence.EvidenceImageUrl ||
+    "";
 
   return (
     <div className="rounded-xl border border-white/10 bg-black/10 p-4">
@@ -691,15 +750,36 @@ function EvidenceItem({ evidence }) {
         </p>
       )}
 
-      {fileUrl && (
-        <a
-          href={fileUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-        >
-          Open Evidence
-        </a>
+      <div className="mt-3 flex flex-wrap gap-3">
+        {fileUrl && (
+          <a
+            href={fileUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          >
+            Open File
+          </a>
+        )}
+
+        {imageUrl && (
+          <a
+            href={imageUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex rounded-lg border border-purple-400/40 bg-purple-400/10 px-3 py-2 text-xs font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
+          >
+            Open Image
+          </a>
+        )}
+      </div>
+
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt="Evidence"
+          className="mt-4 max-h-72 rounded-xl border border-white/10 object-contain"
+        />
       )}
     </div>
   );
@@ -711,7 +791,10 @@ function StatusBadge({ status }) {
   const className =
     value === "RESOLVED" || value === "CLOSED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : value === "OPEN" || value === "PENDING" || value === "IN_REVIEW"
+      : value === "OPEN" ||
+        value === "PENDING" ||
+        value === "IN_REVIEW" ||
+        value === "UNDER_REVIEW"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
       : "border-gray-400/30 bg-gray-400/10 text-gray-300";
 
@@ -732,7 +815,7 @@ function Badge({ label }) {
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({ label, value, error, onChange, placeholder }) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -744,8 +827,16 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/60 bg-red-500/10 focus:border-red-400"
+            : "border-white/10 bg-white/[0.04] focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-sm font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
