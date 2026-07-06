@@ -14,6 +14,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? FileUrl { get; set; }
 
+        // URL used by FE/Admin to preview and view uploaded image evidence.
         public string? ImageUrl { get; set; }
 
         public DateTime CreatedAt { get; set; }

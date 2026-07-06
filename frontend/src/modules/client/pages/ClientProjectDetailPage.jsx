@@ -833,20 +833,11 @@ export default function ClientProjectDetailPage() {
             </button>
 
             {project.status === "COMPLETED" && (
-              <>
-                <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
-                  Leave Review
-                </button>
-
-                {/* Open Dispute cho toàn project — chỉ khi đã COMPLETED, không gắn milestone cụ thể */}
-                <button onClick={() => setDisputeModal({ milestone: null })}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>
-                  Open Dispute
-                </button>
-              </>
+              <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
+                Leave Review
+              </button>
             )}
 
             {project.status === "DISPUTED" && (
@@ -911,10 +902,16 @@ export default function ClientProjectDetailPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
-                const normalizedStatus = (m.status || "").toUpperCase();
-                const mCfg = MILESTONE_STATUS[m.status] || MILESTONE_STATUS.PENDING;
+                const normalizedStatus = String(m.status || "").toUpperCase();
+                const mCfg = MILESTONE_STATUS[normalizedStatus] || MILESTONE_STATUS.PENDING;
                 const isCurrent = index === currentMilestoneIndex;
-                const hasSubmittedDeliverable = m.status === "SUBMITTED";
+
+                const canOpenDeliverable = ["SUBMITTED", "APPROVED", "REJECTED"].includes(
+                  normalizedStatus
+                );
+
+                const deliverableButtonLabel =
+                  normalizedStatus === "SUBMITTED" ? "Preview" : "View";
 
                 return (
                   <div key={m.milestoneId ?? index}
@@ -939,11 +936,11 @@ export default function ClientProjectDetailPage() {
                       <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: mCfg.color, background: mCfg.color + "15", border: `1px solid ${mCfg.color}40` }}>
                         {mCfg.label}
                       </span>
-                      {hasSubmittedDeliverable && (
+                      {canOpenDeliverable && (
                         <button onClick={() => navigate(`/client/milestones/${m.milestoneId}/deliverables`)}
                           style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.1)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
-                          Review
+                          {deliverableButtonLabel}
                         </button>
                       )}
 

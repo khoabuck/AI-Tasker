@@ -422,6 +422,7 @@ builder.Services.AddHostedService<WithdrawalExpiryHostedService>();
 builder.Services.AddScoped<IDeliverableService, AITasker.Infrastructure.Deliverables.DeliverableService>();
 builder.Services.AddHostedService<AITasker.Infrastructure.Deliverables.DeliverableReviewDeadlineHostedService>();
 builder.Services.AddScoped<IDisputeService, AITasker.Infrastructure.Disputes.DisputeService>();
+builder.Services.AddScoped<IExternalUrlValidator, ExternalUrlValidator>();
 
 // =========================
 // BE3 - Notifications / Realtime
@@ -477,6 +478,14 @@ builder.Services.AddHttpClient<
 builder.Services.AddHttpClient<IUrlInspectionService, UrlInspectionService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(12);
+});
+
+//========================
+// External Url Validator
+//========================
+builder.Services.AddHttpClient("ExternalUrlValidator", client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(5);
 });
 
 // =========================

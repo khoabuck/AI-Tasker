@@ -1075,10 +1075,12 @@ namespace AITasker.Infrastructure.Proposals
                 ClientProfileId = clientProfile.ClientProfileId,
                 ClientUserId = clientProfile.UserId,
                 ClientName = clientUser.FullName,
+                ClientAvatarUrl = clientUser.AvatarUrl,
 
                 ExpertProfileId = expertProfile.ExpertProfileId,
                 ExpertUserId = expertProfile.UserId,
                 ExpertName = expertUser.FullName,
+                ExpertAvatarUrl = expertUser.AvatarUrl,
 
                 CoverLetter = proposal.CoverLetter,
                 ProposedPrice = proposal.ProposedPrice,

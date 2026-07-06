@@ -65,19 +65,22 @@ namespace AITasker.Infrastructure.Disputes
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
         private readonly IExpertEarningEscrowService _expertEarningEscrowService;
         private readonly IProjectCompletionService _projectCompletionService;
+        private readonly IExternalUrlValidator _externalUrlValidator;
 
         public DisputeService(
             AITaskerDbContext context,
             INotificationService notificationService,
             IMarketplaceWorkflowPolicyService workflowPolicyService,
             IExpertEarningEscrowService expertEarningEscrowService,
-            IProjectCompletionService projectCompletionService)
+            IProjectCompletionService projectCompletionService,
+            IExternalUrlValidator externalUrlValidator)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
             _expertEarningEscrowService = expertEarningEscrowService;
             _projectCompletionService = projectCompletionService;
+            _externalUrlValidator = externalUrlValidator;
         }
 
         public async Task<DisputeResponse> OpenDisputeAsync(
@@ -85,6 +88,21 @@ namespace AITasker.Infrastructure.Disputes
             OpenDisputeRequest request)
         {
             ValidateOpenRequest(request);
+
+            var evidenceFileUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
+                request.EvidenceFileUrl,
+                nameof(request.EvidenceFileUrl),
+                maxLength: 500);
+
+            var evidenceImageUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
+                request.EvidenceImageUrl,
+                nameof(request.EvidenceImageUrl),
+                maxLength: 1000,
+                requireImage: true);
+
+            var uploadedImageUrls = await ValidateImageUrlListAsync(
+                NormalizeUrlList(request.EvidenceImageUrls),
+                nameof(request.EvidenceImageUrls));
 
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
@@ -268,26 +286,46 @@ namespace AITasker.Infrastructure.Disputes
                 _context.Disputes.Add(dispute);
                 await _context.SaveChangesAsync();
 
-                if (!string.IsNullOrWhiteSpace(request.EvidenceText) ||
-                    !string.IsNullOrWhiteSpace(request.EvidenceFileUrl) ||
-                    !string.IsNullOrWhiteSpace(request.EvidenceImageUrl))
+                var evidenceText = string.IsNullOrWhiteSpace(request.EvidenceText)
+                    ? request.Reason.Trim()
+                    : request.EvidenceText.Trim();
+
+                if (!string.IsNullOrWhiteSpace(evidenceText) ||
+                    !string.IsNullOrWhiteSpace(evidenceFileUrl) ||
+                    !string.IsNullOrWhiteSpace(evidenceImageUrl))
                 {
                     _context.DisputeEvidences.Add(new DisputeEvidence
                     {
                         DisputeId = dispute.DisputeId,
                         UploadedByUserId = currentUserId,
-                        EvidenceText = string.IsNullOrWhiteSpace(request.EvidenceText)
-                            ? request.Reason.Trim()
-                            : request.EvidenceText.Trim(),
-                        FileUrl = string.IsNullOrWhiteSpace(request.EvidenceFileUrl)
-                            ? null
-                            : request.EvidenceFileUrl.Trim(),
-                        ImageUrl = string.IsNullOrWhiteSpace(request.EvidenceImageUrl)
-                            ? null
-                            : request.EvidenceImageUrl.Trim(),
+                        EvidenceText = string.IsNullOrWhiteSpace(evidenceText)
+                            ? "Initial dispute evidence submitted."
+                            : evidenceText,
+                        FileUrl = evidenceFileUrl,
+                        ImageUrl = evidenceImageUrl,
                         CreatedAt = VietnamDateTime.Now
                     });
+                }
 
+                foreach (var uploadedImageUrl in uploadedImageUrls)
+                {
+                    _context.DisputeEvidences.Add(new DisputeEvidence
+                    {
+                        DisputeId = dispute.DisputeId,
+                        UploadedByUserId = currentUserId,
+                        EvidenceText = string.IsNullOrWhiteSpace(evidenceText)
+                            ? "Image evidence submitted."
+                            : evidenceText,
+                        ImageUrl = uploadedImageUrl,
+                        CreatedAt = VietnamDateTime.Now
+                    });
+                }
+
+                if (!string.IsNullOrWhiteSpace(evidenceText) ||
+                    !string.IsNullOrWhiteSpace(evidenceFileUrl) ||
+                    !string.IsNullOrWhiteSpace(evidenceImageUrl) ||
+                    uploadedImageUrls.Count > 0)
+                {
                     await _context.SaveChangesAsync();
                 }
 
@@ -364,6 +402,21 @@ namespace AITasker.Infrastructure.Disputes
         {
             ValidateEvidenceRequest(request);
 
+            var fileUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
+                request.FileUrl,
+                nameof(request.FileUrl),
+                maxLength: 500);
+
+            var imageUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
+                request.ImageUrl,
+                nameof(request.ImageUrl),
+                maxLength: 1000,
+                requireImage: true);
+
+            var imageUrls = await ValidateImageUrlListAsync(
+                NormalizeUrlList(request.ImageUrls),
+                nameof(request.ImageUrls));
+
             var dispute = await GetDisputeAsync(disputeId);
             await EnsureCanAccessDisputeAsync(currentUserId, dispute);
 
@@ -372,21 +425,45 @@ namespace AITasker.Infrastructure.Disputes
                 throw new InvalidOperationException("Evidence can only be added to OPEN disputes.");
             }
 
-            _context.DisputeEvidences.Add(new DisputeEvidence
+            var evidenceText = string.IsNullOrWhiteSpace(request.EvidenceText)
+                ? "Evidence attachment submitted."
+                : request.EvidenceText.Trim();
+
+            if (!string.IsNullOrWhiteSpace(fileUrl) ||
+                !string.IsNullOrWhiteSpace(imageUrl))
             {
-                DisputeId = dispute.DisputeId,
-                UploadedByUserId = currentUserId,
-                EvidenceText = string.IsNullOrWhiteSpace(request.EvidenceText)
-                    ? "Evidence attachment submitted."
-                    : request.EvidenceText.Trim(),
-                FileUrl = string.IsNullOrWhiteSpace(request.FileUrl)
-                    ? null
-                    : request.FileUrl.Trim(),
-                ImageUrl = string.IsNullOrWhiteSpace(request.ImageUrl)
-                    ? null
-                    : request.ImageUrl.Trim(),
-                CreatedAt = VietnamDateTime.Now
-            });
+                _context.DisputeEvidences.Add(new DisputeEvidence
+                {
+                    DisputeId = dispute.DisputeId,
+                    UploadedByUserId = currentUserId,
+                    EvidenceText = evidenceText,
+                    FileUrl = fileUrl,
+                    ImageUrl = imageUrl,
+                    CreatedAt = VietnamDateTime.Now
+                });
+            }
+            else if (!string.IsNullOrWhiteSpace(request.EvidenceText))
+            {
+                _context.DisputeEvidences.Add(new DisputeEvidence
+                {
+                    DisputeId = dispute.DisputeId,
+                    UploadedByUserId = currentUserId,
+                    EvidenceText = request.EvidenceText.Trim(),
+                    CreatedAt = VietnamDateTime.Now
+                });
+            }
+
+            foreach (var uploadedImageUrl in imageUrls)
+            {
+                _context.DisputeEvidences.Add(new DisputeEvidence
+                {
+                    DisputeId = dispute.DisputeId,
+                    UploadedByUserId = currentUserId,
+                    EvidenceText = evidenceText,
+                    ImageUrl = uploadedImageUrl,
+                    CreatedAt = VietnamDateTime.Now
+                });
+            }
 
             await _context.SaveChangesAsync();
 
@@ -785,10 +862,48 @@ namespace AITasker.Infrastructure.Disputes
 
             if (string.IsNullOrWhiteSpace(request.EvidenceText) &&
                 string.IsNullOrWhiteSpace(request.FileUrl) &&
-                string.IsNullOrWhiteSpace(request.ImageUrl))
+                string.IsNullOrWhiteSpace(request.ImageUrl) &&
+                (request.ImageUrls == null || request.ImageUrls.Count == 0))
             {
-                throw new InvalidOperationException("Evidence text, file URL, or image URL is required.");
+                throw new InvalidOperationException("Evidence text, file URL or image evidence is required.");
             }
+        }
+
+        private async Task<List<string>> ValidateImageUrlListAsync(
+            List<string> urls,
+            string fieldName)
+        {
+            var normalized = new List<string>();
+
+            foreach (var url in urls)
+            {
+                var checkedUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
+                    url,
+                    fieldName,
+                    maxLength: 1000,
+                    requireImage: true);
+
+                if (!string.IsNullOrWhiteSpace(checkedUrl))
+                {
+                    normalized.Add(checkedUrl);
+                }
+            }
+
+            return normalized;
+        }
+
+        private static List<string> NormalizeUrlList(IEnumerable<string>? values)
+        {
+            if (values == null)
+            {
+                return new List<string>();
+            }
+
+            return values
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         private static void ValidateResolveRequest(ResolveDisputeRequest request)
