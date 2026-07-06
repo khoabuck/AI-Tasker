@@ -125,6 +125,8 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid email or password.");
         }
 
+        await RestoreExpiredSuspensionAsync(user);
+
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
             throw new InvalidOperationException("Your account is not allowed to login.");
@@ -215,6 +217,8 @@ public class AuthService : IAuthService
 
             await _userRepository.SaveChangesAsync();
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -319,6 +323,11 @@ public class AuthService : IAuthService
 
         var user = await _userRepository.GetByEmailAsync(email);
 
+        if (user != null)
+        {
+            await RestoreExpiredSuspensionAsync(user);
+        }
+
         if (user != null
             && user.AuthProvider == "LOCAL"
             && !string.IsNullOrWhiteSpace(user.PasswordHash)
@@ -354,6 +363,8 @@ public class AuthService : IAuthService
         }
 
         var user = resetToken.User;
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -391,6 +402,8 @@ public class AuthService : IAuthService
         {
             throw new InvalidOperationException("User not found.");
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -442,6 +455,11 @@ public class AuthService : IAuthService
     {
         var user = await _userRepository.GetByIdAsync(userId);
 
+        if (user != null)
+        {
+            await RestoreExpiredSuspensionAsync(user);
+        }
+
         return user == null ? null : MapToUserResponse(user);
     }
 
@@ -455,6 +473,8 @@ public class AuthService : IAuthService
         {
             throw new InvalidOperationException("User not found.");
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -778,6 +798,37 @@ public class AuthService : IAuthService
             .Replace("+", "-")
             .Replace("/", "_")
             .Replace("=", "");
+    }
+
+    private async Task<bool> RestoreExpiredSuspensionAsync(User user)
+    {
+        if (user.Status != "SUSPENDED")
+        {
+            return false;
+        }
+
+        if (!user.LockoutEnd.HasValue)
+        {
+            return false;
+        }
+
+        if (user.LockoutEnd.Value > DateTime.UtcNow)
+        {
+            return false;
+        }
+
+        user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
+            ? "ACTIVE"
+            : user.StatusBeforeSuspension;
+
+        user.StatusBeforeSuspension = null;
+        user.LockoutEnd = null;
+        user.LockReason = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return true;
     }
 
     private static string HashToken(string token)
