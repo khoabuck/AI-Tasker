@@ -28,7 +28,7 @@ function MatchScoreBar({ score }) {
 }
 
 // ── Message Modal ─────────────────────────────────────────────────────
-function MessageModal({ expert, jobId, navigate, onClose }) {
+function MessageModal({ expert, jobId, jobTitle, navigate, onClose }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -108,7 +108,7 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder={`Hi ${expert.fullName.split(" ")[0]}, I'd like to discuss a project opportunity with you...`}
+            placeholder={`Hi ${expert.fullName.split(" ")[0]}, I would like to invite you to apply for my project...`}
             rows={5}
             style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(192,193,255,0.2)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box", transition: "border-color 0.2s", lineHeight: 1.6 }}
             onFocus={(e) => (e.target.style.borderColor = "#c0c1ff")}
@@ -129,10 +129,10 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
           <p style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Quick templates:</p>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {[
-              "I'd like to invite you to apply for my job posting.",
-              "Your skills match our project requirements perfectly.",
-              "Can we schedule a quick call to discuss the project?",
-            ].map((t) => (
+                `Hi ${expert.fullName.split(" ")[0]}, I would like to invite you to apply for my job: ${jobTitle || "this project"}.`,
+                `Your skills look like a strong match for my project. Please take a look and let me know if you are interested.`,
+                `Hi ${expert.fullName.split(" ")[0]}, I reviewed your profile and would like to invite you to discuss this job opportunity.`,
+              ].map((t) => (
               <button key={t} onClick={() => setMessage(t)}
                 style={{ padding: "4px 10px", background: "rgba(192,193,255,0.06)", border: "1px solid rgba(192,193,255,0.15)", borderRadius: 6, fontSize: 11, color: "#c0c1ff", cursor: "pointer", fontFamily: "Inter, sans-serif", transition: "all 0.2s", textAlign: "left" }}
                 onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(192,193,255,0.12)")}
@@ -154,7 +154,7 @@ function MessageModal({ expert, jobId, navigate, onClose }) {
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
               {sent ? "check_circle" : sending ? "hourglass_empty" : "send"}
             </span>
-            {sent ? "Sent!" : sending ? "Sending..." : "Send Message"}
+            {sent ? "Invite Sent!" : sending ? "Sending..." : "Send Invite"}
           </button>
         </div>
       </div>
@@ -171,7 +171,7 @@ export default function ClientJobRecommendationPage() {
   const [jobTitle, setJobTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [messagingExpert, setMessagingExpert] = useState(null);
+  const [invitingExpert, setInvitingExpert] = useState(null);
   const [invitePopup, setInvitePopup] = useState({
     open: false,
     type: "success",
@@ -338,7 +338,7 @@ export default function ClientJobRecommendationPage() {
                           <span style={{ fontSize: 12, color: "#8c90a0" }}>{expert.yearsOfExperience} yrs exp</span>
                           <span style={{ fontSize: 12, color: "#8c90a0" }}>Score: <span style={{ color: "#facc15" }}>{expert.profileScore}</span>/100</span>
                           <span style={{ fontSize: 12, color: "#c2c6d6", fontFamily: "JetBrains Mono, monospace" }}>
-                            ${expert.expectedProjectBudgetMin?.toLocaleString()}–${expert.expectedProjectBudgetMax?.toLocaleString()} USD/mo
+                            
                           </span>
                           {!expert.availableForWork && <span style={{ fontSize: 12, color: "#f97316" }}>Not available</span>}
                         </div>
@@ -381,20 +381,10 @@ export default function ClientJobRecommendationPage() {
                             View Profile
                           </button>
 
-                          {/* Message — purple */}
-                          <button
-                            onClick={() => setMessagingExpert(expert)}
-                            style={{ flex: 1, padding: "9px", background: "rgba(192,193,255,0.08)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
-                            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(192,193,255,0.2)"; e.currentTarget.style.borderColor = "#c0c1ff"; }}
-                            onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(192,193,255,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(192,193,255,0.25)"; }}
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>chat</span>
-                            Message
-                          </button>
 
                           {/* Invite — green */}
                           <button
-                            onClick={() => handleInvite(expert)}
+                            onClick={() => setInvitingExpert(expert)}
                             style={{ flex: 1, padding: "9px", background: "rgba(34,197,94,0.08)", color: "#22c55e", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, transition: "all 0.2s" }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.15)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(34,197,94,0.2)"; e.currentTarget.style.borderColor = "#22c55e"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(34,197,94,0.08)"; e.currentTarget.style.boxShadow = "none"; e.currentTarget.style.borderColor = "rgba(34,197,94,0.25)"; }}
@@ -413,13 +403,14 @@ export default function ClientJobRecommendationPage() {
         )}
       </div>
 
-      {/* Message Modal */}
-      {messagingExpert && (
+      {/* Invite Modal */}
+      {invitingExpert && (
         <MessageModal
-          expert={messagingExpert}
+          expert={invitingExpert}
           jobId={id}
+          jobTitle={jobTitle}
           navigate={navigate}
-          onClose={() => setMessagingExpert(null)}
+          onClose={() => setInvitingExpert(null)}
         />
       )}
       {invitePopup.open && (
@@ -469,32 +460,6 @@ export default function ClientJobRecommendationPage() {
     </ClientLayout>
   );
 
-  // ── Invite handler ─────────────────────────────────────────────────
-  // Đổi hành vi: KHÔNG còn tự tạo conversation + gửi tin nhắn mời soạn sẵn nữa.
-// Chỉ điều hướng sang Messages — giống hệt Connect ở AIMatchingPage: có hội
-// thoại cũ với expert này thì vào thẳng, chưa có thì đưa sang Messages kèm
-// thông tin expert để user tự gõ và gửi tin đầu tiên.
-async function handleInvite(expert) {
-  try {
-    const existing = await findExistingConversationWithExpert(axiosInstance, {
-      expertUserId: expert.userId,
-    });
 
-    if (existing?.conversationId) {
-      navigate(`/client/messages/${existing.conversationId}`);
-      return;
-    }
 
-    navigate(
-      `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
-    );
-  } catch (err) {
-    console.error("Find conversation failed:", err);
-    setInvitePopup({
-      open: true,
-      type: "error",
-      message: "Unable to open conversation with the Expert.",
-    });
-  }
-}
 }

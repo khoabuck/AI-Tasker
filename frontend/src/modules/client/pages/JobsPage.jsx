@@ -306,6 +306,10 @@ export default function JobsPage() {
 
   const showFullLoading = loading && allJobs.length === 0;
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   return (
     <ClientLayout>
       <div style={{ minHeight: "100vh", background: "#0b0e14" }}>

@@ -251,6 +251,10 @@ export default function ClientDashboard() {
     fetchExperts();
   }, []);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // code mới
   const handleConnect = async (expert) => {
     try {

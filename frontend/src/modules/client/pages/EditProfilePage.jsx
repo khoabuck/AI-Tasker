@@ -93,11 +93,19 @@ export default function EditProfilePage() {
           setInitialSnapshot(JSON.stringify(businessData));
         } else {
           setClientType("individual");
+          const individualProfile = data.individualProfile || {};
+
           const individualData = {
-          fullName: data.fullName || user?.fullName || "",
-          phoneNumber: data.phoneNumber || "",
-          address: data.address || "",
-        };
+            fullName: data.fullName || user?.fullName || "",
+            phoneNumber:
+              individualProfile.phoneNumber ||
+              data.phoneNumber ||
+              "",
+            address:
+              individualProfile.address ||
+              data.address ||
+              "",
+          };
 
         setIndividual(individualData);
         setInitialSnapshot(JSON.stringify(individualData));
@@ -144,8 +152,6 @@ export default function EditProfilePage() {
 
     if (!f.address.trim()) {
       errors.address = "Address cannot be empty.";
-    } else if (f.address.trim().length < 5) {
-      errors.address = "Address is too short (minimum 5 characters).";
     }
 
     if (clientType === "business") {
