@@ -237,6 +237,20 @@ export default function LoginPage() {
       className="min-h-screen bg-surface-dark text-on-surface selection:bg-neon-cyan/30"
       style={{ fontFamily: "Inter, sans-serif" }}
     >
+      <style>{`
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 1000px #191c22 inset !important;
+        box-shadow: 0 0 0 1000px #191c22 inset !important;
+        -webkit-text-fill-color: #e1e2eb !important;
+        caret-color: #e1e2eb !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        transition: background-color 9999s ease-in-out 0s;
+      }
+    `}</style>
+
       <header className="fixed top-0 z-50 w-full border-b border-glass-border bg-surface-dark/80 backdrop-blur-md">
         <nav className="mx-auto flex h-20 max-w-[1280px] items-center justify-between px-12">
           <Link
@@ -318,6 +332,9 @@ export default function LoginPage() {
                 <input
                   type="email"
                   name="email"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
                   autoComplete="off"
                   value={form.email}
                   onChange={handleChange}
@@ -412,6 +429,7 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
+                  autoComplete="current-password"
                   value={form.password}
                   onChange={handleChange}
                   required
@@ -424,6 +442,8 @@ export default function LoginPage() {
                         : "rgba(255,255,255,0.12)"
                     }`,
                     color: "#e1e2eb",
+                    WebkitBoxShadow: "0 0 0 1000px #191c22 inset",
+                    WebkitTextFillColor: "#e1e2eb",
                   }}
                   onFocus={() => {
                     setFocusField("password");

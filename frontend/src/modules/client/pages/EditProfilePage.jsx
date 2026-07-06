@@ -12,12 +12,15 @@ import authService from "../../../services/auth.service";
 
 const getInputStyle = (fieldName, fieldErrors) => ({
   background: "#232A35",
-  border: `1px solid ${fieldErrors[fieldName] ? "#ef4444" : "rgba(255,255,255,0.12)"}`,
+  border: `1px solid ${
+    fieldErrors[fieldName] ? "#ef4444" : "transparent"
+  }`,
   borderRadius: 8,
   padding: "12px 16px",
   color: "#e1e2eb",
   width: "100%",
   outline: "none",
+  boxShadow: "none",
   fontFamily: "Inter, sans-serif",
   fontSize: 14,
   boxSizing: "border-box",
@@ -287,18 +290,20 @@ const uploadAvatarIfNeeded = async () => {
       let res;
       if (clientType === "individual") {
         res = await axiosInstance.put("/client-profiles/individual/me", {
-          phoneNumber: individual.phoneNumber,
-          address: individual.address,
-        });
+        fullName: individual.fullName,
+        phoneNumber: individual.phoneNumber,
+        address: individual.address,
+      });
       } else {
         res = await axiosInstance.put("/client-profiles/business/me", {
-          phoneNumber: business.phoneNumber,
-          address: business.address,
-          taxCode: business.taxCode,
-          industry: business.industry,
-          businessEmail: business.businessEmail,
-          businessPhone: business.businessPhone,
-        });
+        fullName: business.fullName,
+        phoneNumber: business.phoneNumber,
+        address: business.address,
+        taxCode: business.taxCode,
+        industry: business.industry,
+        businessEmail: business.businessEmail,
+        businessPhone: business.businessPhone,
+      });
       }
 
       const userStatus = res.data?.userStatus;
@@ -325,17 +330,41 @@ const uploadAvatarIfNeeded = async () => {
       const resData = err?.response?.data;
       const message = resData?.message || resData?.title || "An error occurred or verification failed.";
 
-      if (resData?.errors && typeof resData.errors === "object" && !Array.isArray(resData.errors)) {
-        // BE trả lỗi theo từng field cụ thể → highlight đúng field đó
-        setFieldErrors(resData.errors);
-        setGlobalError(message);
-      } else if (clientType === "business") {
-        // BE chỉ trả message chung (vd: lỗi verify tax code) → mặc định highlight taxCode
-        setFieldErrors({ taxCode: message });
-        setGlobalError(message);
-      } else {
-        setGlobalError(message);
-      }
+      if (
+          resData?.errors &&
+          typeof resData.errors === "object" &&
+          !Array.isArray(resData.errors)
+        ) {
+          setFieldErrors(resData.errors);
+          setGlobalError(message);
+        } else if (clientType === "business") {
+          const lowerMessage = message.toLowerCase();
+
+          if (lowerMessage.includes("full name")) {
+            setFieldErrors({ fullName: message });
+          } else if (
+            lowerMessage.includes("business phone") ||
+            lowerMessage.includes("company phone")
+          ) {
+            setFieldErrors({ businessPhone: message });
+          } else if (lowerMessage.includes("personal phone")) {
+            setFieldErrors({ phoneNumber: message });
+          } else if (lowerMessage.includes("tax")) {
+            setFieldErrors({ taxCode: message });
+          } else if (lowerMessage.includes("industry")) {
+            setFieldErrors({ industry: message });
+          } else if (lowerMessage.includes("email")) {
+            setFieldErrors({ businessEmail: message });
+          } else if (lowerMessage.includes("phone")) {
+            setFieldErrors({ businessPhone: message });
+          } else {
+            setFieldErrors({});
+          }
+
+          setGlobalError(message);
+        } else {
+          setGlobalError(message);
+        }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
@@ -362,10 +391,7 @@ const uploadAvatarIfNeeded = async () => {
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 40 }}>
-          <button onClick={() => navigate("/client/profile")}
-            style={{ width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#e1e2eb" }}>
-            <span className="material-symbols-outlined">arrow_back</span>
-          </button>
+         
           <div>
             <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 28, fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>
               Edit Profile
@@ -414,7 +440,7 @@ const uploadAvatarIfNeeded = async () => {
 
         {/* Form */}
         <div style={{ background: "rgba(16,19,25,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16, padding: 32 }}>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} autoComplete="off">
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
               {/* Avatar Upload */}
@@ -488,16 +514,22 @@ const uploadAvatarIfNeeded = async () => {
               <div>
                 <label style={labelStyle}>Full Name</label>
                 <input
-                    type="text"
-                    name="fullName"
-                    value={form.fullName || ""}
-                    disabled
-                    style={{
-                      ...getInputStyle("fullName", fieldErrors),
-                      opacity: 0.65,
-                      cursor: "not-allowed",
-                    }}
-                  />
+                  type="text"
+                  name="fullName"
+                  value={form.fullName || ""}
+                  onChange={handleChange}
+                  style={getInputStyle("fullName", fieldErrors)}
+                  spellCheck={false}
+                  autoComplete="off"
+                  onFocus={(e) =>
+                    (e.target.style.borderColor =
+                      fieldErrors.fullName ? "#ef4444" : "#00F0FF")
+                  }
+                  onBlur={(e) =>
+                    (e.target.style.borderColor =
+                      fieldErrors.fullName ? "#ef4444" : "transparent")
+                  }
+                />
                 <FieldError name="fullName" errors={fieldErrors} />
               </div>
               {/* Phone + Address */}
@@ -630,7 +662,27 @@ const uploadAvatarIfNeeded = async () => {
           </form>
         </div>
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      input,
+      input:focus,
+      input:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0 1000px #232A35 inset !important;
+        box-shadow: 0 0 0 1000px #232A35 inset !important;
+        -webkit-text-fill-color: #e1e2eb !important;
+      }
+    `}</style>
     </ClientLayout>
   );
 }
