@@ -231,6 +231,40 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword(ChangePasswordRequest request)
+    {
+        var userId = GetCurrentUserId();
+
+        if (userId == null)
+        {
+            return Unauthorized(new
+            {
+                success = false,
+                message = "Invalid token."
+            });
+        }
+
+        try
+        {
+            var result = await _authService.ChangePasswordAsync(
+                userId.Value,
+                request
+            );
+
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new
+            {
+                success = false,
+                message = ex.Message
+            });
+        }
+    }
+
+    [Authorize]
     [HttpPost("select-role")]
     public async Task<IActionResult> SelectRole(SelectRoleRequest request)
     {
