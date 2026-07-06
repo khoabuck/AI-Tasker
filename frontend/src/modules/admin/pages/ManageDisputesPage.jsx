@@ -15,11 +15,6 @@ const RESOLUTION_OPTIONS = [
     label: "Refund to Client",
     description: "The dispute is resolved in favor of the client.",
   },
-  {
-    value: "PARTIAL_SPLIT",
-    label: "Partial Split",
-    description: "The dispute is resolved by splitting the disputed outcome.",
-  },
 ];
 
 const EMPTY_RESOLVE_FORM = {
