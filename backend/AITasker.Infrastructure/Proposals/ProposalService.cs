@@ -4,6 +4,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 
@@ -112,7 +113,7 @@ namespace AITasker.Infrastructure.Proposals
                     ? null
                     : request.PreliminaryMilestonePlan.Trim(),
                 Status = StatusSubmitted,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
 
             var proposalCreditUsageType = ChargeProposalSubmitCredit(
@@ -297,7 +298,7 @@ namespace AITasker.Infrastructure.Proposals
                     ? null
                     : request.PreliminaryMilestonePlan.Trim(),
                 Status = StatusDraft,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
 
             _context.Proposals.Add(proposal);
@@ -595,7 +596,7 @@ namespace AITasker.Infrastructure.Proposals
             var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
 
             proposal.Status = StatusAccepted;
-            job.UpdatedAt = DateTime.UtcNow;
+            job.UpdatedAt = VietnamDateTime.Now;
 
 
             var competingProposals = await _context.Proposals
@@ -1220,7 +1221,7 @@ namespace AITasker.Infrastructure.Proposals
                     ? "Proposal resubmitted after negotiation."
                     : request.ResubmitNote.Trim(),
                 CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow
+                CreatedAt = VietnamDateTime.Now
             };
 
             _context.ProposalVersions.Add(newVersion);
@@ -1372,7 +1373,7 @@ namespace AITasker.Infrastructure.Proposals
                 ResubmitNote = "Initial proposal version generated from existing proposal.",
                 CreatedByUserId = expertProfile.UserId,
                 CreatedAt = proposal.CreatedAt == default
-                    ? DateTime.UtcNow
+                    ? VietnamDateTime.Now
                     : proposal.CreatedAt
             };
 
@@ -1674,7 +1675,7 @@ namespace AITasker.Infrastructure.Proposals
                     Amount = milestone.Amount,
                     OrderIndex = orderIndex,
                     DeadlineOffsetDays = deadlineOffsetDays,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = VietnamDateTime.Now
                 });
 
                 orderIndex++;
@@ -1790,7 +1791,7 @@ namespace AITasker.Infrastructure.Proposals
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = VietnamDateTime.Now
                 })
                 .ToList();
 

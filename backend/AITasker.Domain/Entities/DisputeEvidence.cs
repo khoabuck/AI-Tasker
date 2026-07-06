@@ -14,6 +14,8 @@ namespace AITasker.Domain.Entities
 
         public string? FileUrl { get; set; }
 
+        public string? ImageUrl { get; set; }
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
         public Dispute? Dispute { get; set; }

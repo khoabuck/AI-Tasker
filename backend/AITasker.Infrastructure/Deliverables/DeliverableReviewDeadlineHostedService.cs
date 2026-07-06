@@ -1,5 +1,6 @@
 using AITasker.Application.Interfaces;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -69,7 +70,7 @@ namespace AITasker.Infrastructure.Deliverables
             var projectCompletionService = scope.ServiceProvider.GetRequiredService<IProjectCompletionService>();
             var workflowPolicy = await workflowPolicyService.GetActivePolicyAsync();
 
-            var now = DateTime.UtcNow;
+            var now = VietnamDateTime.Now;
 
             var deliverables = await context.Deliverables
                 .Where(d =>

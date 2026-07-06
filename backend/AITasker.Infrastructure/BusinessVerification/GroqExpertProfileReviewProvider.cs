@@ -173,11 +173,18 @@ public class GroqExpertProfileReviewProvider : IExpertProfileReviewProvider
         - 13-15: clear AI skills plus practical applications in bio/projects.
 
         3. experienceCredibilityScore: 0 to 20
-        - 0-5: claimed experience has no support.
-        - 6-10: claimed experience is mostly self-written with weak proof.
-        - 11-15: some project evidence supports claimed experience, but timeline/detail is limited.
-        - 16-20: strong project, GitHub, portfolio, LinkedIn, certificate, or dated evidence supports the claimed years.
+        - 0-5: claimed experience has no support or is much higher than declared evidence.
+        - 6-10: claimed experience is mostly self-written with weak proof, or no declared years are found in bio/portfolio/GitHub/proof.
+        - 11-15: claimed years are slightly higher than declared evidence years.
+        - 16-20: claimed years are less than or equal to years declared in bio, portfolio, GitHub, or proof evidence.
         Be strict with claimed years. Do not give high experience score only because the user wrote a number.
+        Experience year consistency rule:
+        - Let X be the claimed yearsOfExperience submitted by the user.
+        - Let Y be the declared years found in bio, portfolio, GitHub, or proof evidence.
+        - If X <= Y, experienceCredibilityScore may be 20/20.
+        - If X > Y, reduce experienceCredibilityScore based on the gap.
+        - If no Y is found, do not give full experience score.
+        - For verification update, years of experience should come from the existing profile unless the user resubmits the full expert profile.
 
         4. portfolioEvidenceScore: 0 to 10
         - 0: missing, unreachable, 404, unrelated, blocked without useful evidence, belongs to another person, or fake.

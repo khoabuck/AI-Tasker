@@ -72,10 +72,6 @@ public class ContractFailureRollbackService : IContractFailureRollbackService
             project.Status = ProjectStatusCancelled;
             project.EndDate = now;
 
-            if (string.Equals(failureReason, "ESCROW_TIMEOUT", StringComparison.OrdinalIgnoreCase))
-            {
-                project.EscrowExpiredAt ??= now;
-            }
 
             var milestones = await _context.Milestones
                 .Where(x => x.ProjectId == project.ProjectId)
@@ -166,7 +162,6 @@ public class ContractFailureRollbackService : IContractFailureRollbackService
         return failureReason.Trim().ToUpperInvariant() switch
         {
             "SIGN_TIMEOUT" => $"Contract signing deadline expired for job '{jobTitle}'. The job has been reopened and proposal states were refreshed.",
-            "ESCROW_TIMEOUT" => $"Escrow lock deadline expired for job '{jobTitle}'. The contract was cancelled before project start, the job has been reopened, and proposal states were refreshed.",
             _ => $"Contract was cancelled before project start for job '{jobTitle}'. The job has been reopened and proposal states were refreshed."
         };
     }

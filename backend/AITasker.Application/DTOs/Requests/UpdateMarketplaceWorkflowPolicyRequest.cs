@@ -12,7 +12,6 @@ public class UpdateMarketplaceWorkflowPolicyRequest
 
     public int ContractSignWindowHours { get; set; }
 
-    public int EscrowLockWindowHours { get; set; }
 
     public int ExpertMaxActiveProjects { get; set; }
 
@@ -27,6 +26,12 @@ public class UpdateMarketplaceWorkflowPolicyRequest
     public decimal MinimumDepositAmount { get; set; }
 
     public decimal MaximumDepositAmount { get; set; }
+
+    public int? DepositOrderExpireMinutes { get; set; }
+
+    public int? WithdrawalApprovalWindowHours { get; set; }
+
+    public int? WithdrawalPayoutSyncWarningHours { get; set; }
 
     public int DisputeLostWarningThreshold { get; set; }
 

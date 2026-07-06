@@ -488,12 +488,19 @@ public class ClientProfileService : IClientProfileService
 
         var address = request.Address!.Trim();
 
+        user.FullName = NameNormalizer.NormalizeFullName(request.FullName);
+
+        if (request.AvatarUrl != null)
+        {
+            user.AvatarUrl = NormalizeNullableText(request.AvatarUrl);
+        }
+
+        user.UpdatedAt = DateTime.UtcNow;
+
         clientProfile.PhoneNumber = phoneNumber;
         clientProfile.Address = address;
         clientProfile.PlatformFeeRate = await _platformFeePolicyService.GetFeeRateForClientTypeAsync("INDIVIDUAL");
         clientProfile.UpdatedAt = DateTime.UtcNow;
-
-        user.UpdatedAt = DateTime.UtcNow;
 
         await _clientProfileRepository.SaveChangesAsync();
 
@@ -672,6 +679,18 @@ public class ClientProfileService : IClientProfileService
     private static void ValidateIndividualProfileUpdateRequest(
         UpdateIndividualClientProfileRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.FullName))
+        {
+            throw new InvalidOperationException("Full name is required.");
+        }
+
+        var fullName = NameNormalizer.NormalizeFullName(request.FullName);
+
+        if (fullName.Length < 2 || fullName.Length > 255)
+        {
+            throw new InvalidOperationException("Full name length is invalid.");
+        }
+
         ValidateAndNormalizePhoneNumber(request.PhoneNumber);
 
         if (string.IsNullOrWhiteSpace(request.Address))
@@ -680,6 +699,7 @@ public class ClientProfileService : IClientProfileService
         }
 
         ValidateMaxLength(request.Address, 500, "Address");
+        ValidateMaxLength(request.AvatarUrl, 500, "Avatar URL");
     }
 
     private static void ValidateBusinessProfileUpdateRequest(

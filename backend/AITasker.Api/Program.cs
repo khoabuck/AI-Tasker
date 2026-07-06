@@ -1,4 +1,7 @@
 ﻿using System.Text;
+using System.Security.Claims;
+using System.Net;
+using System.Net.Sockets;
 using AITasker.Api.Hubs;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
@@ -202,6 +205,61 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+
+            OnTokenValidated = async context =>
+            {
+                var userIdValue =
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? context.Principal?.FindFirstValue("userId");
+
+                if (!int.TryParse(userIdValue, out var userId))
+                {
+                    context.Fail("Invalid user token.");
+                    return;
+                }
+
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<AITaskerDbContext>();
+
+                var user = await dbContext.Users
+                    .FirstOrDefaultAsync(x => x.UserId == userId);
+
+                if (user == null)
+                {
+                    context.Fail("User account no longer exists.");
+                    return;
+                }
+
+                var nowUtc = DateTime.UtcNow;
+
+                if (user.Status == "SUSPENDED"
+                    && user.LockoutEnd.HasValue
+                    && user.LockoutEnd.Value <= nowUtc)
+                {
+                    user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
+                        ? "ACTIVE"
+                        : user.StatusBeforeSuspension;
+
+                    user.StatusBeforeSuspension = null;
+                    user.LockoutEnd = null;
+                    user.LockReason = null;
+                    user.UpdatedAt = nowUtc;
+
+                    await dbContext.SaveChangesAsync();
+                }
+
+                if (user.Status == "BANNED")
+                {
+                    context.Fail("Your account is banned.");
+                    return;
+                }
+
+                if (user.Status == "SUSPENDED")
+                {
+                    context.Fail("Your account is temporarily locked.");
+                    return;
+                }
             }
         };
     })
@@ -334,7 +392,6 @@ builder.Services.AddScoped<IContractFailureRollbackService, ContractFailureRollb
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<MilestoneDeadlineHostedService>();
-builder.Services.AddHostedService<PendingEscrowDeadlineHostedService>();
 builder.Services.AddHostedService<ContractSignDeadlineHostedService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();
 
@@ -342,6 +399,7 @@ builder.Services.AddScoped<IConversationService, ConversationService>();
 // BE2 - Review Flow
 // =========================
 builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IReviewReportService, ReviewReportService>();
 
 // =========================
 // BE2 - Admin Dashboard
@@ -355,6 +413,8 @@ builder.Services.AddHttpClient<IWalletService, WalletService>();
 builder.Services.AddHttpClient<IPayOsPayoutService, PayOsPayoutService>();
 builder.Services.AddScoped<IWithdrawalService, WithdrawalService>();
 builder.Services.AddScoped<IPlatformWalletService, PlatformWalletService>();
+builder.Services.AddHostedService<DepositOrderExpiryHostedService>();
+builder.Services.AddHostedService<WithdrawalExpiryHostedService>();
 
 // =========================
 // BE3 - Deliverables / Disputes
@@ -501,5 +561,111 @@ app.MapGet("/api/health/db", async (AITaskerDbContext dbContext) =>
         );
     }
 }).RequireCors(CorsPolicyName);
+
+// =========================
+// Temporary Debug - PayOS Network Check
+// Enable with environment variables:
+// PayOsDebug__Enabled=true
+// DEBUG_SECRET=<strong-secret>
+// Remove or disable after PayOS payout network debugging.
+// =========================
+if (builder.Configuration.GetValue<bool>("PayOsDebug:Enabled"))
+{
+    app.MapGet("/api/debug/payos-network", async (HttpContext context, IConfiguration config) =>
+    {
+        var debugSecret = config["DEBUG_SECRET"];
+
+        if (string.IsNullOrWhiteSpace(debugSecret) ||
+            context.Request.Query["key"] != debugSecret)
+        {
+            return Results.Unauthorized();
+        }
+
+        using var http = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(12)
+        };
+
+        async Task<object> SafeGetString(string url)
+        {
+            try
+            {
+                var value = await http.GetStringAsync(url);
+                return value.Trim();
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = ex.GetType().Name,
+                    message = ex.Message
+                };
+            }
+        }
+
+        async Task<object> SafeCheckHttp(string url)
+        {
+            try
+            {
+                using var response = await http.SendAsync(
+                    new HttpRequestMessage(HttpMethod.Get, url),
+                    HttpCompletionOption.ResponseHeadersRead);
+
+                return new
+                {
+                    statusCode = (int)response.StatusCode,
+                    reason = response.ReasonPhrase,
+                    success = response.IsSuccessStatusCode
+                };
+            }
+            catch (Exception ex)
+            {
+                return new
+                {
+                    error = ex.GetType().Name,
+                    message = ex.Message
+                };
+            }
+        }
+
+        object payosDns;
+
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync("api-merchant.payos.vn");
+
+            payosDns = new
+            {
+                ipv4 = addresses
+                    .Where(x => x.AddressFamily == AddressFamily.InterNetwork)
+                    .Select(x => x.ToString())
+                    .ToArray(),
+
+                ipv6 = addresses
+                    .Where(x => x.AddressFamily == AddressFamily.InterNetworkV6)
+                    .Select(x => x.ToString())
+                    .ToArray()
+            };
+        }
+        catch (Exception ex)
+        {
+            payosDns = new
+            {
+                error = ex.GetType().Name,
+                message = ex.Message
+            };
+        }
+
+        return Results.Ok(new
+        {
+            serverTimeUtc = DateTime.UtcNow,
+            outboundIPv4 = await SafeGetString("https://api4.ipify.org"),
+            outboundIPv6 = await SafeGetString("https://api6.ipify.org"),
+            payosDomain = "https://api-merchant.payos.vn",
+            payosHealth = await SafeCheckHttp("https://api-merchant.payos.vn"),
+            payosDns
+        });
+    }).RequireCors(CorsPolicyName);
+}
 
 app.Run();

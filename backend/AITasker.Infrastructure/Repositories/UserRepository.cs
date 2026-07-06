@@ -97,6 +97,16 @@ public class UserRepository : IUserRepository
             .ToListAsync();
     }
 
+    public async Task<List<User>> GetExpiredSuspendedUsersAsync(DateTime nowUtc)
+    {
+        return await _dbContext.Users
+            .Where(x =>
+                x.Status == "SUSPENDED"
+                && x.LockoutEnd.HasValue
+                && x.LockoutEnd.Value <= nowUtc)
+            .ToListAsync();
+    }
+
     public async Task AddAsync(User user)
     {
         await _dbContext.Users.AddAsync(user);

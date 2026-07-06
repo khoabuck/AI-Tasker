@@ -34,6 +34,10 @@ namespace AITasker.Application.DTOs.Responses
 
         public decimal TotalClientPayment { get; set; }
 
+        public decimal ExpertFeeRate { get; set; }
+
+        public decimal ExpertFeeAmount { get; set; }
+
         public decimal ExpertReceivableAmount { get; set; }
 
         public int FinalTimelineDays { get; set; }
@@ -62,11 +66,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? ProjectStatus { get; set; }
 
-        public DateTime? ProjectEscrowLockDeadlineAt { get; set; }
-
         public DateTime? ProjectEscrowLockedAt { get; set; }
-
-        public DateTime? ProjectEscrowExpiredAt { get; set; }
 
         public DateTime CreatedAt { get; set; }
 

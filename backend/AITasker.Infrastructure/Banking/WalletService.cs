@@ -3,6 +3,7 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -56,6 +57,7 @@ namespace AITasker.Infrastructure.Banking
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxEscrowReceive = "ESCROW_RECEIVE";
         private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
+        private const string TxExpertServiceFee = "EXPERT_SERVICE_FEE";
         private const string TxPlatformFee = "PLATFORM_FEE";
 
         private const string DepositProviderPayOs = "PAYOS";
@@ -107,7 +109,10 @@ namespace AITasker.Infrastructure.Banking
             return MapWallet(wallet);
         }
 
-        public async Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(int userId)
+        public async Task<IReadOnlyList<TransactionResponse>> GetMyTransactionsAsync(
+            int userId,
+            string? category = null,
+            string? statusGroup = null)
         {
             var transactions = await _context.Transactions
                 .AsNoTracking()
@@ -115,9 +120,132 @@ namespace AITasker.Infrastructure.Banking
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
 
-            return transactions
-                .Select(MapTransaction)
+            var projectIds = transactions
+                .Where(x => x.ProjectId.HasValue)
+                .Select(x => x.ProjectId!.Value)
+                .Distinct()
                 .ToList();
+
+            var milestoneIds = transactions
+                .Where(x => x.MilestoneId.HasValue)
+                .Select(x => x.MilestoneId!.Value)
+                .Distinct()
+                .ToList();
+
+            var projects = projectIds.Count == 0
+                ? new Dictionary<int, Project>()
+                : await _context.Projects
+                    .AsNoTracking()
+                    .Where(x => projectIds.Contains(x.ProjectId))
+                    .ToDictionaryAsync(x => x.ProjectId);
+
+            var milestones = milestoneIds.Count == 0
+                ? new Dictionary<int, Milestone>()
+                : await _context.Milestones
+                    .AsNoTracking()
+                    .Where(x => milestoneIds.Contains(x.MilestoneId))
+                    .ToDictionaryAsync(x => x.MilestoneId);
+
+            var contractIds = projects.Values
+                .Select(x => x.ContractId)
+                .Distinct()
+                .ToList();
+
+            var contracts = contractIds.Count == 0
+                ? new Dictionary<int, ProjectContract>()
+                : await _context.ProjectContracts
+                    .AsNoTracking()
+                    .Where(x => contractIds.Contains(x.ContractId))
+                    .ToDictionaryAsync(x => x.ContractId);
+
+            var proposalIds = contracts.Values
+                .Select(x => x.ProposalId)
+                .Distinct()
+                .ToList();
+
+            var proposals = proposalIds.Count == 0
+                ? new Dictionary<int, Proposal>()
+                : await _context.Proposals
+                    .AsNoTracking()
+                    .Where(x => proposalIds.Contains(x.ProposalId))
+                    .ToDictionaryAsync(x => x.ProposalId);
+
+            var jobIds = proposals.Values
+                .Select(x => x.JobId)
+                .Distinct()
+                .ToList();
+
+            var jobs = jobIds.Count == 0
+                ? new Dictionary<int, JobPosting>()
+                : await _context.JobPostings
+                    .AsNoTracking()
+                    .Where(x => jobIds.Contains(x.JobPostingId))
+                    .ToDictionaryAsync(x => x.JobPostingId);
+
+            var responses = transactions
+                .Select(transaction =>
+                {
+                    Project? project = null;
+                    Milestone? milestone = null;
+                    ProjectContract? contract = null;
+                    Proposal? proposal = null;
+                    JobPosting? job = null;
+
+                    if (transaction.ProjectId.HasValue)
+                    {
+                        projects.TryGetValue(transaction.ProjectId.Value, out project);
+                    }
+
+                    if (transaction.MilestoneId.HasValue)
+                    {
+                        milestones.TryGetValue(transaction.MilestoneId.Value, out milestone);
+                    }
+
+                    if (project != null)
+                    {
+                        contracts.TryGetValue(project.ContractId, out contract);
+                    }
+
+                    if (contract != null)
+                    {
+                        proposals.TryGetValue(contract.ProposalId, out proposal);
+                    }
+
+                    if (proposal != null)
+                    {
+                        jobs.TryGetValue(proposal.JobId, out job);
+                    }
+
+                    return MapTransaction(new TransactionContextRow(
+                        transaction,
+                        project?.Title,
+                        milestone?.Title,
+                        contract?.ContractId,
+                        project?.Title ?? job?.Title,
+                        proposal?.ProposalId,
+                        job?.Title,
+                        job?.JobPostingId,
+                        job?.Title));
+                })
+                .ToList();
+
+            if (!string.IsNullOrWhiteSpace(category))
+            {
+                var normalizedCategory = category.Trim().ToUpperInvariant();
+                responses = responses
+                    .Where(x => x.Category == normalizedCategory)
+                    .ToList();
+            }
+
+            if (!string.IsNullOrWhiteSpace(statusGroup))
+            {
+                var normalizedStatusGroup = statusGroup.Trim().ToUpperInvariant();
+                responses = responses
+                    .Where(x => x.StatusGroup == normalizedStatusGroup)
+                    .ToList();
+            }
+
+            return responses;
         }
 
         public async Task<IReadOnlyList<EscrowResponse>> GetProjectEscrowsAsync(
@@ -206,7 +334,7 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("User not found.");
             }
 
-            var now = DateTime.UtcNow;
+            var now = VietnamDateTime.Now;
             var orderCode = await GenerateDepositOrderCodeAsync(userId);
             var payOsOrderCode = await GeneratePayOsOrderCodeAsync();
 
@@ -244,7 +372,7 @@ namespace AITasker.Infrastructure.Banking
                 CancelUrl = cancelUrl,
                 Status = DepositOrderPending,
                 CreatedAt = now,
-                ExpiresAt = now.AddMinutes(2),
+                ExpiresAt = now.AddMinutes(workflowPolicy.DepositOrderExpireMinutes),
                 PaidAt = null,
                 ProviderReference = payOsResult.PaymentLinkId
             };
@@ -306,7 +434,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Only PENDING deposit orders can be confirmed.");
                 }
 
-                if (order.ExpiresAt < DateTime.UtcNow)
+                if (order.ExpiresAt <= VietnamDateTime.Now)
                 {
                     order.Status = DepositOrderExpired;
                     await _context.SaveChangesAsync();
@@ -327,7 +455,7 @@ namespace AITasker.Infrastructure.Banking
                 if (!existingDepositTransaction)
                 {
                     wallet.AvailableBalance += order.Amount;
-                    wallet.UpdatedAt = DateTime.UtcNow;
+                    wallet.UpdatedAt = VietnamDateTime.Now;
 
                     _context.Transactions.Add(new Transaction
                     {
@@ -340,12 +468,12 @@ namespace AITasker.Infrastructure.Banking
                         Status = TransactionStatusSuccess,
                         Description = $"[Deposit] payOS payment confirmed for order {order.OrderCode}",
                         ReferenceId = order.OrderCode,
-                        CreatedAt = DateTime.UtcNow
+                        CreatedAt = VietnamDateTime.Now
                     });
                 }
 
                 order.Status = DepositOrderPaid;
-                order.PaidAt = DateTime.UtcNow;
+                order.PaidAt = VietnamDateTime.Now;
                 order.ProviderReference = string.IsNullOrWhiteSpace(reference)
                     ? paymentLinkId
                     : reference;
@@ -357,8 +485,10 @@ namespace AITasker.Infrastructure.Banking
                 await _notificationService.CreateNotificationAsync(
                     order.UserId,
                     "Wallet deposit successful",
-                    $"Your wallet has been credited with {order.Amount:N0}.",
-                    "WALLET_DEPOSIT_SUCCESS");
+                    $"Your wallet balance has been increased by {order.Amount:N0} VND.",
+                    "WALLET_DEPOSIT_SUCCESS",
+                    relatedEntityType: "DEPOSIT_ORDER",
+                    relatedEntityId: order.DepositOrderId);
 
                 return MapDepositOrder(order, MapWallet(wallet));
             }
@@ -423,7 +553,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetOrCreateWalletAsync(userId);
 
                 wallet.AvailableBalance += amount;
-                wallet.UpdatedAt = DateTime.UtcNow;
+                wallet.UpdatedAt = VietnamDateTime.Now;
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -436,7 +566,7 @@ namespace AITasker.Infrastructure.Banking
                     Status = TransactionStatusSuccess,
                     Description = description,
                     ReferenceId = referenceId,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = VietnamDateTime.Now
                 });
 
                 await _context.SaveChangesAsync();
@@ -490,13 +620,8 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
                 }
 
-                var now = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
 
-                if (project.EscrowExpiredAt != null)
-                {
-                    throw new InvalidOperationException(
-                        "Escrow cannot be locked because escrow lock deadline already expired.");
-                }
 
                 if (project.EscrowLockedAt != null)
                 {
@@ -504,21 +629,6 @@ namespace AITasker.Infrastructure.Banking
                         "Project escrow is already locked.");
                 }
 
-                if (project.EscrowLockDeadlineAt.HasValue &&
-                    project.EscrowLockDeadlineAt.Value < now)
-                {
-                    await ExpirePendingEscrowProjectAsync(
-                        project,
-                        contract,
-                        now);
-
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-                    dbTransactionCompleted = true;
-
-                    throw new InvalidOperationException(
-                        "Escrow lock deadline has expired. Contract and project were cancelled before escrow.");
-                }
 
                 var milestones = await _context.Milestones
                     .Where(m => m.ProjectId == project.ProjectId)
@@ -783,15 +893,19 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Client locked balance is not enough to release escrow.");
                 }
 
-                clientWallet.LockedBalance -= escrow.Amount;
-                clientWallet.UpdatedAt = DateTime.UtcNow;
+                var now = VietnamDateTime.Now;
+                var expertServiceFeeAmount = CalculateExpertServiceFee(escrow.Amount, contract.ExpertFeeRate);
+                var expertNetAmount = escrow.Amount - expertServiceFeeAmount;
 
-                expertWallet.PendingEarningsBalance += escrow.Amount;
-                expertWallet.TotalEarning += escrow.Amount;
-                expertWallet.UpdatedAt = DateTime.UtcNow;
+                clientWallet.LockedBalance -= escrow.Amount;
+                clientWallet.UpdatedAt = now;
+
+                expertWallet.PendingEarningsBalance += expertNetAmount;
+                expertWallet.TotalEarning += expertNetAmount;
+                expertWallet.UpdatedAt = now;
 
                 escrow.Status = EscrowStatusReleased;
-                escrow.UpdatedAt = DateTime.UtcNow;
+                escrow.UpdatedAt = now;
 
                 milestone.Status = MilestoneStatusApproved;
                 milestone.PaymentStatus = PaymentStatusReleased;
@@ -810,7 +924,7 @@ namespace AITasker.Infrastructure.Banking
                     Status = TransactionStatusSuccess,
                     Description = $"[Escrow Release] Released funds for Milestone ID {milestone.MilestoneId}",
                     ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = now
                 });
 
                 _context.Transactions.Add(new Transaction
@@ -819,13 +933,40 @@ namespace AITasker.Infrastructure.Banking
                     ProjectId = project.ProjectId,
                     MilestoneId = milestone.MilestoneId,
                     EscrowId = escrow.EscrowId,
-                    Amount = escrow.Amount,
+                    Amount = expertNetAmount,
                     Type = TxExpertPendingEarningHold,
                     Status = TransactionStatusSuccess,
-                    Description = $"[Expert Pending Earning] Held funds for Milestone ID {milestone.MilestoneId} until project completion",
+                    Description = $"[Expert Pending Earning] Held net earning for Milestone ID {milestone.MilestoneId} until project completion. Expert service fee: {expertServiceFeeAmount:N0} VND.",
                     ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = now
                 });
+
+                if (expertServiceFeeAmount > 0)
+                {
+                    var expertFeeReferenceId = $"MILESTONE_{milestone.MilestoneId}_EXPERT_FEE";
+
+                    _context.Transactions.Add(new Transaction
+                    {
+                        UserId = expertProfile.UserId,
+                        ProjectId = project.ProjectId,
+                        MilestoneId = milestone.MilestoneId,
+                        EscrowId = escrow.EscrowId,
+                        Amount = -expertServiceFeeAmount,
+                        Type = TxExpertServiceFee,
+                        Status = TransactionStatusSuccess,
+                        Description = $"[Expert Service Fee] Deducted {expertServiceFeeAmount:N0} VND expert service fee for Milestone ID {milestone.MilestoneId}.",
+                        ReferenceId = expertFeeReferenceId,
+                        CreatedAt = now
+                    });
+
+                    await _platformWalletService.RecordExpertServiceFeeAsync(
+                        project.ProjectId,
+                        contract.ContractId,
+                        expertProfile.UserId,
+                        expertServiceFeeAmount,
+                        expertFeeReferenceId,
+                        now);
+                }
 
                 await _context.SaveChangesAsync();
                 await dbTransaction.CommitAsync();
@@ -865,6 +1006,17 @@ namespace AITasker.Infrastructure.Banking
 
                 throw;
             }
+        }
+
+
+        private static decimal CalculateExpertServiceFee(decimal amount, decimal expertFeeRate)
+        {
+            if (amount <= 0 || expertFeeRate <= 0)
+            {
+                return 0m;
+            }
+
+            return Math.Round(amount * expertFeeRate / 100m, 0, MidpointRounding.AwayFromZero);
         }
 
         public async Task<bool> ReleaseEscrowAsync(int milestoneId)
@@ -913,7 +1065,7 @@ namespace AITasker.Infrastructure.Banking
                 LockedBalance = 0m,
                 PendingEarningsBalance = 0m,
                 TotalEarning = 0m,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = VietnamDateTime.Now
             };
 
             _context.Wallets.Add(wallet);
@@ -1130,22 +1282,124 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static TransactionResponse MapTransaction(Transaction transaction)
+        private static TransactionResponse MapTransaction(TransactionContextRow row)
         {
+            var transaction = row.Transaction;
+            var category = ResolveTransactionCategory(transaction.Type);
+            var statusGroup = ResolveTransactionStatusGroup(transaction.Status, transaction.Type);
+            var displayTitle = ResolveTransactionDisplayTitle(transaction, row);
+            var displaySubtitle = ResolveTransactionDisplaySubtitle(transaction, row);
+
             return new TransactionResponse
             {
                 TransactionId = transaction.TransactionId,
                 EscrowId = transaction.EscrowId,
                 ProjectId = transaction.ProjectId,
+                ProjectTitle = row.ProjectTitle,
                 MilestoneId = transaction.MilestoneId,
+                MilestoneTitle = row.MilestoneTitle,
+                ContractId = row.ContractId,
+                ContractTitle = row.ContractTitle,
+                ProposalId = row.ProposalId,
+                ProposalTitle = row.ProposalTitle,
+                JobId = row.JobId,
+                JobTitle = row.JobTitle,
                 UserId = transaction.UserId,
                 Type = transaction.Type,
+                Category = category,
+                StatusGroup = statusGroup,
                 Amount = transaction.Amount,
                 Status = transaction.Status,
                 Description = transaction.Description,
+                DisplayTitle = displayTitle,
+                DisplaySubtitle = displaySubtitle,
                 ReferenceId = transaction.ReferenceId,
                 CreatedAt = transaction.CreatedAt
             };
+        }
+
+        private static TransactionResponse MapTransaction(Transaction transaction)
+        {
+            return MapTransaction(new TransactionContextRow(transaction, null, null, null, null, null, null, null, null));
+        }
+
+        private sealed record TransactionContextRow(
+            Transaction Transaction,
+            string? ProjectTitle,
+            string? MilestoneTitle,
+            int? ContractId,
+            string? ContractTitle,
+            int? ProposalId,
+            string? ProposalTitle,
+            int? JobId,
+            string? JobTitle);
+
+        private static string ResolveTransactionCategory(string type)
+        {
+            var normalized = type.Trim().ToUpperInvariant();
+
+            if (normalized.Contains("WITHDRAWAL")) return "WITHDRAWAL";
+            if (normalized.Contains("DEPOSIT")) return "DEPOSIT";
+            if (normalized.Contains("ESCROW")) return "ESCROW";
+            if (normalized.Contains("PLATFORM_FEE")) return "PLATFORM_FEE";
+            if (normalized.Contains("REFUND")) return "REFUND";
+            if (normalized.Contains("PENDING_EARNING")) return "PENDING_EARNING";
+
+            return "WALLET";
+        }
+
+        private static string ResolveTransactionStatusGroup(string status, string type)
+        {
+            var normalizedStatus = status.Trim().ToUpperInvariant();
+            var normalizedType = type.Trim().ToUpperInvariant();
+
+            if (normalizedType.Contains("EXPIRED")) return "EXPIRED";
+            if (normalizedType.Contains("PROCESSING")) return "PROCESSING";
+            if (normalizedType.Contains("REJECTED") || normalizedType.Contains("CANCELLED") || normalizedType.Contains("CANCELED")) return "CANCELLED";
+            if (normalizedType.Contains("REFUND")) return "REFUNDED";
+            if (normalizedStatus is "SUCCESS" or "PAID") return "COMPLETED";
+            if (normalizedStatus is "FAILED") return "FAILED";
+            if (normalizedStatus is "PENDING") return "PENDING";
+
+            return normalizedStatus;
+        }
+
+        private static string ResolveTransactionDisplayTitle(Transaction transaction, TransactionContextRow row)
+        {
+            if (!string.IsNullOrWhiteSpace(row.MilestoneTitle))
+            {
+                return row.MilestoneTitle!;
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.ProjectTitle))
+            {
+                return row.ProjectTitle!;
+            }
+
+            var normalizedType = transaction.Type.Trim().ToUpperInvariant();
+
+            if (normalizedType.Contains("WITHDRAWAL")) return "Withdrawal request";
+            if (normalizedType.Contains("DEPOSIT")) return "Wallet deposit";
+            if (normalizedType.Contains("PLATFORM_FEE")) return "Platform fee";
+
+            return string.IsNullOrWhiteSpace(transaction.Description)
+                ? transaction.Type
+                : transaction.Description;
+        }
+
+        private static string ResolveTransactionDisplaySubtitle(Transaction transaction, TransactionContextRow row)
+        {
+            var parts = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(row.ProjectTitle) &&
+                !string.Equals(row.ProjectTitle, row.MilestoneTitle, StringComparison.OrdinalIgnoreCase))
+            {
+                parts.Add(row.ProjectTitle!);
+            }
+
+            parts.Add(transaction.Type);
+
+            return string.Join(" • ", parts);
         }
 
         private async Task<EscrowResponse> MapEscrowAsync(Escrow escrow)
@@ -1210,7 +1464,7 @@ namespace AITasker.Infrastructure.Banking
         {
             for (var attempt = 0; attempt < 5; attempt++)
             {
-                var orderCode = $"DEP{userId}{DateTime.UtcNow:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
+                var orderCode = $"DEP{userId}{VietnamDateTime.Now:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
 
                 var exists = await _context.DepositOrders
                     .AnyAsync(x => x.OrderCode == orderCode);
@@ -1222,20 +1476,6 @@ namespace AITasker.Infrastructure.Banking
             }
 
             throw new InvalidOperationException("Could not generate unique deposit order code.");
-        }
-
-        private async Task ExpirePendingEscrowProjectAsync(
-            Project project,
-            ProjectContract contract,
-            DateTime now)
-        {
-            var proposal = await GetProposalAsync(contract.ProposalId);
-            var job = await GetJobAsync(proposal.JobId);
-
-            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
-                contract,
-                "ESCROW_TIMEOUT",
-                now);
         }
 
         private async Task EnsureUserCanAccessDepositOrderAsync(
