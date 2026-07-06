@@ -369,6 +369,7 @@ builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IAdminJobService, AdminJobService>();
 
 builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 
