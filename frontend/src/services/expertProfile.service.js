@@ -278,6 +278,9 @@ export function normalizeExpertProfile(profile = {}) {
     expertProfileId: raw.expertProfileId ?? raw.id ?? null,
     userId: raw.userId ?? raw.accountId ?? null,
 
+    expertCategory: raw.expertCategory || raw.ExpertCategory || raw.category || raw.Category || "",
+level: raw.level || raw.Level || raw.expertLevel || raw.ExpertLevel || "",
+
     fullName: raw.fullName || raw.userFullName || raw.name || "",
     email: raw.email || raw.userEmail || "",
     phoneNumber: raw.phoneNumber || raw.phone || "",

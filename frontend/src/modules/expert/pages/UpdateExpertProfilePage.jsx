@@ -412,11 +412,10 @@ export default function UpdateExpertProfilePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("basic")}
-                className={`rounded-2xl border px-5 py-4 text-left transition ${
-                  activeTab === "basic"
+                className={`rounded-2xl border px-5 py-4 text-left transition ${activeTab === "basic"
                     ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-200"
                     : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-                }`}
+                  }`}
               >
                 <p className="font-bold">Basic Information</p>
                 <p className="mt-1 text-xs">
@@ -427,11 +426,10 @@ export default function UpdateExpertProfilePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("verification")}
-                className={`rounded-2xl border px-5 py-4 text-left transition ${
-                  activeTab === "verification"
+                className={`rounded-2xl border px-5 py-4 text-left transition ${activeTab === "verification"
                     ? "border-purple-400/60 bg-purple-400/10 text-purple-200"
                     : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-                }`}
+                  }`}
               >
                 <p className="font-bold">Verification Information</p>
                 <p className="mt-1 text-xs">
@@ -545,8 +543,8 @@ function BasicProfileForm({
               {uploadingAvatar
                 ? "Uploading..."
                 : syncingAvatar
-                ? "Updating..."
-                : "Upload Avatar"}
+                  ? "Updating..."
+                  : "Upload Avatar"}
 
               <input
                 type="file"
@@ -590,24 +588,7 @@ function BasicProfileForm({
           required
         />
 
-        <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-4 md:col-span-2">
-          <div>
-            <p className="text-sm font-bold text-white">Available For Work</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Show clients that you are ready for new projects.
-            </p>
-          </div>
 
-          <input
-            type="checkbox"
-            checked={Boolean(formData.availableForWork)}
-            disabled={saving}
-            onChange={(event) =>
-              onChange("availableForWork", event.target.checked)
-            }
-            className="h-5 w-5 accent-cyan-400"
-          />
-        </label>
       </div>
 
       <div className="mt-5">
@@ -685,13 +666,10 @@ function VerificationProfileForm({
             required
           />
 
-          <NumberInput
+          <ReadonlyNumberInput
             label="Years Of Experience"
             value={formData.yearsOfExperience}
-            error={errors.yearsOfExperience}
-            onChange={(value) => onChange("yearsOfExperience", value)}
-            placeholder="2"
-            required
+            hint="This field is managed by the system and cannot be edited here."
           />
         </div>
       </section>
@@ -855,9 +833,8 @@ function TextInput({
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
       />
 
       <FieldError message={error} />
@@ -885,12 +862,31 @@ function NumberInput({
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
       />
 
       <FieldError message={error} />
+    </label>
+  );
+}
+
+function ReadonlyNumberInput({ label, value, hint }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+        {label}
+      </span>
+
+      <input
+        type="number"
+        value={value ?? ""}
+        readOnly
+        disabled
+        className="w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-gray-400 outline-none opacity-70"
+      />
+
+      {hint && <p className="mt-2 text-xs font-semibold text-gray-500">{hint}</p>}
     </label>
   );
 }
@@ -905,9 +901,8 @@ function SelectInput({ label, value, onChange, error, options }) {
       <select
         value={value || "COURSE_CERTIFICATE"}
         onChange={(event) => onChange(event.target.value)}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
+        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
       >
         {options.map((option) => (
           <option
@@ -945,9 +940,8 @@ function TextareaInput({
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
-          error ? "border-red-400/60" : "border-white/10"
-        }`}
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
+          }`}
       />
 
       <FieldError message={error} />
@@ -980,15 +974,15 @@ function ResultModal({ modal, onClose, onBackProfile }) {
     modal.type === "success"
       ? "check_circle"
       : modal.type === "warning"
-      ? "warning"
-      : "error";
+        ? "warning"
+        : "error";
 
   const color =
     modal.type === "success"
       ? "text-green-300"
       : modal.type === "warning"
-      ? "text-yellow-300"
-      : "text-red-300";
+        ? "text-yellow-300"
+        : "text-red-300";
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
@@ -1076,15 +1070,7 @@ function validateVerificationForm(formData) {
     errors.skills = "Skills must be more specific.";
   }
 
-  if (isEmpty(formData.yearsOfExperience)) {
-    errors.yearsOfExperience = "Years of experience is required.";
-  }
-
-  const years = Number(formData.yearsOfExperience || 0);
-
-  if (!isEmpty(formData.yearsOfExperience) && years < 0) {
-    errors.yearsOfExperience = "Years of experience must be 0 or higher.";
-  }
+  
 
   if (isEmpty(formData.portfolioUrl)) {
     errors.portfolioUrl = "Portfolio URL is required.";
@@ -1157,7 +1143,6 @@ function buildBasicPayload(formData) {
 function buildVerificationPayload(formData) {
   return {
     skills: String(formData.skills || "").trim(),
-    yearsOfExperience: Number(formData.yearsOfExperience || 0),
     portfolioUrl: String(formData.portfolioUrl || "").trim(),
     linkedInUrl: String(formData.linkedInUrl || "").trim(),
     gitHubUrl: String(formData.gitHubUrl || "").trim(),
@@ -1257,11 +1242,11 @@ function getFriendlyError(error, fallback = "Something went wrong.") {
     typeof payload === "string"
       ? payload
       : payload?.message ||
-        payload?.title ||
-        payload?.detail ||
-        payload?.error ||
-        error?.message ||
-        "";
+      payload?.title ||
+      payload?.detail ||
+      payload?.error ||
+      error?.message ||
+      "";
 
   if (message.includes("Certificate URL is invalid")) {
     return "One of your certificate links is invalid.";
@@ -1318,12 +1303,12 @@ function getMissingInformation(data) {
 function getReviewStatus(data) {
   return String(
     data?.profileReviewStatus ||
-      data?.ProfileReviewStatus ||
-      data?.reviewStatus ||
-      data?.ReviewStatus ||
-      data?.status ||
-      data?.Status ||
-      ""
+    data?.ProfileReviewStatus ||
+    data?.reviewStatus ||
+    data?.ReviewStatus ||
+    data?.status ||
+    data?.Status ||
+    ""
   )
     .trim()
     .toUpperCase();
