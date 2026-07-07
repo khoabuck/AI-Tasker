@@ -196,6 +196,14 @@ builder.Services
         {
             OnMessageReceived = context =>
             {
+                var cookieToken = context.Request.Cookies["access_token"];
+
+                if (!string.IsNullOrWhiteSpace(cookieToken))
+                {
+                    context.Token = cookieToken;
+                    return Task.CompletedTask;
+                }
+
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
@@ -369,6 +377,7 @@ builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IAdminJobService, AdminJobService>();
 
 builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 

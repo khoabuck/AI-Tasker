@@ -293,7 +293,11 @@ export default function ClientProposalDetailPage() {
 
       if (walletEnough) {
         // Đủ tiền → chuyển thẳng sang trang ký hợp đồng.
-        navigate(`/client/proposals/${proposalId}/contract`);
+        navigate(`/client/proposals/${proposalId}/contract`, {
+          state: {
+            contract,
+          },
+        });
         return;
       }
       // Không đủ tiền → ở lại trang này, banner "Continue to Contract" bên

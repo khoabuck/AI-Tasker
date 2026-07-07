@@ -17,7 +17,7 @@
 // GET  /api/wallets/balance                          → số dư ví
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -56,9 +56,11 @@ function getContractId(contract) {
 export default function ClientContractSignPage() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialContract = location.state?.contract ?? null;
 
   const [proposal, setProposal] = useState(null);
-  const [contract, setContract] = useState(null);
+  const [contract, setContract] = useState(initialContract);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [pageError, setPageError] = useState("");
@@ -78,21 +80,38 @@ export default function ClientContractSignPage() {
       setLoadError("");
     }
     try {
-      const [proposalRes, contractRes] = await Promise.all([
-        axiosInstance.get(`/proposals/${proposalId}`, { signal }),
-        axiosInstance.get(`/proposals/${proposalId}/contract`, { signal }),
-      ]);
+      const proposalRes = await axiosInstance.get(
+      `/proposals/${proposalId}`,
+      { signal }
+    );
 
-      const proposalData = proposalRes.data?.data ?? proposalRes.data;
-      const contractData = contractRes.data?.data ?? contractRes.data ?? null;
+    const proposalData =
+      proposalRes.data?.data ?? proposalRes.data;
 
-      setProposal(Array.isArray(proposalData) ? proposalData[0] ?? null : proposalData);
+    setProposal(
+      Array.isArray(proposalData)
+        ? proposalData[0] ?? null
+        : proposalData
+    );
+
+    if (!initialContract) {
+      const contractRes = await axiosInstance.get(
+        `/proposals/${proposalId}/contract`,
+        { signal }
+      );
+
+      const contractData =
+        contractRes.data?.data ??
+        contractRes.data ??
+        null;
+
       setContract(contractData);
+    }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       if (!silent) {
         if (err?.response?.status === 404) {
-          setLoadError("No contract has been created for this proposal yet.");
+          setLoadError("");
         } else {
           setLoadError(err?.response?.data?.message || "Failed to load contract.");
         }
@@ -100,7 +119,7 @@ export default function ClientContractSignPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [proposalId]);
+  }, [proposalId, initialContract]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -282,7 +301,7 @@ export default function ClientContractSignPage() {
     );
   }
 
-  if (loadError || !proposal) {
+  if (loadError && !loading) {
     return (
       <ClientLayout>
         <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
@@ -296,6 +315,16 @@ export default function ClientContractSignPage() {
       </ClientLayout>
     );
   }
+
+    if (!proposal || !contract) {
+      return (
+        <ClientLayout>
+          <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
+            Loading contract...
+          </div>
+        </ClientLayout>
+      );
+    }
 
   const { clientSigned, expertSigned, bothSigned } = readContractSignState(contract);
   const isCancelled = (contract?.status || "").toUpperCase() === "CANCELLED";

@@ -4,6 +4,8 @@ namespace AITasker.Domain.Constants
     {
         // Job
         public const string JobDailyDigest = "JOB_DAILY_DIGEST";
+        public const string JobCancelledByAdmin = "JOB_CANCELLED_BY_ADMIN";
+        public const string JobCancelledForExpert = "JOB_CANCELLED_FOR_EXPERT";
 
         // Proposal
         public const string ProposalSubmitted = "PROPOSAL_SUBMITTED";
