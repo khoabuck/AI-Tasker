@@ -10,10 +10,10 @@ const JOBS_PER_PAGE = 6;
 const BUDGET_FILTERS = [
   { key: "ALL", label: "Any budget" },
   { key: "NEGOTIABLE", label: "Negotiable" },
-  { key: "UNDER_100", label: "Under $100,000" },
-  { key: "100_500", label: "$100,000 - $500,000" },
-  { key: "500_1000", label: "$500,000 - $1,000,000" },
-  { key: "OVER_1000", label: "Over $1,000,000" },
+  { key: "UNDER_100", label: "Under 100,000 đ" },
+  { key: "100_500", label: "100,000 đ - 500,000 đ" },
+  { key: "500_1000", label: "500,000 đ - 1,000,000 đ" },
+  { key: "OVER_1000", label: "Over 1,000,000 đ" },
 ];
 
 const DURATION_FILTERS = [
@@ -892,9 +892,9 @@ function formatBudget(min, max) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
+    currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }

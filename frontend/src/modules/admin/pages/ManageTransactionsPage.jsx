@@ -95,10 +95,14 @@ export default function ManageTransactionPage() {
   };
 
   const formatMoney = (value) => {
-    const number = Number(value || 0);
+  const number = Number(value || 0);
 
-    return `$${number.toLocaleString("en-US")}`;
-  };
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
+};
 
   const formatDate = (value) => {
     if (!value) return "No date";

@@ -297,8 +297,12 @@ function Alert({ title, message }) {
 
 function formatMoney(value) {
   const number = Number(value || 0);
-  if (!number) return "$0";
-  return `$${number.toLocaleString()}`;
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
