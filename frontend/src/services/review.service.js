@@ -44,6 +44,17 @@ const reviewService = {
 
     return unwrap(response);
   },
+
+  async reportReview(reviewId, payload) {
+    if (!reviewId) {
+      throw new Error("reviewId is required.");
+    }
+
+    const request = buildReportReviewPayload(payload);
+    const response = await reviewApi.reportReview(reviewId, request);
+
+    return unwrap(response);
+  },
 };
 
 function unwrap(response) {
@@ -76,24 +87,29 @@ function normalizeReview(item) {
 
   const projectId = item?.projectId ?? item?.ProjectId ?? null;
 
-  const rating = Number(item?.rating ?? item?.Rating ?? item?.score ?? item?.Score ?? 0);
+  const rating = Number(
+    item?.rating ?? item?.Rating ?? item?.score ?? item?.Score ?? 0
+  );
 
   return {
     reviewId,
     id: reviewId,
     projectId,
+
     expertProfileId:
       item?.expertProfileId ??
       item?.ExpertProfileId ??
       item?.expertId ??
       item?.ExpertId ??
       null,
+
     reviewerUserId:
       item?.reviewerUserId ??
       item?.ReviewerUserId ??
       item?.clientUserId ??
       item?.ClientUserId ??
       null,
+
     reviewerName:
       item?.reviewerName ||
       item?.ReviewerName ||
@@ -102,12 +118,14 @@ function normalizeReview(item) {
       item?.createdByName ||
       item?.CreatedByName ||
       "Client",
+
     reviewerAvatarUrl:
       item?.reviewerAvatarUrl ||
       item?.ReviewerAvatarUrl ||
       item?.clientAvatarUrl ||
       item?.ClientAvatarUrl ||
       "",
+
     projectTitle:
       item?.projectTitle ||
       item?.ProjectTitle ||
@@ -116,7 +134,9 @@ function normalizeReview(item) {
       item?.jobTitle ||
       item?.JobTitle ||
       "Project",
+
     rating: Number.isNaN(rating) ? 0 : rating,
+
     comment:
       item?.comment ||
       item?.Comment ||
@@ -125,6 +145,35 @@ function normalizeReview(item) {
       item?.content ||
       item?.Content ||
       "",
+
+    status:
+      item?.status ||
+      item?.Status ||
+      item?.reviewStatus ||
+      item?.ReviewStatus ||
+      "VISIBLE",
+
+    reportStatus:
+      item?.reportStatus ||
+      item?.ReportStatus ||
+      item?.reviewReportStatus ||
+      item?.ReviewReportStatus ||
+      item?.latestReportStatus ||
+      item?.LatestReportStatus ||
+      "",
+
+    hasReported:
+      Boolean(
+        item?.hasReported ??
+          item?.HasReported ??
+          item?.isReported ??
+          item?.IsReported ??
+          item?.reportStatus ??
+          item?.ReportStatus ??
+          item?.reviewReportStatus ??
+          item?.ReviewReportStatus
+      ),
+
     createdAt:
       item?.createdAt ||
       item?.CreatedAt ||
@@ -140,6 +189,12 @@ function buildCreateReviewPayload(payload = {}) {
   return {
     rating: Number(payload.rating || 0),
     comment: String(payload.comment || "").trim(),
+  };
+}
+
+function buildReportReviewPayload(payload = {}) {
+  return {
+    reason: String(payload.reason || "").trim(),
   };
 }
 
