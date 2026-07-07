@@ -660,6 +660,17 @@ export default function ClientProjectDetailPage() {
     return () => clearInterval(intervalId);
   }, [fetchData]);
 
+  useEffect(() => {
+    if (
+      project?.status === "COMPLETED" &&
+      location.state?.successMsg !== "Review submitted successfully."
+    ) {
+      navigate(`/client/projects/${projectId}/review`, {
+        replace: true,
+      });
+    }
+  }, [project?.status, projectId, navigate, location.state]);
+
   if (loading) {
     return (
       <ClientLayout>
