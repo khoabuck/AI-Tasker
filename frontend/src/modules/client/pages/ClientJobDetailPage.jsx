@@ -93,7 +93,9 @@ function MessageModal({ proposal, onClose, navigate }) {
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img src={proposal.expertAvatar || proposal.avatarUrl || `https://i.pravatar.cc/100?u=${proposal.proposalId}`} alt={expertName}
+            <img
+                src={proposal.expertAvatarUrl || `https://i.pravatar.cc/100?u=${proposal.expertProfileId || proposal.expertUserId || proposal.proposalId}`}
+                alt={expertName}
               style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(192,193,255,0.3)" }} />
             <div>
               <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, color: "#e1e2eb", margin: 0 }}>{expertName}</h3>
@@ -383,7 +385,9 @@ export default function ClientJobDetailPage() {
                         onMouseEnter={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = "rgba(0,240,255,0.2)"; }}
                         onMouseLeave={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"; }}>
                         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                          <img src={proposal.expertAvatar || proposal.avatarUrl || `https://i.pravatar.cc/100?u=${proposal.proposalId}`} alt={expertName}
+                          <img
+                            src={proposal.expertAvatarUrl || `https://i.pravatar.cc/100?u=${proposal.expertProfileId || proposal.expertUserId || proposal.proposalId}`}
+                            alt={expertName}
                             style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.1)", flexShrink: 0 }} />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>

@@ -617,9 +617,8 @@ export default function ClientProjectDetailPage() {
   const fetchData = useCallback(async (signal, silent = false) => {
     if (!silent) {
       setLoading(true);
+      setError("");
     }
-
-    setError("");
 
     try {
       const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
@@ -671,7 +670,9 @@ export default function ClientProjectDetailPage() {
     }
   }, [project?.status, projectId, navigate, location.state]);
 
-  if (loading) {
+  const showFullLoading = loading && !project;
+
+  if (showFullLoading) {
     return (
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
@@ -683,12 +684,12 @@ export default function ClientProjectDetailPage() {
     );
   }
 
-  if (error || !project) {
+  if (error && !project) {
     return (
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 24px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Project not found."}</p>
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
             Back to list
@@ -697,6 +698,8 @@ export default function ClientProjectDetailPage() {
       </ClientLayout>
     );
   }
+
+if (!project) return null;
 
   const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
@@ -733,8 +736,14 @@ export default function ClientProjectDetailPage() {
 
           {/* Expert info */}
           <div style={{ paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <img src={project.expertAvatar || `https://i.pravatar.cc/80?u=${project.expertId}`} alt={expertName}
-              style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }} />
+            <img
+                src={
+                  project.expertAvatarUrl ||
+                  `https://i.pravatar.cc/80?u=${project.expertProfileId || project.expertUserId || project.projectId}`
+                }
+                alt={expertName}
+                style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }}
+              />
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: "0 0 2px", fontFamily: "Hanken Grotesk, sans-serif" }}>{expertName}</p>
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>

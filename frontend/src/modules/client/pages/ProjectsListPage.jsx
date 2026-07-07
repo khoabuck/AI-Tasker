@@ -46,7 +46,7 @@ function ProjectCard({ project, hasReview }) {
           </h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img
-              src={project.expertAvatar || "/images/default-avatar.png"}
+              src={project.expertAvatarUrl || "/images/default-avatar.png"}
               alt={expertName}
               style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
             />

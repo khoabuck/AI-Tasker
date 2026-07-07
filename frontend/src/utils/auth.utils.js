@@ -33,6 +33,6 @@ export const getErrorMessage = (error) => {
     error?.response?.data?.message ||
     error?.response?.data?.title ||
     error?.message ||
-    "Đã có lỗi xảy ra."
+    "An error has occurred."
   );
 };
