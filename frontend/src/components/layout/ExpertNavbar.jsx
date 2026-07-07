@@ -457,104 +457,106 @@ function NotificationPopup({
   onMarkAllAsRead,
   onViewAll,
 }) {
-  return (
-    <>
-      <style>
-        {`
-          .notification-scrollbar-hidden::-webkit-scrollbar {
-            display: none;
-          }
-        `}
-      </style>
+  const unreadText =
+    unreadCount > 0 ? `${unreadCount} unread` : "All caught up";
 
-      <div className="absolute right-0 top-full z-[999] mt-3 w-[380px] overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_24px_90px_rgba(0,0,0,0.7)]">
-        <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
-          <div className="flex items-start justify-between gap-3">
+  return (
+    <div className="absolute right-0 top-full z-[999] mt-2 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+      <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-white/[0.03] to-purple-400/10 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+              <span className="material-symbols-outlined text-[17px]">
+                notifications
+              </span>
+            </span>
+
             <div>
-              <p className="text-sm font-extrabold text-white">
+              <p className="text-[13px] font-black text-white">
                 Notifications
               </p>
-
-              <p className="mt-1 text-xs text-gray-500">
-                {unreadCount > 0
-                  ? `${unreadCount} unread notification(s)`
-                  : "No unread notifications"}
+              <p className="text-[10px] font-medium text-gray-400">
+                {unreadText}
               </p>
             </div>
-
-            <button
-              type="button"
-              onClick={onMarkAllAsRead}
-              disabled={markingAll || unreadCount <= 0}
-              className="rounded-lg border border-green-400/40 bg-green-400/10 px-3 py-1.5 text-[11px] font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {markingAll ? "..." : "Read all"}
-            </button>
           </div>
-        </div>
 
-        <div
-          className="notification-scrollbar-hidden max-h-[390px] overflow-y-auto p-2"
-          style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-        >
-          {loading ? (
-            <div className="px-4 py-10 text-center text-sm text-gray-400">
-              Loading notifications...
-            </div>
-          ) : notifications.length === 0 ? (
-            <div className="px-4 py-10 text-center">
-              <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
-                notifications_off
-              </span>
-
-              <p className="text-sm font-bold text-white">No notifications</p>
-
-              <p className="mt-1 text-xs text-gray-500">
-                New updates will appear here.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {notifications.map((notification, index) => {
-                const notificationId = getNotificationId(notification);
-                const target =
-                  notification.target ||
-                  notificationService.getNotificationTarget(notification);
-
-                const opening =
-                  String(openingId) === String(notificationId) ||
-                  String(openingId) === String(target?.path);
-
-                return (
-                  <NotificationItem
-                    key={notificationId || index}
-                    notification={notification}
-                    target={target}
-                    opening={opening}
-                    markingId={markingId}
-                    onOpen={() => onOpenNotification(notification)}
-                    onMarkAsRead={onMarkAsRead}
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        <div className="border-t border-white/10 bg-white/[0.03] p-2">
           <button
             type="button"
-            onClick={onViewAll}
-            className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+            onClick={onMarkAllAsRead}
+            disabled={markingAll || unreadCount <= 0}
+            className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold text-cyan-200 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
           >
-            View all notifications
-            <span className="material-symbols-outlined text-[18px]">
-              arrow_forward
-            </span>
+            {markingAll ? "Reading..." : "Read all"}
           </button>
         </div>
       </div>
-    </>
+
+      <div
+        className="max-h-[360px] overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden"
+        style={{
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
+        {loading ? (
+          <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-300" />
+            <p className="mt-3 text-xs font-semibold text-gray-300">
+              Loading notifications...
+            </p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="px-4 py-10 text-center">
+            <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
+              notifications_off
+            </span>
+            <p className="text-sm font-bold text-white">No notifications yet</p>
+            <p className="mt-1 text-xs text-gray-500">
+              Updates will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {notifications.map((notification, index) => {
+              const notificationId = getNotificationId(notification);
+              const target =
+                notification.target ||
+                notificationService.getNotificationTarget(notification);
+
+              const opening =
+                String(openingId) === String(notificationId) ||
+                String(openingId) === String(target?.path);
+
+              return (
+                <NotificationItem
+                  key={notificationId || index}
+                  notification={notification}
+                  target={target}
+                  opening={opening}
+                  markingId={markingId}
+                  onOpen={() => onOpenNotification(notification)}
+                  onMarkAsRead={onMarkAsRead}
+                />
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <div className="border-t border-white/10 bg-white/[0.03] p-2">
+        <button
+          type="button"
+          onClick={onViewAll}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+        >
+          View all notifications
+          <span className="material-symbols-outlined text-[16px]">
+            arrow_forward
+          </span>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -571,81 +573,86 @@ function NotificationItem({
   const isRead = Boolean(notification.isRead);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          onOpen();
-        }
-      }}
-      className={`cursor-pointer rounded-xl border px-3 py-3 transition ${
+      className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${
         isRead
-          ? "border-transparent bg-transparent hover:bg-white/[0.04]"
-          : "border-cyan-400/20 bg-cyan-400/10 hover:border-cyan-400/40"
+          ? "border-transparent bg-transparent hover:border-white/10 hover:bg-white/[0.04]"
+          : "border-cyan-400/20 bg-cyan-400/[0.07] hover:border-cyan-300/50 hover:bg-cyan-400/[0.11]"
       }`}
     >
-      <div className="flex gap-3">
+      <div className="flex gap-2.5">
         <div
           className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.className}`}
         >
-          <span className="material-symbols-outlined text-[20px]">
+          <span className="material-symbols-outlined text-[18px]">
             {tone.icon}
           </span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="line-clamp-1 text-sm font-bold text-white">
-                {notification.title || "Notification"}
-              </p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13px] font-extrabold text-white">
+              {notification.title || "Notification"}
+            </p>
 
-              <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-400">
-                {notification.message ||
-                  notification.content ||
-                  "No message content."}
-              </p>
+            {!isRead && (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
+            )}
+          </div>
+
+          <p className="mt-1 line-clamp-2 text-xs leading-4 text-gray-400">
+            {notification.message ||
+              notification.content ||
+              "No message content."}
+          </p>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] text-gray-400">
+                {tone.label}
+              </span>
+
+              <span className="truncate text-[10px] font-medium text-gray-500">
+                {formatDateTime(
+                  notification.createdAtUtc || notification.createdAt
+                )}
+              </span>
             </div>
 
-            {!isRead && (
-              <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
-            )}
-          </div>
+            <div className="flex shrink-0 items-center gap-1.5">
+              {!isRead && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMarkAsRead(notificationId);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.stopPropagation();
+                      onMarkAsRead(notificationId);
+                    }
+                  }}
+                  className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-cyan-300 hover:bg-cyan-400/10"
+                >
+                  {markingId === notificationId ? "..." : "Read"}
+                </span>
+              )}
 
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-gray-600">
-              {formatDateTime(notification.createdAt || notification.createdAtUtc)}
-            </span>
-
-            <span className="shrink-0 text-[11px] font-bold text-cyan-300">
-              {opening ? "Opening..." : target?.label || "Open"}
-            </span>
-          </div>
-
-          <div className="mt-2 flex items-center justify-between gap-3">
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
-              {tone.label}
-            </span>
-
-            {!isRead && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onMarkAsRead(notificationId);
-                }}
-                disabled={markingId === notificationId}
-                className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200 disabled:opacity-50"
-              >
-                {markingId === notificationId ? "..." : "Read"}
-              </button>
-            )}
+              <span className="flex items-center gap-0.5 text-[10px] font-bold text-cyan-300">
+                {opening ? "Opening..." : target?.label || "Open"}
+                <span className="material-symbols-outlined text-[14px] transition group-hover:translate-x-0.5">
+                  chevron_right
+                </span>
+              </span>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
