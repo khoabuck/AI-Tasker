@@ -23,8 +23,11 @@ export default function LoginPage() {
   const clearAuthSession = () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
     localStorage.removeItem("role");
+    localStorage.removeItem("currentUser");
   };
 
   useEffect(() => {
@@ -172,13 +175,13 @@ export default function LoginPage() {
       const result = await authService.login({
         email: form.email,
         password: form.password,
+        rememberMe: form.remember,
       });
 
       
 
-      if (!result.success || !result.accessToken) {
-        console.log("LOGIN RESULT:", result);
-        setError(result.message || "Login failed: missing access token.");
+      if (!result.success) {
+        setError(result.message || "Login failed.");
         return;
       }
 
@@ -193,7 +196,6 @@ export default function LoginPage() {
       const finalStatus = finalUser.status || storedUser.status || result.status;
 
       handleLoginSuccess({
-        accessToken: result.accessToken,
         user: {
           ...finalUser,
           role: finalRole,

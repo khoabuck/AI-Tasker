@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import GuestRoute from "./GuestRoute";
 import ProtectedRoute from "./ProtectedRoute";
-import authService from "../../services/auth.service";
 
 // Auth pages
 import LoginPage from "../../modules/auth/pages/LoginPage";
@@ -109,7 +108,7 @@ const RequireAuth = ({ children }) => {
     );
   }
 
-  if (!user && !authService.isAuthenticated()) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

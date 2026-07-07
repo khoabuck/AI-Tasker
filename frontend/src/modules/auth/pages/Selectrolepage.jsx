@@ -1,6 +1,6 @@
 // src/modules/auth/pages/SelectRolePage.jsx
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
 import authService from "../../../services/auth.service";
@@ -37,11 +37,7 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { refreshUser, handleLoginSuccess } = useAuth();
-
-  const loginEmail = location.state?.email || "";
-  const loginPassword = location.state?.password || "";
+  const { handleLoginSuccess } = useAuth();
 
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -145,17 +141,6 @@ export default function SelectRolePage() {
       });
 
       const responseData = selectResponse?.data || {};
-
-      const newToken =
-        responseData.accessToken ||
-        responseData.AccessToken ||
-        responseData.token ||
-        responseData.Token ||
-        responseData.data?.accessToken ||
-        responseData.data?.AccessToken ||
-        responseData.data?.token ||
-        responseData.data?.Token;
-
       const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
 
       const userFromResponse =
@@ -166,50 +151,19 @@ export default function SelectRolePage() {
         responseData.data ||
         responseData;
 
-      const selectedUser = authService.normalizeUser(
-        {
-          ...oldUser,
-          ...userFromResponse,
-          role: selected,
-          status: "PENDING_PROFILE",
-        },
-        selected
-      );
-
-      if (newToken) {
-        localStorage.setItem("accessToken", newToken);
-      }
+      const selectedUser = authService.normalizeUser({
+        ...oldUser,
+        ...userFromResponse,
+        role: selected,
+        status: userFromResponse?.status || userFromResponse?.Status || "PENDING_PROFILE",
+      });
 
       localStorage.setItem("user", JSON.stringify(selectedUser));
 
-      if (newToken && handleLoginSuccess) {
+      if (handleLoginSuccess) {
         handleLoginSuccess({
-          accessToken: newToken,
           user: selectedUser,
         });
-      } else if (loginEmail && loginPassword) {
-        const loginResult = await authService.login({
-          email: loginEmail,
-          password: loginPassword,
-        });
-
-        if (!loginResult.success) {
-          setError(
-            "Role selection succeeded but unable to refresh token. Please log in again."
-          );
-          return;
-        }
-
-        handleLoginSuccess({
-          accessToken: loginResult.accessToken,
-          user: loginResult.user,
-        });
-      } else if (refreshUser) {
-        try {
-          await refreshUser();
-        } catch {
-          // Không chặn flow nếu refresh user lỗi.
-        }
       }
 
       redirectAfterRoleSelected(selected);

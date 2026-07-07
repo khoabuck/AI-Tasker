@@ -120,7 +120,6 @@ export default function SetupProfilePage() {
         };
 
         handleLoginSuccess({
-          accessToken: localStorage.getItem("accessToken"),
           user: updatedUser,
         });
 
@@ -359,7 +358,6 @@ export default function SetupProfilePage() {
         const freshUser = meRes?.data?.data || meRes?.data;
 
         handleLoginSuccess({
-          accessToken: localStorage.getItem("accessToken"),
           user: freshUser,
         });
 

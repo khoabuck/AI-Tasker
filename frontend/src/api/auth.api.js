@@ -37,12 +37,21 @@ export const resendVerificationEmailApi = async ({ email }) => {
 };
 
 // POST /api/auth/login
-// Trả về { accessToken, expiresAt, user }
-export const loginApi = async ({ email, password }) => {
+// Backend set JWT vào HttpOnly cookie.
+export const loginApi = async ({ email, password, rememberMe }) => {
   const res = await axiosInstance.post("/auth/login", {
     email,
     password,
+    rememberMe: Boolean(rememberMe),
   });
+
+  return res.data;
+};
+
+// POST /api/auth/logout
+// Backend clear HttpOnly cookie.
+export const logoutApi = async () => {
+  const res = await axiosInstance.post("/auth/logout");
 
   return res.data;
 };
@@ -112,6 +121,7 @@ export default {
   verifyEmailApi,
   resendVerificationEmailApi,
   loginApi,
+  logoutApi,
   loginWithGoogleApi,
   getMeApi,
   forgotPasswordApi,

@@ -394,6 +394,78 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<MessageResponse> ChangePasswordAsync(
+        int userId,
+        ChangePasswordRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        await RestoreExpiredSuspensionAsync(user);
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to change password."
+            );
+        }
+
+        if (user.AuthProvider != "LOCAL"
+            || string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            throw new InvalidOperationException(
+                "This account does not use password login."
+            );
+        }
+
+        var currentPassword = request.CurrentPassword?.Trim() ?? string.Empty;
+        var newPassword = request.NewPassword?.Trim() ?? string.Empty;
+        var confirmNewPassword = request.ConfirmNewPassword?.Trim() ?? string.Empty;
+
+        ValidateChangePassword(
+            currentPassword,
+            newPassword,
+            confirmNewPassword
+        );
+
+        var currentPasswordValid = _passwordHasher.VerifyPassword(
+            currentPassword,
+            user.PasswordHash
+        );
+
+        if (!currentPasswordValid)
+        {
+            throw new InvalidOperationException("Current password is incorrect.");
+        }
+
+        var sameAsCurrentPassword = _passwordHasher.VerifyPassword(
+            newPassword,
+            user.PasswordHash
+        );
+
+        if (sameAsCurrentPassword)
+        {
+            throw new InvalidOperationException(
+                "New password must be different from current password."
+            );
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "Password changed successfully."
+        };
+    }
+
     public async Task<AuthResponse> SelectRoleAsync(int userId, SelectRoleRequest request)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -909,6 +981,50 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(password))
         {
             throw new InvalidOperationException("Password is required.");
+        }
+    }
+
+    private static void ValidateChangePassword(
+        string currentPassword,
+        string newPassword,
+        string confirmNewPassword)
+    {
+        if (string.IsNullOrWhiteSpace(currentPassword))
+        {
+            throw new InvalidOperationException("Current password is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newPassword))
+        {
+            throw new InvalidOperationException("New password is required.");
+        }
+
+        if (newPassword.Length < 6)
+        {
+            throw new InvalidOperationException(
+                "New password must be at least 6 characters."
+            );
+        }
+
+        if (newPassword.Length > 100)
+        {
+            throw new InvalidOperationException(
+                "New password must not exceed 100 characters."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(confirmNewPassword))
+        {
+            throw new InvalidOperationException(
+                "Confirm new password is required."
+            );
+        }
+
+        if (newPassword != confirmNewPassword)
+        {
+            throw new InvalidOperationException(
+                "Confirm new password does not match."
+            );
         }
     }
 

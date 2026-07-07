@@ -1,5 +1,6 @@
 import {
   loginApi,
+  logoutApi,
   loginWithGoogleApi,
   getMeApi,
   updateMyAvatarApi,
@@ -94,55 +95,7 @@ const normalizeUser = (user) => {
   };
 };
 
-const extractAccessToken = (data) => {
-  return getValue(
-    data?.accessToken,
-    data?.AccessToken,
-    data?.token,
-    data?.Token,
-    data?.data?.accessToken,
-    data?.data?.AccessToken,
-    data?.data?.token,
-    data?.data?.Token
-  );
-};
 
-const decodeJwtPayload = (token) => {
-  try {
-    if (!token || !token.includes(".")) return null;
-
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((char) => {
-          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
-        })
-        .join("")
-    );
-
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-};
-
-const getRoleFromToken = (token) => {
-  const payload = decodeJwtPayload(token);
-
-  return getValue(
-    payload?.role,
-    payload?.Role,
-    payload?.[
-      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-    ],
-    payload?.[
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"
-    ],
-    ""
-  );
-};
 
 const getCurrentUserFromStorage = () => {
   try {
@@ -190,102 +143,96 @@ const getFriendlyError = (error, fallback) => {
 
 const authService = {
   login: async (credentials) => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 500));
+  if (USE_MOCK) {
+    await new Promise((res) => setTimeout(res, 500));
 
-      const user = MOCK_USERS.find(
-        (item) =>
-          item.email === credentials.email &&
-          item.password === credentials.password
-      );
+    const user = MOCK_USERS.find(
+      (item) =>
+        item.email === credentials.email &&
+        item.password === credentials.password
+    );
 
-      if (!user) {
-        return {
-          success: false,
-          message: "Invalid email or password.",
-        };
-      }
-
-      const { password, ...userInfo } = user;
-      const accessToken = "mock-token-" + userInfo.role;
-
-      localStorage.setItem("accessToken", accessToken);
-      localStorage.setItem("user", JSON.stringify(userInfo));
-
-      return {
-        success: true,
-        accessToken,
-        user: userInfo,
-        role: userInfo.role,
-        status: userInfo.status,
-      };
-    }
-
-    try {
-      const data = await loginApi(credentials);
-
-      const accessToken = extractAccessToken(data);
-
-      if (!accessToken) {
-        return {
-          success: false,
-          message: "Login response does not contain accessToken.",
-        };
-      }
-
-      localStorage.setItem("accessToken", accessToken);
-
-      let user = normalizeUser(data?.user || data?.User || data?.data?.user || data?.data?.User);
-
-      const tokenRole = getRoleFromToken(accessToken);
-
-      if (!user) {
-        user = normalizeUser({
-          role: tokenRole,
-          status: "ACTIVE",
-        });
-      }
-
-      if (!user?.role || !user?.status) {
-        user = normalizeUser({
-          ...user,
-          role: user?.role || tokenRole || "",
-          status: user?.status || "PENDING_ROLE",
-        });
-      }
-
-      if (!user) {
-        return {
-          success: false,
-          message: "Login response does not contain user information.",
-        };
-      }
-
-      localStorage.setItem("user", JSON.stringify(user));
-
-      return {
-        success: true,
-        accessToken,
-        user,
-        role: user.role,
-        status: user.status,
-      };
-    } catch (error) {
+    if (!user) {
       return {
         success: false,
-        message: getFriendlyError(error, "Login failed."),
+        message: "Invalid email or password.",
       };
     }
-  },
+
+    const { password, ...userInfo } = user;
+
+    localStorage.setItem("user", JSON.stringify(userInfo));
+
+    return {
+      success: true,
+      user: userInfo,
+      role: userInfo.role,
+      status: userInfo.status,
+    };
+  }
+
+  try {
+    const data = await loginApi(credentials);
+
+    let user = normalizeUser(
+      data?.user ||
+        data?.User ||
+        data?.data?.user ||
+        data?.data?.User ||
+        data?.data ||
+        data
+    );
+
+    if (!user?.userId || !user?.email) {
+      try {
+        const meData = await getMeApi();
+        user = normalizeUser(unwrapUserData(meData));
+      } catch {
+        // Nếu user đang PENDING_ROLE/PENDING_EMAIL_VERIFICATION mà /auth/me chưa cho qua,
+        // giữ user từ response login để tiếp tục flow.
+      }
+    }
+
+    if (!user) {
+      return {
+        success: false,
+        message: "Login response does not contain user information.",
+      };
+    }
+
+    localStorage.setItem("user", JSON.stringify(user));
+
+    return {
+      success: true,
+      user,
+      role: user.role,
+      status: user.status,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: getFriendlyError(error, "Login failed."),
+    };
+  }
+},
 
   loginWithGoogle: async () => {
     loginWithGoogleApi();
   },
 
   logout: async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // Vẫn xóa local state nếu BE logout lỗi.
+    }
+
     localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
     localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+    localStorage.removeItem("role");
     localStorage.removeItem("currentUser");
 
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
@@ -300,7 +247,7 @@ const authService = {
   },
 
   getToken: () => {
-    return localStorage.getItem("accessToken");
+    return null;
   },
 
   refreshCurrentUser: async () => {
@@ -348,7 +295,7 @@ const authService = {
   },
 
   isAuthenticated: () => {
-    return Boolean(localStorage.getItem("accessToken"));
+    return Boolean(authService.getCurrentUser());
   },
 
   getRole: () => {

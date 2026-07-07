@@ -22,6 +22,7 @@ const getApiBaseUrl = () => {
 
 const axiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -29,19 +30,8 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token =
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("token") ||
-      localStorage.getItem("authToken");
-
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
     if (import.meta.env.DEV) {
-      console.log("REQUEST URL:", config.baseURL + config.url);
-      console.log("SEND TOKEN:", Boolean(token));
+      console.log("REQUEST URL:", `${config.baseURL || ""}${config.url || ""}`);
     }
 
     return config;

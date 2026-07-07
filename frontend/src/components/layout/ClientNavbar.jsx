@@ -114,14 +114,8 @@ export default function ClientNavbar() {
       .toUpperCase()
     : "CL";
 
-  // Dùng window.location.href thay vì navigate() của React Router.
-  // Lý do: authService.logout() chỉ xóa localStorage/sessionStorage, không có
-  // Context/global state nào lắng nghe để tự re-render lại toàn app (ví dụ
-  // AuthContext.user vẫn giữ giá trị cũ trong memory). navigate() chỉ đổi route
-  // nhưng giữ nguyên toàn bộ React state hiện có trong RAM, nên các trang/khu vực
-  // đang dựa vào "user đã đăng nhập" có thể bị treo ở trạng thái cũ → cần F5.
-  // window.location.href ép trình duyệt reload toàn trang, app mount lại từ đầu,
-  // đọc localStorage đã trống → tự nhận ra chưa đăng nhập, vào /login sạch sẽ.
+  // authService.logout() gọi backend clear HttpOnly cookie,
+  // rồi xóa localStorage/sessionStorage. Reload toàn trang để AuthContext mount lại sạch.
   const handleLogout = async () => {
     await authService.logout();
     window.location.href = "/login";
