@@ -67,6 +67,11 @@ export default function AdminNavbar() {
           Disputes
         </NavLink>
 
+        <NavLink to="/admin/review-reports" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">rate_review</span>
+          Review Reports
+        </NavLink>
+
         <NavLink to="/admin/audit-logs" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">
             history

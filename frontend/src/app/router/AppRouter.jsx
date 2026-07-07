@@ -101,6 +101,8 @@ import AdminProposalCreditPackagesPage from "../../modules/admin/pages/AdminProp
 import AdminProposalCreditsPage from "../../modules/admin/pages/AdminProposalCreditsPage";
 import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPage";
 import AdminWorkflowPolicyPage from "../../modules/admin/pages/AdminWorkflowPolicyPage";
+import AdminReviewReportsPage from "../../modules/admin/pages/AdminReviewReportsPage";
+
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -252,6 +254,8 @@ export default function AppRouter() {
       <Route path="/admin/proposal-credits" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditsPage /></ProtectedRoute>} />
       <Route path="/admin/ai-management" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAiManagementPage /></ProtectedRoute>}/>
       <Route path="/admin/workflow-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminWorkflowPolicyPage /></ProtectedRoute>}/>
+      <Route path="/admin/review-reports" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminReviewReportsPage /></ProtectedRoute>}/>
+
 
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />
