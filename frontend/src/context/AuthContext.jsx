@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { getMeApi } from "../api/auth.api";
+import { getMeApi, logoutApi } from "../api/auth.api";
 import {
   getAccessToken,
   saveAuth,
@@ -229,6 +229,16 @@ function dispatchBlockedErrorEvent(err) {
   );
 }
 
+function unwrapMeResponse(res) {
+  return res?.data?.data || res?.data || res;
+}
+
+function clearLocalDrafts() {
+  localStorage.removeItem("aitasker_expert_profile_setup_draft");
+  localStorage.removeItem("aitasker_expert_profile_edit_draft");
+  localStorage.removeItem("aitasker_expert_profile_correction_draft");
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -243,12 +253,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const restore = async () => {
-      if (!getAccessToken()) {
-        setLoading(false);
-        return;
-      }
-
       const storedUser = getUserFromStorage();
+
       const storedStatus = String(storedUser?.status || "").toUpperCase();
       const isIncompleteOnboarding = [
         "PENDING_ROLE",
@@ -263,7 +269,7 @@ export function AuthProvider({ children }) {
 
       try {
         const res = await getMeApi();
-        const freshUser = res?.data?.data || res?.data || res;
+        const freshUser = unwrapMeResponse(res);
 
         if (isBlockedUserStatus(freshUser)) {
           dispatchBlockedEvent(freshUser);
@@ -276,10 +282,14 @@ export function AuthProvider({ children }) {
         const status = err?.response?.status;
 
         if (status === 401 || status === 403) {
-          dispatchBlockedErrorEvent(err);
-        } else {
-          const stored = getUserFromStorage();
-          if (stored) setUser(stored);
+          if (getAccessToken()) {
+            dispatchBlockedErrorEvent(err);
+          }
+
+          clearAuth();
+          setUser(null);
+        } else if (storedUser) {
+          setUser(storedUser);
         }
       } finally {
         setLoading(false);
@@ -311,12 +321,12 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!user || !getAccessToken()) return;
+    if (!user) return;
 
     const intervalId = window.setInterval(async () => {
       try {
         const res = await getMeApi();
-        const freshUser = res?.data?.data || res?.data || res;
+        const freshUser = unwrapMeResponse(res);
 
         if (isBlockedUserStatus(freshUser)) {
           dispatchBlockedEvent(freshUser);
@@ -347,41 +357,53 @@ export function AuthProvider({ children }) {
   const refreshUser = async () => {
     try {
       const res = await getMeApi();
-      const freshUser = res?.data?.data || res?.data || res;
+      const freshUser = unwrapMeResponse(res);
 
       if (isBlockedUserStatus(freshUser)) {
         dispatchBlockedEvent(freshUser);
-        return;
+        return null;
       }
 
       setUser(freshUser);
       saveAuth({ user: freshUser });
+
+      return freshUser;
     } catch (err) {
       if (err?.response?.status === 401 || err?.response?.status === 403) {
         dispatchBlockedErrorEvent(err);
+        clearAuth();
+        setUser(null);
       } else {
         const stored = localStorage.getItem("user");
         if (stored) setUser(JSON.parse(stored));
       }
+
+      return null;
     }
   };
 
-  const handleLogout = () => {
-    clearAuth();
+  const handleLogout = async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // vẫn clear FE nếu BE logout lỗi
+    }
 
-    localStorage.removeItem("aitasker_expert_profile_setup_draft");
-    localStorage.removeItem("aitasker_expert_profile_edit_draft");
-    localStorage.removeItem("aitasker_expert_profile_correction_draft");
+    clearAuth();
+    clearLocalDrafts();
 
     setUser(null);
   };
 
-  const handleBlockedModalOk = () => {
-    clearAuth();
+  const handleBlockedModalOk = async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // vẫn clear FE
+    }
 
-    localStorage.removeItem("aitasker_expert_profile_setup_draft");
-    localStorage.removeItem("aitasker_expert_profile_edit_draft");
-    localStorage.removeItem("aitasker_expert_profile_correction_draft");
+    clearAuth();
+    clearLocalDrafts();
 
     setUser(null);
 

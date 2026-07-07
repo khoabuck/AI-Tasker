@@ -1,15 +1,24 @@
-// Lưu accessToken và user vào localStorage
 export const saveAuth = (authData) => {
   if (!authData) return;
+
   if (authData.accessToken) {
     localStorage.setItem("accessToken", authData.accessToken);
+  } else {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
   }
+
   if (authData.user) {
     localStorage.setItem("user", JSON.stringify(authData.user));
   }
 };
 
 export const getAccessToken = () => localStorage.getItem("accessToken");
+
+export const hasAuthSession = () => {
+  return Boolean(localStorage.getItem("user") || localStorage.getItem("accessToken"));
+};
 
 export const getUserFromStorage = () => {
   const raw = localStorage.getItem("user");
@@ -23,11 +32,11 @@ export const getUserFromStorage = () => {
 
 export const clearAuth = () => {
   localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
   localStorage.removeItem("user");
 };
 
-// Lấy message lỗi từ response backend
-// Backend trả { success: false, message: "..." }
 export const getErrorMessage = (error) => {
   return (
     error?.response?.data?.message ||

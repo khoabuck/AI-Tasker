@@ -23,22 +23,23 @@ export default function LoginPage() {
   const clearAuthSession = () => {
     localStorage.removeItem("accessToken");
     localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
     localStorage.removeItem("user");
     localStorage.removeItem("role");
   };
 
   useEffect(() => {
-  const savedLogins = localStorage.getItem("rememberLogins");
+    const savedLogins = localStorage.getItem("rememberLogins");
 
-  if (savedLogins) {
-    try {
-      const parsed = JSON.parse(savedLogins);
-      setRememberedLogins(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      localStorage.removeItem("rememberLogins");
+    if (savedLogins) {
+      try {
+        const parsed = JSON.parse(savedLogins);
+        setRememberedLogins(Array.isArray(parsed) ? parsed : []);
+      } catch {
+        localStorage.removeItem("rememberLogins");
+      }
     }
-  }
-}, []);
+  }, []);
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -80,10 +81,7 @@ export default function LoginPage() {
       existing = [];
     }
 
-    const next = [
-      { email },
-      ...existing.filter((item) => item.email !== email),
-    ];
+    const next = [{ email }, ...existing.filter((item) => item.email !== email)];
 
     localStorage.setItem("rememberLogins", JSON.stringify(next));
     setRememberedLogins(next);
@@ -174,12 +172,8 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      console.log("=== LOGIN RESULT ===", result);
-      console.log("=== TOKEN IN STORAGE RIGHT AFTER LOGIN ===", localStorage.getItem("accessToken"));
-
-      if (!result.success || !result.accessToken) {
-        console.log("LOGIN RESULT:", result);
-        setError(result.message || "Login failed: missing access token.");
+      if (!result.success || !result.user) {
+        setError(result.message || "Login failed.");
         return;
       }
 
@@ -194,7 +188,6 @@ export default function LoginPage() {
       const finalStatus = finalUser.status || storedUser.status || result.status;
 
       handleLoginSuccess({
-        accessToken: result.accessToken,
         user: {
           ...finalUser,
           role: finalRole,
@@ -205,8 +198,6 @@ export default function LoginPage() {
       const sessionId = crypto.randomUUID();
       sessionStorage.setItem("sessionId", sessionId);
       localStorage.setItem("activeSessionId", sessionId);
-
-      console.log("=== TOKEN RIGHT BEFORE NAVIGATE ===", localStorage.getItem("accessToken"));
 
       goNextByRoleAndStatus({
         role: finalRole,
@@ -289,7 +280,6 @@ export default function LoginPage() {
                 Welcome Back
               </h1>
             </div>
-
           </header>
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -366,9 +356,7 @@ export default function LoginPage() {
                           <p className="truncate text-sm font-medium text-white">
                             {account.email}
                           </p>
-                          <p className="text-xs text-gray-400">
-                             Saved email
-                          </p>
+                          <p className="text-xs text-gray-400">Saved email</p>
                         </div>
                       </button>
                     ))}
@@ -398,8 +386,7 @@ export default function LoginPage() {
                 <span
                   className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-xl"
                   style={{
-                    color:
-                      focusField === "password" ? "#00F0FF" : "#8c90a0",
+                    color: focusField === "password" ? "#00F0FF" : "#8c90a0",
                     textShadow:
                       focusField === "password"
                         ? "0 0 10px rgba(0,240,255,0.6)"
@@ -433,34 +420,34 @@ export default function LoginPage() {
                 />
 
                 <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: 14,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#00F0FF",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                }}
-              >
-                <span
-                  className="material-symbols-outlined"
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
                   style={{
-                    fontSize: 22,
-                    textShadow: "0 0 10px rgba(0,240,255,0.55)",
-                    transition: "0.2s",
+                    position: "absolute",
+                    right: 14,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#00F0FF",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
                   }}
                 >
-                  {showPassword ? "visibility_off" : "visibility"}
-                </span>
-              </button>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 22,
+                      textShadow: "0 0 10px rgba(0,240,255,0.55)",
+                      transition: "0.2s",
+                    }}
+                  >
+                    {showPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -499,12 +486,12 @@ export default function LoginPage() {
                 boxShadow: "0 0 15px rgba(0,240,255,0.3)",
               }}
               onMouseEnter={(e) =>
-              (e.currentTarget.style.boxShadow =
-                "0 0 25px rgba(0,240,255,0.5)")
+                (e.currentTarget.style.boxShadow =
+                  "0 0 25px rgba(0,240,255,0.5)")
               }
               onMouseLeave={(e) =>
-              (e.currentTarget.style.boxShadow =
-                "0 0 15px rgba(0,240,255,0.3)")
+                (e.currentTarget.style.boxShadow =
+                  "0 0 15px rgba(0,240,255,0.3)")
               }
             >
               {loading ? "Signing in..." : "Sign In"}

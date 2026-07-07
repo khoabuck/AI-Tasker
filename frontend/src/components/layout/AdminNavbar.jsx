@@ -90,6 +90,11 @@ export default function AdminNavbar() {
           Expert Scoring
         </NavLink>
 
+        <NavLink to="/admin/workflow-policy" className={navLinkClass}>
+          <span className="material-symbols-outlined text-[20px]">settings_suggest</span>
+          Workflow Policy
+        </NavLink>
+
         <NavLink to="/admin/job-posting-ai-policy" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">smart_toy</span>
           Job AI Policy

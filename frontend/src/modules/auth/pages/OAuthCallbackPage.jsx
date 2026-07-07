@@ -1,29 +1,24 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
 
 export default function OAuthCallbackPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [error, setError] = useState("");
 
   useEffect(() => {
     handleOAuthCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleOAuthCallback = async () => {
-    const token = searchParams.get("token");
-
-    if (!token) {
-      setError("Token not found. Please log in again.");
-      return;
-    }
-
     try {
-      localStorage.setItem("accessToken", token);
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
 
       const response = await axiosInstance.get("/auth/me");
-      const user = normalizeUser(response.data);
+      const user = normalizeUser(response.data?.data || response.data);
 
       localStorage.setItem("user", JSON.stringify(user));
 
@@ -32,6 +27,8 @@ export default function OAuthCallbackPage() {
       console.error("OAUTH CALLBACK ERROR:", err?.response?.data || err);
 
       localStorage.removeItem("accessToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
       localStorage.removeItem("user");
 
       setError("Google authentication failed. Please try again.");

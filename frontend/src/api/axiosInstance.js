@@ -71,6 +71,7 @@ const dispatchAccountBlockedEvent = (error) => {
 
 const axiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -90,7 +91,7 @@ axiosInstance.interceptors.request.use(
 
     if (import.meta.env.DEV) {
       console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
-      console.log("SEND TOKEN:", Boolean(token));
+      console.log("AUTH MODE:", token ? "Bearer fallback" : "HttpOnly cookie");
     }
 
     return config;

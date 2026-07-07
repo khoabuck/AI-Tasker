@@ -3,6 +3,7 @@ import {
   loginWithGoogleApi,
   getMeApi,
   updateMyAvatarApi,
+  logoutApi,
 } from "../api/auth.api";
 
 const USE_MOCK = false;
@@ -226,16 +227,17 @@ const authService = {
 
       const accessToken = extractAccessToken(data);
 
-      if (!accessToken) {
-        return {
-          success: false,
-          message: "Login response does not contain accessToken.",
-        };
+      if (accessToken) {
+        localStorage.setItem("accessToken", accessToken);
+      } else {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("token");
+        localStorage.removeItem("authToken");
       }
 
-      localStorage.setItem("accessToken", accessToken);
-
-      let user = normalizeUser(data?.user || data?.User || data?.data?.user || data?.data?.User);
+      let user = normalizeUser(
+        data?.user || data?.User || data?.data?.user || data?.data?.User
+      );
 
       const tokenRole = getRoleFromToken(accessToken);
 
@@ -265,7 +267,7 @@ const authService = {
 
       return {
         success: true,
-        accessToken,
+        accessToken: accessToken || "",
         user,
         role: user.role,
         status: user.status,
@@ -283,9 +285,16 @@ const authService = {
   },
 
   logout: async () => {
+    try {
+      await logoutApi();
+    } catch {
+      // vẫn clear local để không kẹt session ở FE
+    }
+
     localStorage.removeItem("accessToken");
     localStorage.removeItem("user");
     localStorage.removeItem("token");
+    localStorage.removeItem("authToken");
     localStorage.removeItem("currentUser");
 
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
@@ -348,7 +357,9 @@ const authService = {
   },
 
   isAuthenticated: () => {
-    return Boolean(localStorage.getItem("accessToken"));
+    return Boolean(
+      localStorage.getItem("user") || localStorage.getItem("accessToken")
+    );
   },
 
   getRole: () => {
