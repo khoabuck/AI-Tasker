@@ -32,6 +32,30 @@ import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
 
+const parseBackendTime = (value) => {
+  if (!value) return null;
+
+  const raw = String(value);
+  const normalized = raw.replace(/\.(\d{3})\d+/, ".$1");
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized);
+
+  const time = Date.parse(hasTimezone ? normalized : `${normalized}+07:00`);
+  return Number.isNaN(time) ? null : time;
+};
+
+const getDepositRemainingSeconds = (order) => {
+  const expiresTime = parseBackendTime(order?.expiresAt);
+  if (!expiresTime) return 0;
+
+  return Math.max(0, Math.floor((expiresTime - Date.now()) / 1000));
+};
+
+const formatCountdown = (seconds) => {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+};
+
 // ── Deposit Modal (PayOS flow — production: poll status thật, không tự nạp tiền) ──
 function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [step, setStep] = useState(existingOrder ? "qr" : "input"); // input | qr | expired
@@ -41,6 +65,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [qrOpenedAt, setQrOpenedAt] = useState(null);
 
   // Mở lại order cũ luôn vào step "qr" — không tự đoán hết hạn dựa vào giờ máy client,
   // chỉ dựa vào status thật trả về từ BE (EXPIRED/CANCELLED) qua polling bên dưới.
@@ -87,14 +112,35 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     if (step !== "qr" || !order?.expiresAt) return;
 
     const updateCountdown = () => {
-      const remain = Math.max(0, Math.floor((new Date(order.expiresAt).getTime() - Date.now()) / 1000));
+      if (!order?.createdAt || !order?.expiresAt) {
+        setSecondsLeft(0);
+        return;
+      }
+
+      const createdTime = Date.parse(order.createdAt);
+      const expiresTime = Date.parse(order.expiresAt);
+
+      const totalSeconds = Math.max(
+        0,
+        Math.floor((expiresTime - createdTime) / 1000)
+      );
+
+      const openedAt = qrOpenedAt || Date.now();
+
+      const elapsedSeconds = Math.max(
+        0,
+        Math.floor((Date.now() - openedAt) / 1000)
+      );
+
+      const remain = Math.max(0, totalSeconds - elapsedSeconds);
+
       setSecondsLeft(remain);
     };
 
     updateCountdown();
     const timer = setInterval(updateCountdown, 1000);
     return () => clearInterval(timer);
-  }, [step, order]);
+  }, [step, order, qrOpenedAt]);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60);
@@ -109,21 +155,10 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
       const res = await walletService.createDepositOrder(amount);
       const orderData = res.data?.data || res.data;
 
-      const clientCreatedAt = Date.now();
-
-    localStorage.setItem(
-      `deposit_created_at_${orderData.depositOrderId}`,
-      String(clientCreatedAt)
-    );
-
-    const createdOrder = {
-      ...orderData,
-      clientCreatedAt,
-    };
-
-    setOrder(createdOrder);
-    onOrderCreated?.(createdOrder);
-    setStep("qr");
+      setOrder(orderData);
+      setQrOpenedAt(Date.now());
+      onOrderCreated?.(orderData);
+      setStep("qr");
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to create deposit order. Please try again.");
     } finally { setLoading(false); }
@@ -557,34 +592,7 @@ function StatusBadge({ status }) {
   );
 }
 
-const DEPOSIT_PENDING_CLICK_LIMIT_MS = 2 * 60 * 1000; // 2 phút
 
-const isDepositClickBlocked = (order, now) => {
-  if (order?.status !== "PENDING") return false;
-
-  const savedCreatedAt = order.depositOrderId
-    ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
-    : null;
-
-  const createdTime = savedCreatedAt
-    ? Number(savedCreatedAt)
-    : order.clientCreatedAt
-      ? Number(order.clientCreatedAt)
-      : order.createdAt
-        ? new Date(order.createdAt).getTime()
-        : null;
-
-  if (!createdTime || Number.isNaN(createdTime)) return false;
-
-  const elapsed = now - createdTime;
-  return elapsed > DEPOSIT_PENDING_CLICK_LIMIT_MS;
-};
-
-// Đổi số giây còn lại thành text "X minute(s)" — làm tròn lên để không hiện
-// "0 minute(s)" khi còn vài giây cuối cùng.
-const formatRemainingMinutes = (seconds) => {
-  return Math.max(1, Math.ceil(seconds / 60));
-};
 
 export default function WalletPage() {
   const navigate = useNavigate();
@@ -597,15 +605,9 @@ export default function WalletPage() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
-  const [now, setNow] = useState(() => Date.now());
+  const [tick, setTick] = useState(0);
+  
 
-  useEffect(() => {
-    const hasPending = depositOrders.some((o) => o.status === "PENDING");
-    if (!hasPending) return;
-
-    const timer = setInterval(() => setNow(Date.now()), 10000);
-    return () => clearInterval(timer);
-  }, [depositOrders]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -619,18 +621,7 @@ export default function WalletPage() {
 
       setBalance(wallet);
       setTransactions(tx);
-      setDepositOrders(
-      deposit.map((order) => {
-        const savedCreatedAt = order.depositOrderId
-          ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
-          : null;
-
-        return {
-          ...order,
-          clientCreatedAt: savedCreatedAt ? Number(savedCreatedAt) : undefined,
-        };
-      })
-    );
+      setDepositOrders(deposit);
       setWithdrawals(withdrawalList);
     } catch (err) {
       console.error(err);
@@ -639,7 +630,31 @@ export default function WalletPage() {
     }
   };
 
-  useEffect(() => { fetchAll(); }, []);
+  useEffect(() => {
+    fetchAll();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick((v) => v + 1);
+
+      const hasExpiredPending = depositOrders.some((order) => {
+        const status = String(order.status || "").toUpperCase();
+
+        return (
+          status === "PENDING" &&
+          order.expiresAt &&
+          getDepositRemainingSeconds(order) <= 0
+        );
+      });
+
+      if (hasExpiredPending) {
+        fetchAll();
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [depositOrders]);
 
   const showSuccess = async (msg) => {
     await fetchAll();
@@ -764,11 +779,12 @@ export default function WalletPage() {
                   </button>
                 </div>
                 {transactions.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "48px 0", color: "#8c90a0" }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>receipt_long</span>
-                    No transactions have been made yet.
-                  </div>
-                ) : (
+                <div style={{ textAlign: "center", padding: "48px 0", color: "#8c90a0" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>receipt_long</span>
+                  No transactions have been made yet.
+                </div>
+              ) : (
+                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -799,6 +815,7 @@ export default function WalletPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 )}
               </div>
 
@@ -807,33 +824,31 @@ export default function WalletPage() {
                 <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
                   <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Deposit History</h4>
                 </div>
-                {depositOrders.filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED").length === 0 ? (
+                {depositOrders.length === 0 ? (
                   <div style={{ textAlign: "center", padding: "48px 24px", color: "#8c90a0" }}>
                     <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>add_card</span>
                     No deposit orders yet.
                   </div>
                 ) : (
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    {depositOrders
-                    .filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED")
-                    .slice(0, 8)
-                    .map((order, i) => {
+                  <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      {depositOrders.map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
-                      const isPending = order.status === "PENDING";
-                      const isBlocked = isDepositClickBlocked(order, now);
-                      const isClickable = isPending && !isBlocked;
+                      void tick;
 
-                      const createdTime = order.clientCreatedAt
-                        ? Number(order.clientCreatedAt)
-                        : order.createdAt
-                          ? new Date(order.createdAt).getTime()
-                          : null;
+                        const status = String(order.status || "").toUpperCase();
 
-                      const remainingMs = createdTime
-                        ? Math.max(0, DEPOSIT_PENDING_CLICK_LIMIT_MS - (now - createdTime))
-                        : 0;
+                        const remainingSeconds =
+                          status === "PENDING" ? getDepositRemainingSeconds(order) : 0;
 
-                      const remainingSeconds = Math.ceil(remainingMs / 1000);
+                        const isExpiredByTime = status === "PENDING" && remainingSeconds <= 0;
+                        const displayStatus = isExpiredByTime ? "EXPIRED" : status;
+
+                        const isPending = displayStatus === "PENDING";
+                        const isExpired = displayStatus === "EXPIRED" || displayStatus === "CANCELLED";
+                        const isClickable = isPending;
+
+                        const remainingText = formatCountdown(remainingSeconds);
 
                       return (
                         <div
@@ -847,7 +862,7 @@ export default function WalletPage() {
                             alignItems: "center",
                             transition: "background 0.2s",
                             cursor: isClickable ? "pointer" : "default",
-                            opacity: isBlocked ? 0.55 : 1,
+                            opacity: isExpired ? 0.55 : 1,
                           }}
                           onMouseEnter={(e) =>
                             isClickable && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")
@@ -862,13 +877,19 @@ export default function WalletPage() {
                               {order.provider ?? "PAYOS"} • {date}
                             </p>
 
-                            {isPending && !isBlocked && remainingSeconds > 0 && (
-                              <p style={{ fontSize: 11, color: "#facc15", margin: "2px 0 0" }}>
-                                QR available for {formatRemainingMinutes(remainingSeconds)} minute(s)
+                            {isPending && (
+                              <p
+                                style={{
+                                  fontSize: 11,
+                                  color: "#facc15",
+                                  margin: "2px 0 0",
+                                }}
+                              >
+                                QR available for {remainingText}. Click to continue payment.
                               </p>
                             )}
 
-                            {isBlocked && (
+                            {isExpired && (
                               <p style={{ fontSize: 11, color: "#f87171", margin: "2px 0 0" }}>
                                 Expired — please create a new deposit request
                               </p>
@@ -876,15 +897,15 @@ export default function WalletPage() {
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <StatusBadge status={order.status} />
+                            <StatusBadge status={displayStatus} />
 
-                            {isPending && !isBlocked && (
+                            {isPending && (
                               <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#8c90a0" }}>
                                 qr_code_2
                               </span>
                             )}
 
-                            {isBlocked && (
+                            {isExpired && (
                               <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#f87171" }}>
                                 block
                               </span>
@@ -893,6 +914,7 @@ export default function WalletPage() {
                         </div>
                       );
                     })}
+                  </div>
                   </div>
                 )}
               </div>
@@ -910,7 +932,8 @@ export default function WalletPage() {
                   No withdrawal requests yet.
                 </div>
               ) : (
-                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
                       {["Amount", "Fee", "Net Amount", "Bank", "Date", "Status"].map((h) => (
@@ -948,6 +971,7 @@ export default function WalletPage() {
                     })}
                   </tbody>
                 </table>
+                </div>
               )}
             </div>
           </>
@@ -958,7 +982,6 @@ export default function WalletPage() {
         <DepositModal
           onClose={() => {
             setShowDeposit(false);
-            setNow(Date.now());
           }}
           onSuccess={() => showSuccess("Deposit successful!")}
           onOrderCreated={(createdOrder) => {
@@ -968,7 +991,7 @@ export default function WalletPage() {
                 (o) => o.depositOrderId !== createdOrder.depositOrderId
               ),
             ]);
-            setNow(Date.now());
+            
           }}
         />
       )}
@@ -992,7 +1015,25 @@ export default function WalletPage() {
         />
       )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        .wallet-scroll-area {
+        max-height: 420px;
+        overflow-y: auto;
+        overflow-x: hidden;
+
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      .wallet-scroll-area::-webkit-scrollbar {
+        display: none;
+      }
+      `}</style>
     </ClientLayout>
   );
 }
