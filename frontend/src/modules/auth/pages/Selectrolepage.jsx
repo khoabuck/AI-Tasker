@@ -40,6 +40,7 @@ export default function SelectRolePage() {
   const { handleLoginSuccess } = useAuth();
 
   const [selected, setSelected] = useState(null);
+  const [lockedRole, setLockedRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -51,19 +52,16 @@ export default function SelectRolePage() {
     const role = String(user?.role || "").toUpperCase();
     const status = String(user?.status || "").toUpperCase();
 
-    if (status === "PENDING_ROLE" || !role) return;
+    if (status === "PENDING_ROLE" || !role) {
+      setLockedRole(null);
+      return;
+    }
 
     if (status === "PENDING_PROFILE") {
-      if (role === "EXPERT") {
-        navigate("/expert/setup-profile", { replace: true });
-        return;
-      }
-
-      if (role === "CLIENT") {
-        navigate("/setup-profile", { replace: true });
-        return;
-      }
-
+      // User đã chọn role rồi, cho hiện lại trang chọn role
+      // nhưng khóa role hiện tại, không tự đá về setup nữa.
+      setSelected(role);
+      setLockedRole(role);
       return;
     }
 
@@ -131,6 +129,13 @@ export default function SelectRolePage() {
 
   const handleConfirm = async () => {
     if (!selected) return;
+
+    // Nếu role đã được chọn trước đó rồi thì không gọi API select-role nữa.
+    // Chỉ cho user tiếp tục về đúng trang setup profile.
+    if (lockedRole) {
+      redirectAfterRoleSelected(lockedRole);
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -271,15 +276,21 @@ export default function SelectRolePage() {
           >
             {ROLES.map((role) => {
               const isSelected = selected === role.key;
+              const isLockedOtherRole = lockedRole && role.key !== lockedRole;
 
               return (
                 <div
                   key={role.key}
                   onClick={() => {
-                    if (!loading) {
-                      setSelected(role.key);
-                      setError("");
+                    if (loading) return;
+
+                    if (isLockedOtherRole) {
+                      setError("You already selected a role. Please continue with your current role.");
+                      return;
                     }
+
+                    setSelected(role.key);
+                    setError("");
                   }}
                   style={{
                     background: isSelected
@@ -293,7 +304,8 @@ export default function SelectRolePage() {
                     }`,
                     borderRadius: 16,
                     padding: 32,
-                    cursor: loading ? "not-allowed" : "pointer",
+                    cursor: loading || isLockedOtherRole ? "not-allowed" : "pointer",
+                    opacity: isLockedOtherRole ? 0.45 : 1,
                     transition: "all 0.2s",
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`

@@ -27,7 +27,7 @@
 // 5) Thêm GET /api/withdrawals/me để hiển thị lịch sử rút tiền (trước đây hoàn toàn
 //    chưa được gọi ở đâu trong trang).
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
@@ -560,6 +560,8 @@ const isExpenseTx = (tx) => {
     "PLATFORM_FEE",
     "WITHDRAWAL",
     "WITHDRAW",
+    "WITHDRAWAL_HOLD",
+    "WITHDRAWAL_PAYOUT_PROCESSING",
     "JOB_CREDIT_PACKAGE_PURCHASE",
   ].includes(getTxType(tx));
 };
@@ -609,8 +611,9 @@ export default function WalletPage() {
   
 
 
-  const fetchAll = async () => {
-    setLoading(true);
+  const fetchAll = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+
     try {
       const [wallet, tx, deposit, withdrawalList] = await Promise.all([
         walletService.getWallet(),
@@ -626,35 +629,36 @@ export default function WalletPage() {
     } catch (err) {
       console.error(err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchAll();
-  }, []);
+  }, [fetchAll]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setTick((v) => v + 1);
-
-      const hasExpiredPending = depositOrders.some((order) => {
-        const status = String(order.status || "").toUpperCase();
-
-        return (
-          status === "PENDING" &&
-          order.expiresAt &&
-          getDepositRemainingSeconds(order) <= 0
-        );
-      });
-
-      if (hasExpiredPending) {
-        fetchAll();
-      }
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [depositOrders]);
+  }, []);
+
+  useEffect(() => {
+    const hasPendingDeposit = depositOrders.some((order) => {
+      const status = String(order.status || "").toUpperCase();
+      return status === "PENDING";
+    });
+
+    if (!hasPendingDeposit) return;
+
+    const timer = setInterval(() => {
+      fetchAll({ silent: true });
+    }, 3000);
+
+    return () => clearInterval(timer);
+  }, [depositOrders, fetchAll]);
 
   const showSuccess = async (msg) => {
     await fetchAll();
@@ -662,31 +666,49 @@ export default function WalletPage() {
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  const metrics = balance
-    ? [
-        {
-          label: "Balance",
-          value: `${balance.availableBalance.toLocaleString()}₫`,
-          icon: "account_balance_wallet",
-          iconBg: "rgba(0,240,255,0.1)",
-          iconColor: "#00F0FF",
-        },
-        {
-          label: "Escrow",
-          value: `${balance.lockedBalance.toLocaleString()}₫`,
-          icon: "lock",
-          iconBg: "rgba(250,204,21,0.1)",
-          iconColor: "#facc15",
-        },
-        {
-          label: "Withdrawable",
-          value: `${(balance.availableBalance - balance.lockedBalance).toLocaleString()}₫`,
-          icon: "outbox",
-          iconBg: "rgba(74,222,128,0.1)",
-          iconColor: "#4ade80",
-        },
-      ]
-    : [];
+  const activeWithdrawalAmount = withdrawals
+  .filter((w) => {
+    const status = String(w.status || "").toUpperCase();
+
+    // PENDING: vừa tạo yêu cầu, tiền bị giữ
+    // PROCESSING: admin đã gửi payout qua PayOS, đang xử lý
+    // PAID: đã rút thành công
+    return ["PENDING", "PROCESSING", "PAID"].includes(status);
+  })
+  .reduce((sum, w) => {
+    return sum + Number(w.amount ?? 0);
+  }, 0);
+
+const escrowAmount = Math.max(
+  0,
+  Number(balance?.lockedBalance ?? 0) - activeWithdrawalAmount
+);
+
+const metrics = balance
+  ? [
+      {
+        label: "Balance",
+        value: `${Number(balance.availableBalance ?? 0).toLocaleString()}₫`,
+        icon: "account_balance_wallet",
+        iconBg: "rgba(0,240,255,0.1)",
+        iconColor: "#00F0FF",
+      },
+      {
+        label: "Escrow",
+        value: `${escrowAmount.toLocaleString()}₫`,
+        icon: "lock",
+        iconBg: "rgba(250,204,21,0.1)",
+        iconColor: "#facc15",
+      },
+      {
+        label: "Withdraw",
+        value: `${activeWithdrawalAmount.toLocaleString()}₫`,
+        icon: "outbox",
+        iconBg: "rgba(74,222,128,0.1)",
+        iconColor: "#4ade80",
+      },
+    ]
+  : [];
 
   return (
     <ClientLayout>

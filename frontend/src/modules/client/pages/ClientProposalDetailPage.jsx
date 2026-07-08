@@ -178,6 +178,7 @@ export default function ClientProposalDetailPage() {
   const [contractCreated, setContractCreated] = useState(null);
   const [contractChecked, setContractChecked] = useState(false);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
+  const [showDeclineModal, setShowDeclineModal] = useState(false);
   const [acceptError, setAcceptError] = useState("");
 
   const fetchProposal = useCallback(async (signal, silent = false) => {
@@ -312,13 +313,22 @@ export default function ClientProposalDetailPage() {
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
-    if (!confirm("Decline this proposal?")) return;
+    setShowDeclineModal(false);
     setActionLoading("decline");
+    setAcceptError("");
+
     try {
       await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
+
       setProposal((prev) => ({ ...prev, status: "REJECTED" }));
+
+      navigate(`/client/jobs/${proposal.jobId}`, {
+        state: {
+          proposalDeclined: true,
+        },
+      });
     } catch (err) {
-      alert(err?.response?.data?.message || "Decline failed.");
+      setAcceptError(err?.response?.data?.message || "Decline proposal failed.");
     } finally {
       setActionLoading(null);
     }
@@ -455,7 +465,7 @@ export default function ClientProposalDetailPage() {
 
               {isPending && (
                 <>
-                  <button onClick={handleDecline} disabled={isProcessing}
+                  <button onClick={() => setShowDeclineModal(true)} disabled={isProcessing}
                     style={{ display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: isProcessing ? "not-allowed" : "pointer", opacity: isProcessing ? 0.6 : 1, transition: "all 0.2s" }}
                     onMouseEnter={(e) => { if (!isProcessing) e.currentTarget.style.background = "rgba(248,113,113,0.15)"; }}
                     onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(248,113,113,0.08)"; }}>
@@ -654,6 +664,46 @@ export default function ClientProposalDetailPage() {
           onClose={() => setShowMessage(false)}
           navigate={navigate}
         />
+      )}
+
+      {showDeclineModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+          <div className="w-full max-w-[440px] rounded-2xl border border-red-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-red-500/10">
+            <div className="mb-4 flex items-center gap-3">
+              <span className="material-symbols-outlined text-[28px] text-red-400">
+                warning
+              </span>
+
+              <h2 className="m-0 text-xl font-bold text-red-400">
+                Decline Proposal
+              </h2>
+            </div>
+
+            <p className="mb-6 leading-relaxed text-slate-300">
+              Do you want to decline this proposal?
+            </p>
+
+            <div className="flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowDeclineModal(false)}
+                disabled={isDeclining}
+                className="rounded-lg border border-white/15 px-5 py-2.5 font-semibold text-slate-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                No
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDecline}
+                disabled={isDeclining}
+                className="rounded-lg bg-red-500 px-5 py-2.5 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isDeclining ? "Declining..." : "Yes"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAcceptModal && (

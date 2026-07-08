@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
@@ -10,14 +10,11 @@ export default function LoginPage() {
   const [form, setForm] = useState({
     email: "",
     password: "",
-    remember: false,
   });
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusField, setFocusField] = useState("");
-  const [rememberedLogins, setRememberedLogins] = useState([]);
-  const [showSavedAccounts, setShowSavedAccounts] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   const clearAuthSession = () => {
@@ -30,69 +27,20 @@ export default function LoginPage() {
     localStorage.removeItem("currentUser");
   };
 
-  useEffect(() => {
-  const savedLogins = localStorage.getItem("rememberLogins");
-
-  if (savedLogins) {
-    try {
-      const parsed = JSON.parse(savedLogins);
-      setRememberedLogins(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      localStorage.removeItem("rememberLogins");
-    }
-  }
-}, []);
 
   const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
+    const { name, value } = event.target;
 
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     }));
 
     setError("");
   };
 
-  const selectSavedAccount = (account) => {
-    setForm((prev) => ({
-      ...prev,
-      email: account.email || "",
-      password: "",
-      remember: true,
-    }));
 
-    setShowSavedAccounts(false);
-    setError("");
-  };
-
-  const saveRememberedLogin = () => {
-    const email = form.email.trim();
-
-    if (!form.remember || !email) {
-      return;
-    }
-
-    const existingRaw = localStorage.getItem("rememberLogins");
-    let existing = [];
-
-    try {
-      existing = existingRaw ? JSON.parse(existingRaw) : [];
-      if (!Array.isArray(existing)) existing = [];
-    } catch {
-      existing = [];
-    }
-
-    const next = [
-      { email },
-      ...existing.filter((item) => item.email !== email),
-    ];
-
-    localStorage.setItem("rememberLogins", JSON.stringify(next));
-    setRememberedLogins(next);
-  };
-
-  const goNextByRoleAndStatus = ({ role, status, email, password }) => {
+  const goNextByRoleAndStatus = ({ role, status, email }) => {
     const normalizedRole = String(role || "").toUpperCase();
     const normalizedStatus = String(status || "").toUpperCase();
 
@@ -107,7 +55,7 @@ export default function LoginPage() {
     if (normalizedStatus === "PENDING_ROLE" || !normalizedRole) {
       navigate("/select-role", {
         replace: true,
-        state: { email, password },
+        state: { email },
       });
       return;
     }
@@ -125,7 +73,7 @@ export default function LoginPage() {
 
       navigate("/select-role", {
         replace: true,
-        state: { email, password },
+        state: { email },
       });
       return;
     }
@@ -161,7 +109,7 @@ export default function LoginPage() {
 
     navigate("/select-role", {
       replace: true,
-      state: { email, password },
+      state: { email },
     });
   };
 
@@ -172,10 +120,11 @@ export default function LoginPage() {
     setError("");
 
     try {
+      const email = form.email.trim();
+
       const result = await authService.login({
-        email: form.email,
+        email,
         password: form.password,
-        rememberMe: form.remember,
       });
 
       
@@ -185,9 +134,6 @@ export default function LoginPage() {
         return;
       }
 
-      if (form.remember) {
-        saveRememberedLogin();
-      }
 
       const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
 
@@ -203,17 +149,11 @@ export default function LoginPage() {
         },
       });
 
-      const sessionId = crypto.randomUUID();
-      sessionStorage.setItem("sessionId", sessionId);
-      localStorage.setItem("activeSessionId", sessionId);
-
-      
 
       goNextByRoleAndStatus({
         role: finalRole,
         status: finalStatus,
-        email: form.email,
-        password: form.password,
+        email,
       });
     } catch (err) {
       console.error("LOGIN ERROR:", err);
@@ -307,7 +247,7 @@ export default function LoginPage() {
 
           </header>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} autoComplete="on" className="space-y-6">
             <div className="space-y-2">
               <label
                 className="block text-xs uppercase tracking-widest text-on-surface-variant"
@@ -337,7 +277,7 @@ export default function LoginPage() {
                   spellCheck={false}
                   autoCorrect="off"
                   autoCapitalize="off"
-                  autoComplete="off"
+                  autoComplete="username"
                   value={form.email}
                   onChange={handleChange}
                   required
@@ -356,42 +296,10 @@ export default function LoginPage() {
                   }}
                   onFocus={() => {
                     setFocusField("email");
-                    setShowSavedAccounts(true);
                   }}
-                  onBlur={() => {
-                    setFocusField("");
-                    setTimeout(() => setShowSavedAccounts(false), 150);
-                  }}
+                  onBlur={() => setFocusField("")}
                 />
 
-                {showSavedAccounts && rememberedLogins.length > 0 && (
-                  <div className="absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-xl border border-white/10 bg-[#191c22] shadow-2xl">
-                    {rememberedLogins.map((account) => (
-                      <button
-                        key={account.email}
-                        type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          selectSavedAccount(account);
-                        }}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.06]"
-                      >
-                        <span className="material-symbols-outlined text-lg text-cyan-300">
-                          account_circle
-                        </span>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">
-                            {account.email}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                             Saved email
-                          </p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -485,24 +393,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                name="remember"
-                id="remember"
-                checked={form.remember}
-                onChange={handleChange}
-                className="h-4 w-4 rounded"
-                style={{ accentColor: "#00F0FF" }}
-              />
-
-              <label
-                htmlFor="remember"
-                className="cursor-pointer text-sm text-on-surface-variant"
-              >
-                Remember me
-              </label>
-            </div>
+            
 
             {error && (
               <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">

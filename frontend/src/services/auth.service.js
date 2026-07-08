@@ -240,6 +240,9 @@ const authService = {
     localStorage.removeItem("aitasker_expert_profile_correction_draft");
 
     sessionStorage.clear();
+
+    // Báo cho các tab khác biết user đã logout.
+    localStorage.setItem("aitasker_logout_at", String(Date.now()));
   },
 
   getCurrentUser: () => {

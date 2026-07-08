@@ -69,6 +69,7 @@ export default function EditJobPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   // Danh sách skill GỐC của job lúc mới tải trang — đóng vai trò baseline để
   // so sánh, giống hệt aiSuggestedSkills bên PostJobPage. Skill nào job vốn
@@ -244,15 +245,29 @@ export default function EditJobPage() {
     }
   };
 
-  // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
-  const handleSubmit = async () => {
+  const openSubmitConfirm = () => {
     if (!form.title.trim()) {
       setSaveError("Job title cannot be empty.");
       return;
     }
-    if (!confirm("Save changes and submit this job?")) return;
+
+    setSaveError("");
+    setSaveSuccess(false);
+    setShowSubmitConfirm(true);
+  };
+
+  // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
+  const handleSubmit = async () => {
+    if (!form.title.trim()) {
+      setSaveError("Job title cannot be empty.");
+      setShowSubmitConfirm(false);
+      return;
+    }
+
     setSubmitting(true);
     setSaveError("");
+    setShowSubmitConfirm(false);
+
     try {
       // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
@@ -263,7 +278,7 @@ export default function EditJobPage() {
     } finally {
       setSubmitting(false);
     }
-  };
+};
 
   // ── Loading ────────────────────────────────────────────────────────
   if (loading || !form) return (
@@ -610,7 +625,7 @@ export default function EditJobPage() {
 
             {/* Submit — chỉ hiện khi job đang là DRAFT, đổi status thành OPEN */}
             {isDraft && (
-              <button type="button" onClick={handleSubmit} disabled={saving || submitting}
+              <button type="button" onClick={openSubmitConfirm} disabled={saving || submitting}
                 style={{ padding: "12px 28px", borderRadius: 8, background: submitting ? "#1d2026" : "#00F0FF", color: submitting ? "#8c90a0" : "#002022", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 14, border: "none", cursor: submitting ? "not-allowed" : "pointer", boxShadow: submitting ? "none" : "0 0 20px rgba(0,240,255,0.25)", display: "flex", alignItems: "center", gap: 8, transition: "all 0.2s" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                   {submitting ? "hourglass_empty" : "publish"}
@@ -622,7 +637,134 @@ export default function EditJobPage() {
 
         </div>
       </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+      {showSubmitConfirm && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(6px)",
+            padding: 24,
+          }}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              borderRadius: 18,
+              background: "#101319",
+              border: "1px solid rgba(255,255,255,0.12)",
+              boxShadow: "0 24px 80px rgba(0,0,0,0.55)",
+              padding: 24,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                marginBottom: 14,
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  color: "#00F0FF",
+                  fontSize: 26,
+                }}
+              >
+                help
+              </span>
+
+              <h3
+                style={{
+                  margin: 0,
+                  color: "#e1e2eb",
+                  fontSize: 18,
+                  fontWeight: 800,
+                  fontFamily: "Hanken Grotesk, sans-serif",
+                }}
+              >
+                Confirm Submit
+              </h3>
+            </div>
+
+            <p
+              style={{
+                margin: "0 0 22px",
+                color: "#c2c6d6",
+                fontSize: 14,
+                lineHeight: 1.6,
+              }}
+            >
+              Save changes and submit this job?
+            </p>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: 10,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setShowSubmitConfirm(false)}
+                disabled={submitting}
+                style={{
+                  padding: "10px 18px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "transparent",
+                  color: "#c2c6d6",
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  fontWeight: 700,
+                }}
+              >
+                No
+              </button>
+
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting}
+                style={{
+                  padding: "10px 22px",
+                  borderRadius: 10,
+                  border: "none",
+                  background: submitting ? "#1d2026" : "#00F0FF",
+                  color: submitting ? "#8c90a0" : "#002022",
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  fontWeight: 800,
+                  boxShadow: submitting ? "none" : "0 0 18px rgba(0,240,255,0.25)",
+                }}
+              >
+                {submitting ? "Submitting..." : "Yes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        textarea {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        textarea::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </ClientLayout>
   );
 }

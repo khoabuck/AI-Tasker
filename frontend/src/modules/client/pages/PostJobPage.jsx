@@ -676,11 +676,17 @@ const suggestedSkills = (data.suggestedSkills || [])
                     {/* Project Type */}
                     <div>
                       <label style={labelStyle}>Project Type</label>
-                      <input type="text" name="projectType" value={form.projectType} onChange={handleChange}
+                      <input
+                        type="text"
+                        name="projectType"
+                        value={form.projectType}
+                        onChange={handleChange}
+                        autoComplete="off"
                         placeholder="e.g. Chatbot, RAG, AI Automation..."
                         style={inputStyle}
                         onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                      />
                     </div>
 
                     {/* Complexity */}
@@ -728,11 +734,22 @@ const suggestedSkills = (data.suggestedSkills || [])
 
                     <div>
                       <label style={labelStyle}>Expected Deliverables</label>
-                      <textarea name="expectedDeliverables" value={form.expectedDeliverables} onChange={handleChange}
+                      <textarea
+                        name="expectedDeliverables"
+                        value={form.expectedDeliverables}
+                        onChange={handleChange}
                         placeholder="What do you expect to receive? e.g. Source code, documentation, demo..."
-                        rows={4} style={{ ...inputStyle, resize: "vertical" }}
+                        rows={4}
+                        className="hidden-scrollbar"
+                        style={{
+                          ...inputStyle,
+                          resize: "vertical",
+                          scrollbarWidth: "none",
+                          msOverflowStyle: "none",
+                        }}
                         onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                      />
                     </div>
                   </div>
                 </div>
@@ -913,11 +930,17 @@ const suggestedSkills = (data.suggestedSkills || [])
                     {/* Project Type */}
                     <div>
                       <label style={labelStyle}>Project Type Hint</label>
-                      <input type="text" name="projectType" value={form.projectType} onChange={handleChange}
-                        placeholder="e.g. Chatbot, RAG, Automation... (helps AI suggest better)"
+                      <input
+                        type="text"
+                        name="projectType"
+                        value={form.projectType}
+                        onChange={handleChange}
+                        autoComplete="off"
+                        placeholder="e.g. Chatbot, RAG, AI Automation..."
                         style={inputStyle}
                         onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                        onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                      />
                     </div>
 
                     {/* Description + Generate button */}
@@ -1040,10 +1063,21 @@ const suggestedSkills = (data.suggestedSkills || [])
                       {/* Expected Deliverables */}
                       <div>
                         <label style={labelStyle}>Expected Deliverables</label>
-                        <textarea name="expectedDeliverables" value={form.expectedDeliverables} onChange={handleChange} rows={4}
-                          style={{ ...inputStyle, resize: "vertical" }}
+                        <textarea
+                          name="expectedDeliverables"
+                          value={form.expectedDeliverables}
+                          onChange={handleChange}
+                          rows={4}
+                          className="hidden-scrollbar"
+                          style={{
+                            ...inputStyle,
+                            resize: "vertical",
+                            scrollbarWidth: "none",
+                            msOverflowStyle: "none",
+                          }}
                           onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
-                          onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")} />
+                          onBlur={(e) => (e.target.style.borderColor = "rgba(255,255,255,0.12)")}
+                        />
                       </div>
 
                       {/* Suggested Skills */}
@@ -1257,31 +1291,40 @@ const suggestedSkills = (data.suggestedSkills || [])
         </form>
       </div>
       <style>{`
-  input,
-  textarea,
-  select {
-    outline: none !important;
-    box-shadow: none !important;
-    background-clip: padding-box !important;
-  }
+        input,
+        textarea,
+        select {
+          outline: none !important;
+          box-shadow: none !important;
+          background-clip: padding-box !important;
+        }
 
-  input:focus,
-  textarea:focus,
-  select:focus {
-    outline: none !important;
-    box-shadow: none !important;
-  }
+        input:focus,
+        textarea:focus,
+        select:focus {
+          outline: none !important;
+          box-shadow: none !important;
+        }
 
-  input:-webkit-autofill,
-  input:-webkit-autofill:hover,
-  input:-webkit-autofill:focus {
-    border-radius: 12px !important;
-    border: 1px solid #2b3442 !important;
-    -webkit-box-shadow: 0 0 0 1000px #1d2026 inset !important;
-    -webkit-text-fill-color: #e1e2eb !important;
-    caret-color: #e1e2eb !important;
-  }
-`}</style>
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+          border-radius: 12px !important;
+          border: 1px solid #2b3442 !important;
+          -webkit-box-shadow: 0 0 0 1000px #1d2026 inset !important;
+          -webkit-text-fill-color: #e1e2eb !important;
+          caret-color: #e1e2eb !important;
+        }
+
+        .hidden-scrollbar {
+          scrollbar-width: none;
+          -ms-overflow-style: none;
+        }
+
+        .hidden-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
     </ClientLayout>
   );
 }

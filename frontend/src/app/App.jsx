@@ -2,25 +2,17 @@ import { useEffect } from "react";
 import { BrowserRouter } from "react-router-dom";
 import { AuthProvider } from "../context/AuthContext";
 import AppRouter from "./router/AppRouter";
+import { clearAuth } from "../utils/auth.utils";
 
 export default function App() {
   useEffect(() => {
     const handleStorageChange = (e) => {
-      if (e.key !== "activeSessionId") return;
+      if (e.key !== "aitasker_logout_at") return;
 
-      const currentSessionId = sessionStorage.getItem("sessionId");
+      clearAuth();
+      sessionStorage.clear();
 
-      if (!currentSessionId) return;
-
-      if (e.newValue && e.newValue !== currentSessionId) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("authToken");
-        localStorage.removeItem("refreshToken");
-        localStorage.removeItem("user");
-        localStorage.removeItem("role");
-        localStorage.removeItem("currentUser");
-
+      if (window.location.pathname !== "/login") {
         window.location.href = "/login";
       }
     };
