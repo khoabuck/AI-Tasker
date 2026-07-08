@@ -78,7 +78,7 @@ export default function ExpertNotificationsPage() {
   const updateReadState = (notificationId) => {
     setNotifications((prev) =>
       prev.map((item) =>
-        String(item.notificationId) === String(notificationId)
+        String(getNotificationId(item)) === String(notificationId)
           ? {
               ...item,
               isRead: true,
@@ -140,15 +140,8 @@ export default function ExpertNotificationsPage() {
       notification.target ||
       notificationService.getNotificationTarget(notification);
 
-    if (!target?.path) {
-      setError(
-        "This notification does not include enough information to open a page."
-      );
-      return;
-    }
-
     try {
-      setOpeningId(notificationId || target.path);
+      setOpeningId(notificationId || target?.path || "/expert/notifications");
       setError("");
       setMessage("");
 
@@ -157,7 +150,7 @@ export default function ExpertNotificationsPage() {
         updateReadState(notificationId);
       }
 
-      navigate(target.path);
+      navigate(target?.path || "/expert/notifications");
     } catch (err) {
       console.error("OPEN NOTIFICATION ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot open this notification."));
@@ -177,12 +170,12 @@ export default function ExpertNotificationsPage() {
               </p>
 
               <h1 className="text-2xl font-bold text-white md:text-3xl">
-                Your notifications
+                Notification Center
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                Open updates about proposals, contracts, projects, milestones,
-                submissions, wallet, reviews, and messages.
+                Track updates about proposals, agreements, projects,
+                submissions, wallet activity, reviews, and messages.
               </p>
             </div>
 
@@ -208,7 +201,6 @@ export default function ExpertNotificationsPage() {
           </div>
 
           {message && <Alert type="success" message={message} />}
-
           {error && <Alert type="danger" message={error} />}
 
           <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -238,7 +230,7 @@ export default function ExpertNotificationsPage() {
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white">
-                  Notification Center
+                  Recent updates
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
@@ -437,9 +429,9 @@ function NotificationItem({
         unread
           ? "border-cyan-400/40 bg-cyan-400/[0.06]"
           : "border-white/10 bg-white/[0.03]"
-      } ${target?.path ? "cursor-pointer hover:border-cyan-400/50" : ""}`}
+      } cursor-pointer hover:border-cyan-400/50 hover:bg-white/[0.04]`}
       onClick={() => {
-        if (target?.path && !opening) {
+        if (!opening) {
           onOpen();
         }
       }}
@@ -467,7 +459,10 @@ function NotificationItem({
               )}
 
               <span className="text-xs text-gray-500">
-                {formatDate(notification.createdAt || notification.createdAtUtc)}
+                {notificationService.formatNotificationTime(
+                  notification.createdAt || notification.createdAtUtc,
+                  { full: true }
+                )}
               </span>
             </div>
 
@@ -479,15 +474,9 @@ function NotificationItem({
               {notification.message || notification.content || "No message."}
             </p>
 
-            {target?.path ? (
-              <p className="mt-2 text-xs font-bold text-cyan-300">
-                Click to open: {target.label}
-              </p>
-            ) : (
-              <p className="mt-2 text-xs font-bold text-gray-500">
-                No linked page available
-              </p>
-            )}
+            <p className="mt-2 text-xs font-bold text-cyan-300">
+              {target?.label || "View notification"}
+            </p>
           </div>
         </div>
 
@@ -509,7 +498,7 @@ function NotificationItem({
           <button
             type="button"
             onClick={onOpen}
-            disabled={!target?.path || opening}
+            disabled={opening}
             className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-3.5 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {opening ? "Opening..." : target?.label || "Open"}
@@ -623,7 +612,7 @@ function getNotificationTone(type, kind) {
   if (value.includes("PROJECT") || targetKind === "PROJECT") {
     return {
       label: "Project",
-      icon: "work",
+      icon: "folder_managed",
       className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     };
   }
@@ -666,7 +655,9 @@ function getNotificationTone(type, kind) {
   if (
     value.includes("ESCROW") ||
     value.includes("WALLET") ||
-    value.includes("PAYMENT")
+    value.includes("PAYMENT") ||
+    value.includes("WITHDRAW") ||
+    targetKind === "WALLET"
   ) {
     return {
       label: "Wallet",
@@ -678,7 +669,7 @@ function getNotificationTone(type, kind) {
   if (value.includes("REVIEW") || targetKind === "REVIEW") {
     return {
       label: "Review",
-      icon: "star",
+      icon: "reviews",
       className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
     };
   }
@@ -696,16 +687,6 @@ function getNotificationTone(type, kind) {
     icon: "notifications",
     className: "border-white/10 bg-white/[0.04] text-gray-300",
   };
-}
-
-function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString();
 }
 
 function getFriendlyError(err, fallback) {

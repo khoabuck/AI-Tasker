@@ -150,14 +150,8 @@ export default function ExpertNavbar() {
       notification.target ||
       notificationService.getNotificationTarget(notification);
 
-    if (!target?.path) {
-      setShowNotifications(false);
-      navigate("/expert/notifications");
-      return;
-    }
-
     try {
-      setOpeningId(notificationId || target.path);
+      setOpeningId(notificationId || target?.path || "/expert/notifications");
 
       if (notificationId && !notification.isRead) {
         await notificationService.markAsRead(notificationId);
@@ -165,7 +159,7 @@ export default function ExpertNavbar() {
       }
 
       setShowNotifications(false);
-      navigate(target.path);
+      navigate(target?.path || "/expert/notifications");
     } catch (error) {
       console.error("OPEN NAVBAR NOTIFICATION ERROR:", error);
     } finally {
@@ -461,7 +455,7 @@ function NotificationPopup({
     unreadCount > 0 ? `${unreadCount} unread` : "All caught up";
 
   return (
-    <div className="absolute right-0 top-full z-[999] mt-2 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+    <div className="absolute right-0 top-full z-[999] mt-2 w-[350px] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
       <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-white/[0.03] to-purple-400/10 px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -493,7 +487,7 @@ function NotificationPopup({
       </div>
 
       <div
-        className="max-h-[360px] overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden"
+        className="max-h-[330px] overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden"
         style={{
           scrollbarWidth: "none",
           msOverflowStyle: "none",
@@ -615,8 +609,8 @@ function NotificationItem({
               </span>
 
               <span className="truncate text-[10px] font-medium text-gray-500">
-                {formatDateTime(
-                  notification.createdAtUtc || notification.createdAt
+                {notificationService.formatNotificationTime(
+                  notification.createdAt || notification.createdAtUtc
                 )}
               </span>
             </div>
@@ -823,19 +817,4 @@ function getNotificationTone(type, kind) {
     icon: "notifications",
     className: "border-white/10 bg-white/[0.04] text-gray-300",
   };
-}
-
-function formatDateTime(value) {
-  if (!value) return "No date";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "No date";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+} 

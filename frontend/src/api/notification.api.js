@@ -5,6 +5,10 @@ const notificationApi = {
     return axiosInstance.get("/notifications/me", { params });
   },
 
+  getNotificationById(notificationId) {
+    return axiosInstance.get(`/notifications/${notificationId}`);
+  },
+
   getUnreadCount() {
     return axiosInstance.get("/notifications/unread-count");
   },

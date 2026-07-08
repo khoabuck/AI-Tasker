@@ -708,7 +708,7 @@ function getPolicyId(policy) {
 function formatNumber(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US").format(
+  return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
 }
