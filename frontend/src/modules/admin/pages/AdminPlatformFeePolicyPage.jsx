@@ -202,8 +202,7 @@ export default function AdminPlatformFeePolicyPage() {
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Enter rates using the same unit expected by backend. For
-                  decimal rate systems, use 0.1 for 10%.
+                  Enter fee rates clearly. Use 0.1 for 10% when the system uses decimal rates.
                 </p>
               </div>
 
@@ -296,25 +295,6 @@ export default function AdminPlatformFeePolicyPage() {
                     value={policy?.expertFeeRate}
                     tone="yellow"
                   />
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Metadata
-                </h2>
-
-                <div className="space-y-4">
-                  <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
-                  <InfoBox
-                    label="Created At"
-                    value={formatDateTime(policy?.createdAt)}
-                  />
-                  <InfoBox
-                    label="Updated At"
-                    value={formatDateTime(policy?.updatedAt)}
-                  />
-                  <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
                 </div>
               </section>
             </aside>
@@ -417,8 +397,6 @@ function PolicyValue({ icon, label, value, tone = "cyan" }) {
       </div>
 
       <p className="text-3xl font-black text-white">{formatRate(value)}</p>
-
-      <p className="mt-1 text-xs text-gray-500">Raw value: {value ?? 0}</p>
     </div>
   );
 }

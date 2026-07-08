@@ -310,7 +310,7 @@ export default function AdminDashboard() {
                     ),
                   },
                   {
-                    label: "Pending WD",
+                    label: "Pending Withdrawals",
                     value: formatMoney(
                       finance.pendingWithdrawalAmount ||
                         summary.pendingWithdrawalAmount
@@ -352,7 +352,7 @@ export default function AdminDashboard() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Latest user and platform transaction records.
+                    Latest platform activity returned from backend.
                   </p>
                 </div>
 

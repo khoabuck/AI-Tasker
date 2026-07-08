@@ -54,17 +54,12 @@ export default function ManageWithdrawalsPage() {
 
       const matchSearch =
         !search ||
-        String(withdrawal.withdrawalRequestId || "")
-          .toLowerCase()
-          .includes(search) ||
         String(withdrawal.expertName || "").toLowerCase().includes(search) ||
         String(withdrawal.expertEmail || "").toLowerCase().includes(search) ||
         String(withdrawal.bankName || "").toLowerCase().includes(search) ||
         String(withdrawal.bankAccountNumber || "")
           .toLowerCase()
-          .includes(search) ||
-        String(withdrawal.payosPayoutId || "").toLowerCase().includes(search) ||
-        String(withdrawal.payosTransferId || "").toLowerCase().includes(search);
+          .includes(search);
 
       const matchStatus = statusFilter === "ALL" || status === statusFilter;
 
@@ -276,7 +271,7 @@ export default function ManageWithdrawalsPage() {
       setBalanceChecked(false);
       setPayosBalance(null);
       await loadWithdrawals({ keepMessage: true });
-      setSuccess(`Withdrawal request #${id} has been approved via PayOS. Please check PayOS balance again before approving another withdrawal.`);
+      setSuccess(`Withdrawal request has been approved via PayOS. Please check PayOS balance again before approving another withdrawal.`);
     } catch (err) {
       console.error("APPROVE PAYOS WITHDRAWAL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot approve withdrawal via PayOS."));
@@ -301,7 +296,7 @@ export default function ManageWithdrawalsPage() {
 
       await loadWithdrawals({ keepMessage: true });
       setSuccess(
-        `Withdrawal request #${withdrawal.withdrawalRequestId} has been synced with PayOS.`
+        `Withdrawal request has been synced with PayOS.`
       );
     } catch (err) {
       console.error("SYNC PAYOS WITHDRAWAL ERROR:", err?.response?.data || err);
@@ -338,7 +333,7 @@ export default function ManageWithdrawalsPage() {
 
       closeActionModal();
       await loadWithdrawals({ keepMessage: true });
-      setSuccess(`Withdrawal request #${id} has been rejected.`);
+      setSuccess(`Withdrawal request has been rejected.`);
     } catch (err) {
       console.error("REJECT WITHDRAWAL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot reject withdrawal request."));
@@ -475,7 +470,7 @@ export default function ManageWithdrawalsPage() {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by expert, email, bank, account number, request id, or PayOS id..."
+                  placeholder="Search by expert, email, bank, or account number..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
@@ -531,7 +526,7 @@ export default function ManageWithdrawalsPage() {
         {action.type === "APPROVE_PAYOS" && (
           <ActionModal
             title="Approve Withdrawal via PayOS"
-            subtitle={`Request #${action.withdrawal?.withdrawalRequestId || "N/A"}`}
+            subtitle={`${action.withdrawal?.expertName || "Expert"} · ${formatMoney(action.withdrawal?.amount, action.withdrawal?.currency || "VND")}`}
             confirmLabel="Approve via PayOS"
             confirmTone="green"
             loading={actionLoading}
@@ -562,7 +557,7 @@ export default function ManageWithdrawalsPage() {
         {action.type === "REJECT" && (
           <ActionModal
             title="Reject Withdrawal"
-            subtitle={`Request #${action.withdrawal?.withdrawalRequestId || "N/A"}`}
+            subtitle={`${action.withdrawal?.expertName || "Expert"} · ${formatMoney(action.withdrawal?.amount, action.withdrawal?.currency || "VND")}`}
             confirmLabel="Reject Request"
             confirmTone="red"
             loading={actionLoading}
@@ -612,9 +607,8 @@ function WithdrawalRow({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Badge label={`Request #${withdrawal.withdrawalRequestId || "N/A"}`} />
             {withdrawal.paymentMethod && <Badge label={withdrawal.paymentMethod} />}
-            {withdrawal.payosStatus && <Badge label={`PayOS: ${withdrawal.payosStatus}`} />}
+            {withdrawal.payosStatus && <Badge label={formatLabel(withdrawal.payosStatus)} />}
           </div>
 
           <h3 className="line-clamp-1 font-bold text-white">
@@ -630,11 +624,6 @@ function WithdrawalRow({
             {maskAccountNumber(withdrawal.bankAccountNumber)}
           </p>
 
-          {(withdrawal.payosPayoutId || withdrawal.payosTransferId) && (
-            <p className="mt-2 truncate text-xs text-cyan-300/80">
-              PayOS ID: {withdrawal.payosPayoutId || withdrawal.payosTransferId}
-            </p>
-          )}
         </div>
 
         <div>

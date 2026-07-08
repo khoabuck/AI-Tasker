@@ -250,9 +250,11 @@ function VersionCard({ version, index, isLatest }) {
         <div className="mb-3 flex items-center justify-between">
           <p className="font-bold text-white">Milestones</p>
 
-          <span className="text-xs text-gray-500">
-            {milestoneDuration} days total · {formatMoney(milestoneTotal)}
-          </span>
+          {milestones.length > 0 && (
+            <span className="text-xs text-gray-500">
+              {milestones.length} item{milestones.length === 1 ? "" : "s"}
+            </span>
+          )}
         </div>
 
         {milestones.length === 0 ? (

@@ -472,11 +472,11 @@ export default function ContractDetailPage() {
                 <TextValue value={deliverables || "No deliverables provided."} />
               </Card>
 
-              <Card title="Acceptance Criteria" icon="verified">
-                <TextValue
-                  value={acceptanceCriteria || "No acceptance criteria provided."}
-                />
-              </Card>
+              {acceptanceCriteria && (
+                <Card title="Acceptance Criteria" icon="verified">
+                  <TextValue value={acceptanceCriteria} />
+                </Card>
+              )}
 
               <Card title="Payment Terms" icon="payments">
                 <TextValue value={contractTerms || "No payment terms provided."} />
@@ -577,7 +577,7 @@ function AcceptSuccessModal({ projectId }) {
 
         <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-200">
           {projectId
-            ? `Redirecting to Project #${projectId}...`
+            ? "Redirecting to your project workspace..."
             : "Redirecting to your projects..."}
         </div>
       </div>
@@ -697,7 +697,7 @@ function MilestoneDraftCard({ milestone, index }) {
         )}
       </div>
 
-      <TextValue value={milestone.description || "No description."} />
+      {milestone.description && <TextValue value={milestone.description} />}
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         {milestone.expectedDeliverable && (

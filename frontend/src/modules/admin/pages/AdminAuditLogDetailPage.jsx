@@ -148,10 +148,6 @@ export default function AdminAuditLogDetailPage() {
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     <ActionBadge action={auditLog.action} />
 
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                      Log #{auditLog.auditLogId || "N/A"}
-                    </span>
-
                     <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
                       {displayEntity}
                     </span>
@@ -191,11 +187,6 @@ export default function AdminAuditLogDetailPage() {
                     value={formatDateTime(auditLog.createdAt)}
                   />
 
-                  <OverviewItem
-                    icon="verified_user"
-                    label="Admin ID"
-                    value={auditLog.adminId || "N/A"}
-                  />
                 </div>
               </section>
 
@@ -270,7 +261,7 @@ export default function AdminAuditLogDetailPage() {
                         icon="shield"
                         title="Audit trail saved"
                         description="This record is available for admin review and compliance tracking."
-                        time={auditLog.ipAddress ? `IP: ${auditLog.ipAddress}` : "IP address not available"}
+                        time="Saved for admin review"
                         tone="green"
                       />
                     </div>
@@ -286,11 +277,6 @@ export default function AdminAuditLogDetailPage() {
                     </h2>
 
                     <div className="space-y-4">
-                      <DetailItem
-                        label="Audit Log ID"
-                        value={auditLog.auditLogId || "N/A"}
-                      />
-
                       <DetailItem
                         label="Action"
                         value={toReadableText(auditLog.action || "UNKNOWN")}
@@ -314,10 +300,8 @@ export default function AdminAuditLogDetailPage() {
                     </h2>
 
                     <div className="space-y-4">
-                      <DetailItem label="Admin ID" value={auditLog.adminId} />
                       <DetailItem label="Name" value={auditLog.adminName} />
                       <DetailItem label="Email" value={auditLog.adminEmail} />
-                      <DetailItem label="IP Address" value={auditLog.ipAddress} />
                     </div>
                   </section>
 

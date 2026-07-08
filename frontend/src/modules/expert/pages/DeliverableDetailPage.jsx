@@ -130,13 +130,7 @@ export default function DeliverableDetailPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-0 md:grid-cols-3">
-              <HeroInfo
-                icon="history"
-                label="Version"
-                value={`Version ${submission.versionNumber || 1}`}
-              />
-
+            <div className="grid grid-cols-1 gap-0 md:grid-cols-2">
               <HeroInfo
                 icon="schedule"
                 label="Submitted"

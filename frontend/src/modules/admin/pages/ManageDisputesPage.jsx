@@ -52,7 +52,6 @@ export default function ManageDisputesPage() {
 
       const matchSearch =
         !search ||
-        String(dispute.disputeId || "").toLowerCase().includes(search) ||
         String(dispute.projectTitle || "").toLowerCase().includes(search) ||
         String(dispute.clientName || "").toLowerCase().includes(search) ||
         String(dispute.expertName || "").toLowerCase().includes(search) ||
@@ -184,7 +183,7 @@ export default function ManageDisputesPage() {
       setSelectedDispute(null);
 
       await loadDisputes({ keepMessage: true });
-      setSuccess(`Dispute #${resolvedId} has been resolved.`);
+      setSuccess("Dispute has been resolved.");
     } catch (err) {
       console.error("RESOLVE DISPUTE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot resolve dispute."));
@@ -289,7 +288,7 @@ export default function ManageDisputesPage() {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by project, client, expert, reason, or dispute id..."
+                  placeholder="Search by project, client, expert, or reason..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
@@ -391,8 +390,6 @@ function DisputeRow({ dispute, disabled, onView, onResolve }) {
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Badge label={`Dispute #${dispute.disputeId || "N/A"}`} />
-            {dispute.projectId && <Badge label={`Project #${dispute.projectId}`} />}
           </div>
 
           <h3 className="line-clamp-1 font-bold text-white">
@@ -477,7 +474,7 @@ function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
             </p>
 
             <h2 className="text-xl font-bold text-white">
-              {dispute.projectTitle || `Dispute #${dispute.disputeId}`}
+              {dispute.projectTitle || "Dispute Detail"}
             </h2>
 
             <p className="mt-1 text-sm text-gray-400">
@@ -502,7 +499,6 @@ function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
             <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
               <InfoBox label="Status" value={formatLabel(status)} />
               <InfoBox label="Amount" value={formatMoney(dispute.disputedAmount)} />
-              <InfoBox label="Project ID" value={dispute.projectId || "N/A"} />
               <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
             </div>
 
@@ -574,7 +570,7 @@ function ResolveDisputeModal({
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">Resolve Dispute</h2>
           <p className="mt-1 text-sm text-gray-400">
-            Dispute #{dispute.disputeId} · {dispute.projectTitle || "Project"}
+            {dispute.projectTitle || "Project"}
           </p>
         </div>
 

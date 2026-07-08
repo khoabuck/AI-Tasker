@@ -1255,10 +1255,6 @@ function SubmissionCard({ submission, onDetail }) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <FriendlyStatusBadge ui={ui} small />
 
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-              Version {submission.versionNumber || 1}
-            </span>
-
             {(submission.submittedAt || submission.createdAt) && (
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                 {formatDate(submission.submittedAt || submission.createdAt)}

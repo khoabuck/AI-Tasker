@@ -361,9 +361,6 @@ export default function AdminUserDetailPage() {
                       {user.email || "No email"}
                     </p>
 
-                    <p className="mt-2 text-xs text-gray-500">
-                      User ID: {user.userId || "N/A"}
-                    </p>
                   </div>
                 </div>
 
@@ -424,7 +421,7 @@ export default function AdminUserDetailPage() {
 
               <InfoCard
                 icon="calendar_month"
-                label="Created At"
+                label="Joined"
                 value={formatDateTime(user.createdAt)}
                 tone="cyan"
               />
@@ -514,27 +511,6 @@ export default function AdminUserDetailPage() {
                     label="Email Verification"
                     value={user.isEmailVerified ? "Verified" : "Not Verified"}
                   />
-                  <DetailItem
-                    label="Updated At"
-                    value={formatDateTime(user.updatedAt)}
-                  />
-                </div>
-
-                <div className="mt-6 border-t border-white/10 pt-5">
-                  <h3 className="mb-4 text-base font-bold text-white">
-                    Linked Profiles
-                  </h3>
-
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <DetailItem
-                      label="Expert Profile ID"
-                      value={user.expertProfileId || "N/A"}
-                    />
-                    <DetailItem
-                      label="Client Profile ID"
-                      value={user.clientProfileId || "N/A"}
-                    />
-                  </div>
                 </div>
               </section>
 
@@ -545,16 +521,6 @@ export default function AdminUserDetailPage() {
                   </h2>
 
                   <div className="space-y-4">
-                    <DetailItem
-                      label="Status Before Suspension"
-                      value={user.statusBeforeSuspension || "N/A"}
-                    />
-
-                    <DetailItem
-                      label="Lockout Count"
-                      value={user.lockoutCount ?? 0}
-                    />
-
                     <DetailItem
                       label="Lockout End"
                       value={formatDateTime(user.lockoutEnd)}

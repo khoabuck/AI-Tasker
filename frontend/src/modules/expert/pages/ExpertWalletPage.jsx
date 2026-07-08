@@ -1246,7 +1246,7 @@ function DepositModal({
                   rel="noreferrer"
                   className="mt-4 flex w-full items-center justify-center rounded-2xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                 >
-                  Open PayOS Payment Page
+                  Open Payment Page
                 </a>
               )}
 
@@ -1524,7 +1524,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
           </p>
 
           <p className="mt-2 text-sm text-gray-500">
-            PayOS • {formatShortDate(order.createdAt)}
+            QR Payment • {formatShortDate(order.createdAt)}
           </p>
 
           {order.transferContent && (
