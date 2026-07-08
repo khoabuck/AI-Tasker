@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { getMeApi, logoutApi } from "../api/auth.api";
 import {
   getAccessToken,
@@ -6,7 +6,10 @@ import {
   clearAuth,
   getUserFromStorage,
 } from "../utils/auth.utils";
-import { ACCOUNT_BLOCKED_EVENT } from "../api/axiosInstance";
+import {
+  ACCOUNT_BLOCKED_EVENT,
+  AUTH_ERROR_EVENT,
+} from "../api/axiosInstance";
 
 const AuthContext = createContext(null);
 
@@ -95,6 +98,15 @@ function getBlockedStatusPayload(user) {
       "Your account is currently restricted. Please contact support if you believe this is a mistake.",
     reason,
     until,
+  };
+}
+
+function getSessionExpiredPayload() {
+  return {
+    title: "Session expired",
+    description: "Your session is no longer valid. Please login again.",
+    reason: "",
+    until: "",
   };
 }
 
@@ -205,12 +217,7 @@ function getBlockedPayloadFromError(err) {
     };
   }
 
-  return {
-    title: "Session expired",
-    description: "Your session is no longer valid. Please login again.",
-    reason: "",
-    until: "",
-  };
+  return getSessionExpiredPayload();
 }
 
 function dispatchBlockedEvent(user) {
@@ -229,6 +236,14 @@ function dispatchBlockedErrorEvent(err) {
   );
 }
 
+function dispatchSessionExpiredEvent() {
+  window.dispatchEvent(
+    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
+      detail: getSessionExpiredPayload(),
+    })
+  );
+}
+
 function unwrapMeResponse(res) {
   return res?.data?.data || res?.data || res;
 }
@@ -239,9 +254,32 @@ function clearLocalDrafts() {
   localStorage.removeItem("aitasker_expert_profile_correction_draft");
 }
 
+function shouldTreatAsBlockedError(err) {
+  const statusText = getErrorStatusText(err);
+  const text = getErrorText(err).toLowerCase();
+
+  return (
+    BLOCKED_STATUSES.includes(statusText) ||
+    text.includes("locked") ||
+    text.includes("lockout") ||
+    text.includes("banned") ||
+    text.includes("ban") ||
+    text.includes("suspended") ||
+    text.includes("disabled") ||
+    text.includes("blocked") ||
+    text.includes("inactive") ||
+    text.includes("tạm khóa") ||
+    text.includes("khóa") ||
+    text.includes("khoá") ||
+    text.includes("cấm")
+  );
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const checkingAuthErrorRef = useRef(false);
 
   const [blockedModal, setBlockedModal] = useState({
     open: false,
@@ -250,6 +288,42 @@ export function AuthProvider({ children }) {
     reason: "",
     until: "",
   });
+
+  const verifyAuthErrorWithMe = async () => {
+    if (checkingAuthErrorRef.current) return;
+
+    checkingAuthErrorRef.current = true;
+
+    try {
+      const res = await getMeApi();
+      const freshUser = unwrapMeResponse(res);
+
+      if (isBlockedUserStatus(freshUser)) {
+        dispatchBlockedEvent(freshUser);
+        clearAuth();
+        setUser(null);
+        return;
+      }
+
+      setUser(freshUser);
+      saveAuth({ user: freshUser });
+    } catch (err) {
+      const status = err?.response?.status;
+
+      if (status === 401 || status === 403) {
+        if (shouldTreatAsBlockedError(err)) {
+          dispatchBlockedErrorEvent(err);
+        } else if (getAccessToken()) {
+          dispatchSessionExpiredEvent();
+        }
+
+        clearAuth();
+        setUser(null);
+      }
+    } finally {
+      checkingAuthErrorRef.current = false;
+    }
+  };
 
   useEffect(() => {
     const restore = async () => {
@@ -283,7 +357,11 @@ export function AuthProvider({ children }) {
 
         if (status === 401 || status === 403) {
           if (getAccessToken()) {
-            dispatchBlockedErrorEvent(err);
+            if (shouldTreatAsBlockedError(err)) {
+              dispatchBlockedErrorEvent(err);
+            } else {
+              dispatchSessionExpiredEvent();
+            }
           }
 
           clearAuth();
@@ -313,10 +391,16 @@ export function AuthProvider({ children }) {
       });
     };
 
+    const handleAuthError = () => {
+      verifyAuthErrorWithMe();
+    };
+
     window.addEventListener(ACCOUNT_BLOCKED_EVENT, handleAccountBlocked);
+    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
 
     return () => {
       window.removeEventListener(ACCOUNT_BLOCKED_EVENT, handleAccountBlocked);
+      window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
     };
   }, []);
 
@@ -339,7 +423,11 @@ export function AuthProvider({ children }) {
         const status = err?.response?.status;
 
         if (status === 401 || status === 403) {
-          dispatchBlockedErrorEvent(err);
+          if (shouldTreatAsBlockedError(err)) {
+            dispatchBlockedErrorEvent(err);
+          } else {
+            dispatchSessionExpiredEvent();
+          }
         }
       }
     }, ACCOUNT_STATUS_CHECK_INTERVAL_MS);
@@ -370,7 +458,12 @@ export function AuthProvider({ children }) {
       return freshUser;
     } catch (err) {
       if (err?.response?.status === 401 || err?.response?.status === 403) {
-        dispatchBlockedErrorEvent(err);
+        if (shouldTreatAsBlockedError(err)) {
+          dispatchBlockedErrorEvent(err);
+        } else if (getAccessToken()) {
+          dispatchSessionExpiredEvent();
+        }
+
         clearAuth();
         setUser(null);
       } else {
@@ -451,13 +544,38 @@ export function useAuth() {
 }
 
 function AccountBlockedModal({ title, message, reason, until, onOk }) {
+  const normalizedTitle = String(title || "").toLowerCase();
+
+  const isSessionExpired = normalizedTitle.includes("session");
+  const isBanned =
+    normalizedTitle.includes("banned") || normalizedTitle.includes("ban");
+  const isLocked =
+    normalizedTitle.includes("locked") ||
+    normalizedTitle.includes("temporarily");
+
+  const icon = isSessionExpired
+    ? "shield_lock"
+    : isBanned
+    ? "block"
+    : isLocked
+    ? "lock_clock"
+    : "admin_panel_settings";
+
+  const toneClass = isSessionExpired
+    ? "border-yellow-400/40 bg-yellow-400/10 text-yellow-300"
+    : "border-red-400/40 bg-red-400/10 text-red-300";
+
+  const buttonClass = isSessionExpired
+    ? "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400"
+    : "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400";
+
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-red-400/30 bg-[#151a22] p-6 shadow-2xl">
-        <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border border-red-400/40 bg-red-400/10">
-          <span className="material-symbols-outlined text-3xl text-red-300">
-            admin_panel_settings
-          </span>
+      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl">
+        <div
+          className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border ${toneClass}`}
+        >
+          <span className="material-symbols-outlined text-3xl">{icon}</span>
         </div>
 
         <h2 className="text-center text-2xl font-black text-white">
@@ -466,10 +584,12 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
 
         <p className="mt-4 text-center text-sm leading-6 text-gray-300">
           {message ||
-            "Your account is currently restricted. Please login again."}
+            (isSessionExpired
+              ? "Your session is no longer valid. Please login again."
+              : "Your account is currently restricted. Please login again.")}
         </p>
 
-        {reason && (
+        {reason && !isSessionExpired && (
           <div className="mt-5 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
               Reason
@@ -478,7 +598,7 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
           </div>
         )}
 
-        {until && (
+        {until && !isSessionExpired && (
           <div className="mt-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-yellow-300">
               Locked Until
@@ -496,7 +616,7 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
         <button
           type="button"
           onClick={onOk}
-          className="mt-6 w-full rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+          className={`mt-6 w-full rounded-xl border px-5 py-3 text-sm font-bold transition hover:text-black ${buttonClass}`}
         >
           OK, back to login
         </button>

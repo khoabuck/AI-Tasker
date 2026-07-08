@@ -279,6 +279,54 @@ export const normalizeProposal = (proposal) => {
       ""
     ),
 
+    resubmitNote: getValue(
+      proposal.resubmitNote,
+      proposal.ResubmitNote,
+      raw.resubmitNote,
+      raw.ResubmitNote,
+      ""
+    ),
+
+    rejectionReason: getValue(
+      proposal.rejectionReason,
+      proposal.RejectionReason,
+      proposal.decisionNote,
+      proposal.DecisionNote,
+      raw.rejectionReason,
+      raw.RejectionReason,
+      raw.decisionNote,
+      raw.DecisionNote,
+      ""
+    ),
+
+    decisionNote: getValue(
+      proposal.decisionNote,
+      proposal.DecisionNote,
+      raw.decisionNote,
+      raw.DecisionNote,
+      ""
+    ),
+
+    version: getValue(
+      proposal.version,
+      proposal.Version,
+      proposal.versionNumber,
+      proposal.VersionNumber,
+      raw.version,
+      raw.Version,
+      raw.versionNumber,
+      raw.VersionNumber,
+      ""
+    ),
+
+    latestVersion: getValue(
+      proposal.latestVersion,
+      proposal.LatestVersion,
+      raw.latestVersion,
+      raw.LatestVersion,
+      null
+    ),
+
     milestones: Array.isArray(milestonesRaw)
       ? milestonesRaw.map(normalizeMilestone).filter(Boolean)
       : [],
@@ -331,11 +379,7 @@ export const normalizeWithdrawWarning = (warning) => {
       )
     ),
 
-    title: getValue(
-      raw.title,
-      raw.Title,
-      "Withdraw proposal?"
-    ),
+    title: getValue(raw.title, raw.Title, "Withdraw proposal?"),
 
     message: getValue(
       raw.message,
@@ -449,6 +493,7 @@ export const mapProposalToForm = (proposal) => {
       expectedOutputs: "",
       workingApproach: "",
       preliminaryMilestonePlan: "",
+      resubmitNote: "",
       milestones: [{ title: "", amount: "", durationDays: "" }],
     };
   }
@@ -466,6 +511,7 @@ export const mapProposalToForm = (proposal) => {
     expectedOutputs: normalized.expectedOutputs || "",
     workingApproach: normalized.workingApproach || "",
     preliminaryMilestonePlan: normalized.preliminaryMilestonePlan || "",
+    resubmitNote: normalized.resubmitNote || "",
     milestones:
       normalized.milestones.length > 0
         ? normalized.milestones.map((milestone) => ({
@@ -620,10 +666,10 @@ const proposalService = {
     const jobId =
       currentProposal?.jobId || formData?.jobId || formData?.jobPostingId;
 
-    const response = await proposalApi.resubmitProposal(
-      proposalId,
-      buildProposalPayload(jobId, formData, { draft: false })
-    );
+    const response = await proposalApi.resubmitProposal(proposalId, {
+      ...buildProposalPayload(jobId, formData, { draft: false }),
+      resubmitNote: String(formData?.resubmitNote || "").trim(),
+    });
 
     return normalizeProposal(unwrapData(response));
   },

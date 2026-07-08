@@ -298,7 +298,6 @@ export default function SubmitProposalPage() {
     }
   };
 
-
   const ensureCanSubmitProposal = async () => {
     try {
       setAccessLoading(true);
@@ -423,6 +422,8 @@ export default function SubmitProposalPage() {
           returnTo: window.location.pathname + window.location.search,
           reason: "BUY_PROPOSAL_CREDITS",
           packageId,
+          depositAmount: price,
+          autoOpenDeposit: true,
         },
       });
 
@@ -456,6 +457,8 @@ export default function SubmitProposalPage() {
             returnTo: window.location.pathname + window.location.search,
             reason: "BUY_PROPOSAL_CREDITS",
             packageId,
+            depositAmount: Number(pkg.price || 0),
+            autoOpenDeposit: true,
           },
         });
       }
@@ -980,6 +983,8 @@ export default function SubmitProposalPage() {
                 returnTo: window.location.pathname + window.location.search,
                 reason: "BUY_PROPOSAL_CREDITS",
                 packageId: pkg?.packageId,
+                depositAmount: Number(pkg?.price || 0),
+                autoOpenDeposit: true,
               },
             })
           }
@@ -1006,7 +1011,7 @@ function UpgradeProposalModal({
         <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
           <div>
             <p className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-cyan-300">
-              Upgrade Required
+              Credits Required
             </p>
 
             <h2 className="text-2xl font-black text-white">

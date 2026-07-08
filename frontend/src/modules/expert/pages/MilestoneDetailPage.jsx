@@ -596,8 +596,8 @@ export default function MilestoneDetailPage() {
 
               <HeroInfo
                 icon="payments"
-                label="Payment"
-                value={formatMoney(milestone.amount)}
+                label="Net Earning"
+                value={formatMoney(getMilestoneNetEarning(milestone))}
               />
 
               <HeroInfo
@@ -861,6 +861,8 @@ export default function MilestoneDetailPage() {
             </main>
 
             <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
+              <MilestonePaymentCard milestone={milestone} />
+
               <Card title="Review Flow" icon="route">
                 <Step
                   active={!hasSubmission}
@@ -929,6 +931,52 @@ export default function MilestoneDetailPage() {
         />
       )}
     </ExpertLayout>
+  );
+}
+
+function MilestonePaymentCard({ milestone }) {
+  const amount = getMilestoneAmount(milestone);
+  const feeRate = getExpertFeeRate(milestone);
+  const fee = getMilestoneServiceFee(milestone);
+  const net = getMilestoneNetEarning(milestone);
+
+  return (
+    <section className="rounded-3xl border border-green-400/20 bg-green-400/10 p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-green-400/20 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">payments</span>
+        </div>
+        <div>
+          <h2 className="text-lg font-extrabold text-white">Milestone Payment</h2>
+          <p className="text-xs text-green-100/70">After expert service fee</p>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <PaymentLine label="Milestone Amount" value={formatMoney(amount)} />
+        <PaymentLine
+          label={`Service Fee${feeRate ? ` (${feeRate}%)` : ""}`}
+          value={`-${formatMoney(fee)}`}
+        />
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-green-400/30 bg-black/20 p-4">
+        <p className="text-xs uppercase tracking-wider text-green-100/70">Net earning</p>
+        <p className="mt-1 text-2xl font-black text-green-300">{formatMoney(net)}</p>
+        <p className="mt-2 text-xs leading-5 text-green-100/70">
+          When this milestone is released, net earning goes to pending earnings until the project is completed.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function PaymentLine({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
+      <p className="text-sm text-green-100/80">{label}</p>
+      <p className="font-bold text-white">{value}</p>
+    </div>
   );
 }
 
@@ -1650,6 +1698,67 @@ function getClientFeedback(submission) {
     submission?.raw?.reviewNote ||
     ""
   );
+}
+
+function getExpertFeeRate(entity) {
+  return firstPositiveNumber(
+    entity?.expertFeeRate,
+    entity?.ExpertFeeRate,
+    entity?.contract?.expertFeeRate,
+    entity?.Contract?.ExpertFeeRate,
+    entity?.project?.expertFeeRate,
+    entity?.Project?.ExpertFeeRate,
+    entity?.raw?.expertFeeRate,
+    entity?.raw?.ExpertFeeRate,
+    0
+  );
+}
+
+function getMilestoneAmount(milestone) {
+  return firstPositiveNumber(
+    milestone?.amount,
+    milestone?.Amount,
+    milestone?.lockedEscrowAmount,
+    milestone?.escrowAmount,
+    milestone?.raw?.amount,
+    milestone?.raw?.Amount,
+    0
+  );
+}
+
+function getMilestoneServiceFee(milestone) {
+  const direct = firstPositiveNumber(
+    milestone?.expertFeeAmount,
+    milestone?.ExpertFeeAmount,
+    milestone?.expertServiceFeeAmount,
+    milestone?.ExpertServiceFeeAmount,
+    milestone?.raw?.expertFeeAmount,
+    milestone?.raw?.ExpertFeeAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  const rate = getExpertFeeRate(milestone);
+  return rate > 0 ? (getMilestoneAmount(milestone) * rate) / 100 : 0;
+}
+
+function getMilestoneNetEarning(milestone) {
+  const direct = firstPositiveNumber(
+    milestone?.expertNetAmount,
+    milestone?.ExpertNetAmount,
+    milestone?.netAmount,
+    milestone?.NetAmount,
+    milestone?.expertReceivableAmount,
+    milestone?.ExpertReceivableAmount,
+    milestone?.raw?.expertNetAmount,
+    milestone?.raw?.ExpertNetAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  return Math.max(getMilestoneAmount(milestone) - getMilestoneServiceFee(milestone), 0);
 }
 
 function formatMoney(value) {

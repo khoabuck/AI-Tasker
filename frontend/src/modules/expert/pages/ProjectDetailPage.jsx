@@ -217,7 +217,7 @@ export default function ProjectDetailPage() {
 
                   <InfoPill
                     icon="payments"
-                    label={formatMoney(project.totalBudget)}
+                    label={`You receive ${formatMoney(getProjectNetEarning(project, displayedMilestones))}`}
                     variant="success"
                   />
 
@@ -326,7 +326,9 @@ export default function ProjectDetailPage() {
             <aside className="space-y-6">
               <Card title="Quick Overview" icon="monitoring">
                 <Info label="Status" value={getProjectStatusLabel(status)} />
-                <Info label="Budget" value={formatMoney(project.totalBudget)} />
+                <Info label="Contract Amount" value={formatMoney(getProjectGrossAmount(project, displayedMilestones))} />
+                <Info label="Expert Service Fee" value={`-${formatMoney(getProjectServiceFee(project, displayedMilestones))}`} />
+                <Info label="You Receive" value={formatMoney(getProjectNetEarning(project, displayedMilestones))} />
                 <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
                   label="Completed"
@@ -359,6 +361,22 @@ export default function ProjectDetailPage() {
                       <li>Submit work directly inside milestone detail.</li>
                       <li>Track client feedback from your submissions.</li>
                     </ul>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-yellow-300">
+                    payments
+                  </span>
+
+                  <div>
+                    <h3 className="font-bold text-white">Earning rule</h3>
+
+                    <p className="mt-2 text-sm leading-6 text-yellow-100/80">
+                      Service fee is deducted when each milestone is released. Net earnings become pending first, then withdrawable after project completion.
+                    </p>
                   </div>
                 </div>
               </section>
@@ -905,6 +923,108 @@ function getProjectStatusLabel(status) {
   return PROJECT_STATUS_LABEL?.[status] || formatStatusLabel(status || "ACTIVE");
 }
 
+function getProjectGrossAmount(project, milestones = []) {
+  const direct = firstPositiveNumber(
+    project?.totalBudget,
+    project?.TotalBudget,
+    project?.contractAmount,
+    project?.ContractAmount,
+    project?.finalPrice,
+    project?.FinalPrice,
+    project?.raw?.totalBudget,
+    project?.raw?.TotalBudget,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  return (Array.isArray(milestones) ? milestones : []).reduce(
+    (total, milestone) => total + getMilestoneAmount(milestone),
+    0
+  );
+}
+
+function getExpertFeeRate(entity) {
+  return firstPositiveNumber(
+    entity?.expertFeeRate,
+    entity?.ExpertFeeRate,
+    entity?.contract?.expertFeeRate,
+    entity?.Contract?.ExpertFeeRate,
+    entity?.raw?.expertFeeRate,
+    entity?.raw?.ExpertFeeRate,
+    0
+  );
+}
+
+function getProjectServiceFee(project, milestones = []) {
+  const direct = firstPositiveNumber(
+    project?.expertFeeAmount,
+    project?.ExpertFeeAmount,
+    project?.expertServiceFeeAmount,
+    project?.ExpertServiceFeeAmount,
+    project?.raw?.expertFeeAmount,
+    project?.raw?.ExpertFeeAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  const milestoneFees = (Array.isArray(milestones) ? milestones : []).reduce(
+    (total, milestone) => total + getMilestoneServiceFee(milestone),
+    0
+  );
+
+  if (milestoneFees > 0) return milestoneFees;
+
+  const rate = getExpertFeeRate(project);
+  return rate > 0 ? (getProjectGrossAmount(project, milestones) * rate) / 100 : 0;
+}
+
+function getProjectNetEarning(project, milestones = []) {
+  const direct = firstPositiveNumber(
+    project?.expertReceivableAmount,
+    project?.ExpertReceivableAmount,
+    project?.netAmount,
+    project?.NetAmount,
+    project?.raw?.expertReceivableAmount,
+    project?.raw?.ExpertReceivableAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  return Math.max(getProjectGrossAmount(project, milestones) - getProjectServiceFee(project, milestones), 0);
+}
+
+function getMilestoneAmount(milestone) {
+  return firstPositiveNumber(milestone?.amount, milestone?.Amount, milestone?.raw?.amount, milestone?.raw?.Amount, 0);
+}
+
+function getMilestoneServiceFee(milestone) {
+  const direct = firstPositiveNumber(
+    milestone?.expertFeeAmount,
+    milestone?.ExpertFeeAmount,
+    milestone?.expertServiceFeeAmount,
+    milestone?.ExpertServiceFeeAmount,
+    milestone?.raw?.expertFeeAmount,
+    milestone?.raw?.ExpertFeeAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  const rate = getExpertFeeRate(milestone);
+  return rate > 0 ? (getMilestoneAmount(milestone) * rate) / 100 : 0;
+}
+
+function firstPositiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
 function formatMoney(value) {
   const number = Number(value || 0);
 
@@ -922,7 +1042,7 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatInfoValue(value) {

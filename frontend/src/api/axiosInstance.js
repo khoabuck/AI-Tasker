@@ -13,57 +13,21 @@ const getApiBaseUrl = () => {
 };
 
 const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
+const AUTH_ERROR_EVENT = "aitasker-auth-error";
 
-const isAccountBlockedError = (error) => {
-  const status = error?.response?.status;
-  const data = error?.response?.data;
-
-  const message = String(
-    data?.message ||
-      data?.title ||
-      data?.detail ||
-      data?.error ||
-      data ||
-      error?.message ||
-      ""
-  ).toLowerCase();
-
-  if (![401, 403].includes(status)) return false;
-
-  return (
-    message.includes("locked") ||
-    message.includes("lock") ||
-    message.includes("banned") ||
-    message.includes("ban") ||
-    message.includes("suspended") ||
-    message.includes("inactive") ||
-    message.includes("disabled") ||
-    message.includes("blocked") ||
-    message.includes("account status") ||
-    message.includes("tài khoản")
-  );
+const isAuthMeRequest = (config) => {
+  return String(config?.url || "").includes("/auth/me");
 };
 
-const getAccountBlockedMessage = (error) => {
-  const data = error?.response?.data;
-
-  return (
-    data?.message ||
-    data?.title ||
-    data?.detail ||
-    data?.error ||
-    "Your account has been locked or banned. Please login again."
-  );
-};
-
-const dispatchAccountBlockedEvent = (error) => {
+const dispatchAuthErrorEvent = (error) => {
   if (typeof window === "undefined") return;
+  if (isAuthMeRequest(error?.config)) return;
 
   window.dispatchEvent(
-    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
+    new CustomEvent(AUTH_ERROR_EVENT, {
       detail: {
-        message: getAccountBlockedMessage(error),
         status: error?.response?.status,
+        url: error?.config?.url || "",
       },
     })
   );
@@ -102,13 +66,15 @@ axiosInstance.interceptors.request.use(
 axiosInstance.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (isAccountBlockedError(error)) {
-      dispatchAccountBlockedEvent(error);
+    const status = error?.response?.status;
+
+    if (status === 401 || status === 403) {
+      dispatchAuthErrorEvent(error);
     }
 
     return Promise.reject(error);
   }
 );
 
-export { ACCOUNT_BLOCKED_EVENT };
+export { ACCOUNT_BLOCKED_EVENT, AUTH_ERROR_EVENT };
 export default axiosInstance;

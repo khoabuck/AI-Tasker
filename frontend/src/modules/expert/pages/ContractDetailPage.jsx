@@ -337,27 +337,6 @@ export default function ContractDetailPage() {
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} contract={contract} />
-
-                  {realContractId && (
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-300">
-                      Contract #{realContractId}
-                    </span>
-                  )}
-
-                  {getField(
-                    contract,
-                    ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
-                    ""
-                  ) && (
-                    <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
-                      Proposal Version{" "}
-                      {getField(
-                        contract,
-                        ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
-                        ""
-                      )}
-                    </span>
-                  )}
                 </div>
 
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
@@ -537,52 +516,34 @@ export default function ContractDetailPage() {
             </main>
 
             <aside className="space-y-6">
-              <PaymentSummary contract={contract} />
+              <PaymentSummary contract={contract} milestones={milestoneDrafts} />
 
               <Card title="Contract Info" icon="info">
                 <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
-                <Info label="Expert" value={expertName} />
-
                 <Info
-                  label="Client Confirmed"
-                  value={formatBoolean(isClientConfirmed(contract))}
+                  label="Timeline"
+                  value={`${getTimelineDays(contract)} days`}
                 />
-
-                <Info
-                  label="Expert Confirmed"
-                  value={formatBoolean(isExpertConfirmed(contract))}
-                />
-
-                {realProposalId && <Info label="Proposal" value={`#${realProposalId}`} />}
-                {realJobId && <Info label="Job" value={`#${realJobId}`} />}
-                {realProjectId && <Info label="Project" value={`#${realProjectId}`} />}
-              </Card>
-
-              <Card title="Dates" icon="event">
                 <Info
                   label="Created"
                   value={formatDate(getField(contract, ["createdAt", "CreatedAt"], ""))}
                 />
-
-                {getField(contract, ["confirmedAt", "ConfirmedAt"], "") && (
-                  <Info
-                    label="Confirmed"
-                    value={formatDate(
-                      getField(contract, ["confirmedAt", "ConfirmedAt"], "")
-                    )}
-                  />
-                )}
-
-                {getField(contract, ["cancelledAt", "CancelledAt"], "") && (
-                  <Info
-                    label="Declined"
-                    value={formatDate(
-                      getField(contract, ["cancelledAt", "CancelledAt"], "")
-                    )}
-                  />
-                )}
               </Card>
+
+              <section className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-yellow-300">
+                    info
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white">Earning note</h3>
+                    <p className="mt-2 text-sm leading-6 text-yellow-100/80">
+                      Expert service fee is deducted when each milestone payment is released. Released net earnings stay pending until the project is completed.
+                    </p>
+                  </div>
+                </div>
+              </section>
             </aside>
           </div>
         </div>
@@ -624,10 +585,10 @@ function AcceptSuccessModal({ projectId }) {
   );
 }
 
-function PaymentSummary({ contract }) {
-  const finalPrice = getFinalPrice(contract);
-  const platformFee = getPlatformFee(contract);
-  const totalClientPayment = getTotalClientPayment(contract);
+function PaymentSummary({ contract, milestones = [] }) {
+  const contractAmount = getFinalPrice(contract);
+  const expertFeeRate = getExpertFeeRate(contract);
+  const expertServiceFee = getExpertServiceFee(contract);
   const expertReceivable = getExpertReceivable(contract);
 
   return (
@@ -640,26 +601,32 @@ function PaymentSummary({ contract }) {
         </div>
 
         <div>
-          <h2 className="font-extrabold text-white">Payment Summary</h2>
+          <h2 className="font-extrabold text-white">Your Payment</h2>
           <p className="text-xs text-green-100/70">
-            Clear breakdown for this contract
+            Estimated earning after expert service fee
           </p>
         </div>
       </div>
 
       <div className="space-y-3">
-        <PaymentRow label="Contract Amount" value={formatMoney(finalPrice)} />
-        <PaymentRow label="Platform Fee" value={formatMoney(platformFee)} />
-        <PaymentRow label="Client Pays" value={formatMoney(totalClientPayment)} />
+        <PaymentRow label="Contract Amount" value={formatMoney(contractAmount)} />
+        <PaymentRow
+          label={`Expert Service Fee${expertFeeRate ? ` (${expertFeeRate}%)` : ""}`}
+          value={`-${formatMoney(expertServiceFee)}`}
+        />
       </div>
 
       <div className="mt-4 rounded-xl border border-green-400/30 bg-black/20 p-4">
         <p className="text-xs uppercase tracking-wider text-green-100/70">
-          You receive
+          You receive after fee
         </p>
 
         <p className="mt-1 text-2xl font-black text-green-300">
           {formatMoney(expertReceivable)}
+        </p>
+
+        <p className="mt-2 text-xs leading-5 text-green-100/70">
+          This is paid into pending earnings milestone by milestone, then becomes withdrawable after project completion.
         </p>
       </div>
     </section>
@@ -733,25 +700,31 @@ function MilestoneDraftCard({ milestone, index }) {
       <TextValue value={milestone.description || "No description."} />
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info
-          label="Expected Deliverable"
-          value={milestone.expectedDeliverable || "N/A"}
-        />
+        {milestone.expectedDeliverable && (
+          <Info
+            label="Expected Deliverable"
+            value={milestone.expectedDeliverable}
+          />
+        )}
+
+        {milestone.acceptanceCriteria && (
+          <Info
+            label="Acceptance Criteria"
+            value={milestone.acceptanceCriteria}
+          />
+        )}
 
         <Info
-          label="Acceptance Criteria"
-          value={milestone.acceptanceCriteria || "N/A"}
+          label="Amount"
+          value={formatMoney(milestone.amount)}
         />
-
-        <Info label="Amount" value={formatMoney(milestone.amount)} />
 
         <Info
           label="Deadline"
-          value={
-            milestone.deadlineOffsetDays || milestone.durationDays
-              ? `${milestone.deadlineOffsetDays || milestone.durationDays} days`
-              : "N/A"
-          }
+          value={`${milestone.deadlineOffsetDays ??
+            milestone.durationDays ??
+            0
+            } days`}
         />
       </div>
     </div>
@@ -903,42 +876,49 @@ function getFinalPrice(contract) {
   return getExpertReceivable(contract);
 }
 
-function getPlatformFee(contract) {
+function getExpertFeeRate(contract) {
   return getNumberField(
     contract,
-    ["platformFeeAmount", "PlatformFeeAmount", "platformFee", "PlatformFee"],
+    ["expertFeeRate", "ExpertFeeRate", "expertServiceFeeRate", "ExpertServiceFeeRate"],
     0
   );
 }
 
-function getTotalClientPayment(contract) {
-  return getNumberField(
+function getExpertServiceFee(contract) {
+  const direct = getNumberField(
     contract,
     [
-      "totalClientPayment",
-      "TotalClientPayment",
-      "clientPaymentAmount",
-      "ClientPaymentAmount",
+      "expertFeeAmount",
+      "ExpertFeeAmount",
+      "expertServiceFeeAmount",
+      "ExpertServiceFeeAmount",
     ],
-    getFinalPrice(contract) + getPlatformFee(contract)
+    0
   );
+
+  if (direct > 0) return direct;
+
+  const rate = getExpertFeeRate(contract);
+  return rate > 0 ? (getFinalPrice(contract) * rate) / 100 : 0;
 }
 
 function getExpertReceivable(contract) {
-  return getNumberField(
+  const direct = getNumberField(
     contract,
     [
       "expertReceivableAmount",
       "ExpertReceivableAmount",
       "expertAmount",
       "ExpertAmount",
-      "totalAmount",
-      "TotalAmount",
-      "amount",
-      "Amount",
+      "netAmount",
+      "NetAmount",
     ],
     0
   );
+
+  if (direct > 0) return direct;
+
+  return Math.max(getFinalPrice(contract) - getExpertServiceFee(contract), 0);
 }
 
 function getTimelineDays(contract) {
@@ -1253,7 +1233,7 @@ function formatDate(value) {
   if (!value) return "N/A";
 
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));
@@ -1299,11 +1279,11 @@ function getFriendlyError(error, fallback = "Something went wrong.") {
     typeof payload === "string"
       ? payload
       : payload?.message ||
-        payload?.title ||
-        payload?.detail ||
-        payload?.error ||
-        error?.message ||
-        "";
+      payload?.title ||
+      payload?.detail ||
+      payload?.error ||
+      error?.message ||
+      "";
 
   const lower = String(message || "").toLowerCase();
 

@@ -94,7 +94,7 @@ export default function ProposalVersionsPage() {
                 </h1>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review all versions you submitted for this proposal.
+                  Review the proposal changes you submitted over time.
                 </p>
               </div>
 
@@ -191,17 +191,6 @@ function VersionCard({ version, index, isLatest }) {
             </span>
           </div>
 
-          <h2 className="text-lg font-bold text-white">
-            Submitted by{" "}
-            {formatDisplayValue(
-              version?.createdByName ||
-                version?.CreatedByName ||
-                version?.expertName ||
-                version?.ExpertName ||
-                "Expert"
-            )}
-          </h2>
-
           {(version?.resubmitNote ||
             version?.ResubmitNote ||
             version?.changeNote ||
@@ -217,7 +206,7 @@ function VersionCard({ version, index, isLatest }) {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 md:min-w-[320px]">
+        <div className="grid grid-cols-3 gap-2 md:min-w-[360px]">
           <MiniInfo
             label="Price"
             value={formatMoney(
@@ -240,11 +229,10 @@ function VersionCard({ version, index, isLatest }) {
           />
 
           <MiniInfo label="Milestones" value={`${milestones.length}`} />
-          <MiniInfo label="Total" value={formatMoney(milestoneTotal)} />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Section title="Cover Letter">
           {formatDisplayValue(version?.coverLetter || version?.CoverLetter)}
         </Section>
@@ -256,15 +244,6 @@ function VersionCard({ version, index, isLatest }) {
         <Section title="Working Approach">
           {formatDisplayValue(version?.workingApproach || version?.WorkingApproach)}
         </Section>
-
-        <Section title="Milestone Plan">
-          {formatDisplayValue(
-            version?.preliminaryMilestonePlan ||
-              version?.PreliminaryMilestonePlan ||
-              version?.milestonePlan ||
-              version?.MilestonePlan
-          )}
-        </Section>
       </div>
 
       <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -272,7 +251,7 @@ function VersionCard({ version, index, isLatest }) {
           <p className="font-bold text-white">Milestones</p>
 
           <span className="text-xs text-gray-500">
-            {milestoneDuration} days total
+            {milestoneDuration} days total · {formatMoney(milestoneTotal)}
           </span>
         </div>
 
@@ -548,7 +527,7 @@ function formatDate(value) {
   if (!value) return "N/A";
 
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));

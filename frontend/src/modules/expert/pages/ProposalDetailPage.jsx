@@ -32,20 +32,6 @@ export default function ProposalDetailPage() {
     }, 0);
   }, [milestones]);
 
-  const milestoneDuration = useMemo(() => {
-    return milestones.reduce((total, milestone) => {
-      const durationDays = Number(
-        milestone?.durationDays ||
-          milestone?.DurationDays ||
-          milestone?.deadlineOffsetDays ||
-          milestone?.DeadlineOffsetDays ||
-          0
-      );
-
-      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
-    }, 0);
-  }, [milestones]);
-
   useEffect(() => {
     loadProposal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -159,12 +145,6 @@ export default function ProposalDetailPage() {
                     <div className="mb-4 flex flex-wrap items-center gap-2">
                       <StatusBadge status={status} />
 
-                      {hasVersion(proposal) && (
-                        <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
-                          {formatProposalVersion(proposal)}
-                        </span>
-                      )}
-
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                         Submitted{" "}
                         {formatDate(proposal?.submittedAt || proposal?.createdAt)}
@@ -265,7 +245,7 @@ export default function ProposalDetailPage() {
                 />
               )}
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
                 <main className="space-y-6">
                   <Card title="Cover Letter" icon="description">
                     <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
@@ -282,11 +262,6 @@ export default function ProposalDetailPage() {
                     <DetailBlock
                       label="Working Approach"
                       value={proposal?.workingApproach}
-                    />
-
-                    <DetailBlock
-                      label="Preliminary Milestone Plan"
-                      value={proposal?.preliminaryMilestonePlan}
                     />
                   </Card>
 
@@ -354,52 +329,50 @@ export default function ProposalDetailPage() {
                         )} days`}
                       />
 
+                      <Info label="Milestones" value={`${milestones.length}`} />
+
                       <Info
                         label="Milestone Total"
                         value={formatMoney(milestoneTotal)}
                       />
 
                       <Info
-                        label="Milestone Days"
-                        value={`${milestoneDuration} days`}
-                      />
-
-                      <Info
-                        label="Version"
-                        value={formatProposalVersion(proposal)}
-                      />
-
-                      <Info
                         label="Contract"
                         value={
-                          contractId
-                            ? `#${contractId}`
-                            : statusGroup === "ACCEPTED"
-                            ? "Available from accepted proposal"
-                            : "N/A"
+                          statusGroup === "ACCEPTED" || contractId
+                            ? "Available"
+                            : "No contract yet"
                         }
                       />
                     </div>
                   </Card>
 
-                  <Card title="Dates" icon="event">
+                  <Card title="Important Date" icon="event">
                     <div className="space-y-4">
                       <Info
-                        label="Submitted At"
+                        label="Submitted"
                         value={formatDate(
                           proposal?.submittedAt || proposal?.createdAt
                         )}
                       />
 
-                      <Info
-                        label="Updated At"
-                        value={formatDate(proposal?.updatedAt)}
-                      />
+                      {statusGroup === "ACCEPTED" && (
+                        <Info
+                          label="Accepted"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
 
-                      <Info
-                        label="Decided At"
-                        value={formatDate(proposal?.decidedAt)}
-                      />
+                      {statusGroup === "REJECTED" && (
+                        <Info
+                          label="Rejected"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
                     </div>
                   </Card>
                 </aside>
@@ -434,7 +407,7 @@ function AcceptedContractNotice({ contractId, onViewContract }) {
 
             {!contractId && (
               <p className="mt-2 text-xs font-semibold text-green-200/80">
-                The contract will be loaded using this proposal ID.
+                The contract will be loaded using this proposal.
               </p>
             )}
           </div>
@@ -672,40 +645,6 @@ function getProposalStatusLabel(statusGroup) {
   return map[statusGroup] || "Submitted";
 }
 
-function hasVersion(proposal) {
-  return Boolean(
-    proposal?.version ||
-      proposal?.Version ||
-      proposal?.latestVersion ||
-      proposal?.LatestVersion
-  );
-}
-
-function formatProposalVersion(proposal) {
-  const version =
-    proposal?.version ||
-    proposal?.Version ||
-    proposal?.latestVersion ||
-    proposal?.LatestVersion;
-
-  if (!version) return "Version N/A";
-
-  if (typeof version === "object") {
-    const versionNumber =
-      version.versionNumber ||
-      version.VersionNumber ||
-      version.version ||
-      version.Version ||
-      version.proposalVersionId ||
-      version.ProposalVersionId ||
-      "N/A";
-
-    return `Version ${versionNumber}`;
-  }
-
-  return `Version ${version}`;
-}
-
 function formatMoney(value) {
   const number = Number(value || 0);
 
@@ -728,7 +667,7 @@ function formatDate(value) {
   if (!value) return "N/A";
 
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));

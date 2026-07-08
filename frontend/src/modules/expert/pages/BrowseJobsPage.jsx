@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
 import jobService from "../../../services/job.service";
+import proposalService from "../../../services/proposal.service";
 import { JobDetailModal } from "./JobDetailPage";
 
 const JOBS_PER_PAGE = 6;
@@ -29,6 +30,8 @@ export default function BrowseJobsPage() {
 
   const [jobs, setJobs] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [myProposals, setMyProposals] = useState([]);
+  const [myDrafts, setMyDrafts] = useState([]);
 
   const [keyword, setKeyword] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
@@ -48,12 +51,21 @@ export default function BrowseJobsPage() {
 
   const expertProfile = useMemo(() => normalizeProfile(profile), [profile]);
 
+  const proposalByJobId = useMemo(() => {
+    return createProposalMap(myProposals, { includeDrafts: false });
+  }, [myProposals]);
+
+  const draftByJobId = useMemo(() => {
+    return createProposalMap(myDrafts, { includeDrafts: true });
+  }, [myDrafts]);
+
   const activeJobs = useMemo(() => {
     return jobs
       .map((job) => normalizeJob(job, expertProfile))
       .filter((job) => job.id)
-      .filter(isActiveJob);
-  }, [jobs, expertProfile]);
+      .filter(isActiveJob)
+      .map((job) => attachApplicationState(job, proposalByJobId, draftByJobId));
+  }, [jobs, expertProfile, proposalByJobId, draftByJobId]);
 
   const categories = useMemo(() => {
     return getUniqueValues(activeJobs.map((job) => job.category));
@@ -148,10 +160,13 @@ export default function BrowseJobsPage() {
       setLoading(true);
       setError("");
 
-      const [jobsResult, profileResult] = await Promise.allSettled([
-        jobService.getOpenJobs(),
-        expertProfileService.getMyExpertProfile(),
-      ]);
+      const [jobsResult, profileResult, proposalsResult, draftsResult] =
+        await Promise.allSettled([
+          jobService.getOpenJobs(),
+          expertProfileService.getMyExpertProfile(),
+          proposalService.getMyProposals(),
+          proposalService.getMyDraftProposals(),
+        ]);
 
       if (jobsResult.status === "fulfilled") {
         setJobs(Array.isArray(jobsResult.value) ? jobsResult.value : []);
@@ -167,6 +182,28 @@ export default function BrowseJobsPage() {
           profileResult.reason?.response?.data || profileResult.reason
         );
         setProfile(null);
+      }
+
+      if (proposalsResult.status === "fulfilled") {
+        setMyProposals(
+          Array.isArray(proposalsResult.value) ? proposalsResult.value : []
+        );
+      } else {
+        console.warn(
+          "LOAD MY PROPOSALS WARNING:",
+          proposalsResult.reason?.response?.data || proposalsResult.reason
+        );
+        setMyProposals([]);
+      }
+
+      if (draftsResult.status === "fulfilled") {
+        setMyDrafts(Array.isArray(draftsResult.value) ? draftsResult.value : []);
+      } else {
+        console.warn(
+          "LOAD MY DRAFTS WARNING:",
+          draftsResult.reason?.response?.data || draftsResult.reason
+        );
+        setMyDrafts([]);
       }
     } catch (err) {
       console.error("LOAD JOBS ERROR:", err?.response?.data || err);
@@ -197,6 +234,25 @@ export default function BrowseJobsPage() {
     }
 
     setSelectedJobId(job.id);
+  };
+
+  const handleOpenJobAction = (job) => {
+    if (!job?.id) {
+      setError("This job is unavailable right now. Please try another job.");
+      return;
+    }
+
+    if (job.applicationStatus === "SUBMITTED" && job.proposal?.proposalId) {
+      navigate(`/expert/proposals/${job.proposal.proposalId}`);
+      return;
+    }
+
+    if (job.applicationStatus === "DRAFT" && job.draft?.proposalId) {
+      navigate(`/expert/jobs/${job.id}/proposal?draftId=${job.draft.proposalId}`);
+      return;
+    }
+
+    navigate(`/expert/jobs/${job.id}/proposal`);
   };
 
   return (
@@ -392,7 +448,7 @@ export default function BrowseJobsPage() {
                     key={job.id}
                     job={job}
                     onViewDetail={() => handleViewDetail(job)}
-                    onSubmit={() => navigate(`/expert/jobs/${job.id}/proposal`)}
+                    onSubmit={() => handleOpenJobAction(job)}
                   />
                 ))}
               </div>
@@ -430,7 +486,9 @@ function JobRow({ job, onViewDetail, onSubmit }) {
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <FitBadge score={job.matchScore} />
             <Badge>{job.category}</Badge>
-            <Badge tone="green">Open</Badge>
+            <Badge tone={getApplicationBadge(job).tone}>
+              {getApplicationBadge(job).label}
+            </Badge>
             {job.complexity && <Badge tone="purple">{job.complexity}</Badge>}
           </div>
                     <h2 className="text-lg font-extrabold text-white">{job.title}</h2>
@@ -511,9 +569,9 @@ function JobRow({ job, onViewDetail, onSubmit }) {
             <button
               type="button"
               onClick={onSubmit}
-              className="flex-1 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              className={getPrimaryActionClass(job, "cyan")}
             >
-              Apply
+              {getPrimaryActionLabel(job)}
             </button>
           </div>
         </div>
@@ -667,6 +725,154 @@ function EmptyState({ title, description }) {
     </div>
   );
 }
+
+
+function createProposalMap(items, options = {}) {
+  const includeDrafts = options.includeDrafts === true;
+  const map = new Map();
+
+  if (!Array.isArray(items)) return map;
+
+  items.forEach((item) => {
+    const status = String(item?.status || item?.Status || "").toUpperCase();
+
+    if (!includeDrafts && status === "DRAFT") return;
+    if (includeDrafts && status && status !== "DRAFT") return;
+
+    const jobId = getProposalJobId(item);
+    const proposalId = getProposalId(item);
+
+    if (!jobId || !proposalId || map.has(String(jobId))) return;
+
+    map.set(String(jobId), {
+      ...item,
+      proposalId,
+      jobId,
+      status: status || (includeDrafts ? "DRAFT" : "SUBMITTED"),
+    });
+  });
+
+  return map;
+}
+
+function attachApplicationState(job, proposalByJobId, draftByJobId) {
+  const jobId = String(job?.id || "");
+  const proposal = proposalByJobId.get(jobId);
+  const draft = draftByJobId.get(jobId);
+
+  if (proposal) {
+    return {
+      ...job,
+      proposal,
+      draft: null,
+      applicationStatus: "SUBMITTED",
+      applicationStatusText: formatStatus(proposal.status || "SUBMITTED"),
+    };
+  }
+
+  if (draft) {
+    return {
+      ...job,
+      proposal: null,
+      draft,
+      applicationStatus: "DRAFT",
+      applicationStatusText: "Draft Saved",
+    };
+  }
+
+  return {
+    ...job,
+    proposal: null,
+    draft: null,
+    applicationStatus: "NONE",
+    applicationStatusText: "Open",
+  };
+}
+
+function getProposalJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobId ||
+    proposal?.JobPostingId ||
+    proposal?.raw?.jobId ||
+    proposal?.raw?.jobPostingId ||
+    proposal?.raw?.JobId ||
+    proposal?.raw?.JobPostingId ||
+    ""
+  );
+}
+
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.id ||
+    proposal?.ProposalId ||
+    proposal?.Id ||
+    proposal?.raw?.proposalId ||
+    proposal?.raw?.id ||
+    proposal?.raw?.ProposalId ||
+    proposal?.raw?.Id ||
+    ""
+  );
+}
+
+function getApplicationBadge(job) {
+  if (job.applicationStatus === "SUBMITTED") {
+    const status = String(job.proposal?.status || "").toUpperCase();
+
+    if (status === "ACCEPTED") {
+      return { label: "Accepted", tone: "green" };
+    }
+
+    if (status === "REJECTED") {
+      return { label: "Rejected", tone: "yellow" };
+    }
+
+    if (status === "WITHDRAWN") {
+      return { label: "Withdrawn", tone: "yellow" };
+    }
+
+    return { label: "Proposal Submitted", tone: "green" };
+  }
+
+  if (job.applicationStatus === "DRAFT") {
+    return { label: "Draft Saved", tone: "yellow" };
+  }
+
+  return { label: "Open", tone: "green" };
+}
+
+function getPrimaryActionLabel(job) {
+  if (job.applicationStatus === "SUBMITTED") return "View Proposal";
+  if (job.applicationStatus === "DRAFT") return "Continue Draft";
+
+  return "Apply";
+}
+
+function getPrimaryActionClass(job, theme = "cyan") {
+  if (job.applicationStatus === "SUBMITTED") {
+    return "flex-1 rounded-lg border border-green-400/60 bg-green-400/10 px-3 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black";
+  }
+
+  if (job.applicationStatus === "DRAFT") {
+    return "flex-1 rounded-lg border border-yellow-400/60 bg-yellow-400/10 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black";
+  }
+
+  if (theme === "purple") {
+    return "flex-1 rounded-lg border border-purple-400/60 bg-purple-400/10 px-3 py-2 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black";
+  }
+
+  return "flex-1 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black";
+}
+
+function formatStatus(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 
 function normalizeProfile(profile) {
   return {

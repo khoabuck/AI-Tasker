@@ -656,7 +656,7 @@ export default function ExpertWalletPage() {
               value={formatMoney(balance?.pendingEarningsBalance)}
               icon="hourglass_top"
               tone="yellow"
-              description="Approved milestone earnings waiting for project completion."
+              description="Net milestone earnings after service fee, waiting for project completion."
             />
 
             <BalanceCard
@@ -672,8 +672,20 @@ export default function ExpertWalletPage() {
               value={formatMoney(balance?.totalEarnings)}
               icon="trending_up"
               tone="purple"
-              description="Total earnings tracked for your Expert account."
+              description="Total net earnings tracked for your Expert account."
             />
+          </section>
+
+          <section className="mb-8 rounded-[1.5rem] border border-yellow-400/20 bg-yellow-400/10 p-5">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined text-yellow-300">info</span>
+              <div>
+                <h2 className="font-black text-white">How expert earnings work</h2>
+                <p className="mt-2 text-sm leading-6 text-yellow-100/80">
+                  When a milestone is released, the expert service fee is deducted immediately. The net amount goes to pending earnings and becomes available for withdrawal after the project is completed.
+                </p>
+              </div>
+            </div>
           </section>
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_430px]">
@@ -1709,10 +1721,10 @@ function getTransactionPresentation(transaction) {
   if (type.includes("FEE")) {
     return {
       group: "FEE",
-      typeLabel: "Platform Fee",
+      typeLabel: "Expert Service Fee",
       description: cleanDescription(
         transaction.description,
-        "Platform service fee"
+        "Service fee deducted from released milestone payment"
       ),
       icon: "percent",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",

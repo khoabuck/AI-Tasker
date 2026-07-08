@@ -192,12 +192,22 @@ function MilestoneCard({
 
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-80">
           <div className="space-y-4">
-            <Info label="Amount" value={formatMoney(milestone.amount)} />
+            <Info label="Net Earning" value={formatMoney(getMilestoneNetEarning(milestone))} />
             <Info label="Due Date" value={formatDate(milestone.dueDate)} />
             <Info
               label="Status"
               value={MILESTONE_STATUS_LABEL[status] || formatStatusLabel(status)}
             />
+
+            <div className="rounded-xl border border-green-400/20 bg-green-400/10 p-3">
+              <p className="text-xs uppercase tracking-wider text-green-100/70">Payment Breakdown</p>
+              <p className="mt-1 text-sm font-bold text-white">
+                {formatMoney(getMilestoneAmount(milestone))}
+              </p>
+              <p className="mt-1 text-xs text-green-100/70">
+                Fee -{formatMoney(getMilestoneServiceFee(milestone))} · You receive {formatMoney(getMilestoneNetEarning(milestone))}
+              </p>
+            </div>
 
             <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-3">
               <button
@@ -327,6 +337,71 @@ function canOpenDisputeFromMilestoneStatus(status) {
   ].includes(value);
 }
 
+function getExpertFeeRate(entity) {
+  return firstPositiveNumber(
+    entity?.expertFeeRate,
+    entity?.ExpertFeeRate,
+    entity?.contract?.expertFeeRate,
+    entity?.Contract?.ExpertFeeRate,
+    entity?.project?.expertFeeRate,
+    entity?.Project?.ExpertFeeRate,
+    entity?.raw?.expertFeeRate,
+    entity?.raw?.ExpertFeeRate,
+    0
+  );
+}
+
+function getMilestoneAmount(milestone) {
+  return firstPositiveNumber(
+    milestone?.amount,
+    milestone?.Amount,
+    milestone?.raw?.amount,
+    milestone?.raw?.Amount,
+    0
+  );
+}
+
+function getMilestoneServiceFee(milestone) {
+  const direct = firstPositiveNumber(
+    milestone?.expertFeeAmount,
+    milestone?.ExpertFeeAmount,
+    milestone?.expertServiceFeeAmount,
+    milestone?.ExpertServiceFeeAmount,
+    milestone?.raw?.expertFeeAmount,
+    milestone?.raw?.ExpertFeeAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  const rate = getExpertFeeRate(milestone);
+  return rate > 0 ? (getMilestoneAmount(milestone) * rate) / 100 : 0;
+}
+
+function getMilestoneNetEarning(milestone) {
+  const direct = firstPositiveNumber(
+    milestone?.expertNetAmount,
+    milestone?.ExpertNetAmount,
+    milestone?.netAmount,
+    milestone?.NetAmount,
+    milestone?.raw?.expertNetAmount,
+    milestone?.raw?.ExpertNetAmount,
+    0
+  );
+
+  if (direct > 0) return direct;
+
+  return Math.max(getMilestoneAmount(milestone) - getMilestoneServiceFee(milestone), 0);
+}
+
+function firstPositiveNumber(...values) {
+  for (const value of values) {
+    const number = Number(value);
+    if (Number.isFinite(number) && number > 0) return number;
+  }
+  return 0;
+}
+
 function formatMoney(value) {
   const number = Number(value || 0);
 
@@ -342,7 +417,7 @@ function formatDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString();
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatStatusLabel(status) {
