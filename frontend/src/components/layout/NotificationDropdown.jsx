@@ -412,26 +412,32 @@ export default function NotificationDropdown() {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p
-                        className={`mb-1 truncate text-[13px] leading-5 ${
-                          isUnread
-                            ? "font-semibold text-gray-100"
-                            : "font-normal text-gray-300"
-                        }`}
-                      >
-                        {n.title || n.message || n.content || "Notification"}
-                      </p>
+                    {/* Title */}
+                    <p
+                      className={`mb-1 text-[13px] leading-5 ${
+                        isUnread
+                          ? "font-semibold text-gray-100"
+                          : "font-normal text-gray-300"
+                      }`}
+                    >
+                      {n.title || "Notification"}
+                    </p>
 
-                      {(n.body || n.description) && (
-                        <p className="mb-1.5 overflow-hidden text-xs leading-5 text-gray-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                          {n.body || n.description}
-                        </p>
-                      )}
+                    {/* Content */}
+                    <p className="mb-1 truncate text-xs text-gray-400">
+                      {n.content || n.message || "No content"}
+                    </p>
 
-                      <span className="font-mono text-[11px] text-gray-400">
-                        {formatNotificationTime(n.createdAt)}
-                      </span>
-                    </div>
+                    {/* Type */}
+                    <p className="mb-1 truncate text-[11px] font-mono text-cyan-400">
+                      {n.type || "SYSTEM"}
+                    </p>
+
+                    {/* Time */}
+                    <span className="font-mono text-[11px] text-gray-500">
+                      {formatNotificationTime(n.createdAt || n.createdAtUtc)}
+                    </span>
+                  </div>
                   </button>
                 );
               })}

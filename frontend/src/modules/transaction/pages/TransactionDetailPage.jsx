@@ -193,8 +193,8 @@ export default function TransactionDetailPage() {
           </div>
         </div>
 
-        {/* Related links — chỉ hiện khi có liên kết tới Project/Milestone */}
-        {(transaction.projectId || transaction.milestoneId || transaction.escrowId) && (
+        {/* Related links — chỉ hiện Project và Milestone, không hiện Escrow */}
+        {(transaction.projectId || projectMilestones.length > 0) && (
           <div style={cardStyle}>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               Related Records
@@ -292,13 +292,6 @@ export default function TransactionDetailPage() {
                   </button>
                 );
               })}
-
-              {transaction.escrowId && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#8c90a0" }}>lock</span>
-                  <span style={{ fontSize: 14, color: "#c2c6d6" }}>Escrow #{transaction.escrowId}</span>
-                </div>
-              )}
             </div>
           </div>
         )}
