@@ -1205,7 +1205,7 @@ function UsageTab({
                   <Td>{formatNumber(item.successfulRequests)}</Td>
                   <Td>{formatNumber(item.failedRequests)}</Td>
                   <Td>{formatNumber(item.totalTokens)}</Td>
-                  <Td>{formatUsd(item.estimatedCostUsd)}</Td>
+                  <Td>{formatVnd(item.estimatedCostUsd)}</Td>
                 </tr>
               ))}
             </tbody>
@@ -1899,13 +1899,13 @@ function formatPercent(value) {
   }).format(Number.isNaN(number) ? 0 : number)}%`;
 }
 
-function formatUsd(value) {
+function formatVnd(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 4,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 

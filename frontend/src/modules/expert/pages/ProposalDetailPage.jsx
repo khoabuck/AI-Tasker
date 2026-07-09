@@ -18,6 +18,8 @@ export default function ProposalDetailPage() {
 
   const status = getProposalStatus(proposal);
   const statusGroup = getProposalStatusGroup(status);
+  const contractId = getContractId(proposal);
+  const currentProposalId = getProposalId(proposal) || proposalId;
 
   const milestones = useMemo(() => {
     return Array.isArray(proposal?.milestones) ? proposal.milestones : [];
@@ -27,20 +29,6 @@ export default function ProposalDetailPage() {
     return milestones.reduce((total, milestone) => {
       const amount = Number(milestone?.amount || 0);
       return total + (Number.isNaN(amount) ? 0 : amount);
-    }, 0);
-  }, [milestones]);
-
-  const milestoneDuration = useMemo(() => {
-    return milestones.reduce((total, milestone) => {
-      const durationDays = Number(
-        milestone?.durationDays ||
-          milestone?.DurationDays ||
-          milestone?.deadlineOffsetDays ||
-          milestone?.DeadlineOffsetDays ||
-          0
-      );
-
-      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
     }, 0);
   }, [milestones]);
 
@@ -86,6 +74,20 @@ export default function ProposalDetailPage() {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const handleViewContract = () => {
+    if (contractId) {
+      navigate(`/expert/contracts/${contractId}`);
+      return;
+    }
+
+    if (currentProposalId) {
+      navigate(`/expert/proposals/${currentProposalId}/contract`);
+      return;
+    }
+
+    setError("Cannot open contract because proposal id is missing.");
   };
 
   if (loading) {
@@ -143,12 +145,6 @@ export default function ProposalDetailPage() {
                     <div className="mb-4 flex flex-wrap items-center gap-2">
                       <StatusBadge status={status} />
 
-                      {hasVersion(proposal) && (
-                        <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
-                          {formatProposalVersion(proposal)}
-                        </span>
-                      )}
-
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                         Submitted{" "}
                         {formatDate(proposal?.submittedAt || proposal?.createdAt)}
@@ -194,6 +190,16 @@ export default function ProposalDetailPage() {
                       View Versions
                     </button>
 
+                    {canViewContract(statusGroup, contractId) && (
+                      <button
+                        type="button"
+                        onClick={handleViewContract}
+                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                      >
+                        View Contract
+                      </button>
+                    )}
+
                     {canResubmitProposal(statusGroup) && (
                       <button
                         type="button"
@@ -228,23 +234,18 @@ export default function ProposalDetailPage() {
                         View Job
                       </button>
                     )}
-
-                    {proposal?.contractId && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(`/expert/contracts/${proposal.contractId}`)
-                        }
-                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                      >
-                        View Contract
-                      </button>
-                    )}
                   </div>
                 </div>
               </section>
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+              {statusGroup === "ACCEPTED" && (
+                <AcceptedContractNotice
+                  contractId={contractId}
+                  onViewContract={handleViewContract}
+                />
+              )}
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
                 <main className="space-y-6">
                   <Card title="Cover Letter" icon="description">
                     <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
@@ -261,11 +262,6 @@ export default function ProposalDetailPage() {
                     <DetailBlock
                       label="Working Approach"
                       value={proposal?.workingApproach}
-                    />
-
-                    <DetailBlock
-                      label="Preliminary Milestone Plan"
-                      value={proposal?.preliminaryMilestonePlan}
                     />
                   </Card>
 
@@ -333,48 +329,50 @@ export default function ProposalDetailPage() {
                         )} days`}
                       />
 
+                      <Info label="Milestones" value={`${milestones.length}`} />
+
                       <Info
                         label="Milestone Total"
                         value={formatMoney(milestoneTotal)}
                       />
 
                       <Info
-                        label="Milestone Days"
-                        value={`${milestoneDuration} days`}
+                        label="Contract"
+                        value={
+                          statusGroup === "ACCEPTED" || contractId
+                            ? "Available"
+                            : "No contract yet"
+                        }
                       />
-
-                      <Info
-                        label="Version"
-                        value={formatProposalVersion(proposal)}
-                      />
-
-                      {proposal?.contractId && (
-                        <Info
-                          label="Contract ID"
-                          value={`#${proposal.contractId}`}
-                        />
-                      )}
                     </div>
                   </Card>
 
-                  <Card title="Dates" icon="event">
+                  <Card title="Important Date" icon="event">
                     <div className="space-y-4">
                       <Info
-                        label="Submitted At"
+                        label="Submitted"
                         value={formatDate(
                           proposal?.submittedAt || proposal?.createdAt
                         )}
                       />
 
-                      <Info
-                        label="Updated At"
-                        value={formatDate(proposal?.updatedAt)}
-                      />
+                      {statusGroup === "ACCEPTED" && (
+                        <Info
+                          label="Accepted"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
 
-                      <Info
-                        label="Decided At"
-                        value={formatDate(proposal?.decidedAt)}
-                      />
+                      {statusGroup === "REJECTED" && (
+                        <Info
+                          label="Rejected"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
                     </div>
                   </Card>
                 </aside>
@@ -384,6 +382,46 @@ export default function ProposalDetailPage() {
         </div>
       </div>
     </ExpertLayout>
+  );
+}
+
+function AcceptedContractNotice({ contractId, onViewContract }) {
+  return (
+    <section className="mb-6 rounded-3xl border border-green-400/30 bg-green-400/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.25)] md:p-7">
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-green-400/40 bg-green-400/10 text-green-300">
+            <span className="material-symbols-outlined">verified</span>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-bold text-white">
+              Your proposal was accepted
+            </h2>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-green-100/80">
+              The client has accepted this proposal. Open the contract to review
+              the final terms, milestones, payment amount and confirmation
+              status.
+            </p>
+
+            {!contractId && (
+              <p className="mt-2 text-xs font-semibold text-green-200/80">
+                The contract will be loaded using this proposal.
+              </p>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onViewContract}
+          className="shrink-0 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+        >
+          View Contract
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -428,9 +466,7 @@ function MilestoneCard({ milestone, index }) {
             {formatDisplayValue(milestone?.title || `Milestone ${index + 1}`)}
           </p>
 
-          <p className="mt-1 text-xs text-gray-500">
-            Milestone {index + 1}
-          </p>
+          <p className="mt-1 text-xs text-gray-500">Milestone {index + 1}</p>
         </div>
 
         <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
@@ -514,6 +550,30 @@ function EmptyState({ message }) {
   );
 }
 
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.ProposalId ||
+    proposal?.id ||
+    proposal?.Id ||
+    ""
+  );
+}
+
+function getContractId(proposal) {
+  return (
+    proposal?.contractId ||
+    proposal?.ContractId ||
+    proposal?.contractID ||
+    proposal?.ContractID ||
+    proposal?.contract?.contractId ||
+    proposal?.contract?.id ||
+    proposal?.Contract?.ContractId ||
+    proposal?.Contract?.Id ||
+    ""
+  );
+}
+
 function getJobId(proposal) {
   return (
     proposal?.jobId ||
@@ -551,13 +611,19 @@ function getProposalStatusGroup(status) {
     return "REJECTED";
   }
 
-  if (value === "ACCEPTED") return "ACCEPTED";
+  if (["ACCEPTED", "APPROVED", "SELECTED"].includes(value)) {
+    return "ACCEPTED";
+  }
 
   if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
     return "CANCELLED";
   }
 
   return "SUBMITTED";
+}
+
+function canViewContract(statusGroup, contractId) {
+  return statusGroup === "ACCEPTED" || Boolean(contractId);
 }
 
 function canResubmitProposal(statusGroup) {
@@ -573,53 +639,19 @@ function getProposalStatusLabel(statusGroup) {
     SUBMITTED: "Submitted",
     ACCEPTED: "Accepted",
     REJECTED: "Rejected",
-    CANCELLED: "Cancel",
+    CANCELLED: "Cancelled",
   };
 
   return map[statusGroup] || "Submitted";
 }
 
-function hasVersion(proposal) {
-  return Boolean(
-    proposal?.version ||
-      proposal?.Version ||
-      proposal?.latestVersion ||
-      proposal?.LatestVersion
-  );
-}
-
-function formatProposalVersion(proposal) {
-  const version =
-    proposal?.version ||
-    proposal?.Version ||
-    proposal?.latestVersion ||
-    proposal?.LatestVersion;
-
-  if (!version) return "Version N/A";
-
-  if (typeof version === "object") {
-    const versionNumber =
-      version.versionNumber ||
-      version.VersionNumber ||
-      version.version ||
-      version.Version ||
-      version.proposalVersionId ||
-      version.ProposalVersionId ||
-      "N/A";
-
-    return `Version ${versionNumber}`;
-  }
-
-  return `Version ${version}`;
-}
-
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
@@ -635,7 +667,7 @@ function formatDate(value) {
   if (!value) return "N/A";
 
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));

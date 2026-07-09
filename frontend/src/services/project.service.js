@@ -6,6 +6,27 @@ const getValue = (...values) => {
   );
 };
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
+const toInteger = (value, fallback = 0) => {
+  const number = Number(value);
+  if (Number.isNaN(number)) return fallback;
+  return Math.trunc(number);
+};
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -42,12 +63,18 @@ const unwrapListData = (response) => {
   return [];
 };
 
-export const normalizeMilestone = (milestone) => {
+export const normalizeMilestone = (milestone, index = 0) => {
   if (!milestone) return null;
 
   const milestoneId = getValue(
     milestone.milestoneId,
     milestone.MilestoneId,
+    milestone.milestoneID,
+    milestone.MilestoneID,
+    milestone.projectMilestoneId,
+    milestone.ProjectMilestoneId,
+    milestone.projectMilestoneID,
+    milestone.ProjectMilestoneID,
     milestone.id,
     milestone.Id
   );
@@ -55,19 +82,41 @@ export const normalizeMilestone = (milestone) => {
   const projectId = getValue(
     milestone.projectId,
     milestone.ProjectId,
+    milestone.projectID,
+    milestone.ProjectID,
     milestone.project?.projectId,
     milestone.Project?.ProjectId,
     null
   );
 
-  const status = String(getValue(milestone.status, milestone.Status, "PENDING"))
+  const status = String(
+    getValue(
+      milestone.status,
+      milestone.Status,
+      milestone.milestoneStatus,
+      milestone.MilestoneStatus,
+      "PENDING"
+    )
+  )
     .trim()
     .toUpperCase();
+
+  const order = toInteger(
+    getValue(
+      milestone.order,
+      milestone.Order,
+      milestone.orderIndex,
+      milestone.OrderIndex,
+      milestone.displayOrder,
+      milestone.DisplayOrder,
+      index + 1
+    ),
+    index + 1
+  );
 
   return {
     milestoneId,
     id: milestoneId,
-
     projectId,
 
     title: getValue(
@@ -75,16 +124,24 @@ export const normalizeMilestone = (milestone) => {
       milestone.Title,
       milestone.name,
       milestone.Name,
-      `Milestone #${milestoneId || ""}`
+      `Milestone ${order || index + 1}`
     ),
 
     description: getValue(
       milestone.description,
       milestone.Description,
+      milestone.expectedDeliverable,
+      milestone.ExpectedDeliverable,
       ""
     ),
 
-    amount: Number(
+    acceptanceCriteria: getValue(
+      milestone.acceptanceCriteria,
+      milestone.AcceptanceCriteria,
+      ""
+    ),
+
+    amount: toNumber(
       getValue(
         milestone.amount,
         milestone.Amount,
@@ -93,7 +150,8 @@ export const normalizeMilestone = (milestone) => {
         milestone.budget,
         milestone.Budget,
         0
-      )
+      ),
+      0
     ),
 
     dueDate: getValue(
@@ -101,19 +159,24 @@ export const normalizeMilestone = (milestone) => {
       milestone.DueDate,
       milestone.deadline,
       milestone.Deadline,
+      milestone.endDate,
+      milestone.EndDate,
       ""
     ),
 
-    order: Number(
+    durationDays: toInteger(
       getValue(
-        milestone.order,
-        milestone.Order,
-        milestone.orderIndex,
-        milestone.OrderIndex,
+        milestone.durationDays,
+        milestone.DurationDays,
+        milestone.deadlineOffsetDays,
+        milestone.DeadlineOffsetDays,
         0
-      )
+      ),
+      0
     ),
 
+    order,
+    orderIndex: order,
     status,
 
     escrowStatus: String(
@@ -122,14 +185,15 @@ export const normalizeMilestone = (milestone) => {
       .trim()
       .toUpperCase(),
 
-    deliverableCount: Number(
+    deliverableCount: toInteger(
       getValue(
         milestone.deliverableCount,
         milestone.DeliverableCount,
         milestone.deliverablesCount,
         milestone.DeliverablesCount,
         0
-      )
+      ),
+      0
     ),
 
     createdAt: getValue(milestone.createdAt, milestone.CreatedAt, ""),
@@ -145,6 +209,8 @@ export const normalizeProject = (project) => {
   const projectId = getValue(
     project.projectId,
     project.ProjectId,
+    project.projectID,
+    project.ProjectID,
     project.id,
     project.Id
   );
@@ -152,24 +218,43 @@ export const normalizeProject = (project) => {
   const contractId = getValue(
     project.contractId,
     project.ContractId,
+    project.contractID,
+    project.ContractID,
+    project.projectContractId,
+    project.ProjectContractId,
     project.contract?.contractId,
     project.Contract?.ContractId,
     null
   );
 
-  const status = String(getValue(project.status, project.Status, "ACTIVE"))
+  const status = String(
+    getValue(
+      project.status,
+      project.Status,
+      project.projectStatus,
+      project.ProjectStatus,
+      "ACTIVE"
+    )
+  )
     .trim()
     .toUpperCase();
+
+  const milestones = Array.isArray(project.milestones)
+    ? project.milestones.map(normalizeMilestone).filter(Boolean)
+    : Array.isArray(project.Milestones)
+    ? project.Milestones.map(normalizeMilestone).filter(Boolean)
+    : [];
 
   return {
     projectId,
     id: projectId,
-
     contractId,
 
     proposalId: getValue(
       project.proposalId,
       project.ProposalId,
+      project.proposalID,
+      project.ProposalID,
       project.contract?.proposalId,
       project.Contract?.ProposalId,
       null
@@ -178,8 +263,12 @@ export const normalizeProject = (project) => {
     jobId: getValue(
       project.jobId,
       project.JobId,
+      project.jobID,
+      project.JobID,
       project.jobPostingId,
       project.JobPostingId,
+      project.job?.jobId,
+      project.Job?.JobId,
       null
     ),
 
@@ -192,6 +281,8 @@ export const normalizeProject = (project) => {
       project.Name,
       project.jobTitle,
       project.JobTitle,
+      project.job?.title,
+      project.Job?.Title,
       `Project #${projectId || ""}`
     ),
 
@@ -200,6 +291,8 @@ export const normalizeProject = (project) => {
       project.Description,
       project.scopeOfWork,
       project.ScopeOfWork,
+      project.terms,
+      project.Terms,
       ""
     ),
 
@@ -223,7 +316,7 @@ export const normalizeProject = (project) => {
       "Expert"
     ),
 
-    totalBudget: Number(
+    totalBudget: toNumber(
       getValue(
         project.totalBudget,
         project.TotalBudget,
@@ -233,18 +326,22 @@ export const normalizeProject = (project) => {
         project.TotalAmount,
         project.contractValue,
         project.ContractValue,
+        project.amount,
+        project.Amount,
         0
-      )
+      ),
+      0
     ),
 
-    progressPercent: Number(
+    progressPercent: toNumber(
       getValue(
         project.progressPercent,
         project.ProgressPercent,
         project.progress,
         project.Progress,
         0
-      )
+      ),
+      0
     ),
 
     startDate: getValue(project.startDate, project.StartDate, ""),
@@ -259,94 +356,71 @@ export const normalizeProject = (project) => {
 
     status,
 
-    milestoneCount: Number(
+    milestoneCount: toInteger(
       getValue(
         project.milestoneCount,
         project.MilestoneCount,
         project.milestonesCount,
         project.MilestonesCount,
-        0
-      )
+        milestones.length
+      ),
+      milestones.length
     ),
 
     createdAt: getValue(project.createdAt, project.CreatedAt, ""),
     updatedAt: getValue(project.updatedAt, project.UpdatedAt, ""),
 
-    milestones: Array.isArray(project.milestones)
-      ? project.milestones.map(normalizeMilestone).filter(Boolean)
-      : Array.isArray(project.Milestones)
-      ? project.Milestones.map(normalizeMilestone).filter(Boolean)
-      : [],
-
+    milestones,
     raw: project,
   };
 };
 
 const projectService = {
-  async createProjectFromContract(contractId) {
-    const response = await projectApi.createProjectFromContract(contractId);
-
-    console.log("CREATE PROJECT FROM CONTRACT RESPONSE:", response?.data);
-
-    return normalizeProject(unwrapData(response));
-  },
-
-  async initializeProject(contractId) {
-    const response = await projectApi.initializeProject(contractId);
-
-    console.log("INITIALIZE PROJECT RESPONSE:", response?.data);
-
-    return normalizeProject(unwrapData(response));
-  },
-
   async getMyProjects() {
     const response = await projectApi.getMyProjects();
-
-    console.log("GET MY PROJECTS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeProject).filter(Boolean);
   },
 
   async getProjectById(projectId) {
-    if (!projectId || projectId === "undefined" || projectId === "null") {
+    if (isInvalidId(projectId)) {
       throw new Error("Invalid project id.");
     }
 
     const response = await projectApi.getProjectById(projectId);
 
-    console.log("GET PROJECT DETAIL RESPONSE:", response?.data);
-
     return normalizeProject(unwrapData(response));
   },
 
   async getProjectMilestones(projectId) {
-    if (!projectId || projectId === "undefined" || projectId === "null") {
+    if (isInvalidId(projectId)) {
       throw new Error("Invalid project id.");
     }
 
     const response = await projectApi.getProjectMilestones(projectId);
 
-    console.log("GET PROJECT MILESTONES RESPONSE:", response?.data);
-
-    return unwrapListData(response).map(normalizeMilestone).filter(Boolean);
+    return unwrapListData(response)
+      .map((item, index) => normalizeMilestone(item, index))
+      .filter(Boolean)
+      .sort((a, b) => Number(a.orderIndex || 0) - Number(b.orderIndex || 0));
   },
 
   async createMilestone(projectId, payload) {
-    const response = await projectApi.createMilestone(projectId, payload);
+    if (isInvalidId(projectId)) {
+      throw new Error("Invalid project id.");
+    }
 
-    console.log("CREATE MILESTONE RESPONSE:", response?.data);
+    const response = await projectApi.createMilestone(projectId, payload);
 
     return normalizeMilestone(unwrapData(response));
   },
 
   async completeCheck(projectId) {
-    if (!projectId || projectId === "undefined" || projectId === "null") {
+    if (isInvalidId(projectId)) {
       throw new Error("Invalid project id.");
     }
 
     const response = await projectApi.completeCheck(projectId);
-
-    console.log("PROJECT COMPLETE CHECK RESPONSE:", response?.data);
 
     return unwrapData(response);
   },

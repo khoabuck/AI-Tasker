@@ -12,6 +12,8 @@ const FILTERS = [
   { key: "OPEN", label: "Open" },
   { key: "UNDER_REVIEW", label: "Under Review" },
   { key: "RESOLVED", label: "Resolved" },
+  { key: "CLOSED", label: "Closed" },
+  { key: "REJECTED", label: "Rejected" },
 ];
 
 export default function MyDisputesPage() {
@@ -41,7 +43,6 @@ export default function MyDisputesPage() {
       setError("");
 
       const data = await disputeService.getMyDisputes();
-
       setDisputes(data);
     } catch (err) {
       console.error("LOAD MY DISPUTES ERROR:", err?.response?.data || err);
@@ -154,6 +155,8 @@ export default function MyDisputesPage() {
 
 function DisputeCard({ dispute, onDetail, onProject }) {
   const status = String(dispute.status || "").toUpperCase();
+  const resolutionLabel =
+    RESOLUTION_TYPE_LABEL[dispute.resolutionType] || dispute.resolutionType;
 
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 transition hover:border-cyan-400/40">
@@ -185,15 +188,24 @@ function DisputeCard({ dispute, onDetail, onProject }) {
             {dispute.reason || "No reason."}
           </p>
 
-          {dispute.resolutionType && (
+          {resolutionLabel && (
             <div className="mt-4 rounded-xl border border-green-400/30 bg-green-400/10 p-4 text-green-200">
               <p className="text-xs font-bold uppercase tracking-wider">
                 Resolution
               </p>
 
-              <p className="mt-2 text-sm leading-6">
-                {RESOLUTION_TYPE_LABEL[dispute.resolutionType] ||
-                  dispute.resolutionType}
+              <p className="mt-2 text-sm leading-6">{resolutionLabel}</p>
+            </div>
+          )}
+
+          {dispute.adminDecision && (
+            <div className="mt-4 rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-cyan-100">
+              <p className="text-xs font-bold uppercase tracking-wider">
+                Admin Decision
+              </p>
+
+              <p className="mt-2 line-clamp-3 text-sm leading-6">
+                {dispute.adminDecision}
               </p>
             </div>
           )}
@@ -209,9 +221,10 @@ function DisputeCard({ dispute, onDetail, onProject }) {
             <Info
               label="Milestone"
               value={
-                dispute.milestoneId
+                dispute.milestoneTitle ||
+                (dispute.milestoneId
                   ? `#${dispute.milestoneId}`
-                  : "Whole project"
+                  : "Whole project")
               }
             />
 
@@ -256,11 +269,13 @@ function Info({ label, value }) {
 
 function StatusBadge({ status }) {
   const style =
-    status === "RESOLVED"
+    status === "RESOLVED" || status === "CLOSED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "UNDER_REVIEW"
+      : status === "UNDER_REVIEW" || status === "OPEN"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : "border-red-400/30 bg-red-400/10 text-red-300";
+      : status === "REJECTED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-gray-400/30 bg-gray-400/10 text-gray-300";
 
   return (
     <span
@@ -282,8 +297,12 @@ function Alert({ title, message }) {
 
 function formatMoney(value) {
   const number = Number(value || 0);
-  if (!number) return "$0";
-  return `$${number.toLocaleString()}`;
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
@@ -299,6 +318,7 @@ function getFriendlyError(err, fallback) {
   return (
     err?.response?.data?.message ||
     err?.response?.data?.title ||
+    err?.response?.data?.detail ||
     err?.response?.data ||
     err?.message ||
     fallback

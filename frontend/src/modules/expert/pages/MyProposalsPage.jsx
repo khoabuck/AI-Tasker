@@ -10,21 +10,27 @@ const FILTERS = [
   { key: "SUBMITTED", label: "Submitted" },
   { key: "ACCEPTED", label: "Accepted" },
   { key: "REJECTED", label: "Rejected" },
-  { key: "CANCELLED", label: "Cancel" },
+  { key: "CANCELLED", label: "Cancelled" },
 ];
 
 export default function MyProposalsPage() {
   const navigate = useNavigate();
 
   const [proposals, setProposals] = useState([]);
+  const [draftCount, setDraftCount] = useState(0);
+
   const [filter, setFilter] = useState("ALL");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+
+  const [cancelModal, setCancelModal] = useState(null);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadProposals();
+    loadPage();
   }, []);
 
   const filteredProposals = useMemo(() => {
@@ -45,24 +51,55 @@ export default function MyProposalsPage() {
 
         return result;
       },
-      { ALL: 0 }
+      {
+        ALL: 0,
+        SUBMITTED: 0,
+        ACCEPTED: 0,
+        REJECTED: 0,
+        CANCELLED: 0,
+      }
     );
   }, [proposals]);
 
-  const loadProposals = async () => {
+  const loadPage = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
       setMessage("");
 
-      const data = await proposalService.getMyProposals();
-      setProposals(Array.isArray(data) ? data : []);
+      const [proposalResult, draftResult] = await Promise.allSettled([
+        proposalService.getMyProposals(),
+        typeof proposalService.getMyDraftProposals === "function"
+          ? proposalService.getMyDraftProposals()
+          : Promise.resolve([]),
+      ]);
+
+      if (proposalResult.status === "fulfilled") {
+        setProposals(
+          Array.isArray(proposalResult.value) ? proposalResult.value : []
+        );
+      } else {
+        throw proposalResult.reason;
+      }
+
+      if (draftResult.status === "fulfilled") {
+        setDraftCount(
+          Array.isArray(draftResult.value) ? draftResult.value.length : 0
+        );
+      }
     } catch (err) {
       console.error("LOAD PROPOSALS ERROR:", err?.response?.data || err);
       setError(getFriendlyProposalError(err, "Cannot load proposals."));
       setProposals([]);
+      setDraftCount(0);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -124,10 +161,10 @@ export default function MyProposalsPage() {
       return;
     }
 
-    setError("Cannot open contract because contract information is missing.");
+    setError("Cannot open contract because proposal id is missing.");
   };
 
-  const handleCancelProposal = async (proposal) => {
+  const handleOpenCancelProposal = async (proposal) => {
     const proposalId = getProposalId(proposal);
 
     if (!proposalId) {
@@ -135,19 +172,57 @@ export default function MyProposalsPage() {
       return;
     }
 
-    const ok = window.confirm("Are you sure you want to cancel this proposal?");
-
-    if (!ok) return;
-
     try {
       setActionLoadingId(proposalId);
       setError("");
       setMessage("");
 
-      await proposalService.withdrawProposal(proposalId);
+      let warning = null;
 
+      if (typeof proposalService.getWithdrawWarning === "function") {
+        warning = await proposalService.getWithdrawWarning(proposalId);
+      }
+
+      setCancelModal({
+        proposal,
+        proposalId,
+        warning: normalizeCancelWarning(warning),
+        reason: "",
+      });
+    } catch (err) {
+      console.error("LOAD CANCEL WARNING ERROR:", err?.response?.data || err);
+      setCancelModal({
+        proposal,
+        proposalId,
+        warning: normalizeCancelWarning(null),
+        reason: "",
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmCancelProposal = async () => {
+    if (!cancelModal?.proposalId) return;
+
+    const warning = cancelModal.warning || {};
+    const reason = String(cancelModal.reason || "").trim();
+
+    if (warning.requiresReason && !reason) {
+      setError("Please enter a reason before cancelling this proposal.");
+      return;
+    }
+
+    try {
+      setActionLoadingId(cancelModal.proposalId);
+      setError("");
+      setMessage("");
+
+      await proposalService.withdrawProposal(cancelModal.proposalId, reason);
+
+      setCancelModal(null);
       setMessage("Proposal cancelled successfully.");
-      await loadProposals();
+      await loadPage({ silent: true });
     } catch (err) {
       console.error("CANCEL PROPOSAL ERROR:", err?.response?.data || err);
       setError(getFriendlyProposalError(err, "Cannot cancel proposal."));
@@ -171,18 +246,33 @@ export default function MyProposalsPage() {
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                Track submitted proposals, update versions, or open contracts
-                for accepted proposals.
+                Track submitted proposals, update versions, manage drafts, or
+                open contracts for accepted proposals.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => navigate("/expert/jobs")}
-              className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-            >
-              Browse Jobs
-            </button>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => navigate("/expert/proposal/drafts")}
+                className="relative w-fit rounded-xl border border-purple-400/50 bg-purple-400/10 px-4 py-2.5 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
+              >
+                My Drafts
+                {draftCount > 0 && (
+                  <span className="ml-2 rounded-full bg-purple-300 px-2 py-0.5 text-[11px] font-black text-black">
+                    {draftCount}
+                  </span>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/expert/jobs")}
+                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              >
+                Browse Jobs
+              </button>
+            </div>
           </div>
 
           {message && (
@@ -193,24 +283,50 @@ export default function MyProposalsPage() {
             <Alert type="danger" title="Proposal error" message={error} />
           )}
 
-          <div className="mb-5 flex flex-wrap gap-2">
-            {FILTERS.map((item) => (
-              <button
-                key={item.key}
-                type="button"
-                onClick={() => setFilter(item.key)}
-                className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
-                  filter === item.key
-                    ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-300"
-                    : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-                }`}
-              >
-                {item.label}
-                <span className="ml-2 text-[11px] opacity-70">
-                  {counters[item.key] || 0}
-                </span>
-              </button>
-            ))}
+          <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <SummaryCard label="Total" value={counters.ALL || 0} icon="list_alt" />
+            <SummaryCard
+              label="Submitted"
+              value={counters.SUBMITTED || 0}
+              icon="schedule"
+            />
+            <SummaryCard
+              label="Accepted"
+              value={counters.ACCEPTED || 0}
+              icon="check_circle"
+            />
+            <SummaryCard label="Drafts" value={draftCount} icon="draft" />
+          </section>
+
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap gap-2">
+              {FILTERS.map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  onClick={() => setFilter(item.key)}
+                  className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
+                    filter === item.key
+                      ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-300"
+                      : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
+                  }`}
+                >
+                  {item.label}
+                  <span className="ml-2 text-[11px] opacity-70">
+                    {counters[item.key] || 0}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadPage({ silent: true })}
+              disabled={refreshing}
+              className="text-xs font-black uppercase tracking-wider text-cyan-300 transition hover:text-cyan-200 disabled:opacity-50"
+            >
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </button>
           </div>
 
           {loading && (
@@ -233,13 +349,23 @@ export default function MyProposalsPage() {
                 Browse open jobs and send your first proposal.
               </p>
 
-              <button
-                type="button"
-                onClick={() => navigate("/expert/jobs")}
-                className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-              >
-                Browse Jobs
-              </button>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate("/expert/proposal/drafts")}
+                  className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                >
+                  View Drafts
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate("/expert/jobs")}
+                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                >
+                  Browse Jobs
+                </button>
+              </div>
             </div>
           )}
 
@@ -255,13 +381,28 @@ export default function MyProposalsPage() {
                   onResubmit={() => goToProposalResubmit(proposal)}
                   onJob={() => goToJob(proposal)}
                   onContract={() => goToContract(proposal)}
-                  onCancel={() => handleCancelProposal(proposal)}
+                  onCancel={() => handleOpenCancelProposal(proposal)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {cancelModal && (
+        <CancelProposalModal
+          modal={cancelModal}
+          actionLoadingId={actionLoadingId}
+          onReasonChange={(reason) =>
+            setCancelModal((prev) => ({
+              ...prev,
+              reason,
+            }))
+          }
+          onClose={() => setCancelModal(null)}
+          onConfirm={handleConfirmCancelProposal}
+        />
+      )}
     </ExpertLayout>
   );
 }
@@ -374,16 +515,15 @@ function ProposalRow({
 
         <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
           <ActionButton label="Detail" tone="cyan" onClick={onDetail} />
-          <ActionButton label="Versions" tone="purple" onClick={onVersions} />
+
+          {statusGroup !== "REJECTED" && (
+            <ActionButton label="Versions" tone="purple" onClick={onVersions} />
+          )}
 
           {jobId && <ActionButton label="Job" tone="gray" onClick={onJob} />}
 
-          {shouldShowContract && (
-            <ActionButton
-              label="Contract"
-              tone="green"
-              onClick={onContract}
-            />
+          {shouldShowContract && statusGroup !== "REJECTED" && (
+            <ActionButton label="Contract" tone="green" onClick={onContract} />
           )}
 
           {canResubmitProposal(statusGroup) && (
@@ -392,14 +532,179 @@ function ProposalRow({
 
           {canCancelProposal(statusGroup) && (
             <ActionButton
-              label={actionLoadingId === proposalId ? "Cancelling..." : "Cancel"}
+              label={
+                String(actionLoadingId) === String(proposalId)
+                  ? "Loading..."
+                  : "Cancel Proposal"
+              }
               tone="red"
-              disabled={actionLoadingId === proposalId}
+              disabled={String(actionLoadingId) === String(proposalId)}
               onClick={onCancel}
             />
           )}
         </div>
       </div>
+    </article>
+  );
+}
+
+function CancelProposalModal({
+  modal,
+  actionLoadingId,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}) {
+  const proposal = modal.proposal;
+  const warning = modal.warning || {};
+  const proposalId = modal.proposalId;
+  const isLoading = String(actionLoadingId) === String(proposalId);
+
+  const title = formatDisplayValue(
+    proposal?.jobTitle ||
+      proposal?.JobTitle ||
+      proposal?.projectTitle ||
+      proposal?.ProjectTitle ||
+      "this proposal"
+  );
+
+  const consequences = Array.isArray(warning.consequences)
+    ? warning.consequences.filter(Boolean)
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-red-400/30 bg-[#151a22] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="border-b border-white/10 p-5">
+          <div className="flex gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
+              <span className="material-symbols-outlined text-3xl text-red-300">
+                cancel
+              </span>
+            </div>
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-red-300">
+                Cancel Proposal
+              </p>
+
+              <h2 className="mt-2 text-xl font-extrabold text-white">
+                Are you sure?
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-gray-400">
+                You are about to cancel your proposal for{" "}
+                <span className="font-bold text-white">{title}</span>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4">
+            <p className="text-sm leading-6 text-red-100">
+              {warning.message ||
+                "After cancelling, this proposal will no longer be considered for this job."}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+              What will happen
+            </p>
+
+            <ul className="space-y-2 text-sm leading-6 text-gray-300">
+              {consequences.length > 0 ? (
+                consequences.map((item, index) => (
+                  <li key={index} className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>{formatDisplayValue(item)}</span>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>
+                      Your proposal will no longer be active for this job.
+                    </span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>The client will not be able to accept it.</span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>This action cannot be undone.</span>
+                  </li>
+                </>
+              )}
+            </ul>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
+              Reason {warning.requiresReason ? "(required)" : "(optional)"}
+            </label>
+
+            <textarea
+              value={modal.reason || ""}
+              onChange={(event) => onReasonChange(event.target.value)}
+              rows={3}
+              placeholder="Example: I am no longer available for this project."
+              className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-white/10 p-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Keep Proposal
+          </button>
+
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onConfirm}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? "Cancelling..." : "Cancel Proposal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({ label, value, icon }) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
+      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
+
+      <p className="text-xs font-black uppercase tracking-[0.22em] text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-2 text-2xl font-black text-white">
+        {formatNumber(value)}
+      </p>
     </article>
   );
 }
@@ -475,18 +780,65 @@ function Alert({ type, title, message }) {
   );
 }
 
+function normalizeCancelWarning(warning) {
+  const raw = warning?.raw || warning?.Raw || warning || {};
+
+  const consequences =
+    raw.consequences ||
+    raw.Consequences ||
+    raw.notes ||
+    raw.Notes ||
+    raw.items ||
+    raw.Items ||
+    [];
+
+  return {
+    canWithdraw:
+      raw.canWithdraw === undefined && raw.CanWithdraw === undefined
+        ? true
+        : Boolean(raw.canWithdraw ?? raw.CanWithdraw),
+    title: raw.title || raw.Title || "Cancel Proposal",
+    message:
+      raw.message ||
+      raw.Message ||
+      raw.warningMessage ||
+      raw.WarningMessage ||
+      raw.detail ||
+      raw.Detail ||
+      "After cancelling, this proposal will no longer be considered for this job.",
+    consequences: Array.isArray(consequences)
+      ? consequences
+      : String(consequences || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean),
+    requiresReason: Boolean(
+      raw.requiresReason ??
+        raw.RequiresReason ??
+        raw.reasonRequired ??
+        raw.ReasonRequired ??
+        false
+    ),
+    raw,
+  };
+}
+
 function getProposalId(proposal) {
   const raw = proposal?.raw || proposal?.Raw || proposal || {};
 
   return (
     proposal?.proposalId ||
     proposal?.ProposalId ||
+    proposal?.proposalID ||
+    proposal?.ProposalID ||
     proposal?.id ||
     proposal?.Id ||
     proposal?.expertProposalId ||
     proposal?.ExpertProposalId ||
     raw?.proposalId ||
     raw?.ProposalId ||
+    raw?.proposalID ||
+    raw?.ProposalID ||
     raw?.id ||
     raw?.Id ||
     raw?.expertProposalId ||
@@ -501,16 +853,24 @@ function getJobId(proposal) {
   return (
     proposal?.jobId ||
     proposal?.JobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobPostingId ||
     proposal?.projectId ||
     proposal?.ProjectId ||
     proposal?.job?.jobId ||
+    proposal?.job?.id ||
     proposal?.Job?.JobId ||
+    proposal?.Job?.Id ||
     raw?.jobId ||
     raw?.JobId ||
+    raw?.jobPostingId ||
+    raw?.JobPostingId ||
     raw?.projectId ||
     raw?.ProjectId ||
     raw?.job?.jobId ||
+    raw?.job?.id ||
     raw?.Job?.JobId ||
+    raw?.Job?.Id ||
     ""
   );
 }
@@ -521,16 +881,38 @@ function getContractId(proposal) {
   return (
     proposal?.contractId ||
     proposal?.ContractId ||
+    proposal?.contractID ||
+    proposal?.ContractID ||
     proposal?.contract?.contractId ||
+    proposal?.contract?.ContractId ||
+    proposal?.contract?.contractID ||
+    proposal?.contract?.ContractID ||
+    proposal?.contract?.id ||
+    proposal?.contract?.Id ||
     proposal?.Contract?.ContractId ||
+    proposal?.Contract?.ContractID ||
+    proposal?.Contract?.Id ||
     proposal?.projectContractId ||
     proposal?.ProjectContractId ||
+    proposal?.projectContractID ||
+    proposal?.ProjectContractID ||
     raw?.contractId ||
     raw?.ContractId ||
+    raw?.contractID ||
+    raw?.ContractID ||
     raw?.contract?.contractId ||
+    raw?.contract?.ContractId ||
+    raw?.contract?.contractID ||
+    raw?.contract?.ContractID ||
+    raw?.contract?.id ||
+    raw?.contract?.Id ||
     raw?.Contract?.ContractId ||
+    raw?.Contract?.ContractID ||
+    raw?.Contract?.Id ||
     raw?.projectContractId ||
     raw?.ProjectContractId ||
+    raw?.projectContractID ||
+    raw?.ProjectContractID ||
     ""
   );
 }
@@ -539,7 +921,11 @@ function getProposalStatus(proposal) {
   const raw = proposal?.raw || proposal?.Raw || proposal || {};
 
   return String(
-    proposal?.status || proposal?.Status || raw?.status || raw?.Status || "SUBMITTED"
+    proposal?.status ||
+      proposal?.Status ||
+      raw?.status ||
+      raw?.Status ||
+      "SUBMITTED"
   )
     .trim()
     .toUpperCase();
@@ -552,19 +938,24 @@ function getProposalStatusGroup(status) {
     [
       "SUBMITTED",
       "PENDING",
+      "PENDING_REVIEW",
+      "UNDER_REVIEW",
       "REVISION_REQUESTED",
       "NEEDS_REVISION",
       "RESUBMISSION_REQUESTED",
+      "RESUBMITTED",
     ].includes(value)
   ) {
     return "SUBMITTED";
   }
 
-  if (["REJECTED", "NOT_SELECTED"].includes(value)) {
+  if (["REJECTED", "NOT_SELECTED", "DECLINED"].includes(value)) {
     return "REJECTED";
   }
 
-  if (value === "ACCEPTED") return "ACCEPTED";
+  if (["ACCEPTED", "APPROVED", "SELECTED"].includes(value)) {
+    return "ACCEPTED";
+  }
 
   if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
     return "CANCELLED";
@@ -586,7 +977,7 @@ function getProposalStatusLabel(statusGroup) {
     SUBMITTED: "Submitted",
     ACCEPTED: "Accepted",
     REJECTED: "Rejected",
-    CANCELLED: "Cancel",
+    CANCELLED: "Cancelled",
   };
 
   return map[statusGroup] || "Submitted";
@@ -633,29 +1024,29 @@ function formatProposalVersion(proposal) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatNumber(value) {
   const number = Number(value || 0);
-  return Number.isNaN(number) ? 0 : number;
+
+  return new Intl.NumberFormat("vi-VN").format(
+    Number.isNaN(number) ? 0 : number
+  );
 }
 
 function formatDate(value) {
   if (!value) return "N/A";
 
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "N/A";
+
+  return date.toLocaleDateString("vi-VN");
 }
 
 function formatDisplayValue(value) {

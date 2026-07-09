@@ -18,6 +18,10 @@ const reviewApi = {
   createProjectReview(projectId, data) {
     return axiosInstance.post(`/projects/${projectId}/reviews`, data);
   },
+
+  reportReview(reviewId, data) {
+    return axiosInstance.post(`/reviews/${reviewId}/report`, data);
+  },
 };
 
 export default reviewApi;

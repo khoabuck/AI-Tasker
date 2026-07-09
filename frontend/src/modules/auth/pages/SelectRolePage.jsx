@@ -1,9 +1,7 @@
-// src/modules/auth/pages/SelectRolePage.jsx
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
-import authService from "../../../services/auth.service";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
@@ -37,11 +35,7 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { refreshUser, handleLoginSuccess } = useAuth();
-
-  const loginEmail = location.state?.email || "";
-  const loginPassword = location.state?.password || "";
 
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -73,8 +67,10 @@ export default function SelectRolePage() {
 
     if (status === "ACTIVE") {
       if (role === "CLIENT") navigate("/client/dashboard", { replace: true });
-      else if (role === "EXPERT") navigate("/expert/dashboard", { replace: true });
-      else if (role === "ADMIN") navigate("/admin/dashboard", { replace: true });
+      else if (role === "EXPERT")
+        navigate("/expert/dashboard", { replace: true });
+      else if (role === "ADMIN")
+        navigate("/admin/dashboard", { replace: true });
       else navigate("/", { replace: true });
     }
   }, [navigate]);
@@ -146,16 +142,6 @@ export default function SelectRolePage() {
 
       const responseData = selectResponse?.data || {};
 
-      const newToken =
-        responseData.accessToken ||
-        responseData.AccessToken ||
-        responseData.token ||
-        responseData.Token ||
-        responseData.data?.accessToken ||
-        responseData.data?.AccessToken ||
-        responseData.data?.token ||
-        responseData.data?.Token;
-
       const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
 
       const userFromResponse =
@@ -176,35 +162,18 @@ export default function SelectRolePage() {
         selected
       );
 
-      if (newToken) {
-        localStorage.setItem("accessToken", newToken);
-      }
-
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
       localStorage.setItem("user", JSON.stringify(selectedUser));
 
-      if (newToken && handleLoginSuccess) {
+      if (handleLoginSuccess) {
         handleLoginSuccess({
-          accessToken: newToken,
           user: selectedUser,
         });
-      } else if (loginEmail && loginPassword) {
-        const loginResult = await authService.login({
-          email: loginEmail,
-          password: loginPassword,
-        });
+      }
 
-        if (!loginResult.success) {
-          setError(
-            "Role selection succeeded but unable to refresh token. Please log in again."
-          );
-          return;
-        }
-
-        handleLoginSuccess({
-          accessToken: loginResult.accessToken,
-          user: loginResult.user,
-        });
-      } else if (refreshUser) {
+      if (refreshUser) {
         try {
           await refreshUser();
         } catch {

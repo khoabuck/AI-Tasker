@@ -8,10 +8,15 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     handleOAuthCallback();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleOAuthCallback = async () => {
     try {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
+
       const response = await axiosInstance.get("/auth/me");
       const user = normalizeUser(response.data?.data || response.data);
 
@@ -21,6 +26,9 @@ export default function OAuthCallbackPage() {
     } catch (err) {
       console.error("OAUTH CALLBACK ERROR:", err?.response?.data || err);
 
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("token");
+      localStorage.removeItem("authToken");
       localStorage.removeItem("user");
 
       setError("Google authentication failed. Please try again.");

@@ -21,26 +21,30 @@ export default function ManageSkillsPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [changingStatus, setChangingStatus] = useState(false);
+  const [changingStatusId, setChangingStatusId] = useState(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     loadSkills();
   }, []);
 
-  const loadSkills = async () => {
+  const loadSkills = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
+
+      if (!keepMessage) {
+        setMessage("");
+      }
 
       const data = await adminSkillService.getSkills({
         activeOnly: false,
       });
 
-      setSkills(data);
+      setSkills(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD ADMIN SKILLS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
@@ -66,14 +70,20 @@ export default function ManageSkillsPage() {
     const keyword = searchText.trim().toLowerCase();
 
     return skills.filter((skill) => {
+      const skillName = String(skill.skillName || "").toLowerCase();
+      const description = String(skill.description || "").toLowerCase();
+      const category = String(skill.category || "").toLowerCase();
+      const skillId = String(skill.skillId || "").toLowerCase();
+
       const matchSearch =
         !keyword ||
-        skill.skillName.toLowerCase().includes(keyword) ||
-        String(skill.description || "").toLowerCase().includes(keyword) ||
-        String(skill.category || "").toLowerCase().includes(keyword);
+        skillName.includes(keyword) ||
+        description.includes(keyword) ||
+        category.includes(keyword) ||
+        skillId.includes(keyword);
 
       const matchCategory =
-        !categoryFilter || skill.category === categoryFilter;
+        !categoryFilter || String(skill.category || "") === categoryFilter;
 
       const matchStatus =
         statusFilter === "ALL" ||
@@ -98,14 +108,17 @@ export default function ManageSkillsPage() {
 
   const handleSelectSkill = (skill) => {
     setSelectedSkill(skill);
+
     setFormData({
       skillName: skill.skillName || "",
       description: skill.description || "",
       category: skill.category || "",
       isActive: Boolean(skill.isActive),
     });
+
     setMessage("");
     setError("");
+    setFieldErrors({});
   };
 
   const handleCreateNew = () => {
@@ -113,10 +126,17 @@ export default function ManageSkillsPage() {
     setFormData(EMPTY_FORM);
     setMessage("");
     setError("");
+    setFieldErrors({});
   };
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
+
+    setError("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
 
     setFormData((prev) => ({
       ...prev,
@@ -125,15 +145,19 @@ export default function ManageSkillsPage() {
   };
 
   const validateForm = () => {
-    if (!formData.skillName.trim()) {
-      return "Skill name is required.";
+    const errors = {};
+    const skillName = String(formData.skillName || "").trim();
+
+    if (!skillName) {
+      errors.skillName = "Skill name is required.";
+    } else if (skillName.length < 2) {
+      errors.skillName = "Skill name must be at least 2 characters.";
     }
 
-    if (formData.skillName.trim().length < 2) {
-      return "Skill name must be at least 2 characters.";
-    }
-
-    return "";
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors,
+    };
   };
 
   const handleSubmit = async (event) => {
@@ -142,10 +166,11 @@ export default function ManageSkillsPage() {
     setMessage("");
     setError("");
 
-    const validateError = validateForm();
+    const validation = validateForm();
 
-    if (validateError) {
-      setError(validateError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields.");
       return;
     }
 
@@ -153,17 +178,29 @@ export default function ManageSkillsPage() {
       setSaving(true);
 
       if (selectedSkill) {
-        await adminSkillService.updateSkill(selectedSkill.skillId, formData);
+        await adminSkillService.updateSkill(selectedSkill.skillId, {
+          skillName: formData.skillName,
+          description: formData.description,
+          category: formData.category,
+          isActive: formData.isActive,
+        });
+
         setMessage("Skill updated successfully.");
       } else {
-        await adminSkillService.createSkill(formData);
+        await adminSkillService.createSkill({
+          skillName: formData.skillName,
+          description: formData.description,
+          category: formData.category,
+        });
+
         setMessage("Skill created successfully.");
       }
 
       setSelectedSkill(null);
       setFormData(EMPTY_FORM);
+      setFieldErrors({});
 
-      await loadSkills();
+      await loadSkills({ keepMessage: true });
     } catch (err) {
       console.error("SAVE SKILL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
@@ -176,7 +213,7 @@ export default function ManageSkillsPage() {
     if (!skill?.skillId) return;
 
     try {
-      setChangingStatus(true);
+      setChangingStatusId(skill.skillId);
       setMessage("");
       setError("");
 
@@ -189,44 +226,44 @@ export default function ManageSkillsPage() {
         setFormData(EMPTY_FORM);
       }
 
-      await loadSkills();
+      await loadSkills({ keepMessage: true });
     } catch (err) {
       console.error("ACTIVATE SKILL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
     } finally {
-      setChangingStatus(false);
+      setChangingStatusId(null);
     }
   };
 
-  const handleDeactivate = async (skill) => {
+  const handleSetInactive = async (skill) => {
     if (!skill?.skillId) return;
 
     const confirmed = window.confirm(
-      `Deactivate skill "${skill.skillName}"? This will hide it from active skill lists.`
+      `Set skill "${skill.skillName}" to inactive? You can activate it again later.`
     );
 
     if (!confirmed) return;
 
     try {
-      setChangingStatus(true);
+      setChangingStatusId(skill.skillId);
       setMessage("");
       setError("");
 
-      await adminSkillService.deactivateSkill(skill.skillId);
+      await adminSkillService.deleteSkill(skill.skillId);
 
-      setMessage("Skill deactivated successfully.");
+      setMessage("Skill set to inactive successfully.");
 
       if (selectedSkill?.skillId === skill.skillId) {
         setSelectedSkill(null);
         setFormData(EMPTY_FORM);
       }
 
-      await loadSkills();
+      await loadSkills({ keepMessage: true });
     } catch (err) {
-      console.error("DEACTIVATE SKILL ERROR:", err?.response?.data || err);
+      console.error("SET SKILL INACTIVE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
     } finally {
-      setChangingStatus(false);
+      setChangingStatusId(null);
     }
   };
 
@@ -254,8 +291,8 @@ export default function ManageSkillsPage() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Manage system skills used by experts, jobs, recommendations and
-                matching features.
+                Manage system skills used by experts, jobs, recommendations,
+                and matching features.
               </p>
             </div>
 
@@ -270,7 +307,7 @@ export default function ManageSkillsPage() {
 
               <button
                 type="button"
-                onClick={loadSkills}
+                onClick={() => loadSkills()}
                 disabled={loading}
                 className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
@@ -414,12 +451,12 @@ export default function ManageSkillsPage() {
                 )}
 
                 {filteredSkills.map((skill) => {
-                  const isSelected =
-                    selectedSkill?.skillId === skill.skillId;
+                  const isSelected = selectedSkill?.skillId === skill.skillId;
+                  const isChanging = changingStatusId === skill.skillId;
 
                   return (
                     <article
-                      key={skill.skillId}
+                      key={skill.skillId || skill.id}
                       onClick={() => handleSelectSkill(skill)}
                       className={`${cardStyle} cursor-pointer p-6 transition ${
                         isSelected
@@ -431,7 +468,7 @@ export default function ManageSkillsPage() {
                         <StatusBadge isActive={skill.isActive} />
 
                         <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                          Skill #{skill.skillId}
+                          Skill #{skill.skillId || "N/A"}
                         </span>
 
                         {skill.category && (
@@ -462,12 +499,12 @@ export default function ManageSkillsPage() {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                handleDeactivate(skill);
+                                handleSetInactive(skill);
                               }}
-                              disabled={changingStatus}
+                              disabled={isChanging}
                               className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Deactivate
+                              {isChanging ? "Saving..." : "Set Inactive"}
                             </button>
                           ) : (
                             <button
@@ -476,10 +513,10 @@ export default function ManageSkillsPage() {
                                 event.stopPropagation();
                                 handleActivate(skill);
                               }}
-                              disabled={changingStatus}
+                              disabled={isChanging}
                               className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              Activate
+                              {isChanging ? "Saving..." : "Activate"}
                             </button>
                           )}
                         </div>
@@ -528,8 +565,18 @@ export default function ManageSkillsPage() {
                         value={formData.skillName}
                         onChange={handleChange}
                         placeholder="Example: React, ASP.NET Core, OpenAI API"
-                        className={inputStyle}
+                        className={
+                          fieldErrors.skillName
+                            ? "w-full rounded-xl border border-red-400/70 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-white/[0.07]"
+                            : inputStyle
+                        }
                       />
+
+                      {fieldErrors.skillName && (
+                        <p className="mt-2 text-xs font-semibold text-red-300">
+                          {fieldErrors.skillName}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -655,9 +702,9 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("vi-VN", {
+  return date.toLocaleDateString("en-US", {
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     year: "numeric",
   });
 }
@@ -673,13 +720,16 @@ function getFriendlyError(err) {
     return "Backend blocked this request because the current token does not have ADMIN permission.";
   }
 
+  if (status === 404) {
+    return "Skills API was not found. Please check backend route.";
+  }
+
   const data = err?.response?.data;
 
   if (typeof data === "string") return data;
-
   if (data?.message) return data.message;
-
   if (data?.title) return data.title;
+  if (data?.detail) return data.detail;
 
   if (data?.errors) {
     const allErrors = Object.values(data.errors).flat();

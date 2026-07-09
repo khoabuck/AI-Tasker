@@ -1,6 +1,16 @@
 import milestoneApi from "../api/milestone.api";
 import { normalizeMilestone } from "./project.service";
 
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -20,33 +30,21 @@ const unwrapData = (response) => {
 
 const milestoneService = {
   async getMilestoneById(milestoneId) {
-    if (
-      !milestoneId ||
-      milestoneId === "undefined" ||
-      milestoneId === "null"
-    ) {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const response = await milestoneApi.getMilestoneById(milestoneId);
 
-    console.log("GET MILESTONE DETAIL RESPONSE:", response?.data);
-
     return normalizeMilestone(unwrapData(response));
   },
 
   async updateMilestone(milestoneId, payload) {
-    if (
-      !milestoneId ||
-      milestoneId === "undefined" ||
-      milestoneId === "null"
-    ) {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const response = await milestoneApi.updateMilestone(milestoneId, payload);
-
-    console.log("UPDATE MILESTONE RESPONSE:", response?.data);
 
     return normalizeMilestone(unwrapData(response));
   },

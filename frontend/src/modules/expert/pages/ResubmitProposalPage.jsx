@@ -285,6 +285,18 @@ export default function ResubmitProposalPage() {
           {proposal && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
               <form onSubmit={handleSubmit} className="space-y-6">
+                {(proposal.rejectionReason || proposal.decisionNote) && (
+                  <Alert
+                    type="warning"
+                    title="Requested changes"
+                    message={
+                      proposal.rejectionReason ||
+                      proposal.decisionNote ||
+                      "Please improve your proposal and submit again."
+                    }
+                  />
+                )}
+
                 <Card title="Resubmit Note" icon="edit_note">
                   <TextArea
                     label="What did you change?"
@@ -321,7 +333,7 @@ export default function ResubmitProposalPage() {
                       onChange={(value) => updateField("proposedPrice", value)}
                       onBlur={() => markTouched("proposedPrice")}
                       error={getFieldError("proposedPrice")}
-                      placeholder="500"
+                      placeholder="500000"
                     />
 
                     <NumberInput
@@ -397,8 +409,8 @@ export default function ResubmitProposalPage() {
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only sends title, amount, and duration days
-                      to backend.
+                      Each milestone only needs title, payment amount, and
+                      duration days.
                     </p>
                   </div>
 
@@ -483,7 +495,7 @@ export default function ResubmitProposalPage() {
                   </h2>
 
                   <div className="mt-5 space-y-3">
-                    <Info label="Status" value={proposal.status || "N/A"} />
+                    <Info label="Status" value={formatStatus(proposal.status)} />
 
                     <Info
                       label="Current Price"
@@ -502,19 +514,14 @@ export default function ResubmitProposalPage() {
                   </div>
                 </section>
 
-                {(proposal.rejectionReason || proposal.decisionNote) && (
-                  <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5 text-yellow-200">
-                    <p className="font-bold">Client feedback</p>
+                <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5 text-cyan-100">
+                  <p className="font-bold">Tip</p>
 
-                    <p className="mt-2 text-sm leading-6">
-                      {formatDisplayValue(
-                        proposal.rejectionReason ||
-                          proposal.decisionNote ||
-                          "Please improve your proposal and submit again."
-                      )}
-                    </p>
-                  </section>
-                )}
+                  <p className="mt-2 text-sm leading-6">
+                    Keep your resubmit note short and clear. Explain exactly
+                    what changed so the client can review faster.
+                  </p>
+                </section>
               </aside>
             </div>
           )}
@@ -594,7 +601,7 @@ function MilestoneEditor({
           onChange={(value) => onChange(index, "amount", value)}
           onBlur={() => onBlur(index, "amount")}
           error={getError(index, "amount")}
-          placeholder="200"
+          placeholder="200000"
         />
 
         <NumberInput
@@ -759,8 +766,14 @@ function buildFormFromProposal(proposal) {
 
   return {
     coverLetter: proposal?.coverLetter || "",
-    proposedPrice: String(proposal?.proposedPrice || ""),
-    proposedTimelineDays: String(proposal?.proposedTimelineDays || ""),
+    proposedPrice:
+      proposal?.proposedPrice || proposal?.proposedPrice === 0
+        ? String(proposal.proposedPrice)
+        : "",
+    proposedTimelineDays:
+      proposal?.proposedTimelineDays || proposal?.proposedTimelineDays === 0
+        ? String(proposal.proposedTimelineDays)
+        : "",
     expectedOutputs: proposal?.expectedOutputs || "",
     workingApproach: proposal?.workingApproach || "",
     preliminaryMilestonePlan: proposal?.preliminaryMilestonePlan || "",
@@ -769,8 +782,12 @@ function buildFormFromProposal(proposal) {
       milestones.length > 0
         ? milestones.map((item) => ({
             title: item?.title || "",
-            amount: String(item?.amount || ""),
-            durationDays: String(item?.durationDays || ""),
+            amount:
+              item?.amount || item?.amount === 0 ? String(item.amount) : "",
+            durationDays:
+              item?.durationDays || item?.durationDays === 0
+                ? String(item.durationDays)
+                : "",
           }))
         : [createEmptyMilestone()],
   };
@@ -779,10 +796,10 @@ function buildFormFromProposal(proposal) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
@@ -833,6 +850,13 @@ function formatDisplayValue(value) {
   }
 
   return String(value);
+}
+
+function formatStatus(value) {
+  return String(value || "N/A")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function unwrapMaybe(result) {

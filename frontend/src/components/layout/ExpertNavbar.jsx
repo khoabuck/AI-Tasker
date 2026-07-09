@@ -16,6 +16,7 @@ export default function ExpertNavbar() {
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   const [markingAll, setMarkingAll] = useState(false);
   const [markingId, setMarkingId] = useState(null);
+  const [openingId, setOpeningId] = useState(null);
 
   useEffect(() => {
     loadUnreadCount();
@@ -66,9 +67,10 @@ export default function ExpertNavbar() {
       setLoadingNotifications(true);
 
       const notifications = await notificationService.getMyNotifications();
+      const list = Array.isArray(notifications) ? notifications : [];
 
-      setNotificationList(notifications.slice(0, 6));
-      setUnreadCount(notifications.filter((item) => !item.isRead).length);
+      setNotificationList(list.slice(0, 6));
+      setUnreadCount(list.filter((item) => !item.isRead).length);
     } catch (error) {
       console.error("LOAD NOTIFICATION PREVIEW ERROR:", error);
       setNotificationList([]);
@@ -87,6 +89,22 @@ export default function ExpertNavbar() {
     }
   };
 
+  const updateNotificationReadState = (notificationId) => {
+    setNotificationList((prev) =>
+      prev.map((item) =>
+        String(getNotificationId(item)) === String(notificationId)
+          ? {
+              ...item,
+              isRead: true,
+              readAt: item.readAt || new Date().toISOString(),
+            }
+          : item
+      )
+    );
+
+    setUnreadCount((prev) => Math.max(Number(prev || 0) - 1, 0));
+  };
+
   const handleMarkAsRead = async (notificationId) => {
     if (!notificationId) return;
 
@@ -94,19 +112,7 @@ export default function ExpertNavbar() {
       setMarkingId(notificationId);
 
       await notificationService.markAsRead(notificationId);
-
-      setNotificationList((prev) =>
-        prev.map((item) =>
-          item.notificationId === notificationId
-            ? {
-                ...item,
-                isRead: true,
-              }
-            : item
-        )
-      );
-
-      setUnreadCount((prev) => Math.max(Number(prev || 0) - 1, 0));
+      updateNotificationReadState(notificationId);
     } catch (error) {
       console.error("MARK NOTIFICATION READ ERROR:", error);
     } finally {
@@ -126,6 +132,7 @@ export default function ExpertNavbar() {
         prev.map((item) => ({
           ...item,
           isRead: true,
+          readAt: item.readAt || new Date().toISOString(),
         }))
       );
 
@@ -134,6 +141,29 @@ export default function ExpertNavbar() {
       console.error("MARK ALL NOTIFICATIONS READ ERROR:", error);
     } finally {
       setMarkingAll(false);
+    }
+  };
+
+  const handleOpenNotification = async (notification) => {
+    const notificationId = getNotificationId(notification);
+    const target =
+      notification.target ||
+      notificationService.getNotificationTarget(notification);
+
+    try {
+      setOpeningId(notificationId || target?.path || "/expert/notifications");
+
+      if (notificationId && !notification.isRead) {
+        await notificationService.markAsRead(notificationId);
+        updateNotificationReadState(notificationId);
+      }
+
+      setShowNotifications(false);
+      navigate(target?.path || "/expert/notifications");
+    } catch (error) {
+      console.error("OPEN NAVBAR NOTIFICATION ERROR:", error);
+    } finally {
+      setOpeningId(null);
     }
   };
 
@@ -299,6 +329,8 @@ export default function ExpertNavbar() {
                 loading={loadingNotifications}
                 markingAll={markingAll}
                 markingId={markingId}
+                openingId={openingId}
+                onOpenNotification={handleOpenNotification}
                 onMarkAsRead={handleMarkAsRead}
                 onMarkAllAsRead={handleMarkAllAsRead}
                 onViewAll={handleGoToNotifications}
@@ -413,115 +445,95 @@ function NotificationPopup({
   loading,
   markingAll,
   markingId,
+  openingId,
+  onOpenNotification,
   onMarkAsRead,
   onMarkAllAsRead,
   onViewAll,
 }) {
-  return (
-    <div className="absolute right-0 top-full z-[999] mt-3 w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_24px_90px_rgba(0,0,0,0.7)]">
-      <div className="border-b border-white/10 bg-white/[0.03] px-4 py-3">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-sm font-extrabold text-white">Notifications</p>
+  const unreadText =
+    unreadCount > 0 ? `${unreadCount} unread` : "All caught up";
 
-            <p className="mt-1 text-xs text-gray-500">
-              {unreadCount > 0
-                ? `${unreadCount} unread notification(s)`
-                : "No unread notifications"}
-            </p>
+  return (
+    <div className="absolute right-0 top-full z-[999] mt-2 w-[350px] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
+      <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-white/[0.03] to-purple-400/10 px-3 py-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
+              <span className="material-symbols-outlined text-[17px]">
+                notifications
+              </span>
+            </span>
+
+            <div>
+              <p className="text-[13px] font-black text-white">
+                Notifications
+              </p>
+              <p className="text-[10px] font-medium text-gray-400">
+                {unreadText}
+              </p>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={onMarkAllAsRead}
             disabled={markingAll || unreadCount <= 0}
-            className="rounded-lg border border-green-400/40 bg-green-400/10 px-3 py-1.5 text-[11px] font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold text-cyan-200 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {markingAll ? "..." : "Read all"}
+            {markingAll ? "Reading..." : "Read all"}
           </button>
         </div>
       </div>
 
-      <div className="max-h-[360px] overflow-y-auto p-2">
+      <div
+        className="max-h-[330px] overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden"
+        style={{
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
         {loading ? (
-          <div className="px-4 py-10 text-center text-sm text-gray-400">
-            Loading notifications...
+          <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-300" />
+            <p className="mt-3 text-xs font-semibold text-gray-300">
+              Loading notifications...
+            </p>
           </div>
         ) : notifications.length === 0 ? (
           <div className="px-4 py-10 text-center">
             <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
               notifications_off
             </span>
-
-            <p className="text-sm font-bold text-white">No notifications</p>
-
+            <p className="text-sm font-bold text-white">No notifications yet</p>
             <p className="mt-1 text-xs text-gray-500">
-              New updates will appear here.
+              Updates will appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-1">
-            {notifications.map((notification, index) => (
-              <div
-                key={notification.notificationId || index}
-                className={`rounded-xl border px-3 py-3 transition ${
-                  notification.isRead
-                    ? "border-transparent bg-transparent hover:bg-white/[0.04]"
-                    : "border-cyan-400/20 bg-cyan-400/10"
-                }`}
-              >
-                <div className="flex gap-3">
-                  <div
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${
-                      notification.isRead
-                        ? "border-white/10 bg-white/[0.04] text-gray-400"
-                        : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {getNotificationIcon(notification.type)}
-                    </span>
-                  </div>
+          <div className="space-y-1.5">
+            {notifications.map((notification, index) => {
+              const notificationId = getNotificationId(notification);
+              const target =
+                notification.target ||
+                notificationService.getNotificationTarget(notification);
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="line-clamp-1 text-sm font-bold text-white">
-                        {notification.title || "Notification"}
-                      </p>
+              const opening =
+                String(openingId) === String(notificationId) ||
+                String(openingId) === String(target?.path);
 
-                      {!notification.isRead && (
-                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
-                      )}
-                    </div>
-
-                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-gray-400">
-                      {notification.message || "No message content."}
-                    </p>
-
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <span className="text-[11px] text-gray-600">
-                        {formatDateTime(notification.createdAt)}
-                      </span>
-
-                      {!notification.isRead && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onMarkAsRead(notification.notificationId)
-                          }
-                          disabled={markingId === notification.notificationId}
-                          className="text-[11px] font-bold text-cyan-300 hover:text-cyan-200 disabled:opacity-50"
-                        >
-                          {markingId === notification.notificationId
-                            ? "..."
-                            : "Read"}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
+              return (
+                <NotificationItem
+                  key={notificationId || index}
+                  notification={notification}
+                  target={target}
+                  opening={opening}
+                  markingId={markingId}
+                  onOpen={() => onOpenNotification(notification)}
+                  onMarkAsRead={onMarkAsRead}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -530,15 +542,111 @@ function NotificationPopup({
         <button
           type="button"
           onClick={onViewAll}
-          className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
           View all notifications
-          <span className="material-symbols-outlined text-[18px]">
+          <span className="material-symbols-outlined text-[16px]">
             arrow_forward
           </span>
         </button>
       </div>
     </div>
+  );
+}
+
+function NotificationItem({
+  notification,
+  target,
+  opening,
+  markingId,
+  onOpen,
+  onMarkAsRead,
+}) {
+  const notificationId = getNotificationId(notification);
+  const tone = getNotificationTone(notification.type, target?.kind);
+  const isRead = Boolean(notification.isRead);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${
+        isRead
+          ? "border-transparent bg-transparent hover:border-white/10 hover:bg-white/[0.04]"
+          : "border-cyan-400/20 bg-cyan-400/[0.07] hover:border-cyan-300/50 hover:bg-cyan-400/[0.11]"
+      }`}
+    >
+      <div className="flex gap-2.5">
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.className}`}
+        >
+          <span className="material-symbols-outlined text-[18px]">
+            {tone.icon}
+          </span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13px] font-extrabold text-white">
+              {notification.title || "Notification"}
+            </p>
+
+            {!isRead && (
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
+            )}
+          </div>
+
+          <p className="mt-1 line-clamp-2 text-xs leading-4 text-gray-400">
+            {notification.message ||
+              notification.content ||
+              "No message content."}
+          </p>
+
+          <div className="mt-2 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] text-gray-400">
+                {tone.label}
+              </span>
+
+              <span className="truncate text-[10px] font-medium text-gray-500">
+                {notificationService.formatNotificationTime(
+                  notification.createdAt || notification.createdAtUtc
+                )}
+              </span>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5">
+              {!isRead && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMarkAsRead(notificationId);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.stopPropagation();
+                      onMarkAsRead(notificationId);
+                    }
+                  }}
+                  className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-cyan-300 hover:bg-cyan-400/10"
+                >
+                  {markingId === notificationId ? "..." : "Read"}
+                </span>
+              )}
+
+              <span className="flex items-center gap-0.5 text-[10px] font-bold text-cyan-300">
+                {opening ? "Opening..." : target?.label || "Open"}
+                <span className="material-symbols-outlined text-[14px] transition group-hover:translate-x-0.5">
+                  chevron_right
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -597,36 +705,116 @@ function DropdownLink({ to, icon, label }) {
   );
 }
 
-function getNotificationIcon(type) {
+function getNotificationId(notification) {
+  return (
+    notification?.notificationId ||
+    notification?.NotificationId ||
+    notification?.id ||
+    notification?.Id ||
+    notification?.raw?.notificationId ||
+    notification?.raw?.NotificationId ||
+    notification?.raw?.id ||
+    notification?.raw?.Id ||
+    ""
+  );
+}
+
+function getNotificationTone(type, kind) {
   const value = String(type || "").toUpperCase();
+  const targetKind = String(kind || "").toUpperCase();
 
-  if (value.includes("PROPOSAL")) return "description";
-  if (value.includes("CONTRACT")) return "contract";
-  if (value.includes("PROJECT")) return "folder_managed";
-  if (value.includes("MILESTONE")) return "flag";
-  if (value.includes("DELIVERABLE")) return "inventory_2";
-  if (value.includes("DISPUTE")) return "gavel";
-
-  if (value.includes("WALLET") || value.includes("WITHDRAW")) {
-    return "account_balance_wallet";
+  if (value.includes("PROPOSAL") || targetKind === "PROPOSAL") {
+    return {
+      label: "Proposal",
+      icon: "description",
+      className: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+    };
   }
 
-  if (value.includes("REVIEW")) return "reviews";
+  if (value.includes("CONTRACT") || targetKind === "CONTRACT") {
+    return {
+      label: "Agreement",
+      icon: "contract",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
 
-  return "notifications";
-}
+  if (value.includes("PROJECT") || targetKind === "PROJECT") {
+    return {
+      label: "Project",
+      icon: "folder_managed",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
 
-function formatDateTime(value) {
-  if (!value) return "No date";
+  if (value.includes("MILESTONE") || targetKind === "MILESTONE") {
+    return {
+      label: "Milestone",
+      icon: "flag",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    };
+  }
 
-  const date = new Date(value);
+  if (
+    value.includes("DELIVERABLE") ||
+    value.includes("SUBMISSION") ||
+    value.includes("REVISION") ||
+    targetKind === "SUBMISSION"
+  ) {
+    return {
+      label: value.includes("REVISION") ? "Changes Requested" : "Submission",
+      icon: value.includes("REVISION") ? "edit_note" : "assignment",
+      className: value.includes("REVISION")
+        ? "border-yellow-400/20 bg-yellow-400/10 text-yellow-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
+    };
+  }
 
-  if (Number.isNaN(date.getTime())) return "No date";
+  if (
+    value.includes("CHAT") ||
+    value.includes("MESSAGE") ||
+    targetKind === "MESSAGE"
+  ) {
+    return {
+      label: "Message",
+      icon: "chat",
+      className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    };
+  }
 
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+  if (
+    value.includes("WALLET") ||
+    value.includes("WITHDRAW") ||
+    value.includes("ESCROW") ||
+    value.includes("PAYMENT") ||
+    targetKind === "WALLET"
+  ) {
+    return {
+      label: "Wallet",
+      icon: "account_balance_wallet",
+      className: "border-green-400/20 bg-green-400/10 text-green-300",
+    };
+  }
+
+  if (value.includes("REVIEW") || targetKind === "REVIEW") {
+    return {
+      label: "Review",
+      icon: "reviews",
+      className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+    };
+  }
+
+  if (value.includes("DISPUTE") || targetKind === "DISPUTE") {
+    return {
+      label: "Dispute",
+      icon: "gavel",
+      className: "border-red-400/20 bg-red-400/10 text-red-300",
+    };
+  }
+
+  return {
+    label: "Notification",
+    icon: "notifications",
+    className: "border-white/10 bg-white/[0.04] text-gray-300",
+  };
+} 

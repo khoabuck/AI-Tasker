@@ -1,23 +1,36 @@
 import axios from "axios";
 
+const cleanUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
+
 const getApiBaseUrl = () => {
-  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  const apiBaseUrl = cleanUrl(import.meta.env.VITE_API_BASE_URL);
 
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/+$/, "");
+  if (!apiBaseUrl) {
+    throw new Error("Missing VITE_API_BASE_URL");
   }
 
-  const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
+  return apiBaseUrl;
+};
 
-  if (backendBaseUrl) {
-    return `${backendBaseUrl.replace(/\/+$/, "")}/api`;
-  }
+const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
+const AUTH_ERROR_EVENT = "aitasker-auth-error";
 
-  if (import.meta.env.DEV) {
-    return "http://localhost:5070/api";
-  }
+const isAuthMeRequest = (config) => {
+  return String(config?.url || "").includes("/auth/me");
+};
 
-  return "";
+const dispatchAuthErrorEvent = (error) => {
+  if (typeof window === "undefined") return;
+  if (isAuthMeRequest(error?.config)) return;
+
+  window.dispatchEvent(
+    new CustomEvent(AUTH_ERROR_EVENT, {
+      detail: {
+        status: error?.response?.status,
+        url: error?.config?.url || "",
+      },
+    })
+  );
 };
 
 const axiosInstance = axios.create({
@@ -30,8 +43,19 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config) => {
+    const token =
+      localStorage.getItem("accessToken") ||
+      localStorage.getItem("token") ||
+      localStorage.getItem("authToken");
+
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+
     if (import.meta.env.DEV) {
-      console.log("REQUEST URL:", `${config.baseURL || ""}${config.url || ""}`);
+      console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
+      console.log("AUTH MODE:", token ? "Bearer fallback" : "HttpOnly cookie");
     }
 
     return config;
@@ -39,4 +63,18 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+
+    if (status === 401 || status === 403) {
+      dispatchAuthErrorEvent(error);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export { ACCOUNT_BLOCKED_EVENT, AUTH_ERROR_EVENT };
 export default axiosInstance;

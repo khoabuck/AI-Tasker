@@ -12,6 +12,7 @@ export default function ContractDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
+  const [acceptSuccessModal, setAcceptSuccessModal] = useState(null);
 
   const [showDeclineBox, setShowDeclineBox] = useState(false);
   const [declineReason, setDeclineReason] = useState("");
@@ -29,8 +30,9 @@ export default function ContractDetailPage() {
   );
 
   const canRespond = useMemo(() => {
-    return canAcceptContract(status) || canDeclineContract(status);
-  }, [status]);
+    if (!realContractId) return false;
+    return canAcceptContract(status, contract) || canDeclineContract(status, contract);
+  }, [status, contract, realContractId]);
 
   const contractTitle = getField(
     contract,
@@ -43,6 +45,8 @@ export default function ContractDetailPage() {
       "Title",
       "job.title",
       "Job.Title",
+      "project.title",
+      "Project.Title",
     ],
     "Contract"
   );
@@ -58,6 +62,8 @@ export default function ContractDetailPage() {
       "Description",
       "job.description",
       "Job.Description",
+      "project.description",
+      "Project.Description",
     ],
     ""
   );
@@ -167,13 +173,9 @@ export default function ContractDetailPage() {
 
   const loadMilestoneDrafts = async (id) => {
     try {
-      const fn =
-        contractService.getContractMilestoneDrafts ||
-        contractService.getMilestoneDrafts;
+      if (!id) return [];
 
-      if (!fn) return [];
-
-      const data = await fn.call(contractService, id);
+      const data = await contractService.getContractMilestoneDrafts(id);
 
       return Array.isArray(data)
         ? data.map((item, index) => normalizeMilestone(item, index))
@@ -185,6 +187,8 @@ export default function ContractDetailPage() {
   };
 
   const refreshAfterAction = async (updatedContract) => {
+    if (!updatedContract) return;
+
     setContract(updatedContract);
 
     const id = getContractId(updatedContract) || realContractId;
@@ -195,12 +199,18 @@ export default function ContractDetailPage() {
       setMilestoneDrafts(
         apiMilestones.length > 0 ? apiMilestones : fallbackMilestones
       );
+    } else {
+      setMilestoneDrafts(fallbackMilestones);
     }
   };
 
   const handleAcceptContract = async () => {
-    const ok = window.confirm("Are you sure you want to accept this contract?");
+    if (!realContractId) {
+      setError("Cannot accept this contract because contract id is missing.");
+      return;
+    }
 
+    const ok = window.confirm("Are you sure you want to accept this contract?");
     if (!ok) return;
 
     try {
@@ -212,7 +222,18 @@ export default function ContractDetailPage() {
 
       await refreshAfterAction(updatedContract);
 
-      setMessage("Contract accepted successfully.");
+      const projectId = getProjectId(updatedContract) || realProjectId;
+
+      setAcceptSuccessModal({ projectId });
+
+      setTimeout(() => {
+        if (projectId) {
+          navigate(`/expert/projects/${projectId}`, { replace: true });
+          return;
+        }
+
+        navigate("/expert/projects", { replace: true });
+      }, 1200);
     } catch (err) {
       console.error("ACCEPT CONTRACT ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot accept contract right now."));
@@ -222,13 +243,17 @@ export default function ContractDetailPage() {
   };
 
   const handleDeclineContract = async () => {
+    if (!realContractId) {
+      setError("Cannot decline this contract because contract id is missing.");
+      return;
+    }
+
     if (!declineReason.trim()) {
       setError("Please enter a reason before declining this contract.");
       return;
     }
 
     const ok = window.confirm("Are you sure you want to decline this contract?");
-
     if (!ok) return;
 
     try {
@@ -311,28 +336,7 @@ export default function ContractDetailPage() {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
-                  <StatusBadge status={status} />
-
-                  {realContractId && (
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-300">
-                      Contract #{realContractId}
-                    </span>
-                  )}
-
-                  {getField(
-                    contract,
-                    ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
-                    ""
-                  ) && (
-                    <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
-                      Proposal Version{" "}
-                      {getField(
-                        contract,
-                        ["sourceProposalVersionNumber", "SourceProposalVersionNumber"],
-                        ""
-                      )}
-                    </span>
-                  )}
+                  <StatusBadge status={status} contract={contract} />
                 </div>
 
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
@@ -344,8 +348,9 @@ export default function ContractDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Please review the contract details carefully before accepting.
-                  You may decline if the contract terms are not acceptable.
+                  Please review the contract details carefully. You can accept
+                  or decline only after the client sends the contract for your
+                  confirmation.
                 </p>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -367,13 +372,16 @@ export default function ContractDetailPage() {
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-cyan-100/80">
-                  Once you accept, the contract can move forward to the project
-                  stage based on the platform workflow.
+                  {canRespond
+                    ? "The client has sent this contract for your confirmation. Review it carefully before accepting or declining."
+                    : isDraftContract(status)
+                      ? "This is still a draft contract. You can review the details, but you cannot accept or decline it until the client sends it to you."
+                      : "This contract is no longer waiting for your response."}
                 </p>
 
                 {canRespond && (
                   <div className="mt-4 flex flex-col gap-2">
-                    {canAcceptContract(status) && (
+                    {canAcceptContract(status, contract) && (
                       <button
                         type="button"
                         disabled={actionLoading === "accept"}
@@ -386,7 +394,7 @@ export default function ContractDetailPage() {
                       </button>
                     )}
 
-                    {canDeclineContract(status) && (
+                    {canDeclineContract(status, contract) && (
                       <button
                         type="button"
                         disabled={actionLoading === "decline"}
@@ -413,7 +421,7 @@ export default function ContractDetailPage() {
             />
           )}
 
-          {showDeclineBox && (
+          {showDeclineBox && canDeclineContract(status, contract) && (
             <section className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
               <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-red-200">
                 Reason for declining
@@ -464,13 +472,11 @@ export default function ContractDetailPage() {
                 <TextValue value={deliverables || "No deliverables provided."} />
               </Card>
 
-              <Card title="Acceptance Criteria" icon="verified">
-                <TextValue
-                  value={
-                    acceptanceCriteria || "No acceptance criteria provided."
-                  }
-                />
-              </Card>
+              {acceptanceCriteria && (
+                <Card title="Acceptance Criteria" icon="verified">
+                  <TextValue value={acceptanceCriteria} />
+                </Card>
+              )}
 
               <Card title="Payment Terms" icon="payments">
                 <TextValue value={contractTerms || "No payment terms provided."} />
@@ -510,70 +516,79 @@ export default function ContractDetailPage() {
             </main>
 
             <aside className="space-y-6">
-              <PaymentSummary contract={contract} />
+              <PaymentSummary contract={contract} milestones={milestoneDrafts} />
 
               <Card title="Contract Info" icon="info">
-                <Info label="Status" value={getContractStatusLabel(status)} />
+                <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
-                <Info label="Expert" value={expertName} />
-
                 <Info
-                  label="Client Confirmed"
-                  value={formatBoolean(
-                    getField(contract, ["clientConfirmed", "ClientConfirmed"], false)
-                  )}
+                  label="Timeline"
+                  value={`${getTimelineDays(contract)} days`}
                 />
-
-                <Info
-                  label="Expert Confirmed"
-                  value={formatBoolean(
-                    getField(contract, ["expertConfirmed", "ExpertConfirmed"], false)
-                  )}
-                />
-
-                {realProposalId && <Info label="Proposal" value={`#${realProposalId}`} />}
-                {realJobId && <Info label="Job" value={`#${realJobId}`} />}
-                {realProjectId && <Info label="Project" value={`#${realProjectId}`} />}
-              </Card>
-
-              <Card title="Dates" icon="event">
                 <Info
                   label="Created"
-                  value={formatDate(
-                    getField(contract, ["createdAt", "CreatedAt"], "")
-                  )}
+                  value={formatDate(getField(contract, ["createdAt", "CreatedAt"], ""))}
                 />
-
-                {getField(contract, ["confirmedAt", "ConfirmedAt"], "") && (
-                  <Info
-                    label="Confirmed"
-                    value={formatDate(
-                      getField(contract, ["confirmedAt", "ConfirmedAt"], "")
-                    )}
-                  />
-                )}
-
-                {getField(contract, ["cancelledAt", "CancelledAt"], "") && (
-                  <Info
-                    label="Declined"
-                    value={formatDate(
-                      getField(contract, ["cancelledAt", "CancelledAt"], "")
-                    )}
-                  />
-                )}
               </Card>
+
+              <section className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
+                <div className="flex items-start gap-3">
+                  <span className="material-symbols-outlined text-yellow-300">
+                    info
+                  </span>
+                  <div>
+                    <h3 className="font-bold text-white">Earning note</h3>
+                    <p className="mt-2 text-sm leading-6 text-yellow-100/80">
+                      Expert service fee is deducted when each milestone payment is released. Released net earnings stay pending until the project is completed.
+                    </p>
+                  </div>
+                </div>
+              </section>
             </aside>
           </div>
         </div>
       </div>
+
+      {acceptSuccessModal && (
+        <AcceptSuccessModal projectId={acceptSuccessModal.projectId} />
+      )}
     </ExpertLayout>
   );
 }
 
-function PaymentSummary({ contract }) {
-  const finalPrice = getFinalPrice(contract);
-  const platformFee = getPlatformFee(contract);
-  const totalClientPayment = getTotalClientPayment(contract);
+function AcceptSuccessModal({ projectId }) {
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-3xl border border-green-400/30 bg-[#151a22] p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-green-400/30 bg-green-400/10">
+          <span className="material-symbols-outlined text-4xl text-green-300">
+            check_circle
+          </span>
+        </div>
+
+        <h2 className="mt-5 text-2xl font-extrabold text-white">
+          Contract accepted successfully
+        </h2>
+
+        <p className="mt-3 text-sm leading-6 text-gray-400">
+          Your contract has been confirmed. We are redirecting you to your
+          project workspace.
+        </p>
+
+        <div className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-200">
+          {projectId
+            ? "Redirecting to your project workspace..."
+            : "Redirecting to your projects..."}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentSummary({ contract, milestones = [] }) {
+  const contractAmount = getFinalPrice(contract);
+  const expertFeeRate = getExpertFeeRate(contract);
+  const expertServiceFee = getExpertServiceFee(contract);
   const expertReceivable = getExpertReceivable(contract);
 
   return (
@@ -586,26 +601,32 @@ function PaymentSummary({ contract }) {
         </div>
 
         <div>
-          <h2 className="font-extrabold text-white">Payment Summary</h2>
+          <h2 className="font-extrabold text-white">Your Payment</h2>
           <p className="text-xs text-green-100/70">
-            Clear breakdown for this contract
+            Estimated earning after expert service fee
           </p>
         </div>
       </div>
 
       <div className="space-y-3">
-        <PaymentRow label="Contract Amount" value={formatMoney(finalPrice)} />
-        <PaymentRow label="Platform Fee" value={formatMoney(platformFee)} />
-        <PaymentRow label="Client Pays" value={formatMoney(totalClientPayment)} />
+        <PaymentRow label="Contract Amount" value={formatMoney(contractAmount)} />
+        <PaymentRow
+          label={`Expert Service Fee${expertFeeRate ? ` (${expertFeeRate}%)` : ""}`}
+          value={`-${formatMoney(expertServiceFee)}`}
+        />
       </div>
 
       <div className="mt-4 rounded-xl border border-green-400/30 bg-black/20 p-4">
         <p className="text-xs uppercase tracking-wider text-green-100/70">
-          You receive
+          You receive after fee
         </p>
 
         <p className="mt-1 text-2xl font-black text-green-300">
           {formatMoney(expertReceivable)}
+        </p>
+
+        <p className="mt-2 text-xs leading-5 text-green-100/70">
+          This is paid into pending earnings milestone by milestone, then becomes withdrawable after project completion.
         </p>
       </div>
     </section>
@@ -676,28 +697,34 @@ function MilestoneDraftCard({ milestone, index }) {
         )}
       </div>
 
-      <TextValue value={milestone.description || "No description."} />
+      {milestone.description && <TextValue value={milestone.description} />}
 
       <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info
-          label="Expected Deliverable"
-          value={milestone.expectedDeliverable || "N/A"}
-        />
+        {milestone.expectedDeliverable && (
+          <Info
+            label="Expected Deliverable"
+            value={milestone.expectedDeliverable}
+          />
+        )}
+
+        {milestone.acceptanceCriteria && (
+          <Info
+            label="Acceptance Criteria"
+            value={milestone.acceptanceCriteria}
+          />
+        )}
 
         <Info
-          label="Acceptance Criteria"
-          value={milestone.acceptanceCriteria || "N/A"}
+          label="Amount"
+          value={formatMoney(milestone.amount)}
         />
-
-        <Info label="Amount" value={formatMoney(milestone.amount)} />
 
         <Info
           label="Deadline"
-          value={
-            milestone.deadlineOffsetDays || milestone.durationDays
-              ? `${milestone.deadlineOffsetDays || milestone.durationDays} days`
-              : "N/A"
-          }
+          value={`${milestone.deadlineOffsetDays ??
+            milestone.durationDays ??
+            0
+            } days`}
         />
       </div>
     </div>
@@ -723,20 +750,22 @@ function TextValue({ value }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, contract }) {
   const normalized = normalizeStatus(status);
 
   const style = isContractAccepted(normalized)
     ? "border-green-400/30 bg-green-400/10 text-green-300"
     : isContractDeclined(normalized)
-    ? "border-red-400/30 bg-red-400/10 text-red-300"
-    : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : isDraftContract(normalized) && !isWaitingForExpert(normalized, contract)
+        ? "border-white/10 bg-white/[0.04] text-gray-300"
+        : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {getContractStatusLabel(normalized)}
+      {getContractStatusLabel(normalized, contract)}
     </span>
   );
 }
@@ -746,8 +775,8 @@ function Alert({ type, title, message }) {
     type === "success"
       ? "border-green-500/30 bg-green-500/10 text-green-300"
       : type === "warning"
-      ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
-      : "border-red-500/30 bg-red-500/10 text-red-300";
+        ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-200"
+        : "border-red-500/30 bg-red-500/10 text-red-300";
 
   return (
     <div className={`mb-5 rounded-xl border px-5 py-4 text-sm ${style}`}>
@@ -795,6 +824,19 @@ function getNumberField(entity, paths = [], fallback = 0) {
   return Number.isNaN(number) ? fallback : number;
 }
 
+function getBooleanField(entity, paths = [], fallback = false) {
+  const value = getField(entity, paths, fallback);
+
+  if (typeof value === "boolean") return value;
+
+  const text = String(value || "").trim().toLowerCase();
+
+  if (["true", "1", "yes"].includes(text)) return true;
+  if (["false", "0", "no"].includes(text)) return false;
+
+  return fallback;
+}
+
 function getContractId(contract) {
   return getField(contract, ["contractId", "ContractId", "id", "Id"], "");
 }
@@ -834,38 +876,49 @@ function getFinalPrice(contract) {
   return getExpertReceivable(contract);
 }
 
-function getPlatformFee(contract) {
+function getExpertFeeRate(contract) {
   return getNumberField(
     contract,
-    ["platformFeeAmount", "PlatformFeeAmount", "platformFee", "PlatformFee"],
+    ["expertFeeRate", "ExpertFeeRate", "expertServiceFeeRate", "ExpertServiceFeeRate"],
     0
   );
 }
 
-function getTotalClientPayment(contract) {
-  return getNumberField(
+function getExpertServiceFee(contract) {
+  const direct = getNumberField(
     contract,
     [
-      "totalClientPayment",
-      "TotalClientPayment",
-      "clientPaymentAmount",
-      "ClientPaymentAmount",
+      "expertFeeAmount",
+      "ExpertFeeAmount",
+      "expertServiceFeeAmount",
+      "ExpertServiceFeeAmount",
     ],
-    getFinalPrice(contract) + getPlatformFee(contract)
+    0
   );
+
+  if (direct > 0) return direct;
+
+  const rate = getExpertFeeRate(contract);
+  return rate > 0 ? (getFinalPrice(contract) * rate) / 100 : 0;
 }
 
 function getExpertReceivable(contract) {
-  return getNumberField(
+  const direct = getNumberField(
     contract,
     [
       "expertReceivableAmount",
       "ExpertReceivableAmount",
       "expertAmount",
       "ExpertAmount",
+      "netAmount",
+      "NetAmount",
     ],
     0
   );
+
+  if (direct > 0) return direct;
+
+  return Math.max(getFinalPrice(contract) - getExpertServiceFee(contract), 0);
 }
 
 function getTimelineDays(contract) {
@@ -1038,23 +1091,75 @@ function normalizeMilestone(item, index = 0) {
       "",
 
     amount: Number(item?.amount ?? item?.Amount ?? 0),
-
     durationDays: Number(duration),
-
     deadlineOffsetDays: Number(duration),
-
     revisionLimit: item?.revisionLimit ?? item?.RevisionLimit ?? null,
-
     orderIndex: Number(item?.orderIndex ?? item?.OrderIndex ?? index + 1),
-
     status: String(item?.status || item?.Status || "PENDING").toUpperCase(),
-
     raw: item,
   };
 }
 
 function normalizeStatus(status) {
   return String(status || "DRAFT").trim().toUpperCase();
+}
+
+function isDraftContract(status) {
+  return ["DRAFT", "CREATED", "PREVIEW"].includes(normalizeStatus(status));
+}
+
+function isClientConfirmed(contract) {
+  return getBooleanField(
+    contract,
+    [
+      "clientConfirmed",
+      "ClientConfirmed",
+      "isClientConfirmed",
+      "IsClientConfirmed",
+    ],
+    false
+  );
+}
+
+function isExpertConfirmed(contract) {
+  return getBooleanField(
+    contract,
+    [
+      "expertConfirmed",
+      "ExpertConfirmed",
+      "isExpertConfirmed",
+      "IsExpertConfirmed",
+    ],
+    false
+  );
+}
+
+function isContractSentToExpert(status) {
+  return [
+    "PENDING",
+    "PENDING_EXPERT",
+    "PENDING_EXPERT_APPROVAL",
+    "WAITING_EXPERT",
+    "WAITING_EXPERT_CONFIRMATION",
+    "CLIENT_CONFIRMED",
+    "CLIENT_SENT",
+    "SENT",
+    "SENT_TO_EXPERT",
+    "AWAITING_EXPERT",
+    "AWAITING_EXPERT_CONFIRMATION",
+  ].includes(normalizeStatus(status));
+}
+
+function isWaitingForExpert(status, contract) {
+  const normalized = normalizeStatus(status);
+
+  if (isContractSentToExpert(normalized)) return true;
+
+  return (
+    isDraftContract(normalized) &&
+    isClientConfirmed(contract) &&
+    !isExpertConfirmed(contract)
+  );
 }
 
 function isContractAccepted(status) {
@@ -1069,26 +1174,34 @@ function isContractDeclined(status) {
   );
 }
 
-function canAcceptContract(status) {
-  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
-    normalizeStatus(status)
-  );
+function canAcceptContract(status, contract) {
+  return isWaitingForExpert(status, contract);
 }
 
-function canDeclineContract(status) {
-  return ["DRAFT", "PENDING", "WAITING_EXPERT", "CLIENT_CONFIRMED"].includes(
-    normalizeStatus(status)
-  );
+function canDeclineContract(status, contract) {
+  return isWaitingForExpert(status, contract);
 }
 
-function getContractStatusLabel(status) {
+function getContractStatusLabel(status, contract) {
   const value = normalizeStatus(status);
+
+  if (isWaitingForExpert(value, contract)) return "Waiting Expert";
 
   const map = {
     DRAFT: "Draft",
-    PENDING: "Pending",
+    CREATED: "Draft",
+    PREVIEW: "Draft",
+    PENDING: "Waiting Expert",
+    PENDING_EXPERT: "Waiting Expert",
+    PENDING_EXPERT_APPROVAL: "Waiting Expert",
     WAITING_EXPERT: "Waiting Expert",
+    WAITING_EXPERT_CONFIRMATION: "Waiting Expert",
     CLIENT_CONFIRMED: "Waiting Expert",
+    CLIENT_SENT: "Waiting Expert",
+    SENT: "Waiting Expert",
+    SENT_TO_EXPERT: "Waiting Expert",
+    AWAITING_EXPERT: "Waiting Expert",
+    AWAITING_EXPERT_CONFIRMATION: "Waiting Expert",
     ACCEPTED: "Accepted",
     CONFIRMED: "Confirmed",
     ACTIVE: "Active",
@@ -1105,10 +1218,10 @@ function getContractStatusLabel(status) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
@@ -1120,7 +1233,7 @@ function formatDate(value) {
   if (!value) return "N/A";
 
   try {
-    return new Intl.DateTimeFormat("en-US", {
+    return new Intl.DateTimeFormat("vi-VN", {
       dateStyle: "medium",
       timeStyle: "short",
     }).format(new Date(value));
@@ -1166,11 +1279,11 @@ function getFriendlyError(error, fallback = "Something went wrong.") {
     typeof payload === "string"
       ? payload
       : payload?.message ||
-        payload?.title ||
-        payload?.detail ||
-        payload?.error ||
-        error?.message ||
-        "";
+      payload?.title ||
+      payload?.detail ||
+      payload?.error ||
+      error?.message ||
+      "";
 
   const lower = String(message || "").toLowerCase();
 

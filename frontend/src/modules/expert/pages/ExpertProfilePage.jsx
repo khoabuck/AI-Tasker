@@ -14,6 +14,7 @@ export default function ExpertProfilePage() {
 
   useEffect(() => {
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProfile = async () => {
@@ -22,7 +23,12 @@ export default function ExpertProfilePage() {
       setError("");
 
       const result = await expertProfileService.getMyExpertProfile();
-      const data = unwrapData(result);
+      const data = unwrapProfileData(result);
+
+      console.log("EXPERT PROFILE RESULT:", result);
+      console.log("EXPERT PROFILE DATA:", data);
+      console.log("CATEGORY:", data?.expertCategory);
+      console.log("LEVEL:", data?.level);
 
       setProfile(data);
       updateLocalUserStatus(getUserStatus(data));
@@ -262,20 +268,18 @@ export default function ExpertProfilePage() {
                 <Summary label="Passing Score" value={feedback.passScore} />
                 <Summary
                   label="Category"
-                  value={profile?.expertCategory || "N/A"}
+                  value={formatExpertCategory(profile?.expertCategory)}
                 />
-                <Summary label="Level" value={profile?.level || "N/A"} />
+                <Summary
+                  label="Level"
+                  value={formatExpertLevel(profile?.level)}
+                />
               </Card>
 
               <Card title="Work Preferences">
                 <Summary
                   label="Experience"
                   value={`${profile?.yearsOfExperience ?? 0} years`}
-                />
-
-                <Summary
-                  label="Verified Experience"
-                  value={`${profile?.verifiedYearsOfExperience ?? 0} years`}
                 />
 
                 <Summary
@@ -623,6 +627,13 @@ function getCertificateBadge(status) {
     };
   }
 
+  if (value === "INVALID") {
+    return {
+      label: "Invalid",
+      className: "border-red-400/30 bg-red-400/10 text-red-300",
+    };
+  }
+
   return {
     label: "Not verified",
     className: "border-white/10 bg-white/[0.04] text-gray-300",
@@ -691,6 +702,47 @@ function getMissingInformation(profile) {
   return String(value || "");
 }
 
+function formatExpertCategory(value) {
+  const map = {
+    AI_AUTOMATION: "AI Automation",
+    AI: "AI",
+    DATA_AI: "Data & AI",
+    DATA_SCIENCE: "Data Science",
+    MACHINE_LEARNING: "Machine Learning",
+    CHATBOT: "Chatbot",
+    COMPUTER_VISION: "Computer Vision",
+    NLP: "NLP",
+    OTHER: "Other",
+  };
+
+  return map[value] || formatEnumText(value) || "N/A";
+}
+
+function formatExpertLevel(value) {
+  const map = {
+    INTERN: "Intern",
+    FRESHER: "Fresher",
+    JUNIOR: "Junior",
+    MIDDLE: "Middle",
+    MID: "Middle",
+    SENIOR: "Senior",
+    EXPERT: "Expert",
+  };
+
+  return map[value] || formatEnumText(value) || "N/A";
+}
+
+function formatEnumText(value) {
+  if (!value) return "";
+
+  return String(value)
+    .trim()
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function updateLocalUserStatus(status) {
   if (!status) return;
 
@@ -720,11 +772,20 @@ function toArray(value) {
     .filter(Boolean);
 }
 
-function unwrapData(result) {
-  if (!result) return result;
+function unwrapProfileData(result) {
+  if (!result) return null;
 
-  if (result.data?.data) return result.data.data;
-  if (result.data) return result.data;
+  if (result?.expertProfileId) return result;
+
+  if (result?.success === true && result?.data) return result.data;
+
+  if (result?.data?.expertProfileId) return result.data;
+
+  if (result?.data?.success === true && result?.data?.data) {
+    return result.data.data;
+  }
+
+  if (result?.data?.data?.expertProfileId) return result.data.data;
 
   return result;
 }

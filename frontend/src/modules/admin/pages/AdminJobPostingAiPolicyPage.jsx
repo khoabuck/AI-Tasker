@@ -375,34 +375,6 @@ export default function AdminJobPostingAiPolicyPage() {
                     />
                   </div>
                 </section>
-
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                  <h2 className="mb-5 text-xl font-bold text-white">
-                    Policy Metadata
-                  </h2>
-
-                  <div className="space-y-4">
-                    <InfoBox label="Policy ID" value={getPolicyId(policy)} />
-                    <InfoBox
-                      label="Created At"
-                      value={formatDateTime(policy?.createdAt)}
-                    />
-                    <InfoBox
-                      label="Updated At"
-                      value={formatDateTime(policy?.updatedAt)}
-                    />
-                    <InfoBox
-                      label="Updated By"
-                      value={
-                        policy?.updatedByAdminEmail ||
-                        policy?.updatedByAdminFullName ||
-                        policy?.raw?.UpdatedByAdminEmail ||
-                        policy?.raw?.UpdatedByAdminFullName ||
-                        "N/A"
-                      }
-                    />
-                  </div>
-                </section>
               </aside>
             </div>
           </>
@@ -708,7 +680,7 @@ function getPolicyId(policy) {
 function formatNumber(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US").format(
+  return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
 }
