@@ -1916,7 +1916,14 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("vi-VN");
+  return date.toLocaleString("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 }
 
 function formatLabel(value) {

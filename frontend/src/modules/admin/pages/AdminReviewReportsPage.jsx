@@ -1050,11 +1050,11 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("vi-VN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return date.toLocaleDateString("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 }
 
 function formatLabel(value) {

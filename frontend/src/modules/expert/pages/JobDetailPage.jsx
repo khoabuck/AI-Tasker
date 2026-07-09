@@ -977,10 +977,10 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "Flexible";
 
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
+  return date.toLocaleDateString("vi-VN", {
     day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
   });
 }
 

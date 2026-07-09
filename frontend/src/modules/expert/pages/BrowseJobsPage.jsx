@@ -1116,11 +1116,13 @@ function formatDuration(days) {
 function formatDate(value) {
   if (!value) return "Flexible";
 
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Flexible";
+
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }

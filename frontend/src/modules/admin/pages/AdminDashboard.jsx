@@ -590,10 +590,11 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("en-US", {
-    month: "short",
-    day: "2-digit",
-  });
+  return date.toLocaleDateString("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 }
 
 function formatLabel(value) {

@@ -695,9 +695,10 @@ function formatTime(value) {
 
   if (Number.isNaN(date.getTime())) return "";
 
-  return date.toLocaleTimeString("en-US", {
+  return date.toLocaleTimeString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   });
 }
 

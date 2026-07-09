@@ -110,11 +110,11 @@ export default function ManageTransactionPage() {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return "No date";
 
-    return date.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
+    return date.toLocaleDateString("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
   };
 
   const getStatusClass = (status) => {

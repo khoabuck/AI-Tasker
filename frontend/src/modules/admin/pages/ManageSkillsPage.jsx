@@ -702,11 +702,11 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+  return date.toLocaleDateString("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 }
 
 function getFriendlyError(err) {
