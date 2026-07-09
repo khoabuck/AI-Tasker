@@ -684,9 +684,9 @@ function formatBudget(min, max) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("vi-VN", {
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "VND",
+    currency: "USD",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }

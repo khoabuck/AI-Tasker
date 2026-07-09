@@ -20,6 +20,7 @@ const TYPE_CONFIG = {
   ESCROW_LOCK_EXPIRED: { icon: "lock_clock", color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
 
   CONTRACT_CONFIRMED_PENDING_ESCROW: { icon: "contract", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
+  CONTRACT_CONFIRMED_ESCROW_LOCKED: { icon: "lock", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
 
   DEPOSIT: { icon: "add_card", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
   WITHDRAWAL: { icon: "outbox", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
@@ -146,6 +147,7 @@ function getNotificationTargetUrl(notification) {
           ? `/client/projects/${projectId}`
           : "/client/projects";
 
+    case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
     case "ESCROW_LOCKED":
     case "ESCROW_LOCK_EXPIRED":
       return projectId
@@ -309,7 +311,7 @@ export default function NotificationsPage() {
 
         {/* Header */}
         <button
-          onClick={() => navigate(-1)}
+          onClick={() => navigate("/client/dashboard", { replace: true })}
           className="mb-6 flex w-fit items-center gap-2 rounded-lg border border-cyan-400/30 px-4 py-2 text-cyan-400 transition hover:bg-cyan-400/10"
         >
           <span className="material-symbols-outlined text-[18px]">
@@ -389,24 +391,61 @@ export default function NotificationsPage() {
                     {/* Content */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 4 }}>
-                        <p style={{ fontSize: 14, color: isUnread ? "#e1e2eb" : "#c2c6d6", fontWeight: isUnread ? 600 : 400, margin: 0, lineHeight: 1.5 }}>
-                          {n.title || n.message || n.content}
+                        <p
+                          style={{
+                            fontSize: 14,
+                            color: isUnread ? "#e1e2eb" : "#c2c6d6",
+                            fontWeight: isUnread ? 600 : 400,
+                            margin: 0,
+                            lineHeight: 1.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                            maxWidth: "100%",
+                          }}
+                        >
+                          {n.title || "Notification"}
                         </p>
                         <span style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap", flexShrink: 0 }}>
                           {timeAgo(n.createdAt)}
                         </span>
                       </div>
 
-                      {(n.body || n.description) && (
-                        <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 8px", lineHeight: 1.6 }}>
-                          {n.body || n.description}
-                        </p>
-                      )}
+                      <p
+                        style={{
+                          fontSize: 13,
+                          color: "#8c90a0",
+                          margin: "0 0 8px",
+                          lineHeight: 1.6,
+                          overflow: "hidden",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                        }}
+                      >
+                        {n.content || n.message || n.body || n.description || ""}
+                      </p>
 
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         {n.type && (
-                          <span style={{ padding: "2px 8px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: cfg.color, background: cfg.bg, border: `1px solid ${cfg.color}30` }}>
-                            {n.type.replace(/_/g, " ")}
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              fontFamily: "JetBrains Mono, monospace",
+                              color: cfg.color,
+                              background: cfg.bg,
+                              border: `1px solid ${cfg.color}30`,
+                              maxWidth: 180,
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              whiteSpace: "nowrap",
+                              display: "inline-block",
+                            }}
+                          >
+                            {n.type}
                           </span>
                         )}
                         {isUnread && (

@@ -6,20 +6,7 @@ const getValue = (...values) => {
   );
 };
 
-const toNumber = (value, fallback = 0) => {
-  const number = Number(value);
-  return Number.isNaN(number) ? fallback : number;
-};
-
-const isInvalidId = (value) => {
-  return (
-    value === undefined ||
-    value === null ||
-    value === "" ||
-    value === "undefined" ||
-    value === "null"
-  );
-};
+const trim = (value) => String(value || "").trim();
 
 const unwrapData = (response) => {
   const data = response?.data;
@@ -27,33 +14,21 @@ const unwrapData = (response) => {
   if (!data) return null;
 
   if (data?.data?.wallet) return data.data.wallet;
-  if (data?.data?.depositOrder) return data.data.depositOrder;
-  if (data?.data?.withdrawal) return data.data.withdrawal;
+  if (data?.data?.balance !== undefined) return data.data.balance;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
+  if (data?.data?.depositOrder) return data.data.depositOrder;
+  if (data?.data?.withdrawal) return data.data.withdrawal;
   if (data?.data) return data.data;
 
   if (data?.wallet) return data.wallet;
-  if (data?.depositOrder) return data.depositOrder;
-  if (data?.withdrawal) return data.withdrawal;
+  if (data?.balance !== undefined) return data.balance;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
+  if (data?.depositOrder) return data.depositOrder;
+  if (data?.withdrawal) return data.withdrawal;
 
   return data;
-};
-
-const unwrapBalanceData = (response) => {
-  const data = response?.data;
-
-  if (!data) return null;
-
-  if (data.balance !== undefined && data.balance !== null) return data.balance;
-
-  if (data.data?.balance !== undefined && data.data?.balance !== null) {
-    return data.data.balance;
-  }
-
-  return unwrapData(response);
 };
 
 const unwrapListData = (response) => {
@@ -63,942 +38,462 @@ const unwrapListData = (response) => {
 
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
+  if (Array.isArray(data?.Items)) return data.Items;
   if (Array.isArray(data?.result)) return data.result;
+  if (Array.isArray(data?.Result)) return data.Result;
+  if (Array.isArray(data?.results)) return data.results;
+  if (Array.isArray(data?.Results)) return data.Results;
+
   if (Array.isArray(data?.transactions)) return data.transactions;
-  if (Array.isArray(data?.depositOrders)) return data.depositOrders;
+  if (Array.isArray(data?.Transactions)) return data.Transactions;
+
   if (Array.isArray(data?.withdrawals)) return data.withdrawals;
+  if (Array.isArray(data?.Withdrawals)) return data.Withdrawals;
+  if (Array.isArray(data?.withdrawalRequests)) return data.withdrawalRequests;
+  if (Array.isArray(data?.WithdrawalRequests)) return data.WithdrawalRequests;
+
+  if (Array.isArray(data?.depositOrders)) return data.depositOrders;
+  if (Array.isArray(data?.DepositOrders)) return data.DepositOrders;
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.Items)) return data.data.Items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
+  if (Array.isArray(data?.data?.Result)) return data.data.Result;
+  if (Array.isArray(data?.data?.results)) return data.data.results;
+  if (Array.isArray(data?.data?.Results)) return data.data.Results;
+
   if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
-  if (Array.isArray(data?.data?.depositOrders)) return data.data.depositOrders;
+  if (Array.isArray(data?.data?.Transactions)) return data.data.Transactions;
+
   if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
+  if (Array.isArray(data?.data?.Withdrawals)) return data.data.Withdrawals;
+
+  if (Array.isArray(data?.data?.withdrawalRequests)) {
+    return data.data.withdrawalRequests;
+  }
+
+  if (Array.isArray(data?.data?.WithdrawalRequests)) {
+    return data.data.WithdrawalRequests;
+  }
+
+  if (Array.isArray(data?.data?.depositOrders)) {
+    return data.data.depositOrders;
+  }
+
+  if (Array.isArray(data?.data?.DepositOrders)) {
+    return data.data.DepositOrders;
+  }
 
   return [];
 };
 
-export const normalizeWallet = (wallet) => {
-  if (!wallet) return null;
+const normalizeWallet = (wallet) => {
+  if (!wallet) {
+    return {
+      walletId: null,
+      userId: null,
+      balance: 0,
+      availableBalance: 0,
+      lockedBalance: 0,
+      pendingBalance: 0,
+      totalEarning: 0,
+      totalEarned: 0,
+      createdAt: "",
+      updatedAt: "",
+      raw: null,
+    };
+  }
 
-  const raw = wallet.raw || wallet.Raw || wallet;
-
-  const availableBalance = toNumber(
+  const availableBalance = Number(
     getValue(
       wallet.availableBalance,
       wallet.AvailableBalance,
       wallet.balance,
       wallet.Balance,
-      raw.availableBalance,
-      raw.AvailableBalance,
-      raw.balance,
-      raw.Balance,
       0
-    ),
-    0
+    )
   );
 
-  const pendingEarningsBalance = toNumber(
-    getValue(
-      wallet.pendingEarningsBalance,
-      wallet.PendingEarningsBalance,
-      wallet.pendingEarnings,
-      wallet.PendingEarnings,
-      wallet.pendingBalance,
-      wallet.PendingBalance,
-      raw.pendingEarningsBalance,
-      raw.PendingEarningsBalance,
-      raw.pendingEarnings,
-      raw.PendingEarnings,
-      raw.pendingBalance,
-      raw.PendingBalance,
-      0
-    ),
-    0
-  );
-
-  const lockedBalance = toNumber(
+  const lockedBalance = Number(
     getValue(
       wallet.lockedBalance,
       wallet.LockedBalance,
-      wallet.escrowBalance,
-      wallet.EscrowBalance,
-      raw.lockedBalance,
-      raw.LockedBalance,
-      raw.escrowBalance,
-      raw.EscrowBalance,
+      wallet.escrowAmount,
+      wallet.EscrowAmount,
+      wallet.lockedAmount,
+      wallet.LockedAmount,
       0
-    ),
-    0
+    )
   );
 
-  const withdrawableBalance = toNumber(
-    getValue(
-      wallet.withdrawableBalance,
-      wallet.WithdrawableBalance,
-      wallet.availableBalance,
-      wallet.AvailableBalance,
-      wallet.balance,
-      wallet.Balance,
-      raw.withdrawableBalance,
-      raw.WithdrawableBalance,
-      raw.availableBalance,
-      raw.AvailableBalance,
-      raw.balance,
-      raw.Balance,
-      availableBalance
-    ),
-    availableBalance
+  const pendingBalance = Number(
+    getValue(wallet.pendingBalance, wallet.PendingBalance, 0)
   );
 
-  const totalEarning = toNumber(
+  const totalEarning = Number(
     getValue(
       wallet.totalEarning,
       wallet.TotalEarning,
-      wallet.totalEarnings,
-      wallet.TotalEarnings,
       wallet.totalEarned,
       wallet.TotalEarned,
-      raw.totalEarning,
-      raw.TotalEarning,
-      raw.totalEarnings,
-      raw.TotalEarnings,
-      raw.totalEarned,
-      raw.TotalEarned,
-      availableBalance + pendingEarningsBalance
-    ),
-    availableBalance + pendingEarningsBalance
-  );
-
-  const walletId = getValue(
-    wallet.walletId,
-    wallet.WalletId,
-    wallet.id,
-    wallet.Id,
-    raw.walletId,
-    raw.WalletId,
-    raw.id,
-    raw.Id,
-    ""
+      wallet.totalIncome,
+      wallet.TotalIncome,
+      0
+    )
   );
 
   return {
-    walletId,
-    id: walletId,
+    walletId: getValue(wallet.walletId, wallet.WalletId, wallet.id, wallet.Id),
+    userId: getValue(wallet.userId, wallet.UserId),
 
-    userId: getValue(wallet.userId, wallet.UserId, raw.userId, raw.UserId, ""),
-
-    availableBalance,
     balance: availableBalance,
-    withdrawableBalance,
-    pendingEarningsBalance,
+    availableBalance,
     lockedBalance,
+    pendingBalance,
 
     totalEarning,
-    totalEarnings: totalEarning,
-    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
+    totalEarned: totalEarning,
 
-    currency: "VND",
-
-    updatedAt: getValue(
-      wallet.updatedAt,
-      wallet.UpdatedAt,
-      raw.updatedAt,
-      raw.UpdatedAt,
-      ""
-    ),
+    createdAt: getValue(wallet.createdAt, wallet.CreatedAt, ""),
+    updatedAt: getValue(wallet.updatedAt, wallet.UpdatedAt, ""),
 
     raw: wallet,
   };
 };
 
-export const normalizeBalance = (balanceData) => {
-  if (balanceData === undefined || balanceData === null) {
+const normalizeBalance = (balanceData) => {
+  if (balanceData === null || balanceData === undefined) {
     return {
-      availableBalance: 0,
       balance: 0,
-      withdrawableBalance: 0,
-      pendingEarningsBalance: 0,
-      lockedBalance: 0,
-      totalEarning: 0,
-      totalEarnings: 0,
-      totalBalance: 0,
-      currency: "VND",
+      availableBalance: 0,
     };
   }
 
   if (typeof balanceData === "number") {
     return {
-      availableBalance: balanceData,
       balance: balanceData,
-      withdrawableBalance: balanceData,
-      pendingEarningsBalance: 0,
-      lockedBalance: 0,
-      totalEarning: balanceData,
-      totalEarnings: balanceData,
-      totalBalance: balanceData,
-      currency: "VND",
+      availableBalance: balanceData,
     };
   }
 
-  const raw = balanceData.raw || balanceData.Raw || balanceData;
-
-  const availableBalance = toNumber(
+  const balance = Number(
     getValue(
-      balanceData.availableBalance,
-      balanceData.AvailableBalance,
       balanceData.balance,
       balanceData.Balance,
-      raw.availableBalance,
-      raw.AvailableBalance,
-      raw.balance,
-      raw.Balance,
-      0
-    ),
-    0
-  );
-
-  const pendingEarningsBalance = toNumber(
-    getValue(
-      balanceData.pendingEarningsBalance,
-      balanceData.PendingEarningsBalance,
-      balanceData.pendingEarnings,
-      balanceData.PendingEarnings,
-      balanceData.pendingBalance,
-      balanceData.PendingBalance,
-      raw.pendingEarningsBalance,
-      raw.PendingEarningsBalance,
-      raw.pendingEarnings,
-      raw.PendingEarnings,
-      raw.pendingBalance,
-      raw.PendingBalance,
-      0
-    ),
-    0
-  );
-
-  const lockedBalance = toNumber(
-    getValue(
-      balanceData.lockedBalance,
-      balanceData.LockedBalance,
-      balanceData.escrowBalance,
-      balanceData.EscrowBalance,
-      raw.lockedBalance,
-      raw.LockedBalance,
-      raw.escrowBalance,
-      raw.EscrowBalance,
-      0
-    ),
-    0
-  );
-
-  const withdrawableBalance = toNumber(
-    getValue(
-      balanceData.withdrawableBalance,
-      balanceData.WithdrawableBalance,
       balanceData.availableBalance,
       balanceData.AvailableBalance,
-      balanceData.balance,
-      balanceData.Balance,
-      raw.withdrawableBalance,
-      raw.WithdrawableBalance,
-      raw.availableBalance,
-      raw.AvailableBalance,
-      raw.balance,
-      raw.Balance,
-      availableBalance
-    ),
-    availableBalance
-  );
-
-  const totalEarning = toNumber(
-    getValue(
-      balanceData.totalEarning,
-      balanceData.TotalEarning,
-      balanceData.totalEarnings,
-      balanceData.TotalEarnings,
-      balanceData.totalEarned,
-      balanceData.TotalEarned,
-      raw.totalEarning,
-      raw.TotalEarning,
-      raw.totalEarnings,
-      raw.TotalEarnings,
-      raw.totalEarned,
-      raw.TotalEarned,
-      availableBalance + pendingEarningsBalance
-    ),
-    availableBalance + pendingEarningsBalance
+      balanceData.amount,
+      balanceData.Amount,
+      0
+    )
   );
 
   return {
-    availableBalance,
-    balance: availableBalance,
-    withdrawableBalance,
-    pendingEarningsBalance,
-    lockedBalance,
-    totalEarning,
-    totalEarnings: totalEarning,
-    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
-    currency: "VND",
+    balance,
+    availableBalance: balance,
     raw: balanceData,
   };
 };
 
-export const normalizeTransaction = (transaction) => {
+const normalizeTransaction = (transaction) => {
   if (!transaction) return null;
-
-  const raw = transaction.raw || transaction.Raw || transaction;
-
-  const amount = toNumber(
-    getValue(transaction.amount, transaction.Amount, raw.amount, raw.Amount, 0),
-    0
-  );
-
-  const type = String(
-    getValue(
-      transaction.type,
-      transaction.Type,
-      raw.type,
-      raw.Type,
-      "TRANSACTION"
-    )
-  ).toUpperCase();
-
-  const status = String(
-    getValue(
-      transaction.status,
-      transaction.Status,
-      raw.status,
-      raw.Status,
-      "SUCCESS"
-    )
-  ).toUpperCase();
 
   const transactionId = getValue(
     transaction.transactionId,
     transaction.TransactionId,
-    transaction.walletTransactionId,
-    transaction.WalletTransactionId,
     transaction.id,
-    transaction.Id,
-    raw.transactionId,
-    raw.TransactionId,
-    raw.walletTransactionId,
-    raw.WalletTransactionId,
-    raw.id,
-    raw.Id,
-    ""
+    transaction.Id
   );
 
   return {
     transactionId,
     id: transactionId,
 
-    escrowId: getValue(
-      transaction.escrowId,
-      transaction.EscrowId,
-      raw.escrowId,
-      raw.EscrowId,
-      ""
-    ),
+    escrowId: getValue(transaction.escrowId, transaction.EscrowId),
+    projectId: getValue(transaction.projectId, transaction.ProjectId),
+    milestoneId: getValue(transaction.milestoneId, transaction.MilestoneId),
+    userId: getValue(transaction.userId, transaction.UserId),
 
-    projectId: getValue(
-      transaction.projectId,
-      transaction.ProjectId,
-      raw.projectId,
-      raw.ProjectId,
-      ""
-    ),
+    type: getValue(transaction.type, transaction.Type, "TRANSACTION"),
 
-    milestoneId: getValue(
-      transaction.milestoneId,
-      transaction.MilestoneId,
-      transaction.projectMilestoneId,
-      transaction.ProjectMilestoneId,
-      raw.milestoneId,
-      raw.MilestoneId,
-      raw.projectMilestoneId,
-      raw.ProjectMilestoneId,
-      ""
-    ),
+    amount: Number(getValue(transaction.amount, transaction.Amount, 0)),
 
-    userId: getValue(
-      transaction.userId,
-      transaction.UserId,
-      raw.userId,
-      raw.UserId,
-      ""
-    ),
-
-    type,
-    status,
-
-    amount: Math.abs(amount),
-    signedAmount: amount,
-    direction: getTransactionDirection(type, amount),
+    status: String(getValue(transaction.status, transaction.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
 
     description: getValue(
       transaction.description,
       transaction.Description,
-      raw.description,
-      raw.Description,
       ""
     ),
 
     referenceId: getValue(
       transaction.referenceId,
       transaction.ReferenceId,
-      raw.referenceId,
-      raw.ReferenceId,
+      transaction.transactionRef,
+      transaction.TransactionRef,
       ""
     ),
 
-    currency: "VND",
-
-    createdAt: getValue(
-      transaction.createdAt,
-      transaction.CreatedAt,
-      raw.createdAt,
-      raw.CreatedAt,
-      ""
-    ),
+    createdAt: getValue(transaction.createdAt, transaction.CreatedAt, ""),
 
     raw: transaction,
   };
 };
 
-export const normalizeDepositOrder = (order) => {
-  if (!order) return null;
-
-  const raw = order.raw || order.Raw || order;
-
-  const depositOrderId = getValue(
-    order.depositOrderId,
-    order.DepositOrderId,
-    order.depositOrderID,
-    order.DepositOrderID,
-    order.id,
-    order.Id,
-    raw.depositOrderId,
-    raw.DepositOrderId,
-    raw.id,
-    raw.Id,
-    ""
-  );
-
-  const amount = toNumber(
-    getValue(order.amount, order.Amount, raw.amount, raw.Amount, 0),
-    0
-  );
-
-  const status = String(
-    getValue(order.status, order.Status, raw.status, raw.Status, "PENDING")
-  ).toUpperCase();
-
-  const paymentUrl = getValue(
-    order.paymentUrl,
-    order.PaymentUrl,
-    order.checkoutUrl,
-    order.CheckoutUrl,
-    order.payUrl,
-    order.PayUrl,
-    order.paymentLink,
-    order.PaymentLink,
-    raw.paymentUrl,
-    raw.PaymentUrl,
-    raw.checkoutUrl,
-    raw.CheckoutUrl,
-    raw.payUrl,
-    raw.PayUrl,
-    raw.paymentLink,
-    raw.PaymentLink,
-    ""
-  );
-
-  const qrCode = getValue(
-    order.qrCode,
-    order.QrCode,
-    order.QRCode,
-    order.qrData,
-    order.QrData,
-    order.qrContent,
-    order.QrContent,
-    order.paymentQrCode,
-    order.PaymentQrCode,
-    raw.qrCode,
-    raw.QrCode,
-    raw.QRCode,
-    raw.qrData,
-    raw.QrData,
-    raw.qrContent,
-    raw.QrContent,
-    raw.paymentQrCode,
-    raw.PaymentQrCode,
-    ""
-  );
-
-  const qrImageUrl = getValue(
-    order.qrImageUrl,
-    order.QrImageUrl,
-    order.qrCodeUrl,
-    order.QrCodeUrl,
-    order.qrUrl,
-    order.QrUrl,
-    order.paymentQrUrl,
-    order.PaymentQrUrl,
-    order.vietQrUrl,
-    order.VietQrUrl,
-    raw.qrImageUrl,
-    raw.QrImageUrl,
-    raw.qrCodeUrl,
-    raw.QrCodeUrl,
-    raw.qrUrl,
-    raw.QrUrl,
-    raw.paymentQrUrl,
-    raw.PaymentQrUrl,
-    raw.vietQrUrl,
-    raw.VietQrUrl,
-    ""
-  );
-
-  return {
-    depositOrderId,
-    id: depositOrderId,
-
-    amount,
-    currency: "VND",
-    status,
-
-    paymentUrl,
-    qrCode,
-    qrImageUrl,
-
-    bankName: getValue(
-      order.bankName,
-      order.BankName,
-      order.bankCode,
-      order.BankCode,
-      order.providerName,
-      order.ProviderName,
-      raw.bankName,
-      raw.BankName,
-      raw.bankCode,
-      raw.BankCode,
-      raw.providerName,
-      raw.ProviderName,
-      ""
-    ),
-
-    accountName: getValue(
-      order.accountName,
-      order.AccountName,
-      order.accountHolderName,
-      order.AccountHolderName,
-      order.bankAccountName,
-      order.BankAccountName,
-      order.beneficiaryName,
-      order.BeneficiaryName,
-      order.receiverName,
-      order.ReceiverName,
-      order.merchantName,
-      order.MerchantName,
-      order.ownerName,
-      order.OwnerName,
-      order.virtualAccountName,
-      order.VirtualAccountName,
-      raw.accountName,
-      raw.AccountName,
-      raw.accountHolderName,
-      raw.AccountHolderName,
-      raw.bankAccountName,
-      raw.BankAccountName,
-      raw.beneficiaryName,
-      raw.BeneficiaryName,
-      raw.receiverName,
-      raw.ReceiverName,
-      raw.merchantName,
-      raw.MerchantName,
-      raw.ownerName,
-      raw.OwnerName,
-      raw.virtualAccountName,
-      raw.VirtualAccountName,
-      ""
-    ),
-
-    accountNumber: getValue(
-      order.accountNumber,
-      order.AccountNumber,
-      order.bankAccountNumber,
-      order.BankAccountNumber,
-      order.virtualAccountNumber,
-      order.VirtualAccountNumber,
-      order.virtualAccountNo,
-      order.VirtualAccountNo,
-      order.vaNumber,
-      order.VaNumber,
-      order.bankAccountNo,
-      order.BankAccountNo,
-      raw.accountNumber,
-      raw.AccountNumber,
-      raw.bankAccountNumber,
-      raw.BankAccountNumber,
-      raw.virtualAccountNumber,
-      raw.VirtualAccountNumber,
-      raw.virtualAccountNo,
-      raw.VirtualAccountNo,
-      raw.vaNumber,
-      raw.VaNumber,
-      raw.bankAccountNo,
-      raw.BankAccountNo,
-      ""
-    ),
-
-    transferContent: getValue(
-      order.transferContent,
-      order.TransferContent,
-      order.paymentContent,
-      order.PaymentContent,
-      order.description,
-      order.Description,
-      order.addInfo,
-      order.AddInfo,
-      order.orderCode,
-      order.OrderCode,
-      raw.transferContent,
-      raw.TransferContent,
-      raw.paymentContent,
-      raw.PaymentContent,
-      raw.description,
-      raw.Description,
-      raw.addInfo,
-      raw.AddInfo,
-      raw.orderCode,
-      raw.OrderCode,
-      ""
-    ),
-
-    createdAt: getValue(
-      order.createdAt,
-      order.CreatedAt,
-      raw.createdAt,
-      raw.CreatedAt,
-      ""
-    ),
-
-    updatedAt: getValue(
-      order.updatedAt,
-      order.UpdatedAt,
-      raw.updatedAt,
-      raw.UpdatedAt,
-      ""
-    ),
-
-    raw: order,
-  };
-};
-
-export const normalizeWithdrawal = (withdrawal) => {
+const normalizeWithdrawal = (withdrawal) => {
   if (!withdrawal) return null;
 
-  const raw = withdrawal.raw || withdrawal.Raw || withdrawal;
-
-  const withdrawalId = getValue(
-    withdrawal.withdrawalId,
-    withdrawal.WithdrawalId,
+  const withdrawalRequestId = getValue(
     withdrawal.withdrawalRequestId,
     withdrawal.WithdrawalRequestId,
+    withdrawal.withdrawalId,
+    withdrawal.WithdrawalId,
     withdrawal.id,
-    withdrawal.Id,
-    raw.withdrawalId,
-    raw.WithdrawalId,
-    raw.withdrawalRequestId,
-    raw.WithdrawalRequestId,
-    raw.id,
-    raw.Id,
-    ""
+    withdrawal.Id
   );
 
   return {
-    withdrawalId,
-    id: withdrawalId,
+    withdrawalRequestId,
+    id: withdrawalRequestId,
 
-    amount: toNumber(
-      getValue(withdrawal.amount, withdrawal.Amount, raw.amount, raw.Amount, 0),
-      0
-    ),
+    userId: getValue(withdrawal.userId, withdrawal.UserId),
+    userFullName: getValue(withdrawal.userFullName, withdrawal.UserFullName, ""),
+    userEmail: getValue(withdrawal.userEmail, withdrawal.UserEmail, ""),
 
-    status: String(
-      getValue(withdrawal.status, withdrawal.Status, raw.status, raw.Status, "PENDING")
-    ).toUpperCase(),
+    amount: Number(getValue(withdrawal.amount, withdrawal.Amount, 0)),
 
-    bankName: getValue(
-      withdrawal.bankName,
-      withdrawal.BankName,
-      raw.bankName,
-      raw.BankName,
-      ""
-    ),
+    bankName: getValue(withdrawal.bankName, withdrawal.BankName, ""),
 
     bankAccountNumber: getValue(
       withdrawal.bankAccountNumber,
       withdrawal.BankAccountNumber,
-      raw.bankAccountNumber,
-      raw.BankAccountNumber,
       ""
     ),
 
     bankAccountHolder: getValue(
       withdrawal.bankAccountHolder,
       withdrawal.BankAccountHolder,
-      raw.bankAccountHolder,
-      raw.BankAccountHolder,
+      withdrawal.bankAccountName,
+      withdrawal.BankAccountName,
       ""
     ),
 
-    rejectReason: getValue(
-      withdrawal.rejectReason,
-      withdrawal.RejectReason,
-      withdrawal.rejectionReason,
-      withdrawal.RejectionReason,
-      raw.rejectReason,
-      raw.RejectReason,
-      raw.rejectionReason,
-      raw.RejectionReason,
-      ""
-    ),
+    status: String(getValue(withdrawal.status, withdrawal.Status, "PENDING"))
+      .trim()
+      .toUpperCase(),
 
-    createdAt: getValue(
-      withdrawal.createdAt,
-      withdrawal.CreatedAt,
-      raw.createdAt,
-      raw.CreatedAt,
-      ""
-    ),
+    adminNote: getValue(withdrawal.adminNote, withdrawal.AdminNote, ""),
 
-    updatedAt: getValue(
-      withdrawal.updatedAt,
-      withdrawal.UpdatedAt,
-      raw.updatedAt,
-      raw.UpdatedAt,
-      ""
+    createdAt: getValue(withdrawal.createdAt, withdrawal.CreatedAt, ""),
+
+    processedAt: getValue(withdrawal.processedAt, withdrawal.ProcessedAt, ""),
+
+    processedByAdminId: getValue(
+      withdrawal.processedByAdminId,
+      withdrawal.ProcessedByAdminId
     ),
 
     raw: withdrawal,
   };
 };
 
-function getTransactionDirection(type, amount) {
-  const value = String(type || "").toUpperCase();
+const normalizeDepositOrder = (depositOrder) => {
+  if (!depositOrder) return null;
 
-  if (
-    value.includes("ESCROW_RECEIVE") ||
-    value.includes("RECEIVE") ||
-    value.includes("RELEASE") ||
-    value.includes("EARNING") ||
-    value.includes("CREDIT") ||
-    value.includes("DEPOSIT") ||
-    value.includes("REFUND") ||
-    amount > 0
-  ) {
-    return "IN";
-  }
+  const depositOrderId = getValue(
+    depositOrder.depositOrderId,
+    depositOrder.DepositOrderId,
+    depositOrder.orderId,
+    depositOrder.OrderId,
+    depositOrder.id,
+    depositOrder.Id
+  );
 
-  if (
-    value.includes("WITHDRAW") ||
-    value.includes("DEBIT") ||
-    value.includes("FEE") ||
-    value.includes("PAYMENT") ||
-    value.includes("PURCHASE") ||
-    amount < 0
-  ) {
-    return "OUT";
-  }
+  return {
+    depositOrderId,
+    id: depositOrderId,
 
-  return "NEUTRAL";
-}
+    walletId: getValue(depositOrder.walletId, depositOrder.WalletId),
+    userId: getValue(depositOrder.userId, depositOrder.UserId),
+
+    amount: Number(getValue(depositOrder.amount, depositOrder.Amount, 0)),
+
+    status: String(
+      getValue(depositOrder.status, depositOrder.Status, "PENDING")
+    )
+      .trim()
+      .toUpperCase(),
+
+    paymentUrl: getValue(
+      depositOrder.paymentUrl,
+      depositOrder.PaymentUrl,
+      depositOrder.checkoutUrl,
+      depositOrder.CheckoutUrl,
+      depositOrder.payUrl,
+      depositOrder.PayUrl,
+      ""
+    ),
+
+    transactionRef: getValue(
+      depositOrder.transactionRef,
+      depositOrder.TransactionRef,
+      depositOrder.referenceCode,
+      depositOrder.ReferenceCode,
+      depositOrder.orderCode,
+      depositOrder.OrderCode,
+      ""
+    ),
+
+    description: getValue(
+      depositOrder.description,
+      depositOrder.Description,
+      ""
+    ),
+
+    createdAt: getValue(depositOrder.createdAt, depositOrder.CreatedAt, ""),
+    paidAt: getValue(depositOrder.paidAt, depositOrder.PaidAt, ""),
+    expiredAt: getValue(depositOrder.expiredAt, depositOrder.ExpiredAt, ""),
+
+    raw: depositOrder,
+  };
+};
+
+const buildWithdrawalPayload = (formData) => {
+  return {
+    amount: Number(formData.amount),
+    bankName: trim(formData.bankName),
+    bankAccountNumber: trim(formData.bankAccountNumber),
+    bankAccountHolder: trim(formData.bankAccountHolder),
+  };
+};
+
+const buildDepositOrderPayload = (formData = {}) => {
+  return {
+    amount: Number(formData.amount),
+    description: trim(formData.description),
+  };
+};
 
 const expertWalletService = {
+  async getWalletOverview() {
+    /*
+      Gọi /wallets/me trước để backend tạo wallet nếu account chưa có wallet.
+      Sau đó mới gọi balance / transactions / withdrawals song song.
+      Cách này tránh lỗi duplicate Wallet UserId khi account mới vào wallet lần đầu.
+    */
+    const walletResponse = await expertWalletApi.getMyWallet();
+    const wallet = normalizeWallet(unwrapData(walletResponse));
+
+    const [balanceResponse, transactionsResponse, withdrawalsResponse] =
+      await Promise.all([
+        expertWalletApi.getWalletBalance(),
+        expertWalletApi.getMyTransactions(),
+        expertWalletApi.getMyWithdrawals(),
+      ]);
+
+    const balance = normalizeBalance(unwrapData(balanceResponse));
+
+    const transactions = unwrapListData(transactionsResponse)
+      .map(normalizeTransaction)
+      .filter(Boolean);
+
+    const withdrawals = unwrapListData(withdrawalsResponse)
+      .map(normalizeWithdrawal)
+      .filter(Boolean);
+
+    return {
+      wallet: {
+        ...wallet,
+        ...balance,
+        lockedBalance: wallet.lockedBalance,
+        pendingBalance: wallet.pendingBalance,
+        totalEarning: wallet.totalEarning,
+        totalEarned: wallet.totalEarned,
+      },
+      transactions,
+      withdrawals,
+    };
+  },
+
   async getMyWallet() {
     const response = await expertWalletApi.getMyWallet();
+
     return normalizeWallet(unwrapData(response));
   },
 
-  async getBalance() {
-    const response = await expertWalletApi.getBalance();
-    return normalizeBalance(unwrapBalanceData(response));
+  async getWalletBalance() {
+    const response = await expertWalletApi.getWalletBalance();
+
+    return normalizeBalance(unwrapData(response));
   },
 
   async getMyTransactions() {
     const response = await expertWalletApi.getMyTransactions();
 
-    return unwrapListData(response)
-      .map(normalizeTransaction)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
-  },
-
-  async getMyDepositOrders() {
-    const response = await expertWalletApi.getMyDepositOrders();
-
-    return unwrapListData(response)
-      .map(normalizeDepositOrder)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
+    return unwrapListData(response).map(normalizeTransaction).filter(Boolean);
   },
 
   async getMyWithdrawals() {
     const response = await expertWalletApi.getMyWithdrawals();
 
-    return unwrapListData(response)
-      .map(normalizeWithdrawal)
-      .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
-        return dateB - dateA;
-      });
+    return unwrapListData(response).map(normalizeWithdrawal).filter(Boolean);
   },
 
-  async getWalletOverview() {
-    const [
-      walletResult,
-      balanceResult,
-      transactionResult,
-      depositOrderResult,
-      withdrawalResult,
-    ] = await Promise.allSettled([
-      this.getMyWallet(),
-      this.getBalance(),
-      this.getMyTransactions(),
-      this.getMyDepositOrders(),
-      this.getMyWithdrawals(),
-    ]);
-
-    const wallet =
-      walletResult.status === "fulfilled" ? walletResult.value : null;
-
-    const balance =
-      balanceResult.status === "fulfilled"
-        ? balanceResult.value
-        : normalizeBalance(null);
-
-    const transactions =
-      transactionResult.status === "fulfilled" ? transactionResult.value : [];
-
-    const depositOrders =
-      depositOrderResult.status === "fulfilled" ? depositOrderResult.value : [];
-
-    const withdrawals =
-      withdrawalResult.status === "fulfilled" ? withdrawalResult.value : [];
-
-    return {
-      wallet,
-      balance: {
-        ...balance,
-
-        availableBalance:
-          balance.availableBalance || wallet?.availableBalance || 0,
-
-        balance: balance.availableBalance || wallet?.availableBalance || 0,
-
-        withdrawableBalance:
-          balance.withdrawableBalance ||
-          wallet?.withdrawableBalance ||
-          balance.availableBalance ||
-          wallet?.availableBalance ||
-          0,
-
-        pendingEarningsBalance:
-          balance.pendingEarningsBalance ||
-          wallet?.pendingEarningsBalance ||
-          0,
-
-        lockedBalance: wallet?.lockedBalance || balance.lockedBalance || 0,
-
-        totalEarning:
-          wallet?.totalEarning ||
-          balance.totalEarning ||
-          wallet?.totalEarnings ||
-          balance.totalEarnings ||
-          0,
-
-        totalEarnings:
-          wallet?.totalEarnings ||
-          balance.totalEarnings ||
-          wallet?.totalEarning ||
-          balance.totalEarning ||
-          0,
-
-        totalBalance:
-          wallet?.totalBalance ||
-          balance.totalBalance ||
-          Number(wallet?.availableBalance || balance.availableBalance || 0) +
-            Number(wallet?.lockedBalance || balance.lockedBalance || 0) +
-            Number(
-              wallet?.pendingEarningsBalance ||
-                balance.pendingEarningsBalance ||
-                0
-            ),
-
-        currency: "VND",
-      },
-      transactions,
-      depositOrders,
-      withdrawals,
-    };
-  },
-
-  async createDepositOrder(payload) {
-    const amount = toNumber(payload?.amount, 0);
-
-    if (amount <= 0) {
-      throw new Error("Deposit amount must be greater than 0.");
-    }
-
-    const response = await expertWalletApi.createDepositOrder({ amount });
-    return normalizeDepositOrder(unwrapData(response));
-  },
-
-  async getDepositOrderById(depositOrderId) {
-    if (isInvalidId(depositOrderId)) {
-      throw new Error("Invalid deposit order id.");
-    }
-
-    const response = await expertWalletApi.getDepositOrderById(depositOrderId);
-    return normalizeDepositOrder(unwrapData(response));
-  },
-
-  async createWithdrawal(form) {
-    const amount = toNumber(form?.amount, 0);
-
-    if (amount <= 0) {
-      throw new Error("Withdrawal amount must be greater than 0.");
-    }
-
-    const bankName = String(form?.bankName || "").trim();
-    const bankAccountNumber = String(form?.bankAccountNumber || "").trim();
-    const bankAccountHolder = String(form?.bankAccountHolder || "").trim();
-
-    if (!bankName || !bankAccountNumber || !bankAccountHolder) {
-      throw new Error("Please fill in all bank information.");
-    }
-
-    const response = await expertWalletApi.createWithdrawal({
-      amount,
-      bankName,
-      bankAccountNumber,
-      bankAccountHolder,
-    });
+  async requestWithdraw(formData) {
+    const payload = buildWithdrawalPayload(formData);
+    const response = await expertWalletApi.createWithdrawal(payload);
 
     return normalizeWithdrawal(unwrapData(response));
   },
+
+  async createDepositOrder(formData) {
+    const payload = buildDepositOrderPayload(formData);
+    const response = await expertWalletApi.createDepositOrder(payload);
+
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  async getMyDepositOrders() {
+    const response = await expertWalletApi.getMyDepositOrders();
+
+    return unwrapListData(response).map(normalizeDepositOrder).filter(Boolean);
+  },
+
+  async getDepositOrder(depositOrderId) {
+    if (!depositOrderId) {
+      throw new Error("depositOrderId is required.");
+    }
+
+    const response = await expertWalletApi.getDepositOrder(depositOrderId);
+
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  async simulateDepositPaid(depositOrderId) {
+    if (!depositOrderId) {
+      throw new Error("depositOrderId is required.");
+    }
+
+    const response = await expertWalletApi.simulateDepositPaid(depositOrderId);
+
+    return normalizeDepositOrder(unwrapData(response));
+  },
+
+  /*
+    Alias để nếu page cũ còn gọi createDeposit()
+    thì vẫn chạy qua API deposit-orders mới, không gọi endpoint cũ nữa.
+  */
+  async createDeposit(formData) {
+    return this.createDepositOrder(formData);
+  },
+
+  normalizeWallet,
+  normalizeBalance,
+  normalizeTransaction,
+  normalizeWithdrawal,
+  normalizeDepositOrder,
 };
 
 export default expertWalletService;

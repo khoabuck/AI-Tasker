@@ -102,6 +102,7 @@ function NavItem({ label, to, dropdown, active }) {
 export default function ClientNavbar() {
   const navigate = useNavigate();
   const user = authService.getCurrentUser();
+  const avatarUrl = user?.avatarUrl || "";
   const [avatarOpen, setAvatarOpen] = useState(false);
 
   const initials = user?.fullName
@@ -113,14 +114,8 @@ export default function ClientNavbar() {
       .toUpperCase()
     : "CL";
 
-  // Dùng window.location.href thay vì navigate() của React Router.
-  // Lý do: authService.logout() chỉ xóa localStorage/sessionStorage, không có
-  // Context/global state nào lắng nghe để tự re-render lại toàn app (ví dụ
-  // AuthContext.user vẫn giữ giá trị cũ trong memory). navigate() chỉ đổi route
-  // nhưng giữ nguyên toàn bộ React state hiện có trong RAM, nên các trang/khu vực
-  // đang dựa vào "user đã đăng nhập" có thể bị treo ở trạng thái cũ → cần F5.
-  // window.location.href ép trình duyệt reload toàn trang, app mount lại từ đầu,
-  // đọc localStorage đã trống → tự nhận ra chưa đăng nhập, vào /login sạch sẽ.
+  // authService.logout() gọi backend clear HttpOnly cookie,
+  // rồi xóa localStorage/sessionStorage. Reload toàn trang để AuthContext mount lại sạch.
   const handleLogout = async () => {
     await authService.logout();
     window.location.href = "/login";
@@ -157,8 +152,16 @@ export default function ClientNavbar() {
             onClick={() => setAvatarOpen((prev) => !prev)}
             className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 transition-all hover:border-cyan-400/40 hover:shadow-[0_0_14px_rgba(0,240,255,0.2)]"
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-400 text-sm font-bold text-gray-900">
-              {initials}
+            <div className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-full bg-cyan-400 text-sm font-bold text-gray-900">
+              {avatarUrl ? (
+                <img
+                  src={avatarUrl}
+                  alt="Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                initials
+              )}
             </div>
 
             <span

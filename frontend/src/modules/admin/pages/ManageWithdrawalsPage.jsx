@@ -2,745 +2,534 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminWithdrawalService from "../../../services/adminWithdrawal.service";
 
-const STATUS_OPTIONS = [
-  "ALL",
-  "PENDING",
-  "PROCESSING",
-  "APPROVED",
-  "COMPLETED",
-  "PAID",
-  "REJECTED",
-  "FAILED",
-];
-
-const EMPTY_ACTION = {
-  type: "",
-  withdrawal: null,
-};
-
-const EMPTY_FORM = {
-  reason: "",
-};
+const STATUS_OPTIONS = ["ALL", "PENDING", "APPROVED", "REJECTED"];
 
 export default function ManageWithdrawalsPage() {
   const [withdrawals, setWithdrawals] = useState([]);
-  const [payosBalance, setPayosBalance] = useState(null);
+  const [selectedWithdrawal, setSelectedWithdrawal] = useState(null);
 
-  const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [searchText, setSearchText] = useState("");
+  const [adminNote, setAdminNote] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [balanceLoading, setBalanceLoading] = useState(false);
-  const [balanceChecked, setBalanceChecked] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
-  const [modalError, setModalError] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
-
-  const [action, setAction] = useState(EMPTY_ACTION);
-  const [form, setForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
-    loadWithdrawals();
-  }, []);
+    loadWithdrawals(statusFilter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter]);
 
-  const filteredWithdrawals = useMemo(() => {
-    const search = keyword.trim().toLowerCase();
-
-    return withdrawals.filter((withdrawal) => {
-      const status = String(withdrawal.status || "PENDING").toUpperCase();
-
-      const matchSearch =
-        !search ||
-        String(withdrawal.withdrawalRequestId || "")
-          .toLowerCase()
-          .includes(search) ||
-        String(withdrawal.expertName || "").toLowerCase().includes(search) ||
-        String(withdrawal.expertEmail || "").toLowerCase().includes(search) ||
-        String(withdrawal.bankName || "").toLowerCase().includes(search) ||
-        String(withdrawal.bankAccountNumber || "")
-          .toLowerCase()
-          .includes(search) ||
-        String(withdrawal.payosPayoutId || "").toLowerCase().includes(search) ||
-        String(withdrawal.payosTransferId || "").toLowerCase().includes(search);
-
-      const matchStatus = statusFilter === "ALL" || status === statusFilter;
-
-      return matchSearch && matchStatus;
-    });
-  }, [withdrawals, keyword, statusFilter]);
-
-  const stats = useMemo(() => {
-    return withdrawals.reduce(
-      (result, withdrawal) => {
-        const status = String(withdrawal.status || "PENDING").toUpperCase();
-        const amount = Number(withdrawal.amount || 0);
-
-        result.total += 1;
-        result.totalAmount += amount;
-
-        if (status === "PENDING") {
-          result.pending += 1;
-          result.pendingAmount += amount;
-        }
-
-        if (status === "PROCESSING") {
-          result.processing += 1;
-          result.processingAmount += amount;
-        }
-
-        if (["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(status)) {
-          result.approved += 1;
-          result.approvedAmount += amount;
-        }
-
-        if (["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(status)) {
-          result.rejected += 1;
-        }
-
-        return result;
-      },
-      {
-        total: 0,
-        pending: 0,
-        processing: 0,
-        approved: 0,
-        rejected: 0,
-        totalAmount: 0,
-        pendingAmount: 0,
-        processingAmount: 0,
-        approvedAmount: 0,
-      }
-    );
-  }, [withdrawals]);
-
-  const loadWithdrawals = async ({ keepMessage = false } = {}) => {
+  const loadWithdrawals = async (status = statusFilter) => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
-      if (!keepMessage) {
-        setSuccess("");
+      const data = await adminWithdrawalService.getAllWithdrawals(status);
+
+      setWithdrawals(data);
+
+      if (selectedWithdrawal) {
+        const updatedSelected = data.find(
+          (item) =>
+            item.withdrawalRequestId === selectedWithdrawal.withdrawalRequestId
+        );
+
+        setSelectedWithdrawal(updatedSelected || null);
       }
-
-      const withdrawalData = await adminWithdrawalService.getWithdrawals();
-
-      setWithdrawals(Array.isArray(withdrawalData) ? withdrawalData : []);
     } catch (err) {
-      console.error("LOAD WITHDRAWALS ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load withdrawal requests."));
+      console.error("LOAD ADMIN WITHDRAWALS ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err));
+      setWithdrawals([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCheckPayosBalance = async () => {
-    try {
-      setBalanceLoading(true);
-      setError("");
-      setSuccess("");
-      setModalError("");
-      setFieldErrors({});
+  const filteredWithdrawals = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
 
-      const data = await adminWithdrawalService.getPayosBalance();
+    return withdrawals.filter((item) => {
+      if (!keyword) return true;
 
-      setPayosBalance(data);
-      setBalanceChecked(true);
-      setSuccess("PayOS balance has been checked successfully.");
-    } catch (err) {
-      console.error("CHECK PAYOS BALANCE ERROR:", err?.response?.data || err);
-      setPayosBalance(null);
-      setBalanceChecked(false);
-      setError(getFriendlyError(err, "Cannot check PayOS balance."));
-    } finally {
-      setBalanceLoading(false);
-    }
-  };
-
-  const openApproveModal = (withdrawal) => {
-    const balance = Number(
-      payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
-    );
-    const withdrawalAmount = Number(withdrawal?.amount || 0);
-    const currency = payosBalance?.currency || withdrawal?.currency || "VND";
-
-    if (!balanceChecked) {
-      setError("Please check PayOS balance before approving this withdrawal.");
-      return;
-    }
-
-    if (withdrawalAmount > balance) {
-      setError(
-        `PayOS balance is insufficient. Current balance: ${formatMoney(
-          balance,
-          currency
-        )}. Withdrawal amount: ${formatMoney(
-          withdrawalAmount,
-          withdrawal?.currency || currency
-        )}.`
+      return (
+        String(item.withdrawalRequestId || "").includes(keyword) ||
+        String(item.userFullName || "").toLowerCase().includes(keyword) ||
+        String(item.userEmail || "").toLowerCase().includes(keyword) ||
+        String(item.bankName || "").toLowerCase().includes(keyword) ||
+        String(item.bankAccountNumber || "").toLowerCase().includes(keyword) ||
+        String(item.bankAccountHolder || "").toLowerCase().includes(keyword)
       );
-      return;
-    }
-
-    setAction({
-      type: "APPROVE_PAYOS",
-      withdrawal,
     });
+  }, [withdrawals, searchText]);
 
-    setForm({
-      reason: "Approve withdrawal via PayOS.",
-    });
+  const summary = useMemo(() => {
+    const pending = withdrawals.filter((item) => item.status === "PENDING");
+    const approved = withdrawals.filter((item) => item.status === "APPROVED");
+    const rejected = withdrawals.filter((item) => item.status === "REJECTED");
 
+    return {
+      total: withdrawals.length,
+      pendingCount: pending.length,
+      approvedCount: approved.length,
+      rejectedCount: rejected.length,
+      pendingAmount: pending.reduce((sum, item) => sum + item.amount, 0),
+      approvedAmount: approved.reduce((sum, item) => sum + item.amount, 0),
+    };
+  }, [withdrawals]);
+
+  const handleSelectWithdrawal = (item) => {
+    setSelectedWithdrawal(item);
+    setAdminNote(item.adminNote || "");
+    setMessage("");
     setError("");
-    setSuccess("");
-    setModalError("");
-    setFieldErrors({});
   };
 
-  const openRejectModal = (withdrawal) => {
-    setAction({
-      type: "REJECT",
-      withdrawal,
-    });
-
-    setForm(EMPTY_FORM);
-    setError("");
-    setSuccess("");
-    setModalError("");
-    setFieldErrors({});
-  };
-
-  const closeActionModal = () => {
-    if (actionLoading) return;
-
-    setAction(EMPTY_ACTION);
-    setForm(EMPTY_FORM);
-    setModalError("");
-    setFieldErrors({});
-  };
-
-  const handleApprovePayos = async () => {
-    if (!action.withdrawal?.withdrawalRequestId) return;
-
-    const validation = validateActionForm(form, "Approval Reason");
-
-    if (!validation.valid) {
-      setFieldErrors(validation.errors);
-      setModalError("Please fix the highlighted fields.");
+  const handleApprove = async () => {
+    if (!selectedWithdrawal) {
+      setError("Please select a withdrawal request first.");
       return;
     }
 
-    const balanceValue = Number(
-      payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
-    );
-
-    if (!balanceChecked) {
-      setFieldErrors({});
-      setModalError("Please check PayOS balance before approving this withdrawal.");
-      return;
-    }
-
-    if (Number(action.withdrawal.amount || 0) > balanceValue) {
-      setFieldErrors({});
-      setModalError(
-        `PayOS balance is insufficient. Current balance: ${formatMoney(
-          balanceValue,
-          payosBalance?.currency || action.withdrawal.currency || "VND"
-        )}. Withdrawal amount: ${formatMoney(
-          action.withdrawal.amount,
-          action.withdrawal.currency || "VND"
-        )}.`
-      );
+    if (selectedWithdrawal.status !== "PENDING") {
+      setError("Only PENDING withdrawal requests can be approved.");
       return;
     }
 
     try {
-      setActionLoading(true);
+      setProcessing(true);
       setError("");
-      setSuccess("");
-      setModalError("");
-      setFieldErrors({});
+      setMessage("");
 
-      await adminWithdrawalService.approveWithdrawalPayos(
-        action.withdrawal.withdrawalRequestId,
-        {
-          reason: form.reason,
-        }
+      await adminWithdrawalService.approveWithdrawal(
+        selectedWithdrawal.withdrawalRequestId,
+        adminNote
       );
 
-      const id = action.withdrawal.withdrawalRequestId;
+      setMessage("Withdrawal request approved successfully.");
+      setSelectedWithdrawal(null);
+      setAdminNote("");
 
-      closeActionModal();
-      setBalanceChecked(false);
-      setPayosBalance(null);
-      await loadWithdrawals({ keepMessage: true });
-      setSuccess(`Withdrawal request #${id} has been approved via PayOS. Please check PayOS balance again before approving another withdrawal.`);
+      await loadWithdrawals(statusFilter);
     } catch (err) {
-      console.error("APPROVE PAYOS WITHDRAWAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot approve withdrawal via PayOS."));
+      console.error("APPROVE WITHDRAWAL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err));
     } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleSyncPayos = async (withdrawal) => {
-    if (!withdrawal?.withdrawalRequestId) return;
-
-    try {
-      setActionLoading(true);
-      setError("");
-      setSuccess("");
-      setModalError("");
-      setFieldErrors({});
-
-      await adminWithdrawalService.syncWithdrawalPayos(
-        withdrawal.withdrawalRequestId
-      );
-
-      await loadWithdrawals({ keepMessage: true });
-      setSuccess(
-        `Withdrawal request #${withdrawal.withdrawalRequestId} has been synced with PayOS.`
-      );
-    } catch (err) {
-      console.error("SYNC PAYOS WITHDRAWAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot sync withdrawal with PayOS."));
-    } finally {
-      setActionLoading(false);
+      setProcessing(false);
     }
   };
 
   const handleReject = async () => {
-    if (!action.withdrawal?.withdrawalRequestId) return;
+    if (!selectedWithdrawal) {
+      setError("Please select a withdrawal request first.");
+      return;
+    }
 
-    const validation = validateActionForm(form, "Rejection Reason");
+    if (selectedWithdrawal.status !== "PENDING") {
+      setError("Only PENDING withdrawal requests can be rejected.");
+      return;
+    }
 
-    if (!validation.valid) {
-      setFieldErrors(validation.errors);
-      setModalError("Please fix the highlighted fields.");
+    if (!adminNote.trim()) {
+      setError("Admin note is required when rejecting a withdrawal request.");
       return;
     }
 
     try {
-      setActionLoading(true);
+      setProcessing(true);
       setError("");
-      setSuccess("");
+      setMessage("");
 
       await adminWithdrawalService.rejectWithdrawal(
-        action.withdrawal.withdrawalRequestId,
-        {
-          reason: form.reason,
-        }
+        selectedWithdrawal.withdrawalRequestId,
+        adminNote
       );
 
-      const id = action.withdrawal.withdrawalRequestId;
+      setMessage("Withdrawal request rejected successfully.");
+      setSelectedWithdrawal(null);
+      setAdminNote("");
 
-      closeActionModal();
-      await loadWithdrawals({ keepMessage: true });
-      setSuccess(`Withdrawal request #${id} has been rejected.`);
+      await loadWithdrawals(statusFilter);
     } catch (err) {
       console.error("REJECT WITHDRAWAL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot reject withdrawal request."));
+      setError(getFriendlyError(err));
     } finally {
-      setActionLoading(false);
+      setProcessing(false);
     }
   };
 
+  const cardStyle =
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+
+  const inputStyle =
+    "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
+
+  const labelStyle =
+    "mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400";
+
   return (
     <AdminLayout>
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Withdrawal Management
-            </p>
+      <div className="px-5 py-10 md:px-8">
+        <div className="mx-auto max-w-7xl">
+          <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                Admin Withdrawals
+              </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Manage withdrawals
-            </h1>
+              <h1 className="text-3xl font-bold text-white md:text-4xl">
+                Withdrawal management
+              </h1>
 
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review expert withdrawal requests, check PayOS payout balance,
-              approve via PayOS, sync payout status, or reject invalid requests.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={handleCheckPayosBalance}
-              disabled={loading || actionLoading || balanceLoading}
-              className="w-fit rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {balanceLoading ? "Checking..." : "Check your PayOS balance"}
-            </button>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                Review withdrawal requests, verify bank information, then
+                approve or reject payout requests.
+              </p>
+            </div>
 
             <button
               type="button"
-              onClick={() => loadWithdrawals()}
-              disabled={loading || actionLoading || balanceLoading}
-              className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => loadWithdrawals(statusFilter)}
+              disabled={loading}
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Loading..." : "Refresh"}
             </button>
-          </div>
-        </div>
+          </section>
 
-        {error && (
-          <Alert
-            type="danger"
-            title="Action failed"
-            message={error}
-            onClose={() => setError("")}
-          />
-        )}
+          {message && (
+            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
+              {message}
+            </div>
+          )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+          {error && (
+            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+              {error}
+            </div>
+          )}
 
-        <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <StatCard
-            icon="account_balance"
-            label="PayOS Balance"
-            value={
-              balanceChecked
-                ? formatMoney(
-                    payosBalance?.availableBalance ??
-                      payosBalance?.currentBalance ??
-                      0,
-                    payosBalance?.currency || "VND"
-                  )
-                : "Not checked"
-            }
-            description={
-              balanceChecked
-                ? "Available payout balance"
-                : "Check balance before approval"
-            }
-            tone={balanceChecked ? "green" : "yellow"}
-          />
+          <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
+            <SummaryCard
+              icon="account_balance_wallet"
+              label="Total Requests"
+              value={summary.total}
+              tone="cyan"
+            />
 
-          <StatCard
-            icon="account_balance_wallet"
-            label="Total Requests"
-            value={stats.total}
-            description={formatMoney(stats.totalAmount, "VND")}
-            tone="cyan"
-          />
+            <SummaryCard
+              icon="pending_actions"
+              label="Pending"
+              value={summary.pendingCount}
+              helper={formatMoney(summary.pendingAmount)}
+              tone="yellow"
+            />
 
-          <StatCard
-            icon="pending_actions"
-            label="Pending"
-            value={stats.pending}
-            description={formatMoney(stats.pendingAmount, "VND")}
-            tone="yellow"
-          />
+            <SummaryCard
+              icon="check_circle"
+              label="Approved"
+              value={summary.approvedCount}
+              helper={formatMoney(summary.approvedAmount)}
+              tone="green"
+            />
 
-          <StatCard
-            icon="sync"
-            label="Processing"
-            value={stats.processing}
-            description={formatMoney(stats.processingAmount, "VND")}
-            tone="purple"
-          />
+            <SummaryCard
+              icon="cancel"
+              label="Rejected"
+              value={summary.rejectedCount}
+              tone="red"
+            />
+          </section>
 
-          <StatCard
-            icon="check_circle"
-            label="Approved"
-            value={stats.approved}
-            description={formatMoney(stats.approvedAmount, "VND")}
-            tone="green"
-          />
-        </section>
+          <section className={`${cardStyle} mb-6 p-6`}>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_220px_160px]">
+              <div>
+                <label className={labelStyle}>Search</label>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
-            <div>
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-                Search
-              </label>
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-xl text-gray-500">
+                    search
+                  </span>
 
-              <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
-                <span className="material-symbols-outlined text-[20px] text-gray-500">
-                  search
-                </span>
+                  <input
+                    type="text"
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="Search user, email, bank, account number..."
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
+                  />
+                </div>
+              </div>
 
-                <input
-                  value={keyword}
-                  onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by expert, email, bank, account number, request id, or PayOS id..."
-                  className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
-                />
+              <div>
+                <label className={labelStyle}>Status</label>
+
+                <select
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
+                >
+                  {STATUS_OPTIONS.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 text-center">
+                <p className="text-xs uppercase tracking-wider text-gray-500">
+                  Showing
+                </p>
+
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {filteredWithdrawals.length}
+                </p>
               </div>
             </div>
+          </section>
 
-            <FilterSelect
-              label="Status"
-              value={statusFilter}
-              options={STATUS_OPTIONS}
-              onChange={setStatusFilter}
-            />
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-          <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-white">
-                Withdrawal Requests
-              </h2>
-
-              <p className="mt-1 text-sm text-gray-500">
-                Showing {filteredWithdrawals.length} of {withdrawals.length} records.
-              </p>
-            </div>
-          </div>
-
-          {loading ? (
-            <div className="p-12 text-center text-gray-400">
+          {loading && (
+            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
               <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
                 hourglass_empty
               </span>
               Loading withdrawal requests...
             </div>
-          ) : filteredWithdrawals.length === 0 ? (
-            <EmptyState />
-          ) : (
-            <div className="divide-y divide-white/10">
-              {filteredWithdrawals.map((withdrawal) => (
-                <WithdrawalRow
-                  key={withdrawal.withdrawalRequestId || withdrawal.id}
-                  withdrawal={withdrawal}
-                  disabled={actionLoading}
-                  onApprove={() => openApproveModal(withdrawal)}
-                  onReject={() => openRejectModal(withdrawal)}
-                  onSyncPayos={() => handleSyncPayos(withdrawal)}
-                />
-              ))}
+          )}
+
+          {!loading && (
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_430px]">
+              <section className="space-y-5">
+                {filteredWithdrawals.length === 0 && (
+                  <div className={`${cardStyle} p-12 text-center`}>
+                    <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+                      account_balance_wallet
+                    </span>
+
+                    <h2 className="text-xl font-bold text-white">
+                      No withdrawal requests found
+                    </h2>
+
+                    <p className="mt-2 text-sm text-gray-400">
+                      There are no withdrawal requests matching your filter.
+                    </p>
+                  </div>
+                )}
+
+                {filteredWithdrawals.map((item) => {
+                  const isSelected =
+                    selectedWithdrawal?.withdrawalRequestId ===
+                    item.withdrawalRequestId;
+
+                  return (
+                    <article
+                      key={item.withdrawalRequestId}
+                      onClick={() => handleSelectWithdrawal(item)}
+                      className={`${cardStyle} cursor-pointer p-6 transition ${
+                        isSelected
+                          ? "border-cyan-400/50"
+                          : "hover:border-cyan-400/40"
+                      }`}
+                    >
+                      <div className="mb-4 flex flex-wrap items-center gap-2">
+                        <StatusBadge status={item.status} />
+
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
+                          Request #{item.withdrawalRequestId}
+                        </span>
+
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
+                          Created {formatDate(item.createdAt)}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <h2 className="text-xl font-bold text-white">
+                            {item.userFullName}
+                          </h2>
+
+                          <p className="mt-1 text-sm text-gray-400">
+                            {item.userEmail}
+                          </p>
+
+                          <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                            <InfoLine label="Bank" value={item.bankName} />
+                            <InfoLine
+                              label="Account"
+                              value={item.bankAccountNumber}
+                            />
+                            <InfoLine
+                              label="Holder"
+                              value={item.bankAccountHolder}
+                            />
+                            <InfoLine
+                              label="Processed"
+                              value={formatDate(item.processedAt)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-green-400/20 bg-green-400/10 px-5 py-4 text-right">
+                          <p className="text-xs uppercase tracking-wider text-green-200/70">
+                            Amount
+                          </p>
+                          <p className="mt-1 text-2xl font-black text-green-300">
+                            {formatMoney(item.amount)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {item.adminNote && (
+                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-xs uppercase tracking-wider text-gray-500">
+                            Admin note
+                          </p>
+
+                          <p className="mt-2 text-sm leading-6 text-gray-300">
+                            {item.adminNote}
+                          </p>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </section>
+
+              <aside>
+                <div className={`${cardStyle} sticky top-24 p-6`}>
+                  {!selectedWithdrawal && (
+                    <div className="text-center">
+                      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+                        payments
+                      </span>
+
+                      <h2 className="text-lg font-bold text-white">
+                        Select a withdrawal
+                      </h2>
+
+                      <p className="mt-2 text-sm text-gray-400">
+                        Choose a request on the left to approve or reject it.
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedWithdrawal && (
+                    <>
+                      <div className="mb-6">
+                        <h2 className="text-lg font-bold text-white">
+                          Process Withdrawal
+                        </h2>
+
+                        <p className="mt-1 text-sm text-gray-500">
+                          Request #{selectedWithdrawal.withdrawalRequestId}
+                        </p>
+                      </div>
+
+                      <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                        <div className="space-y-3 text-sm">
+                          <InfoLine
+                            label="User"
+                            value={selectedWithdrawal.userFullName}
+                          />
+
+                          <InfoLine
+                            label="Email"
+                            value={selectedWithdrawal.userEmail}
+                          />
+
+                          <InfoLine
+                            label="Amount"
+                            value={formatMoney(selectedWithdrawal.amount)}
+                          />
+
+                          <InfoLine
+                            label="Bank"
+                            value={selectedWithdrawal.bankName}
+                          />
+
+                          <InfoLine
+                            label="Account number"
+                            value={selectedWithdrawal.bankAccountNumber}
+                          />
+
+                          <InfoLine
+                            label="Account holder"
+                            value={selectedWithdrawal.bankAccountHolder}
+                          />
+
+                          <InfoLine
+                            label="Status"
+                            value={selectedWithdrawal.status}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-5">
+                        <label className={labelStyle}>Admin Note</label>
+
+                        <textarea
+                          value={adminNote}
+                          onChange={(event) => setAdminNote(event.target.value)}
+                          rows="6"
+                          placeholder="Write admin note. Required when rejecting..."
+                          disabled={selectedWithdrawal.status !== "PENDING"}
+                          className={`${inputStyle} resize-none disabled:cursor-not-allowed disabled:opacity-50`}
+                        />
+                      </div>
+
+                      {selectedWithdrawal.status !== "PENDING" && (
+                        <div className="mb-5 rounded-xl border border-green-400/30 bg-green-400/10 p-4 text-sm text-green-300">
+                          This request has already been processed.
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={handleApprove}
+                          disabled={
+                            processing || selectedWithdrawal.status !== "PENDING"
+                          }
+                          className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {processing ? "Processing..." : "Approve"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleReject}
+                          disabled={
+                            processing || selectedWithdrawal.status !== "PENDING"
+                          }
+                          className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {processing ? "Processing..." : "Reject"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </aside>
             </div>
           )}
-        </section>
-
-        {action.type === "APPROVE_PAYOS" && (
-          <ActionModal
-            title="Approve Withdrawal via PayOS"
-            subtitle={`Request #${action.withdrawal?.withdrawalRequestId || "N/A"}`}
-            confirmLabel="Approve via PayOS"
-            confirmTone="green"
-            loading={actionLoading}
-            error={modalError}
-            onClose={closeActionModal}
-            onConfirm={handleApprovePayos}
-          >
-            <WithdrawalSummary withdrawal={action.withdrawal} />
-
-            <TextArea
-              label="Approval Reason"
-              required
-              value={form.reason}
-              error={fieldErrors.reason}
-              onChange={(value) => {
-                setModalError("");
-                setFieldErrors((prev) => ({ ...prev, reason: "" }));
-                setForm((prev) => ({
-                  ...prev,
-                  reason: value,
-                }));
-              }}
-              placeholder="Example: Payment details verified. Approve via PayOS."
-            />
-          </ActionModal>
-        )}
-
-        {action.type === "REJECT" && (
-          <ActionModal
-            title="Reject Withdrawal"
-            subtitle={`Request #${action.withdrawal?.withdrawalRequestId || "N/A"}`}
-            confirmLabel="Reject Request"
-            confirmTone="red"
-            loading={actionLoading}
-            error={modalError}
-            onClose={closeActionModal}
-            onConfirm={handleReject}
-          >
-            <WithdrawalSummary withdrawal={action.withdrawal} />
-
-            <TextArea
-              label="Rejection Reason"
-              required
-              value={form.reason}
-              error={fieldErrors.reason}
-              onChange={(value) => {
-                setModalError("");
-                setFieldErrors((prev) => ({ ...prev, reason: "" }));
-                setForm((prev) => ({
-                  ...prev,
-                  reason: value,
-                }));
-              }}
-              placeholder="Example: Bank account information is invalid."
-            />
-          </ActionModal>
-        )}
+        </div>
       </div>
     </AdminLayout>
   );
 }
 
-function WithdrawalRow({
-  withdrawal,
-  disabled,
-  onApprove,
-  onReject,
-  onSyncPayos,
-}) {
-  const status = String(withdrawal.status || "PENDING").toUpperCase();
-  const canApprove = status === "PENDING";
-  const canReject = ["PENDING", "PROCESSING"].includes(status);
-  const canSync = ["PENDING", "PROCESSING", "APPROVED"].includes(status);
-
-  return (
-    <article className="p-5 transition hover:bg-white/[0.02]">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_170px_170px_300px] xl:items-center">
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <StatusBadge status={status} />
-            <Badge label={`Request #${withdrawal.withdrawalRequestId || "N/A"}`} />
-            {withdrawal.paymentMethod && <Badge label={withdrawal.paymentMethod} />}
-            {withdrawal.payosStatus && <Badge label={`PayOS: ${withdrawal.payosStatus}`} />}
-          </div>
-
-          <h3 className="line-clamp-1 font-bold text-white">
-            {withdrawal.expertName || "Expert"}
-          </h3>
-
-          <p className="mt-1 text-sm text-gray-400">
-            {withdrawal.expertEmail || "No email"}
-          </p>
-
-          <p className="mt-2 text-xs text-gray-500">
-            {withdrawal.bankName || "No bank"} ·{" "}
-            {maskAccountNumber(withdrawal.bankAccountNumber)}
-          </p>
-
-          {(withdrawal.payosPayoutId || withdrawal.payosTransferId) && (
-            <p className="mt-2 truncate text-xs text-cyan-300/80">
-              PayOS ID: {withdrawal.payosPayoutId || withdrawal.payosTransferId}
-            </p>
-          )}
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Amount
-          </p>
-
-          <p className="text-lg font-extrabold text-white">
-            {formatMoney(withdrawal.amount, withdrawal.currency || "VND")}
-          </p>
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Created
-          </p>
-
-          <p className="text-sm font-bold text-white">
-            {formatDate(withdrawal.createdAt)}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap xl:justify-end">
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={disabled || !canApprove}
-            className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Approve PayOS
-          </button>
-
-          <button
-            type="button"
-            onClick={onSyncPayos}
-            disabled={disabled || !canSync}
-            className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Sync PayOS
-          </button>
-
-          <button
-            type="button"
-            onClick={onReject}
-            disabled={disabled || !canReject}
-            className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Reject
-          </button>
-        </div>
-      </div>
-
-      {(withdrawal.adminNote || withdrawal.rejectionReason) && (
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/10 p-4 text-sm text-gray-400">
-          {withdrawal.adminNote && (
-            <p>
-              <span className="font-bold text-cyan-300">Admin note:</span>{" "}
-              {withdrawal.adminNote}
-            </p>
-          )}
-
-          {withdrawal.rejectionReason && (
-            <p className="mt-1">
-              <span className="font-bold text-red-300">Rejection reason:</span>{" "}
-              {withdrawal.rejectionReason}
-            </p>
-          )}
-        </div>
-      )}
-    </article>
-  );
-}
-
-function WithdrawalSummary({ withdrawal }) {
-  if (!withdrawal) return null;
-
-  return (
-    <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <InfoBox label="Expert" value={withdrawal.expertName || "Expert"} />
-        <InfoBox
-          label="Amount"
-          value={formatMoney(withdrawal.amount, withdrawal.currency || "VND")}
-        />
-        <InfoBox label="Bank" value={withdrawal.bankName || "N/A"} />
-        <InfoBox
-          label="Account Number"
-          value={withdrawal.bankAccountNumber || "N/A"}
-        />
-        <InfoBox
-          label="Account Holder"
-          value={withdrawal.bankAccountName || "N/A"}
-        />
-        <InfoBox label="Status" value={formatLabel(withdrawal.status)} />
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, description, tone = "cyan" }) {
+function SummaryCard({ icon, label, value, helper, tone }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     green: "border-green-400/20 bg-green-400/10 text-green-300",
     yellow: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
     red: "border-red-400/20 bg-red-400/10 text-red-300",
-    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
   };
 
   return (
@@ -755,135 +544,18 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
 
       <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
 
-      <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+      <p className="mt-2 text-3xl font-bold text-white">{value ?? 0}</p>
 
-      <p className="mt-2 text-sm text-gray-400">{description}</p>
+      {helper && <p className="mt-2 text-xs text-gray-500">{helper}</p>}
     </div>
   );
 }
 
-function FilterSelect({ label, value, options, onChange }) {
+function InfoLine({ label, value }) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-        {label}
-      </label>
-
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
-      >
-        {options.map((item) => (
-          <option key={item} value={item}>
-            {formatLabel(item)}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-function ActionModal({
-  title,
-  subtitle,
-  children,
-  confirmLabel,
-  confirmTone = "cyan",
-  loading,
-  error = "",
-  onClose,
-  onConfirm,
-}) {
-  const confirmClass =
-    confirmTone === "red"
-      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
-      : confirmTone === "green"
-        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
-        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
-        <div className="border-b border-white/10 px-6 py-5">
-          <h2 className="text-xl font-bold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
-        </div>
-
-        <div className="px-6 py-5">
-          {error && (
-            <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          )}
-
-          {children}
-        </div>
-
-        <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Cancel
-          </button>
-
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={loading}
-            className={`rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
-          >
-            {loading ? "Processing..." : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TextArea({
-  label,
-  value,
-  onChange,
-  placeholder,
-  required = false,
-  error = "",
-}) {
-  return (
-    <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-        {label}
-        {required && <span className="ml-1 text-red-400">*</span>}
-      </label>
-
-      <textarea
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={4}
-        placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
-          error
-            ? "border-red-400/70 focus:border-red-400"
-            : "border-white/10 focus:border-cyan-400/50"
-        }`}
-      />
-
-      {error && <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>}
-    </div>
-  );
-}
-
-function InfoBox({ label, value }) {
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">
-        {label}
-      </p>
-
-      <p className="mt-1 break-words text-sm font-bold text-white">
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 break-words font-semibold text-gray-200">
         {value || "N/A"}
       </p>
     </div>
@@ -893,92 +565,30 @@ function InfoBox({ label, value }) {
 function StatusBadge({ status }) {
   const value = String(status || "PENDING").toUpperCase();
 
-  const className =
-    ["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(value)
+  const style =
+    value === "APPROVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : ["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(value)
-        ? "border-red-400/30 bg-red-400/10 text-red-300"
-        : value === "PROCESSING"
-          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-          : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+      : value === "REJECTED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {formatLabel(value)}
+      {value}
     </span>
   );
 }
 
-function Badge({ label }) {
-  return (
-    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-semibold text-gray-400">
-      {label}
-    </span>
-  );
-}
-
-function Alert({ type, title, message, onClose }) {
-  const className =
-    type === "success"
-      ? "border-green-500/30 bg-green-500/10 text-green-200"
-      : "border-red-500/30 bg-red-500/10 text-red-200";
-
-  return (
-    <div className={`mb-5 rounded-xl border px-5 py-4 ${className}`}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-bold">{title}</p>
-          <p className="mt-1 text-sm opacity-90">{message}</p>
-        </div>
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-sm font-bold opacity-70 hover:opacity-100"
-        >
-          Close
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="p-12 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
-        account_balance_wallet
-      </span>
-
-      <h3 className="text-lg font-bold text-white">No withdrawals found</h3>
-
-      <p className="mt-2 text-sm text-gray-400">
-        Try changing the search keyword or status filter.
-      </p>
-    </div>
-  );
-}
-
-function maskAccountNumber(value) {
-  if (!value) return "No account number";
-
-  const text = String(value);
-
-  if (text.length <= 4) return text;
-
-  return `•••• ${text.slice(-4)}`;
-}
-
-function formatMoney(value, currency = "VND") {
+function formatMoney(value) {
   const number = Number(value || 0);
 
   return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: currency || "VND",
+    currency: "VND",
     maximumFractionDigits: 0,
-  }).format(Number.isNaN(number) ? 0 : number);
+  }).format(number);
 }
 
 function formatDate(value) {
@@ -988,39 +598,16 @@ function formatDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
+  return date.toLocaleString("vi-VN", {
     day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 
-function formatLabel(value) {
-  if (!value) return "N/A";
-
-  return String(value)
-    .replaceAll("_", " ")
-    .toLowerCase()
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
-function validateActionForm(form, label = "Reason") {
-  const errors = {};
-  const reason = String(form.reason || "").trim();
-
-  if (!reason) {
-    errors.reason = `${label} is required.`;
-  } else if (reason.length < 10) {
-    errors.reason = `${label} must be at least 10 characters.`;
-  }
-
-  return {
-    valid: Object.keys(errors).length === 0,
-    errors,
-  };
-}
-
-function getFriendlyError(err, fallback = "Something went wrong.") {
+function getFriendlyError(err) {
   const status = err?.response?.status;
 
   if (status === 401) {
@@ -1031,16 +618,13 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
     return "Backend blocked this request because the current token does not have ADMIN permission.";
   }
 
-  if (status === 404) {
-    return "Admin withdrawals API was not found. Please check backend route.";
-  }
-
   const data = err?.response?.data;
 
   if (typeof data === "string") return data;
+
   if (data?.message) return data.message;
+
   if (data?.title) return data.title;
-  if (data?.detail) return data.detail;
 
   if (data?.errors) {
     const allErrors = Object.values(data.errors).flat();
@@ -1050,5 +634,5 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
     }
   }
 
-  return err?.message || fallback;
+  return err?.message || "Something went wrong. Please try again.";
 }

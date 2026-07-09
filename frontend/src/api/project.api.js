@@ -1,6 +1,14 @@
 import axiosInstance from "./axiosInstance";
 
 const projectApi = {
+  createProjectFromContract(contractId) {
+    return axiosInstance.post(`/projects/from-contract/${contractId}`);
+  },
+
+  initializeProject(contractId) {
+    return axiosInstance.post(`/projects/initialize/${contractId}`);
+  },
+
   getMyProjects() {
     return axiosInstance.get("/projects/me");
   },

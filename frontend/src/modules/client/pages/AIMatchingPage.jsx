@@ -185,6 +185,23 @@ export default function AIMatchingPage() {
   const [error, setError] = useState("");
   const [recentPrompts, setRecentPrompts] = useState(restoreRecentPrompts());
 
+
+  const saveSearchState = () => {
+    try {
+      sessionStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify({
+          query,
+          experts,
+          total,
+          hasSearched,
+        })
+      );
+    } catch {
+      // ignore
+    }
+  };
+
   // Lưu lại state NGAY LÚC bấm "View Profile" — điểm duy nhất đặt cờ cho phép
   // phục hồi kết quả search khi quay lại bằng nút Back. recentPrompts KHÔNG nằm
   // trong cờ này vì nó đã tự sống bền trong localStorage riêng (xem handleSearch).
@@ -204,6 +221,8 @@ export default function AIMatchingPage() {
   // Đồng bộ đúng logic Connect của ExpertSearchPage — tạo conversation trực tiếp
   // (type: "DIRECT") rồi điều hướng sang Messages, không cần qua bước review proposal.
   const handleConnect = async (expert) => {
+    saveSearchState();
+
     try {
       const conversationId = await aiMatchingService.findConversationWithExpert(expert);
 

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getMeApi } from "../api/auth.api";
-import { getAccessToken, saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
+import authService from "../services/auth.service";
+import { saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
 
 const AuthContext = createContext(null);
 
@@ -8,25 +9,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Khi reload trang: nếu có token thì gọi /auth/me để lấy user mới nhất
-  // code mới
+  // Khi reload trang: gọi /auth/me để backend kiểm tra HttpOnly cookie
   useEffect(() => {
     const restore = async () => {
-      if (!getAccessToken()) {
-        setLoading(false);
-        return;
-      }
-
-      // Nếu user đã lưu sẵn trong localStorage cho biết họ đang ở trạng thái
-      // "chưa hoàn tất" (chưa chọn role, hoặc chưa xác thực email), thì KHÔNG
-      // gọi /auth/me để xác thực lại — vì:
-      // 1) Token vừa được cấp vài giây trước lúc login, chắc chắn còn hợp lệ.
-      // 2) BE có thể từ chối /auth/me (401) cho user chưa có role đầy đủ,
-      //    khiến effect này tự xóa mất token đúng lúc user đang đứng ở
-      //    SelectRolePage chuẩn bị bấm Confirm — đây chính là nguyên nhân
-      //    gây lỗi 401 "thỉnh thoảng mới bị" khi chọn role.
       const storedUser = getUserFromStorage();
       const storedStatus = String(storedUser?.status || "").toUpperCase();
+
       const isIncompleteOnboarding = [
         "PENDING_ROLE",
         "PENDING_EMAIL_VERIFICATION",
@@ -45,14 +33,8 @@ export function AuthProvider({ children }) {
         setUser(freshUser);
         saveAuth({ user: freshUser });
       } catch (err) {
-        const status = err?.response?.status;
-        if (status === 401 || status === 403) {
-          clearAuth();
-          setUser(null);
-        } else {
-          const stored = getUserFromStorage();
-          if (stored) setUser(stored);
-        }
+        clearAuth();
+        setUser(null);
       } finally {
         setLoading(false);
       }
@@ -63,7 +45,7 @@ export function AuthProvider({ children }) {
 
   // Gọi sau khi login thành công
   const handleLoginSuccess = (authData) => {
-    saveAuth(authData);
+    saveAuth({ user: authData.user });
     setUser(authData.user);
   };
 
@@ -80,13 +62,15 @@ export function AuthProvider({ children }) {
         clearAuth();
         setUser(null);
       } else {
-        const stored = localStorage.getItem("user");
-        if (stored) setUser(JSON.parse(stored));
+        const stored = getUserFromStorage();
+        if (stored) setUser(stored);
       }
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await authService.logout();
+
     clearAuth();
 
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
@@ -114,6 +98,6 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth phải dùng bên trong AuthProvider");
+  if (!ctx) throw new Error("useAuth must be used inside AuthProvider");
   return ctx;
 }

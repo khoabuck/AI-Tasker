@@ -1,82 +1,31 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAuditLogService from "../../../services/adminAuditLog.service";
 
-const DEFAULT_FILTERS = {
-  adminId: "",
-  action: "",
-  entityName: "",
-  entityId: "",
-  from: "",
-  to: "",
-  pageNumber: 1,
-  pageSize: 10,
-};
-
 export default function AdminAuditLogsPage() {
-  const navigate = useNavigate();
-
   const [logs, setLogs] = useState([]);
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
-  const [pagination, setPagination] = useState({
-    pageNumber: 1,
-    pageSize: 10,
-    totalCount: 0,
-    totalPages: 1,
-  });
+  const [searchText, setSearchText] = useState("");
+  const [actionFilter, setActionFilter] = useState("ALL");
+  const [entityFilter, setEntityFilter] = useState("ALL");
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    loadAuditLogs(DEFAULT_FILTERS);
+    loadAuditLogs();
   }, []);
 
-  const summary = useMemo(() => {
-    const actions = new Set();
-    const entities = new Set();
-
-    logs.forEach((log) => {
-      if (log.action) actions.add(log.action);
-      if (log.entityName) entities.add(log.entityName);
-    });
-
-    return {
-      total: pagination.totalCount,
-      currentPage: pagination.pageNumber,
-      actions: actions.size,
-      entities: entities.size,
-    };
-  }, [logs, pagination]);
-
-  const loadAuditLogs = async (nextFilters = filters) => {
+  const loadAuditLogs = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const result = await adminAuditLogService.getAuditLogs({
-        AdminId: nextFilters.adminId,
-        Action: nextFilters.action,
-        EntityName: nextFilters.entityName,
-        EntityId: nextFilters.entityId,
-        From: toDateTimeStart(nextFilters.from),
-        To: toDateTimeEnd(nextFilters.to),
-        PageNumber: nextFilters.pageNumber,
-        PageSize: nextFilters.pageSize,
-      });
-
-      setLogs(result.items || []);
-
-      setPagination({
-        pageNumber: result.pageNumber || nextFilters.pageNumber || 1,
-        pageSize: result.pageSize || nextFilters.pageSize || 10,
-        totalCount: result.totalCount || 0,
-        totalPages: result.totalPages || 1,
-      });
+      const data = await adminAuditLogService.getAuditLogs();
+      setLogs(data);
     } catch (err) {
-      console.error("LOAD ADMIN AUDIT LOGS ERROR:", err?.response?.data || err);
+      console.error("LOAD AUDIT LOGS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err));
       setLogs([]);
     } finally {
@@ -84,83 +33,72 @@ export default function AdminAuditLogsPage() {
     }
   };
 
-  const handleChange = (name, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
-  };
+  const actionOptions = useMemo(() => {
+    const values = logs
+      .map((log) => log.action)
+      .filter(Boolean)
+      .map((value) => String(value).toUpperCase());
 
-  const handleApplyFilters = async () => {
-    const nextFilters = {
-      ...filters,
-      pageNumber: 1,
-    };
+    return ["ALL", ...Array.from(new Set(values))];
+  }, [logs]);
 
-    setFilters(nextFilters);
-    await loadAuditLogs(nextFilters);
-  };
+  const entityOptions = useMemo(() => {
+    const values = logs
+      .map((log) => log.entityType)
+      .filter(Boolean)
+      .map((value) => String(value).toUpperCase());
 
-  const handleResetFilters = async () => {
-    setFilters(DEFAULT_FILTERS);
-    await loadAuditLogs(DEFAULT_FILTERS);
-  };
+    return ["ALL", ...Array.from(new Set(values))];
+  }, [logs]);
 
-  const handlePageChange = async (pageNumber) => {
-    const nextFilters = {
-      ...filters,
-      pageNumber,
-    };
+  const filteredLogs = useMemo(() => {
+    const keyword = searchText.trim().toLowerCase();
 
-    setFilters(nextFilters);
-    await loadAuditLogs(nextFilters);
-  };
+    return logs.filter((log) => {
+      const action = String(log.action || "").toUpperCase();
+      const entityType = String(log.entityType || "").toUpperCase();
 
-  const getAuditLogRouteId = (log) => {
-    return (
-      log.auditLogId ||
-      log.id ||
-      log.auditId ||
-      log.logId ||
-      log.raw?.auditLogId ||
-      log.raw?.AuditLogId ||
-      log.raw?.auditLogID ||
-      log.raw?.AuditLogID ||
-      log.raw?.adminAuditLogId ||
-      log.raw?.AdminAuditLogId ||
-      log.raw?.auditId ||
-      log.raw?.AuditId ||
-      log.raw?.logId ||
-      log.raw?.LogId ||
-      log.raw?.id ||
-      log.raw?.Id
-    );
-  };
+      const text = [
+        log.auditLogId,
+        log.action,
+        log.entityType,
+        log.entityId,
+        log.actorName,
+        log.actorEmail,
+        log.description,
+        log.ipAddress,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
 
-  const handleViewDetail = (log, index) => {
-    const auditLogId = getAuditLogRouteId(log);
+      const matchSearch = !keyword || text.includes(keyword);
+      const matchAction = actionFilter === "ALL" || action === actionFilter;
+      const matchEntity = entityFilter === "ALL" || entityType === entityFilter;
 
-    if (auditLogId) {
-      navigate(`/admin/audit-logs/${auditLogId}`);
-      return;
-    }
-
-    const localId = `local-${index}-${Date.now()}`;
-
-    sessionStorage.setItem(`admin-audit-log:${localId}`, JSON.stringify(log));
-
-    navigate(`/admin/audit-logs/${localId}`, {
-      state: {
-        auditLog: log,
-      },
+      return matchSearch && matchAction && matchEntity;
     });
-  };
+  }, [logs, searchText, actionFilter, entityFilter]);
+
+  const summary = useMemo(() => {
+    const actorCount = new Set(
+      logs.map((log) => log.actorUserId || log.actorEmail).filter(Boolean)
+    ).size;
+
+    const entityCount = new Set(
+      logs.map((log) => log.entityType).filter(Boolean)
+    ).size;
+
+    return {
+      total: logs.length,
+      actors: actorCount,
+      entities: entityCount,
+      filtered: filteredLogs.length,
+    };
+  }, [logs, filteredLogs]);
 
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
-
-  const inputStyle =
-    "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
 
   const labelStyle =
     "mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400";
@@ -169,330 +107,212 @@ export default function AdminAuditLogsPage() {
     <AdminLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          {/* Header */}
+          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Admin Audit
+                Admin Audit Logs
               </p>
 
               <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Audit logs
+                System activity logs
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track admin actions, affected entities, timestamps, and audit
-                metadata.
+                Track important administrative actions, actor information,
+                affected entities and audit metadata.
               </p>
             </div>
 
             <button
               type="button"
-              onClick={() => loadAuditLogs(filters)}
+              onClick={loadAuditLogs}
               disabled={loading}
-              className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "Loading..." : "Refresh"}
+              Refresh
             </button>
-          </section>
+          </div>
 
+          {/* Error */}
           {error && (
             <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
               {error}
             </div>
           )}
 
-          <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
-            <SummaryCard
-              icon="receipt_long"
-              label="Total Logs"
-              value={summary.total}
-              tone="cyan"
-            />
-
-            <SummaryCard
-              icon="dynamic_feed"
-              label="Page"
-              value={summary.currentPage}
-              tone="green"
-            />
-
-            <SummaryCard
-              icon="bolt"
-              label="Actions"
-              value={summary.actions}
-              tone="yellow"
-            />
-
-            <SummaryCard
-              icon="database"
-              label="Entities"
-              value={summary.entities}
-              tone="purple"
-            />
+          {/* Summary */}
+          <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+            <SummaryCard label="Total Logs" value={summary.total} icon="history" />
+            <SummaryCard label="Actors" value={summary.actors} icon="person" tone="green" />
+            <SummaryCard label="Entity Types" value={summary.entities} icon="category" tone="yellow" />
+            <SummaryCard label="Showing" value={summary.filtered} icon="filter_alt" tone="cyan" />
           </section>
 
+          {/* Filters */}
           <section className={`${cardStyle} mb-6 p-6`}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_220px_220px_150px]">
               <div>
-                <label className={labelStyle}>Admin ID</label>
+                <label className={labelStyle}>Search Logs</label>
 
-                <input
-                  type="number"
-                  value={filters.adminId}
-                  onChange={(event) =>
-                    handleChange("adminId", event.target.value)
-                  }
-                  placeholder="Example: 1"
-                  className={inputStyle}
-                />
+                <div className="relative">
+                  <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-xl text-gray-500">
+                    search
+                  </span>
+
+                  <input
+                    type="text"
+                    value={searchText}
+                    onChange={(event) => setSearchText(event.target.value)}
+                    placeholder="Search action, actor, entity, description..."
+                    className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
+                  />
+                </div>
               </div>
 
               <div>
                 <label className={labelStyle}>Action</label>
 
-                <input
-                  type="text"
-                  value={filters.action}
-                  onChange={(event) =>
-                    handleChange("action", event.target.value)
-                  }
-                  placeholder="Example: UPDATE_JOB_POSTING_AI_POLICY"
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>Entity Name</label>
-
-                <input
-                  type="text"
-                  value={filters.entityName}
-                  onChange={(event) =>
-                    handleChange("entityName", event.target.value)
-                  }
-                  placeholder="Example: JobPostingAiPolicy"
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>Entity ID</label>
-
-                <input
-                  type="number"
-                  value={filters.entityId}
-                  onChange={(event) =>
-                    handleChange("entityId", event.target.value)
-                  }
-                  placeholder="Example: 1"
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>From</label>
-
-                <input
-                  type="date"
-                  value={filters.from}
-                  onChange={(event) => handleChange("from", event.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>To</label>
-
-                <input
-                  type="date"
-                  value={filters.to}
-                  onChange={(event) => handleChange("to", event.target.value)}
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>Page Size</label>
-
                 <select
-                  value={filters.pageSize}
-                  onChange={(event) =>
-                    handleChange("pageSize", Number(event.target.value))
-                  }
+                  value={actionFilter}
+                  onChange={(event) => setActionFilter(event.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
                 >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
+                  {actionOptions.map((action) => (
+                    <option key={action} value={action}>
+                      {formatLabel(action)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              <div className="flex items-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleApplyFilters}
-                  disabled={loading}
-                  className="flex-1 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Apply
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  disabled={loading}
-                  className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          </section>
-
-          <section className={`${cardStyle}`}>
-            <div className="flex flex-col gap-3 border-b border-white/10 px-6 py-5 md:flex-row md:items-center md:justify-between">
               <div>
-                <h2 className="text-lg font-bold text-white">Logs</h2>
+                <label className={labelStyle}>Entity</label>
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Showing {logs.length} records on page{" "}
-                  {pagination.pageNumber} of {pagination.totalPages}.
+                <select
+                  value={entityFilter}
+                  onChange={(event) => setEntityFilter(event.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
+                >
+                  {entityOptions.map((entity) => (
+                    <option key={entity} value={entity}>
+                      {formatLabel(entity)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4 text-center">
+                <p className="text-xs uppercase tracking-wider text-gray-500">
+                  Results
+                </p>
+
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {filteredLogs.length}
                 </p>
               </div>
             </div>
-
-            {loading ? (
-              <div className="p-12 text-center text-gray-400">
-                <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                  hourglass_empty
-                </span>
-                Loading audit logs...
-              </div>
-            ) : logs.length === 0 ? (
-              <EmptyState />
-            ) : (
-              <div className="divide-y divide-white/10">
-                {logs.map((log, index) => (
-                  <AuditLogRow
-                    key={
-                      log.auditLogId ||
-                      log.id ||
-                      log.auditId ||
-                      log.logId ||
-                      `${log.entityName}-${log.entityId}-${log.createdAt}-${index}`
-                    }
-                    log={log}
-                    onViewDetail={() => handleViewDetail(log, index)}
-                  />
-                ))}
-              </div>
-            )}
-
-            <div className="flex flex-col gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-gray-500">
-                Total:{" "}
-                <span className="font-bold text-white">
-                  {pagination.totalCount}
-                </span>
-              </p>
-
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  disabled={loading || pagination.pageNumber <= 1}
-                  onClick={() => handlePageChange(pagination.pageNumber - 1)}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Previous
-                </button>
-
-                <div className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-white">
-                  {pagination.pageNumber} / {pagination.totalPages}
-                </div>
-
-                <button
-                  type="button"
-                  disabled={
-                    loading || pagination.pageNumber >= pagination.totalPages
-                  }
-                  onClick={() => handlePageChange(pagination.pageNumber + 1)}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
           </section>
+
+          {/* Loading */}
+          {loading && (
+            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
+              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
+                hourglass_empty
+              </span>
+              Loading audit logs...
+            </div>
+          )}
+
+          {/* Empty */}
+          {!loading && filteredLogs.length === 0 && (
+            <div className={`${cardStyle} p-12 text-center`}>
+              <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+                history
+              </span>
+
+              <h2 className="text-xl font-bold text-white">No audit logs found</h2>
+
+              <p className="mt-2 text-sm text-gray-400">
+                There are no logs matching your current filters.
+              </p>
+            </div>
+          )}
+
+          {/* Logs */}
+          {!loading && filteredLogs.length > 0 && (
+            <div className="space-y-4">
+              {filteredLogs.map((log) => (
+                <article
+                  key={log.auditLogId}
+                  className={`${cardStyle} p-6 transition hover:border-cyan-400/40`}
+                >
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-3 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${getActionClass(
+                            log.action
+                          )}`}
+                        >
+                          {formatLabel(log.action)}
+                        </span>
+
+                        <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-purple-300">
+                          {formatLabel(log.entityType)}
+                        </span>
+
+                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
+                          {formatDateTime(log.createdAt)}
+                        </span>
+                      </div>
+
+                      <h2 className="text-xl font-bold text-white">
+                        {log.description || `${formatLabel(log.action)} ${formatLabel(log.entityType)}`}
+                      </h2>
+
+                      <div className="mt-4 grid grid-cols-1 gap-4 text-sm md:grid-cols-4">
+                        <InfoBox label="Log ID" value={log.auditLogId} />
+                        <InfoBox label="Entity ID" value={log.entityId} />
+                        <InfoBox label="Actor" value={log.actorName} />
+                        <InfoBox label="Actor Email" value={log.actorEmail} />
+                      </div>
+                    </div>
+
+                    <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-72">
+                      <p className="mb-3 text-xs uppercase tracking-wider text-gray-500">
+                        More Info
+                      </p>
+
+                      <div className="space-y-3 text-sm">
+                        <InfoBox label="IP Address" value={log.ipAddress} />
+                        <InfoBox label="Actor ID" value={log.actorUserId} />
+                      </div>
+
+                      <Link
+                        to={`/admin/audit-logs/${log.auditLogId}`}
+                        className="mt-4 block rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                      >
+                        View Detail
+                      </Link>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </AdminLayout>
   );
 }
 
-function AuditLogRow({ log, onViewDetail }) {
-  return (
-    <article className="p-6 transition hover:bg-white/[0.02]">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_220px_180px] xl:items-center">
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <ActionBadge action={log.action} />
-
-            <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-              Log #{log.auditLogId || log.id || "N/A"}
-            </span>
-
-            <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
-              {log.entityName || "N/A"} #{log.entityId || "N/A"}
-            </span>
-          </div>
-
-          <h3 className="font-bold text-white">
-            {log.action || "UNKNOWN"} on {log.entityName || "N/A"}
-          </h3>
-
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
-            {log.description ||
-              log.reason ||
-              "No description was provided for this audit log."}
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
-            <span>Admin ID: {log.adminId || "N/A"}</span>
-            {log.adminEmail && <span>• {log.adminEmail}</span>}
-            {log.ipAddress && <span>• IP: {log.ipAddress}</span>}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Created At
-          </p>
-
-          <p className="text-sm font-bold text-white">
-            {formatDateTime(log.createdAt)}
-          </p>
-        </div>
-
-        <div className="xl:text-right">
-          <button
-            type="button"
-            onClick={onViewDetail}
-            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-          >
-            View Detail
-          </button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
-function SummaryCard({ icon, label, value, tone }) {
+function SummaryCard({ label, value, icon, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     green: "border-green-400/20 bg-green-400/10 text-green-300",
     yellow: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
-    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+    red: "border-red-400/20 bg-red-400/10 text-red-300",
   };
 
   return (
@@ -511,68 +331,46 @@ function SummaryCard({ icon, label, value, tone }) {
   );
 }
 
-function ActionBadge({ action }) {
-  const normalized = String(action || "").toUpperCase();
-
-  const tone =
-    normalized.includes("DELETE") ||
-    normalized.includes("REJECT") ||
-    normalized.includes("BAN")
-      ? "red"
-      : normalized.includes("CREATE") ||
-        normalized.includes("APPROVE") ||
-        normalized.includes("ACTIVATE")
-      ? "green"
-      : normalized.includes("UPDATE") ||
-        normalized.includes("RESOLVE") ||
-        normalized.includes("LOCK")
-      ? "yellow"
-      : "cyan";
-
-  const className = {
-    red: "border-red-400/30 bg-red-400/10 text-red-300",
-    green: "border-green-400/30 bg-green-400/10 text-green-300",
-    yellow: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
-    cyan: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
-  };
-
+function InfoBox({ label, value }) {
   return (
-    <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-        className[tone] || className.cyan
-      }`}
-    >
-      {normalized || "UNKNOWN"}
-    </span>
-  );
-}
-
-function EmptyState() {
-  return (
-    <div className="p-12 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
-        receipt_long
-      </span>
-
-      <h3 className="text-lg font-bold text-white">No audit logs found</h3>
-
-      <p className="mt-2 text-sm text-gray-400">
-        Try changing filters or date range.
+    <div>
+      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
+      <p className="mt-1 break-words font-semibold text-gray-200">
+        {value || "N/A"}
       </p>
     </div>
   );
 }
 
-function toDateTimeStart(value) {
-  if (!value) return "";
+function getActionClass(action) {
+  const value = String(action || "").toUpperCase();
 
-  return `${value}T00:00:00`;
+  if (value.includes("CREATE") || value.includes("ADD") || value.includes("APPROVE")) {
+    return "border-green-400/30 bg-green-400/10 text-green-300";
+  }
+
+  if (value.includes("UPDATE") || value.includes("EDIT") || value.includes("CHANGE")) {
+    return "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+  }
+
+  if (value.includes("DELETE") || value.includes("BAN") || value.includes("REJECT")) {
+    return "border-red-400/30 bg-red-400/10 text-red-300";
+  }
+
+  if (value.includes("LOCK") || value.includes("SUSPEND") || value.includes("RESOLVE")) {
+    return "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+  }
+
+  return "border-gray-400/30 bg-gray-400/10 text-gray-300";
 }
 
-function toDateTimeEnd(value) {
-  if (!value) return "";
+function formatLabel(value) {
+  if (!value) return "N/A";
 
-  return `${value}T23:59:59`;
+  return String(value)
+    .replaceAll("_", " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatDateTime(value) {
@@ -603,7 +401,7 @@ function getFriendlyError(err) {
   }
 
   if (status === 404) {
-    return "Audit logs API was not found. Please check backend route.";
+    return "Admin audit logs API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;
@@ -611,7 +409,6 @@ function getFriendlyError(err) {
   if (typeof data === "string") return data;
   if (data?.message) return data.message;
   if (data?.title) return data.title;
-  if (data?.detail) return data.detail;
 
   if (data?.errors) {
     const allErrors = Object.values(data.errors).flat();

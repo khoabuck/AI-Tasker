@@ -1,36 +1,41 @@
 import axiosInstance from "./axiosInstance";
 
 const expertWalletApi = {
+  // GET /api/wallets/me
   getMyWallet() {
     return axiosInstance.get("/wallets/me");
   },
 
-  getBalance() {
+  // GET /api/wallets/balance
+  getWalletBalance() {
     return axiosInstance.get("/wallets/balance");
   },
 
+  // GET /api/transactions/me
   getMyTransactions() {
     return axiosInstance.get("/transactions/me");
   },
 
+  // POST /api/wallets/deposit-orders
   createDepositOrder(data) {
     return axiosInstance.post("/wallets/deposit-orders", data);
   },
 
+  // GET /api/wallets/deposit-orders/me
   getMyDepositOrders() {
     return axiosInstance.get("/wallets/deposit-orders/me");
   },
 
-  getDepositOrderById(depositOrderId) {
+  // GET /api/wallets/deposit-orders/{depositOrderId}
+  getDepositOrder(depositOrderId) {
     return axiosInstance.get(`/wallets/deposit-orders/${depositOrderId}`);
   },
 
-  createWithdrawal(data) {
-    return axiosInstance.post("/withdrawals", data);
-  },
-
-  getMyWithdrawals() {
-    return axiosInstance.get("/withdrawals/me");
+  // POST /api/wallets/deposit-orders/{depositOrderId}/simulate-paid
+  simulateDepositPaid(depositOrderId) {
+    return axiosInstance.post(
+      `/wallets/deposit-orders/${depositOrderId}/simulate-paid`
+    );
   },
 };
 

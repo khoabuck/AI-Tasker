@@ -18,8 +18,6 @@ export default function ProposalDetailPage() {
 
   const status = getProposalStatus(proposal);
   const statusGroup = getProposalStatusGroup(status);
-  const contractId = getContractId(proposal);
-  const currentProposalId = getProposalId(proposal) || proposalId;
 
   const milestones = useMemo(() => {
     return Array.isArray(proposal?.milestones) ? proposal.milestones : [];
@@ -88,20 +86,6 @@ export default function ProposalDetailPage() {
     } finally {
       setActionLoading(false);
     }
-  };
-
-  const handleViewContract = () => {
-    if (contractId) {
-      navigate(`/expert/contracts/${contractId}`);
-      return;
-    }
-
-    if (currentProposalId) {
-      navigate(`/expert/proposals/${currentProposalId}/contract`);
-      return;
-    }
-
-    setError("Cannot open contract because proposal id is missing.");
   };
 
   if (loading) {
@@ -210,16 +194,6 @@ export default function ProposalDetailPage() {
                       View Versions
                     </button>
 
-                    {canViewContract(statusGroup, contractId) && (
-                      <button
-                        type="button"
-                        onClick={handleViewContract}
-                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                      >
-                        View Contract
-                      </button>
-                    )}
-
                     {canResubmitProposal(statusGroup) && (
                       <button
                         type="button"
@@ -254,16 +228,21 @@ export default function ProposalDetailPage() {
                         View Job
                       </button>
                     )}
+
+                    {proposal?.contractId && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          navigate(`/expert/contracts/${proposal.contractId}`)
+                        }
+                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                      >
+                        View Contract
+                      </button>
+                    )}
                   </div>
                 </div>
               </section>
-
-              {statusGroup === "ACCEPTED" && (
-                <AcceptedContractNotice
-                  contractId={contractId}
-                  onViewContract={handleViewContract}
-                />
-              )}
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
                 <main className="space-y-6">
@@ -369,16 +348,12 @@ export default function ProposalDetailPage() {
                         value={formatProposalVersion(proposal)}
                       />
 
-                      <Info
-                        label="Contract"
-                        value={
-                          contractId
-                            ? `#${contractId}`
-                            : statusGroup === "ACCEPTED"
-                            ? "Available from accepted proposal"
-                            : "N/A"
-                        }
-                      />
+                      {proposal?.contractId && (
+                        <Info
+                          label="Contract ID"
+                          value={`#${proposal.contractId}`}
+                        />
+                      )}
                     </div>
                   </Card>
 
@@ -409,46 +384,6 @@ export default function ProposalDetailPage() {
         </div>
       </div>
     </ExpertLayout>
-  );
-}
-
-function AcceptedContractNotice({ contractId, onViewContract }) {
-  return (
-    <section className="mb-6 rounded-3xl border border-green-400/30 bg-green-400/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.25)] md:p-7">
-      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-green-400/40 bg-green-400/10 text-green-300">
-            <span className="material-symbols-outlined">verified</span>
-          </div>
-
-          <div>
-            <h2 className="text-xl font-bold text-white">
-              Your proposal was accepted
-            </h2>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-green-100/80">
-              The client has accepted this proposal. Open the contract to review
-              the final terms, milestones, payment amount and confirmation
-              status.
-            </p>
-
-            {!contractId && (
-              <p className="mt-2 text-xs font-semibold text-green-200/80">
-                The contract will be loaded using this proposal ID.
-              </p>
-            )}
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={onViewContract}
-          className="shrink-0 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-        >
-          View Contract
-        </button>
-      </div>
-    </section>
   );
 }
 
@@ -493,7 +428,9 @@ function MilestoneCard({ milestone, index }) {
             {formatDisplayValue(milestone?.title || `Milestone ${index + 1}`)}
           </p>
 
-          <p className="mt-1 text-xs text-gray-500">Milestone {index + 1}</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Milestone {index + 1}
+          </p>
         </div>
 
         <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
@@ -577,30 +514,6 @@ function EmptyState({ message }) {
   );
 }
 
-function getProposalId(proposal) {
-  return (
-    proposal?.proposalId ||
-    proposal?.ProposalId ||
-    proposal?.id ||
-    proposal?.Id ||
-    ""
-  );
-}
-
-function getContractId(proposal) {
-  return (
-    proposal?.contractId ||
-    proposal?.ContractId ||
-    proposal?.contractID ||
-    proposal?.ContractID ||
-    proposal?.contract?.contractId ||
-    proposal?.contract?.id ||
-    proposal?.Contract?.ContractId ||
-    proposal?.Contract?.Id ||
-    ""
-  );
-}
-
 function getJobId(proposal) {
   return (
     proposal?.jobId ||
@@ -638,19 +551,13 @@ function getProposalStatusGroup(status) {
     return "REJECTED";
   }
 
-  if (["ACCEPTED", "APPROVED", "SELECTED"].includes(value)) {
-    return "ACCEPTED";
-  }
+  if (value === "ACCEPTED") return "ACCEPTED";
 
   if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
     return "CANCELLED";
   }
 
   return "SUBMITTED";
-}
-
-function canViewContract(statusGroup, contractId) {
-  return statusGroup === "ACCEPTED" || Boolean(contractId);
 }
 
 function canResubmitProposal(statusGroup) {
@@ -666,7 +573,7 @@ function getProposalStatusLabel(statusGroup) {
     SUBMITTED: "Submitted",
     ACCEPTED: "Accepted",
     REJECTED: "Rejected",
-    CANCELLED: "Cancelled",
+    CANCELLED: "Cancel",
   };
 
   return map[statusGroup] || "Submitted";

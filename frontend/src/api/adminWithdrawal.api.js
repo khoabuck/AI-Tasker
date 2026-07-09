@@ -1,29 +1,24 @@
 import axiosInstance from "./axiosInstance";
 
 const adminWithdrawalApi = {
-  getWithdrawals(params = {}) {
+  getAllWithdrawals(status = "") {
+    const params = {};
+
+    if (status && status !== "ALL") {
+      params.status = status;
+    }
+
     return axiosInstance.get("/withdrawals/admin", { params });
   },
 
-  getPayosBalance() {
-    return axiosInstance.get("/withdrawals/admin/payos/balance");
-  },
-
-  approveWithdrawalPayos(withdrawalRequestId, data = {}) {
+  approveWithdrawal(withdrawalRequestId, data) {
     return axiosInstance.post(
-      `/withdrawals/admin/${withdrawalRequestId}/approve-payos`,
+      `/withdrawals/admin/${withdrawalRequestId}/approve`,
       data
     );
   },
 
-  syncWithdrawalPayos(withdrawalRequestId, data = {}) {
-    return axiosInstance.post(
-      `/withdrawals/admin/${withdrawalRequestId}/sync-payos`,
-      data
-    );
-  },
-
-  rejectWithdrawal(withdrawalRequestId, data = {}) {
+  rejectWithdrawal(withdrawalRequestId, data) {
     return axiosInstance.post(
       `/withdrawals/admin/${withdrawalRequestId}/reject`,
       data

@@ -60,11 +60,41 @@ const TYPE_CONFIG = {
     bg: "bg-indigo-300/10",
   },
   DELIVERABLE_SUBMITTED: {
-    icon: "upload_file",
-    color: "text-emerald-400",
-    bg: "bg-emerald-400/10",
-  },
-  SYSTEM: {
+  icon: "upload_file",
+  color: "text-emerald-400",
+  bg: "bg-emerald-400/10",
+},
+DELIVERABLE_APPROVED: {
+  icon: "verified",
+  color: "text-emerald-400",
+  bg: "bg-emerald-400/10",
+},
+CONTRACT_CONFIRMED_PENDING_ESCROW: {
+  icon: "contract",
+  color: "text-yellow-400",
+  bg: "bg-yellow-400/10",
+},
+CONTRACT_CONFIRMED_ESCROW_LOCKED: {
+  icon: "lock",
+  color: "text-emerald-400",
+  bg: "bg-emerald-400/10",
+},
+ESCROW_LOCKED: {
+  icon: "lock",
+  color: "text-yellow-400",
+  bg: "bg-yellow-400/10",
+},
+ESCROW_RELEASED: {
+  icon: "payments",
+  color: "text-emerald-400",
+  bg: "bg-emerald-400/10",
+},
+ESCROW_LOCK_EXPIRED: {
+  icon: "lock_clock",
+  color: "text-red-400",
+  bg: "bg-red-400/10",
+},
+SYSTEM: {
     icon: "notifications",
     color: "text-gray-400",
     bg: "bg-gray-400/10",
@@ -142,36 +172,34 @@ function getNotificationTargetUrl(notification) {
   const type = notification?.type || "SYSTEM";
   const metadata = parseMetadata(notification);
 
-  if (notification?.actionUrl) return notification.actionUrl;
-  if (notification?.link) return notification.link;
-  if (notification?.url) return notification.url;
-  if (notification?.targetUrl) return notification.targetUrl;
-
   const proposalId = getValue(notification, metadata, [
     "proposalId",
     "relatedProposalId",
     "targetProposalId",
-    "entityId",
-    "referenceId",
-    "targetId",
   ]);
 
   const conversationId = getValue(notification, metadata, [
     "conversationId",
     "relatedConversationId",
     "targetConversationId",
-    "entityId",
-    "referenceId",
-    "targetId",
   ]);
 
   const milestoneId = getValue(notification, metadata, [
     "milestoneId",
     "relatedMilestoneId",
     "targetMilestoneId",
-    "entityId",
-    "referenceId",
-    "targetId",
+  ]);
+
+  const projectId = getValue(notification, metadata, [
+    "projectId",
+    "relatedProjectId",
+    "targetProjectId",
+  ]);
+
+  const contractId = getValue(notification, metadata, [
+    "contractId",
+    "relatedContractId",
+    "targetContractId",
   ]);
 
   switch (type) {
@@ -189,8 +217,17 @@ function getNotificationTargetUrl(notification) {
         ? `/client/proposals/${proposalId}`
         : "/client/projects";
 
-    case "JOB_INVITED":
-      return "/expert/messages";
+    case "CONTRACT_CONFIRMED_PENDING_ESCROW":
+      return contractId
+        ? `/client/contracts/${contractId}`
+        : "/client/projects";
+
+    case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
+    case "ESCROW_LOCKED":
+    case "ESCROW_LOCK_EXPIRED":
+      return projectId
+        ? `/client/projects/${projectId}`
+        : "/client/projects";
 
     case "DELIVERABLE_SUBMITTED":
     case "MILESTONE_DELIVERABLE_SUBMITTED":
@@ -202,11 +239,19 @@ function getNotificationTargetUrl(notification) {
         ? `/client/milestones/${milestoneId}/deliverables`
         : "/client/projects";
 
+    case "ESCROW_RELEASED":
+      return milestoneId
+        ? `/client/milestones/${milestoneId}/deliverables`
+        : "/client/wallet";
+
     case "DEPOSIT":
     case "WITHDRAWAL":
     case "WITHDRAWAL_APPROVED":
     case "WITHDRAWAL_REJECTED":
       return "/client/wallet";
+
+    case "JOB_INVITED":
+      return "/expert/messages";
 
     default:
       return "/client/notifications";
@@ -254,21 +299,21 @@ export default function NotificationDropdown() {
   }, []);
 
   const handleNotificationClick = async (notification) => {
-    const notificationId = getNotificationId(notification);
-    const targetUrl = getNotificationTargetUrl(notification);
+  const notificationId = getNotificationId(notification);
+  const targetUrl = getNotificationTargetUrl(notification);
 
-    console.log("Notification:", notification);
-    console.log("Target URL:", targetUrl);
+  setOpen(false);
 
-    try {
-      if (!notification?.isRead && notificationId) {
-        await markRead(notificationId);
-      }
-    } finally {
-      navigate(targetUrl);
-      setOpen(false);
+  try {
+    if (!notification?.isRead && notificationId) {
+      await markRead(notificationId);
     }
-  };
+  } catch (err) {
+    console.error("Mark read failed:", err);
+  }
+
+  navigate(targetUrl);
+};
 
   return (
     <div ref={dropdownRef} className="relative">
@@ -367,26 +412,32 @@ export default function NotificationDropdown() {
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p
-                        className={`mb-1 truncate text-[13px] leading-5 ${
-                          isUnread
-                            ? "font-semibold text-gray-100"
-                            : "font-normal text-gray-300"
-                        }`}
-                      >
-                        {n.title || n.message || n.content || "Notification"}
-                      </p>
+                    {/* Title */}
+                    <p
+                      className={`mb-1 text-[13px] leading-5 ${
+                        isUnread
+                          ? "font-semibold text-gray-100"
+                          : "font-normal text-gray-300"
+                      }`}
+                    >
+                      {n.title || "Notification"}
+                    </p>
 
-                      {(n.body || n.description) && (
-                        <p className="mb-1.5 overflow-hidden text-xs leading-5 text-gray-400 [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2]">
-                          {n.body || n.description}
-                        </p>
-                      )}
+                    {/* Content */}
+                    <p className="mb-1 truncate text-xs text-gray-400">
+                      {n.content || n.message || "No content"}
+                    </p>
 
-                      <span className="font-mono text-[11px] text-gray-400">
-                        {formatNotificationTime(n.createdAt)}
-                      </span>
-                    </div>
+                    {/* Type */}
+                    <p className="mb-1 truncate text-[11px] font-mono text-cyan-400">
+                      {n.type || "SYSTEM"}
+                    </p>
+
+                    {/* Time */}
+                    <span className="font-mono text-[11px] text-gray-500">
+                      {formatNotificationTime(n.createdAt || n.createdAtUtc)}
+                    </span>
+                  </div>
                   </button>
                 );
               })}

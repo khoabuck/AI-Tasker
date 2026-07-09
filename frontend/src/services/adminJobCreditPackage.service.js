@@ -14,7 +14,6 @@ const toNumber = (value, fallback = 0) => {
 const toBoolean = (value, fallback = true) => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1;
 
   const normalized = String(value).trim().toLowerCase();
 
@@ -89,15 +88,11 @@ export const normalizeJobCreditPackage = (item) => {
     ),
 
     aiGenerationCredits: toNumber(
-      getValue(
-        item.aiGenerationCredits,
-        item.AiGenerationCredits,
-        item.AIGenerationCredits,
-        0
-      )
+      getValue(item.aiGenerationCredits, item.AiGenerationCredits, item.AIGenerationCredits, 0)
     ),
 
     price: toNumber(getValue(item.price, item.Price, 0)),
+
     currency: getValue(item.currency, item.Currency, "VND"),
 
     isActive: toBoolean(
@@ -105,7 +100,9 @@ export const normalizeJobCreditPackage = (item) => {
       true
     ),
 
-    displayOrder: toNumber(getValue(item.displayOrder, item.DisplayOrder, 0)),
+    displayOrder: toNumber(
+      getValue(item.displayOrder, item.DisplayOrder, 0)
+    ),
 
     createdAt: getValue(item.createdAt, item.CreatedAt, ""),
     updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
@@ -141,9 +138,7 @@ const adminJobCreditPackageService = {
     return unwrapListData(response)
       .map(normalizeJobCreditPackage)
       .filter(Boolean)
-      .sort(
-        (a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0)
-      );
+      .sort((a, b) => Number(a.displayOrder || 0) - Number(b.displayOrder || 0));
   },
 
   async getPackageById(packageId) {

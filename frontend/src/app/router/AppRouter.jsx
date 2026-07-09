@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import GuestRoute from "./GuestRoute";
 import ProtectedRoute from "./ProtectedRoute";
-import authService from "../../services/auth.service";
 
 // Auth pages
 import LoginPage from "../../modules/auth/pages/LoginPage";
@@ -12,7 +11,7 @@ import ForgotPasswordPage from "../../modules/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
 import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
-import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
+import SetupProfilePage from "../../modules/auth/pages/SetupProfilepage";
 import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
@@ -81,8 +80,6 @@ import ExpertNotificationsPage from "../../modules/expert/pages/ExpertNotificati
 import ExpertReviewsPage from "../../modules/expert/pages/ExpertReviewsPage";
 import ExpertSkillsPage from "../../modules/expert/pages/ExpertSkillsPage";
 import ExpertProfileLockedPage from "../../modules/expert/pages/ExpertProfileLockedPage";
-import ProposalCreditPackagesPage from "../../modules/expert/pages/ProposalCreditPackagesPage";
-import MyProposalDraftsPage from "../../modules/expert/pages/MyProposalDraftsPage";
 
 // Admin pages
 import AdminDashboard from "../../modules/admin/pages/AdminDashboard";
@@ -96,12 +93,6 @@ import AdminAuditLogsPage from "../../modules/admin/pages/AdminAuditLogsPage";
 import AdminAuditLogDetailPage from "../../modules/admin/pages/AdminAuditLogDetailPage";
 import AdminExpertScoringPolicyPage from "../../modules/admin/pages/AdminExpertScoringPolicyPage";
 import AdminPlatformFeePolicyPage from "../../modules/admin/pages/AdminPlatformFeePolicyPage";
-import AdminJobPostingAiPolicyPage from "../../modules/admin/pages/AdminJobPostingAiPolicyPage";
-import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCreditPackagesPage";
-import AdminProposalCreditPackagesPage from "../../modules/admin/pages/AdminProposalCreditPackagesPage";
-import AdminProposalCreditsPage from "../../modules/admin/pages/AdminProposalCreditsPage";
-import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPage";
-
 
 // Error pages
 import NotFoundPage from "../../modules/error/pages/NotFoundPage";
@@ -117,7 +108,7 @@ const RequireAuth = ({ children }) => {
     );
   }
 
-  if (!user && !authService.isAuthenticated()) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -206,9 +197,6 @@ export default function AppRouter() {
       <Route path="/expert/proposals/:proposalId/resubmit" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ResubmitProposalPage /></ProtectedRoute>} />
       <Route path="/expert/proposals/:proposalId/contract" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
       <Route path="/expert/proposals/:proposalId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalDetailPage /></ProtectedRoute>} />
-      <Route path="/expert/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProposalCreditPackagesPage /></ProtectedRoute>} /> 
-      <Route path="/expert/proposal/drafts" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MyProposalDraftsPage /></ProtectedRoute>} />                       
-
 
       {/* Expert contracts */}
       <Route path="/expert/contracts/:contractId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ContractDetailPage /></ProtectedRoute>} />
@@ -247,13 +235,7 @@ export default function AppRouter() {
       <Route path="/admin/audit-logs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogsPage /></ProtectedRoute>} />
       <Route path="/admin/audit-logs/:auditLogId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAuditLogDetailPage /></ProtectedRoute>} />
       <Route path="/admin/expert-profile-scoring-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminExpertScoringPolicyPage /></ProtectedRoute>} />
-      <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />  
-      <Route path="/admin/job-posting-ai-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobPostingAiPolicyPage /></ProtectedRoute>} />
-      <Route path="/admin/job-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminJobCreditPackagesPage /></ProtectedRoute>} /> 
-      <Route path="/admin/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditPackagesPage /></ProtectedRoute>} />
-      <Route path="/admin/proposal-credits" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditsPage /></ProtectedRoute>} />
-      <Route path="/admin/ai-management" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAiManagementPage /></ProtectedRoute>}/>
-
+      <Route path="/admin/platform-fee-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminPlatformFeePolicyPage /></ProtectedRoute>} />
 
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />

@@ -7,7 +7,7 @@ export default function GuestRoute({ children }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0f1116] text-gray-400 text-sm">
-        Đang tải...
+        Loading...
       </div>
     );
   }

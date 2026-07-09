@@ -9,31 +9,7 @@ const proposalApi = {
     return axiosInstance.get("/proposals/me");
   },
 
-  getMyProposalCredits() {
-    return axiosInstance.get("/proposals/me/credits");
-  },
-
-  getMyDraftProposals() {
-    return axiosInstance.get("/proposals/drafts/me");
-  },
-
-  createDraftProposal(data) {
-    return axiosInstance.post("/proposals/drafts", data);
-  },
-
-  updateDraftProposal(proposalId, data) {
-    return axiosInstance.put(`/proposals/drafts/${proposalId}`, data);
-  },
-
-  deleteDraftProposal(proposalId) {
-    return axiosInstance.delete(`/proposals/drafts/${proposalId}`);
-  },
-
-  submitDraftProposal(proposalId) {
-    return axiosInstance.post(`/proposals/drafts/${proposalId}/submit`);
-  },
-
-  getProposalsByJob(jobId) {
+  getJobProposals(jobId) {
     return axiosInstance.get(`/jobs/${jobId}/proposals`);
   },
 
@@ -49,16 +25,14 @@ const proposalApi = {
     return axiosInstance.post(`/proposals/${proposalId}/resubmit`, data);
   },
 
-  decisionProposal(proposalId, data) {
-    return axiosInstance.post(`/proposals/${proposalId}/decision`, data);
+  decideProposal(proposalId, decision) {
+    return axiosInstance.post(`/proposals/${proposalId}/decision`, null, {
+      params: { decision },
+    });
   },
 
-  getWithdrawWarning(proposalId) {
-    return axiosInstance.get(`/proposals/${proposalId}/withdraw-warning`);
-  },
-
-  withdrawProposal(proposalId, data = {}) {
-    return axiosInstance.patch(`/proposals/${proposalId}/withdraw`, data);
+  withdrawProposal(proposalId) {
+    return axiosInstance.patch(`/proposals/${proposalId}/withdraw`);
   },
 };
 

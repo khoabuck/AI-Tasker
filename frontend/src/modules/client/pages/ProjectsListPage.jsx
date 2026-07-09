@@ -27,7 +27,7 @@ const STATUS_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#9ca3af", bg: "rgba(156,163,175,0.08)", border: "rgba(156,163,175,0.25)" },
 };
 
-function ProjectCard({ project }) {
+function ProjectCard({ project, hasReview }) {
   const navigate = useNavigate();
   const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
@@ -46,7 +46,7 @@ function ProjectCard({ project }) {
           </h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img
-              src={project.expertAvatar || "/images/default-avatar.png"}
+              src={project.expertAvatarUrl || "/images/default-avatar.png"}
               alt={expertName}
               style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
             />
@@ -105,7 +105,7 @@ function ProjectCard({ project }) {
               }}
               className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-bold text-green-400 transition hover:bg-green-500/20"
             >
-              Leave Review
+              {hasReview ? "View Review" : "Review"}
             </button>
           )}
 
@@ -131,7 +131,15 @@ export default function ProjectsListPage() {
   const location = useLocation();
   const activeStatus = searchParams.get("status") || "ACTIVE";
 
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "instant",
+    });
+  }, [activeStatus]);
+
   const [allProjects, setAllProjects] = useState([]);
+  const [reviewedProjectIds, setReviewedProjectIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -141,7 +149,33 @@ export default function ProjectsListPage() {
     try {
       const res = await axiosInstance.get("/projects/me", { signal });
       const raw = res.data;
-      setAllProjects(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
+      const projects = Array.isArray(raw) ? raw : raw.items ?? raw.data ?? [];
+
+      setAllProjects(projects);
+
+      const completedProjects = projects.filter(
+        (p) => String(p.status || "").toUpperCase() === "COMPLETED"
+      );
+
+      const results = await Promise.allSettled(
+        completedProjects.map((p) =>
+          axiosInstance.get(`/projects/${p.projectId}/review`, { signal })
+        )
+      );
+
+      const reviewedIds = new Set();
+
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          const reviewData = result.value.data?.data ?? result.value.data;
+
+          if (reviewData?.reviewId) {
+            reviewedIds.add(completedProjects[index].projectId);
+          }
+        }
+      });
+
+      setReviewedProjectIds(reviewedIds);
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(err?.response?.data?.message || "Unable to load the list of projects.");
@@ -221,7 +255,11 @@ export default function ProjectsListPage() {
         {!loading && !error && filteredProjects.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {filteredProjects.map((project) => (
-              <ProjectCard key={project.projectId} project={project} />
+              <ProjectCard
+                key={project.projectId}
+                project={project}
+                hasReview={reviewedProjectIds.has(project.projectId)}
+              />
             ))}
           </div>
         )}

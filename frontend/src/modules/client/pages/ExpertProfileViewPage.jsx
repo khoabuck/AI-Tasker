@@ -51,6 +51,11 @@ function SocialLink({ icon, label, url }) {
 }
 
 export default function ExpertProfileViewPage() {
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+  
   const { expertProfileId } = useParams();
   const navigate = useNavigate();
 
@@ -78,6 +83,8 @@ export default function ExpertProfileViewPage() {
       setLoading(false);
     }
   }, [expertProfileId]);
+
+  
 
   useEffect(() => {
     const controller = new AbortController();

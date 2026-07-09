@@ -130,7 +130,7 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSubmit} autoComplete="off">
               <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 16 }}>
 
                 {/* Full Name */}
@@ -147,6 +147,10 @@ export default function RegisterPage() {
                       onChange={handleChange}
                       required
                       placeholder="Dr. Sarah Chen"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                       style={inputStyle("fullName")}
                       onFocus={() => setFocusField("fullName")}
                       onBlur={() => setFocusField("")}
@@ -168,6 +172,10 @@ export default function RegisterPage() {
                       onChange={handleChange}
                       required
                       placeholder="sarah.chen@neural.ai"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
                       style={inputStyle("email")}
                       onFocus={() => setFocusField("email")}
                       onBlur={() => setFocusField("")}
@@ -190,6 +198,7 @@ export default function RegisterPage() {
                         value={form.password}
                         onChange={handleChange}
                         required
+                        autoComplete="new-password"
                         style={{ ...inputStyle("password"), paddingRight: 48 }}
                         onFocus={() => setFocusField("password")}
                         onBlur={() => setFocusField("")}
@@ -239,6 +248,7 @@ export default function RegisterPage() {
                         value={form.confirmPassword}
                         onChange={handleChange}
                         required
+                        autoComplete="new-password"
                         style={{ ...inputStyle("confirmPassword"), paddingRight: 48 }}
                         onFocus={() => setFocusField("confirmPassword")}
                         onBlur={() => setFocusField("")}

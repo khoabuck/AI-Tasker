@@ -1,26 +1,20 @@
 import axiosInstance from "./axiosInstance";
 
 const adminSkillApi = {
-  getSkills(params = {}) {
-    const query = {};
+  getSkills({ keyword = "", category = "", activeOnly = false } = {}) {
+    const params = {
+      activeOnly,
+    };
 
-    if (params.keyword) {
-      query.keyword = params.keyword;
+    if (keyword) {
+      params.keyword = keyword;
     }
 
-    if (params.category) {
-      query.category = params.category;
+    if (category) {
+      params.category = category;
     }
 
-    if (
-      params.activeOnly !== undefined &&
-      params.activeOnly !== null &&
-      params.activeOnly !== ""
-    ) {
-      query.activeOnly = params.activeOnly;
-    }
-
-    return axiosInstance.get("/skills", { params: query });
+    return axiosInstance.get("/skills", { params });
   },
 
   getSkillById(skillId) {
@@ -35,7 +29,7 @@ const adminSkillApi = {
     return axiosInstance.put(`/skills/${skillId}`, data);
   },
 
-  deleteSkill(skillId) {
+  deactivateSkill(skillId) {
     return axiosInstance.delete(`/skills/${skillId}`);
   },
 

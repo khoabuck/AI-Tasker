@@ -107,20 +107,24 @@ const ROW_OPTIONS = [5, 10, 20, 50];
     return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
   };
 
-  const getTxProjectText = (tx) => {
-    if (tx.projectId && tx.milestoneId) {
-      return `Project #${tx.projectId} • Milestone #${tx.milestoneId}`;
+    const getTxProjectText = (tx) => {
+    if (tx.projectTitle) {
+      return tx.projectTitle;
     }
 
-    if (tx.projectId) {
-      return `Project #${tx.projectId}`;
+    if (tx.jobTitle) {
+      return tx.jobTitle;
+    }
+
+    if (tx.contractTitle) {
+      return tx.contractTitle;
     }
 
     if (getTxType(tx) === "DEPOSIT") {
       return "Deposit to wallet";
     }
 
-    return tx.description ?? "—";
+    return tx.displayTitle || tx.description || "—";
   };
 
   const formatTxDate = (value) => {
@@ -483,9 +487,35 @@ useEffect(() => {
         <div style={{ background: "rgba(29,32,38,0.4)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" }}>
 
           {/* Table Header */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 2.4fr 3fr 1.5fr 1.5fr 1fr", padding: "14px 24px", background: "rgba(29,32,38,0.3)", borderBottom: "1px solid rgba(255,255,255,0.1)", columnGap: 20 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "160px 260px minmax(220px, 0.7fr) 160px 160px 140px",
+              padding: "14px 24px",
+              background: "rgba(29,32,38,0.3)",
+              borderBottom: "1px solid rgba(255,255,255,0.1)",
+              columnGap: 20,
+            }}
+          >
             {["Date", "Type", "Project Name", "Amount", "Status", "Action"].map((h, i) => (
-              <div key={h} style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.12em", color: "#8c90a0", textAlign: i >= 3 ? "right" : "left" }}>{h}</div>
+              <div
+                key={h}
+                style={{
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 10,
+                  textTransform: "uppercase",
+                  letterSpacing: h === "Action" ? "0.05em" : "0.12em",
+                  color: "#8c90a0",
+                  textAlign:
+                    h === "Status" || h === "Action"
+                      ? "center"
+                      : i >= 3
+                      ? "right"
+                      : "left",
+                }}
+              >
+                {h}
+              </div>
             ))}
           </div>
 
@@ -526,7 +556,7 @@ useEffect(() => {
 
               return (
                 <div key={tx.transactionId ?? tx.id}
-                  style={{ display: "grid", gridTemplateColumns: "1fr 2.4fr 3fr 1.5fr 1.5fr 1fr", columnGap: 20, padding: "18px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.2s" }}
+                  style={{ display: "grid", gridTemplateColumns: "160px 260px minmax(220px, 0.7fr) 160px 160px 140px", columnGap: 20, padding: "18px 24px", alignItems: "center", borderBottom: "1px solid rgba(255,255,255,0.05)", transition: "background 0.2s" }}
                   onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                   onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
 
@@ -559,7 +589,7 @@ useEffect(() => {
                   </div>
 
                   {/* Status */}
-                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
                     <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: 700, background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}>
                       {statusKey || "—"}
                     </span>
@@ -569,7 +599,22 @@ useEffect(() => {
                   <div style={{ display: "flex", justifyContent: "flex-end" }}>
                     <button
                       onClick={() => navigate(`/client/transactions/${tx.transactionId}`)}
-                      style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", color: "#00F0FF", background: "none", border: "none", cursor: "pointer", transition: "filter 0.2s" }}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                        width: "100%",
+                        fontSize: 11,
+                        fontFamily: "JetBrains Mono, monospace",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "#00F0FF",
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        transition: "filter 0.2s",
+                      }}
                       onMouseEnter={(e) => (e.currentTarget.style.filter = "brightness(1.3)")}
                       onMouseLeave={(e) => (e.currentTarget.style.filter = "brightness(1)")}>
                       Detail

@@ -10,42 +10,58 @@ export const CERTIFICATE_TYPES = [
 ];
 
 export const CERTIFICATE_TYPE_OPTIONS = [
-  { label: "Course Certificate", value: "COURSE_CERTIFICATE" },
-  { label: "Professional Certificate", value: "PROFESSIONAL_CERTIFICATE" },
-  { label: "Bootcamp Certificate", value: "BOOTCAMP_CERTIFICATE" },
-  { label: "Degree Certificate", value: "DEGREE_CERTIFICATE" },
-  { label: "Award / Achievement", value: "AWARD_CERTIFICATE" },
-  { label: "Other", value: "OTHER" },
+  {
+    label: "Chứng chỉ khóa học",
+    value: "COURSE_CERTIFICATE",
+  },
+  {
+    label: "Chứng chỉ nghề nghiệp/chuyên môn",
+    value: "PROFESSIONAL_CERTIFICATE",
+  },
+  {
+    label: "Chứng chỉ bootcamp/trung tâm",
+    value: "BOOTCAMP_CERTIFICATE",
+  },
+  {
+    label: "Bằng cấp chính quy",
+    value: "DEGREE_CERTIFICATE",
+  },
+  {
+    label: "Giải thưởng/thành tích",
+    value: "AWARD_CERTIFICATE",
+  },
+  {
+    label: "Khác",
+    value: "OTHER",
+  },
 ];
 
 export const CERTIFICATE_STATUS_LABEL = {
-  VERIFIED: "Verified",
-  NAME_MISMATCH: "Certificate holder name does not match profile name",
-  NEEDS_REVIEW: "Needs manual review",
-  NO_CERTIFICATE: "No certificate provided",
+  VERIFIED: "Đã xác minh",
+  NAME_MISMATCH: "Tên trên chứng chỉ không khớp hồ sơ",
+  NEEDS_REVIEW: "Cần kiểm tra thủ công",
+  NO_CERTIFICATE: "Chưa cung cấp chứng chỉ",
 };
 
 export const EXPERT_PROFILE_REVIEW_STATUS_LABEL = {
-  PENDING: "Pending Review",
-  APPROVED: "Approved",
-  REJECTED: "Rejected",
-  NEEDS_CORRECTION: "Needs Correction",
-  LOCKED: "Profile Locked",
+  PENDING: "Đang chờ duyệt",
+  APPROVED: "Đã duyệt",
+  REJECTED: "Bị từ chối",
+  NEEDS_CORRECTION: "Cần chỉnh sửa",
+  LOCKED: "Hồ sơ bị khóa",
 };
 
 const EXPERT_PROFILE_ERROR_MAP = {
-  "Full name is required.": "Full name is required.",
-  "Certificate URL is invalid.": "Certificate URL is invalid.",
-  "Certificate type is invalid.": "Certificate type is invalid.",
-  "Duplicate certificate URL in request.":
-    "You entered a duplicate certificate URL.",
+  "Certificate URL is invalid.": "URL chứng chỉ không hợp lệ.",
+  "Certificate type is invalid.": "Loại chứng chỉ không hợp lệ.",
+  "Duplicate certificate URL in request.": "Bạn đã nhập trùng URL chứng chỉ.",
   "This certificate URL is already used by another expert.":
-    "This certificate URL is already used by another expert.",
-  "Portfolio URL is invalid.": "Portfolio URL is invalid.",
-  "GitHub URL is invalid.": "GitHub URL is invalid.",
-  "LinkedIn URL is invalid.": "LinkedIn URL is invalid.",
-  "Phone number already exists.": "This phone number is already used.",
-  "Business email already exists.": "This business email is already used.",
+    "Chứng chỉ này đã được sử dụng bởi Expert khác.",
+  "Portfolio URL is invalid.": "Portfolio URL không hợp lệ.",
+  "GitHub URL is invalid.": "GitHub URL không hợp lệ.",
+  "LinkedIn URL is invalid.": "LinkedIn URL không hợp lệ.",
+  "Phone number already exists.": "Số điện thoại này đã được sử dụng.",
+  "Business email already exists.": "Email doanh nghiệp này đã được sử dụng.",
 };
 
 function unwrapData(response) {
@@ -75,7 +91,9 @@ function numberOrZero(value) {
 
 function booleanValue(value) {
   if (typeof value === "boolean") return value;
-  if (typeof value === "string") return value.toLowerCase() === "true";
+  if (typeof value === "string") {
+    return value.toLowerCase() === "true";
+  }
   return Boolean(value);
 }
 
@@ -88,7 +106,7 @@ function getCertificateTypeLabel(type) {
   const normalizedType = normalizeCertificateType(type);
   return (
     CERTIFICATE_TYPE_OPTIONS.find((item) => item.value === normalizedType)
-      ?.label || "Other"
+      ?.label || "Khác"
   );
 }
 
@@ -307,7 +325,8 @@ export function normalizeExpertProfile(profile = {}) {
     profileScoreMax,
     profilePassScore,
     profileScoreText:
-      raw.profileScoreText || buildProfileScoreText(profileScore, profileScoreMax),
+      raw.profileScoreText ||
+      buildProfileScoreText(profileScore, profileScoreMax),
 
     scoreBreakdown: normalizeScoreBreakdown(raw.scoreBreakdown),
 
@@ -342,8 +361,6 @@ export function buildExpertProfilePayload(formData = {}) {
   const certificates = normalizeCertificatesForPayload(formData.certificates);
 
   return {
-    fullName: trimString(formData.fullName),
-
     avatarUrl: nullableString(formData.avatarUrl),
     professionalTitle: trimString(formData.professionalTitle),
     bio: trimString(formData.bio),
@@ -406,28 +423,28 @@ export function validateCertificatePayload(certificates = []) {
 
     if (!url) {
       errors[`certificates.${index}.certificateUrl`] =
-        "Please enter a certificate URL or remove this certificate row.";
+        "Vui lòng nhập URL chứng chỉ hoặc xóa dòng chứng chỉ này.";
       return;
     }
 
     if (!isValidUrl(url)) {
       errors[`certificates.${index}.certificateUrl`] =
-        "Certificate URL is invalid.";
+        "URL chứng chỉ không hợp lệ.";
     }
 
     if (!type) {
       errors[`certificates.${index}.certificateType`] =
-        "Please select a certificate type.";
+        "Vui lòng chọn loại chứng chỉ.";
     } else if (!CERTIFICATE_TYPES.includes(type.toUpperCase())) {
       errors[`certificates.${index}.certificateType`] =
-        "Certificate type is invalid.";
+        "Loại chứng chỉ không hợp lệ.";
     }
 
     const normalizedUrl = url.toLowerCase();
 
     if (usedUrls.has(normalizedUrl)) {
       errors[`certificates.${index}.certificateUrl`] =
-        "You entered a duplicate certificate URL.";
+        "Bạn đã nhập trùng URL chứng chỉ.";
     }
 
     usedUrls.add(normalizedUrl);
@@ -447,36 +464,40 @@ function isValidUrl(value) {
 
 export function getFriendlyExpertProfileError(
   error,
-  fallback = "Unable to process expert profile. Please try again."
+  fallback = "Không thể xử lý hồ sơ Expert. Vui lòng thử lại."
 ) {
   const status = error?.response?.status;
   const data = error?.response?.data;
 
   if (status === 401) {
-    return "Your session has expired. Please sign in again.";
+    return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
   }
 
   if (status === 403) {
-    return "Your account does not have permission to perform this action.";
+    return "Tài khoản của bạn không có quyền thực hiện thao tác này.";
   }
 
   if (status === 404) {
-    return "Expert profile was not found.";
+    return "Không tìm thấy hồ sơ Expert.";
   }
 
   if (status === 409) {
-    return mapKnownErrorMessage(data) || "Duplicate data found. Please check again.";
+    return mapKnownErrorMessage(data) || "Dữ liệu bị trùng. Vui lòng kiểm tra lại.";
   }
 
   if (status === 400) {
     return (
       extractValidationMessage(data) ||
       mapKnownErrorMessage(data) ||
-      "Your profile information is invalid. Please check again."
+      "Thông tin hồ sơ chưa hợp lệ. Vui lòng kiểm tra lại."
     );
   }
 
-  return mapKnownErrorMessage(data) || error?.message || fallback;
+  return (
+    mapKnownErrorMessage(data) ||
+    error?.message ||
+    fallback
+  );
 }
 
 function mapKnownErrorMessage(data) {
@@ -486,9 +507,12 @@ function mapKnownErrorMessage(data) {
     return EXPERT_PROFILE_ERROR_MAP[data] || cleanupBackendMessage(data);
   }
 
-  const messages = [data.message, data.title, data.error, data.detail].filter(
-    Boolean
-  );
+  const messages = [
+    data.message,
+    data.title,
+    data.error,
+    data.detail,
+  ].filter(Boolean);
 
   for (const message of messages) {
     const mapped = EXPERT_PROFILE_ERROR_MAP[message];
@@ -505,23 +529,20 @@ function extractValidationMessage(data) {
   if (!data?.errors || typeof data.errors !== "object") return "";
 
   const fieldLabels = {
-    fullName: "Full Name",
-    FullName: "Full Name",
+    avatarUrl: "Ảnh đại diện",
+    AvatarUrl: "Ảnh đại diện",
 
-    avatarUrl: "Avatar",
-    AvatarUrl: "Avatar",
+    professionalTitle: "Chức danh chuyên môn",
+    ProfessionalTitle: "Chức danh chuyên môn",
 
-    professionalTitle: "Professional Title",
-    ProfessionalTitle: "Professional Title",
+    bio: "Giới thiệu",
+    Bio: "Giới thiệu",
 
-    bio: "Bio",
-    Bio: "Bio",
+    skills: "Kỹ năng",
+    Skills: "Kỹ năng",
 
-    skills: "Skills",
-    Skills: "Skills",
-
-    yearsOfExperience: "Years of Experience",
-    YearsOfExperience: "Years of Experience",
+    yearsOfExperience: "Số năm kinh nghiệm",
+    YearsOfExperience: "Số năm kinh nghiệm",
 
     portfolioUrl: "Portfolio",
     PortfolioUrl: "Portfolio",
@@ -534,14 +555,14 @@ function extractValidationMessage(data) {
     GitHubUrl: "GitHub",
     githubUrl: "GitHub",
 
-    certificates: "Certificates",
-    Certificates: "Certificates",
+    certificates: "Chứng chỉ",
+    Certificates: "Chứng chỉ",
 
-    certificateUrl: "Certificate URL",
-    CertificateUrl: "Certificate URL",
+    certificateUrl: "URL chứng chỉ",
+    CertificateUrl: "URL chứng chỉ",
 
-    certificateType: "Certificate Type",
-    CertificateType: "Certificate Type",
+    certificateType: "Loại chứng chỉ",
+    CertificateType: "Loại chứng chỉ",
   };
 
   const messages = [];
@@ -555,7 +576,9 @@ function extractValidationMessage(data) {
     const message =
       EXPERT_PROFILE_ERROR_MAP[rawMessage] || cleanupBackendMessage(rawMessage);
 
-    if (message) messages.push(`${label}: ${message}`);
+    if (message) {
+      messages.push(`${label}: ${message}`);
+    }
   });
 
   return messages.slice(0, 3).join(" ");
@@ -565,10 +588,8 @@ function cleanupBackendMessage(message) {
   const text = String(message || "").trim();
   if (!text) return "";
 
-  if (EXPERT_PROFILE_ERROR_MAP[text]) return EXPERT_PROFILE_ERROR_MAP[text];
-
-  if (text.includes("FullName") || text.includes("fullName")) {
-    return "Full name is required.";
+  if (EXPERT_PROFILE_ERROR_MAP[text]) {
+    return EXPERT_PROFILE_ERROR_MAP[text];
   }
 
   if (
@@ -576,7 +597,7 @@ function cleanupBackendMessage(message) {
     text.includes("certificateUrl") ||
     text.includes("CertificateUrl")
   ) {
-    return "Certificate URL is invalid.";
+    return "URL chứng chỉ không hợp lệ.";
   }
 
   if (
@@ -584,19 +605,19 @@ function cleanupBackendMessage(message) {
     text.includes("certificateType") ||
     text.includes("CertificateType")
   ) {
-    return "Certificate type is invalid.";
+    return "Loại chứng chỉ không hợp lệ.";
   }
 
   if (text.includes("Duplicate certificate URL")) {
-    return "You entered a duplicate certificate URL.";
+    return "Bạn đã nhập trùng URL chứng chỉ.";
   }
 
   if (text.includes("already used by another expert")) {
-    return "This certificate URL is already used by another expert.";
+    return "Chứng chỉ này đã được sử dụng bởi Expert khác.";
   }
 
   if (text.includes("PortfolioUrl") || text.includes("portfolioUrl")) {
-    return "Portfolio URL is required or invalid.";
+    return "Portfolio URL là bắt buộc hoặc không hợp lệ.";
   }
 
   if (
@@ -604,7 +625,7 @@ function cleanupBackendMessage(message) {
     text.includes("gitHubUrl") ||
     text.includes("githubUrl")
   ) {
-    return "GitHub URL is required or invalid.";
+    return "GitHub URL là bắt buộc hoặc không hợp lệ.";
   }
 
   if (
@@ -612,7 +633,7 @@ function cleanupBackendMessage(message) {
     text.includes("linkedInUrl") ||
     text.includes("linkedinUrl")
   ) {
-    return "LinkedIn is optional. You can leave it empty or check the URL again.";
+    return "LinkedIn là tùy chọn. Bạn có thể để trống hoặc kiểm tra lại URL.";
   }
 
   return text;
@@ -645,7 +666,7 @@ const expertProfileService = {
       const response = await axiosInstance.get("/expert-profiles/me");
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to load expert profile.");
+      throwFriendlyError(error, "Không thể tải hồ sơ Expert.");
     }
   },
 
@@ -660,7 +681,7 @@ const expertProfileService = {
       );
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to load expert profile.");
+      throwFriendlyError(error, "Không thể tải hồ sơ Expert.");
     }
   },
 
@@ -670,7 +691,7 @@ const expertProfileService = {
       const response = await axiosInstance.post("/expert-profiles", payload);
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to create expert profile.");
+      throwFriendlyError(error, "Không thể tạo hồ sơ Expert.");
     }
   },
 
@@ -683,7 +704,7 @@ const expertProfileService = {
       );
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to resubmit expert profile.");
+      throwFriendlyError(error, "Không thể gửi lại hồ sơ Expert.");
     }
   },
 
@@ -693,7 +714,7 @@ const expertProfileService = {
       const response = await axiosInstance.put("/expert-profiles/me", payload);
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to update expert profile.");
+      throwFriendlyError(error, "Không thể cập nhật hồ sơ Expert.");
     }
   },
 
@@ -710,7 +731,7 @@ const expertProfileService = {
       );
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to update basic information.");
+      throwFriendlyError(error, "Không thể cập nhật thông tin cơ bản.");
     }
   },
 
@@ -723,7 +744,7 @@ const expertProfileService = {
       );
       return normalizeExpertProfile(unwrapData(response));
     } catch (error) {
-      throwFriendlyError(error, "Unable to update verification information.");
+      throwFriendlyError(error, "Không thể cập nhật thông tin xác minh.");
     }
   },
 };

@@ -11,9 +11,10 @@ export default function AdminNavbar() {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${isActive
-      ? "border border-cyan-400/30 bg-cyan-400/10 text-[#00F0FF]"
-      : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+      isActive
+        ? "border border-cyan-400/30 bg-cyan-400/10 text-[#00F0FF]"
+        : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
     }`;
 
   const adminInitials = getInitials(user?.fullName || user?.name || "Admin");
@@ -90,27 +91,6 @@ export default function AdminNavbar() {
           Expert Scoring
         </NavLink>
 
-        <NavLink to="/admin/job-posting-ai-policy" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">smart_toy</span>
-          Job AI Policy
-        </NavLink>
-
-        <NavLink to="/admin/ai-management" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">hub</span>
-          AI Management
-        </NavLink>
-
-        <NavLink to="/admin/job-credit-packages" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">inventory_2</span>
-          Credit Packages
-        </NavLink>
-        <NavLink to="/admin/proposal-credit-packages" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            workspace_premium
-          </span>
-          Proposal Packages
-        </NavLink>
-
         <NavLink to="/admin/platform-fee-policy" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">
             payments
@@ -123,13 +103,6 @@ export default function AdminNavbar() {
         <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-600">
           Operations
         </p>
-
-        <NavLink to="/admin/proposal-credits" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            account_balance_wallet
-          </span>
-          Proposal Credits
-        </NavLink>
 
         <NavLink to="/admin/jobs" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">work</span>
