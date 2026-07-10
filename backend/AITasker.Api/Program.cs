@@ -207,7 +207,8 @@ builder.Services
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                if (!string.IsNullOrEmpty(accessToken)
+                    && path.StartsWithSegments("/hubs"))
                 {
                     context.Token = accessToken;
                 }
@@ -223,7 +224,7 @@ builder.Services
 
                 if (!int.TryParse(userIdValue, out var userId))
                 {
-                    context.Fail("Invalid user token.");
+                    context.Fail("INVALID_USER_TOKEN");
                     return;
                 }
 
@@ -235,12 +236,13 @@ builder.Services
 
                 if (user == null)
                 {
-                    context.Fail("User account no longer exists.");
+                    context.Fail("USER_NOT_FOUND");
                     return;
                 }
 
                 var nowUtc = DateTime.UtcNow;
 
+                // Auto unlock account when suspension time is over.
                 if (user.Status == "SUSPENDED"
                     && user.LockoutEnd.HasValue
                     && user.LockoutEnd.Value <= nowUtc)
@@ -259,15 +261,53 @@ builder.Services
 
                 if (user.Status == "BANNED")
                 {
-                    context.Fail("Your account is banned.");
+                    context.HttpContext.Items["AccountStatus"] = "BANNED";
+                    context.HttpContext.Items["AccountMessage"] = "Your account has been banned.";
+                    context.HttpContext.Items["AccountReason"] = user.BanReason ?? string.Empty;
+                    context.HttpContext.Items["AccountLockedUntil"] = null;
+
+                    context.Fail("ACCOUNT_BANNED");
                     return;
                 }
 
                 if (user.Status == "SUSPENDED")
                 {
-                    context.Fail("Your account is temporarily locked.");
+                    context.HttpContext.Items["AccountStatus"] = "SUSPENDED";
+                    context.HttpContext.Items["AccountMessage"] = "Your account is temporarily locked.";
+                    context.HttpContext.Items["AccountReason"] = user.LockReason ?? string.Empty;
+                    context.HttpContext.Items["AccountLockedUntil"] = user.LockoutEnd;
+
+                    context.Fail("ACCOUNT_SUSPENDED");
                     return;
                 }
+            },
+
+            OnChallenge = async context =>
+            {
+                var accountStatus =
+                    context.HttpContext.Items["AccountStatus"]?.ToString();
+
+                if (accountStatus != "BANNED"
+                    && accountStatus != "SUSPENDED")
+                {
+                    return;
+                }
+
+                context.HandleResponse();
+
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
+
+                var response = new
+                {
+                    success = false,
+                    status = accountStatus,
+                    message = context.HttpContext.Items["AccountMessage"]?.ToString(),
+                    reason = context.HttpContext.Items["AccountReason"]?.ToString(),
+                    lockedUntil = context.HttpContext.Items["AccountLockedUntil"]
+                };
+
+                await context.Response.WriteAsJsonAsync(response);
             }
         };
     })
