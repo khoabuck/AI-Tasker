@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
+import { changePasswordApi } from "../../../api/auth.api";
 
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
@@ -11,6 +12,17 @@ export default function ExpertProfilePage() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     loadProfile();
@@ -45,6 +57,132 @@ export default function ExpertProfilePage() {
       setError("Cannot load your expert profile right now.");
     } finally {
       setLoading(false);
+    }
+  };
+
+
+  const openChangePasswordModal = () => {
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setPasswordErrors({});
+    setPasswordError("");
+    setPasswordMessage("");
+    setShowChangePasswordModal(true);
+  };
+
+  const closeChangePasswordModal = () => {
+    if (changingPassword) return;
+
+    setShowChangePasswordModal(false);
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setPasswordErrors({});
+    setPasswordError("");
+    setPasswordMessage("");
+  };
+
+  const updatePasswordField = (name, value) => {
+    setPasswordError("");
+    setPasswordMessage("");
+
+    setPasswordErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const validatePasswordForm = () => {
+    const errors = {};
+    const currentPassword = passwordForm.currentPassword;
+    const newPassword = passwordForm.newPassword;
+    const confirmNewPassword = passwordForm.confirmNewPassword;
+
+    if (!currentPassword.trim()) {
+      errors.currentPassword = "Current password is required.";
+    }
+
+    if (!newPassword.trim()) {
+      errors.newPassword = "New password is required.";
+    } else if (newPassword.length < 6) {
+      errors.newPassword = "New password must be at least 6 characters.";
+    } else if (newPassword.length > 100) {
+      errors.newPassword = "New password must not exceed 100 characters.";
+    }
+
+    if (!confirmNewPassword.trim()) {
+      errors.confirmNewPassword = "Confirm new password is required.";
+    } else if (newPassword !== confirmNewPassword) {
+      errors.confirmNewPassword = "Confirm new password does not match.";
+    }
+
+    if (
+      currentPassword &&
+      newPassword &&
+      currentPassword === newPassword
+    ) {
+      errors.newPassword =
+        "New password must be different from current password.";
+    }
+
+    setPasswordErrors(errors);
+
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+
+    if (!validatePasswordForm()) {
+      setPasswordError("Please fix the highlighted fields.");
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      setPasswordError("");
+      setPasswordMessage("");
+      setPasswordErrors({});
+
+      const response = await changePasswordApi({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmNewPassword: passwordForm.confirmNewPassword,
+      });
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: "",
+      });
+
+      setPasswordMessage(
+        response?.message || "Password changed successfully."
+      );
+    } catch (err) {
+      console.error(
+        "CHANGE PASSWORD ERROR:",
+        err?.response?.data || err
+      );
+
+      setPasswordError(
+        getFriendlyError(
+          err,
+          "Cannot change password. Please check your current password and try again."
+        )
+      );
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -173,6 +311,14 @@ export default function ExpertProfilePage() {
                   </Link>
                 )}
 
+                <button
+                  type="button"
+                  onClick={openChangePasswordModal}
+                  className="rounded-xl border border-indigo-400/50 bg-indigo-400/10 px-5 py-3 text-center text-sm font-bold text-indigo-200 transition hover:bg-indigo-400 hover:text-white"
+                >
+                  Change Password
+                </button>
+
                 <Link
                   to="/expert/jobs"
                   className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-center text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
@@ -297,7 +443,219 @@ export default function ExpertProfilePage() {
           </div>
         </div>
       </div>
+
+      {showChangePasswordModal && (
+        <ChangePasswordModal
+          form={passwordForm}
+          errors={passwordErrors}
+          error={passwordError}
+          message={passwordMessage}
+          loading={changingPassword}
+          onChange={updatePasswordField}
+          onClose={closeChangePasswordModal}
+          onSubmit={handleChangePassword}
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+function ChangePasswordModal({
+  form,
+  errors,
+  error,
+  message,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+}) {
+  const [showPasswords, setShowPasswords] = useState({
+    currentPassword: false,
+    newPassword: false,
+    confirmNewPassword: false,
+  });
+
+  const togglePassword = (name) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [name]: !prev[name],
+    }));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <form
+        onSubmit={onSubmit}
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl border border-indigo-400/30 bg-[#151a22] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.75)]"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-300">
+              Account Security
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-white">
+              Change Password
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-400">
+              Enter your current password and choose a new password for your
+              account.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Close change password modal"
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              close
+            </span>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="mb-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+            {message}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <PasswordInput
+            label="Current Password"
+            value={form.currentPassword}
+            show={showPasswords.currentPassword}
+            error={errors.currentPassword}
+            disabled={loading}
+            autoComplete="current-password"
+            placeholder="Enter your current password"
+            onChange={(value) => onChange("currentPassword", value)}
+            onToggle={() => togglePassword("currentPassword")}
+          />
+
+          <PasswordInput
+            label="New Password"
+            value={form.newPassword}
+            show={showPasswords.newPassword}
+            error={errors.newPassword}
+            disabled={loading}
+            autoComplete="new-password"
+            placeholder="Enter your new password"
+            onChange={(value) => onChange("newPassword", value)}
+            onToggle={() => togglePassword("newPassword")}
+          />
+
+          <PasswordInput
+            label="Confirm New Password"
+            value={form.confirmNewPassword}
+            show={showPasswords.confirmNewPassword}
+            error={errors.confirmNewPassword}
+            disabled={loading}
+            autoComplete="new-password"
+            placeholder="Enter your new password again"
+            onChange={(value) => onChange("confirmNewPassword", value)}
+            onToggle={() => togglePassword("confirmNewPassword")}
+          />
+        </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-400 px-5 py-3 text-sm font-black text-black transition hover:bg-indigo-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[19px]">
+              lock_reset
+            </span>
+            {loading ? "Changing..." : "Change Password"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PasswordInput({
+  label,
+  value,
+  show,
+  error,
+  disabled,
+  autoComplete,
+  placeholder,
+  onChange,
+  onToggle,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-gray-400">
+        {label}
+        <span className="ml-1 text-red-400">*</span>
+      </span>
+
+      <div className="relative">
+        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-gray-500">
+          lock
+        </span>
+
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={`h-12 w-full rounded-xl border bg-white/[0.04] pl-12 pr-12 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60 ${
+            error
+              ? "border-red-400/70 focus:border-red-400"
+              : "border-white/10 focus:border-indigo-400"
+          }`}
+        />
+
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={show ? `Hide ${label}` : `Show ${label}`}
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            {show ? "visibility_off" : "visibility"}
+          </span>
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">
+          {error}
+        </p>
+      )}
+    </label>
   );
 }
 
@@ -788,6 +1146,20 @@ function unwrapProfileData(result) {
   if (result?.data?.data?.expertProfileId) return result.data.data;
 
   return result;
+}
+
+function getFriendlyError(error, fallback = "Something went wrong.") {
+  const data = error?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  return (
+    data?.message ||
+    data?.title ||
+    data?.detail ||
+    error?.message ||
+    fallback
+  );
 }
 
 function getRawPayload(error) {

@@ -78,6 +78,24 @@ export const resetPasswordApi = async ({
   return res.data;
 };
 
+/* ===========================
+   CHANGE PASSWORD
+=========================== */
+
+export const changePasswordApi = async ({
+  currentPassword,
+  newPassword,
+  confirmNewPassword,
+}) => {
+  const res = await axiosInstance.post("/auth/change-password", {
+    currentPassword,
+    newPassword,
+    confirmNewPassword,
+  });
+
+  return res.data;
+};
+
 export const selectRoleApi = async ({ role }) => {
   const res = await axiosInstance.post("/auth/select-role", {
     role,
@@ -109,6 +127,7 @@ export default {
   getMeApi,
   forgotPasswordApi,
   resetPasswordApi,
+  changePasswordApi,
   selectRoleApi,
   updateMyAvatarApi,
 };
