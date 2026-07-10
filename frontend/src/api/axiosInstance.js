@@ -15,13 +15,43 @@ const getApiBaseUrl = () => {
 const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
 const AUTH_ERROR_EVENT = "aitasker-auth-error";
 
+const normalizeRequestUrl = (config) => {
+  return String(config?.url || "").toLowerCase();
+};
+
 const isAuthMeRequest = (config) => {
-  return String(config?.url || "").includes("/auth/me");
+  return normalizeRequestUrl(config).includes("/auth/me");
+};
+
+const isPublicAuthRequest = (config) => {
+  const url = normalizeRequestUrl(config);
+
+  const publicAuthPaths = [
+    "/auth/login",
+    "/auth/register",
+    "/auth/google-login",
+    "/auth/google-callback",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+    "/auth/verify-email",
+    "/auth/resend-verification",
+    "/auth/logout",
+  ];
+
+  return publicAuthPaths.some((path) => url.includes(path));
 };
 
 const dispatchAuthErrorEvent = (error) => {
   if (typeof window === "undefined") return;
+
+  // /auth/me được AuthContext tự xử lý để phân biệt:
+  // - chưa đăng nhập
+  // - hết phiên
+  // - bị lock/ban
   if (isAuthMeRequest(error?.config)) return;
+
+  // Không mở modal session cho API public.
+  if (isPublicAuthRequest(error?.config)) return;
 
   window.dispatchEvent(
     new CustomEvent(AUTH_ERROR_EVENT, {
@@ -43,19 +73,8 @@ const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token =
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("token") ||
-      localStorage.getItem("authToken");
-
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
     if (import.meta.env.DEV) {
       console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
-      console.log("AUTH MODE:", token ? "Bearer fallback" : "HttpOnly cookie");
     }
 
     return config;

@@ -4,6 +4,7 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import milestoneService from "../../../services/milestone.service";
 import deliverableService from "../../../services/deliverable.service";
 import disputeService from "../../../services/dispute.service";
+import projectService from "../../../services/project.service";
 
 const emptySubmissionForm = {
   fileUrl: "",
@@ -26,6 +27,7 @@ export default function MilestoneDetailPage() {
   const navigate = useNavigate();
 
   const [milestone, setMilestone] = useState(null);
+  const [project, setProject] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [activeDispute, setActiveDispute] = useState(null);
   const [submissionForm, setSubmissionForm] = useState(emptySubmissionForm);
@@ -61,6 +63,21 @@ export default function MilestoneDetailPage() {
       const realMilestoneId = getMilestoneId(data) || milestoneId;
       const projectId = getProjectIdFromMilestone(data);
 
+      if (projectId) {
+        try {
+          const projectData = await projectService.getProjectById(projectId);
+          setProject(projectData);
+        } catch (projectError) {
+          console.warn(
+            "LOAD PROJECT STATUS ERROR:",
+            projectError?.response?.data || projectError
+          );
+          setProject(null);
+        }
+      } else {
+        setProject(null);
+      }
+
       if (projectId && realMilestoneId) {
         await loadActiveDispute(projectId, realMilestoneId);
       } else {
@@ -74,6 +91,7 @@ export default function MilestoneDetailPage() {
       console.error("LOAD MILESTONE DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load milestone."));
       setMilestone(null);
+      setProject(null);
       setActiveDispute(null);
       setSubmissions([]);
     } finally {
@@ -87,13 +105,43 @@ export default function MilestoneDetailPage() {
 
       const found = Array.isArray(disputes)
         ? disputes.find((item) => {
-            const status = String(item.status || "").toUpperCase();
-            const isActive = ["OPEN", "UNDER_REVIEW"].includes(status);
-            const sameProject = String(item.projectId) === String(projectId);
+            const status = String(item.status || "")
+              .trim()
+              .toUpperCase();
 
+            const isActive = [
+              "OPEN",
+              "PENDING",
+              "UNDER_REVIEW",
+              "INVESTIGATING",
+              "EVIDENCE_REQUIRED",
+            ].includes(status);
+
+            const disputeProjectId =
+              item?.projectId ||
+              item?.ProjectId ||
+              item?.raw?.projectId ||
+              item?.raw?.ProjectId ||
+              "";
+
+            const disputeMilestoneId =
+              item?.milestoneId ||
+              item?.MilestoneId ||
+              item?.raw?.milestoneId ||
+              item?.raw?.MilestoneId ||
+              "";
+
+            const sameProject =
+              String(disputeProjectId) === String(projectId);
+
+            /*
+             * Chỉ xem dispute là của milestone hiện tại khi Backend trả đúng
+             * milestoneId. Project-level dispute không được tự động khóa tất
+             * cả milestone trong cùng project.
+             */
             const sameMilestone =
-              !item.milestoneId ||
-              String(item.milestoneId) === String(realMilestoneId);
+              Boolean(disputeMilestoneId) &&
+              String(disputeMilestoneId) === String(realMilestoneId);
 
             return isActive && sameProject && sameMilestone;
           })
@@ -177,6 +225,17 @@ export default function MilestoneDetailPage() {
   const openDisputeModal = () => {
     const activeDisputeId = getDisputeId(activeDispute);
 
+    if (isProjectCompletedStatus(getProjectStatus(project, milestone))) {
+      if (activeDisputeId) {
+        navigate(`/expert/disputes/${activeDisputeId}`);
+      } else {
+        setError(
+          "This project is completed. You cannot open a new dispute for this milestone."
+        );
+      }
+      return;
+    }
+
     if (activeDisputeId) {
       navigate(`/expert/disputes/${activeDisputeId}`);
       return;
@@ -240,6 +299,13 @@ export default function MilestoneDetailPage() {
 
   const handleSubmitWork = async (event) => {
     event.preventDefault();
+
+    if (isProjectCompletedStatus(getProjectStatus(project, milestone))) {
+      setSubmissionError(
+        "This project is completed. New milestone submissions and resubmissions are closed."
+      );
+      return;
+    }
 
     const realMilestoneId = getMilestoneId(milestone) || milestoneId;
     const latestSubmission = getLatestSubmission(submissions);
@@ -310,6 +376,13 @@ export default function MilestoneDetailPage() {
 
   const handleCreateDispute = async (event) => {
     event.preventDefault();
+
+    if (isProjectCompletedStatus(getProjectStatus(project, milestone))) {
+      setDisputeError(
+        "This project is completed. You cannot open a new dispute for this milestone."
+      );
+      return;
+    }
 
     const activeDisputeId = getDisputeId(activeDispute);
 
@@ -439,6 +512,8 @@ export default function MilestoneDetailPage() {
 
   const realMilestoneId = getMilestoneId(milestone) || milestoneId;
   const milestoneStatus = String(milestone.status || "PENDING").toUpperCase();
+  const projectStatus = getProjectStatus(project, milestone);
+  const projectCompleted = isProjectCompletedStatus(projectStatus);
 
   const latestSubmission = getLatestSubmission(submissions);
   const hasSubmission = Boolean(getSubmissionId(latestSubmission));
@@ -450,6 +525,7 @@ export default function MilestoneDetailPage() {
       isChangeRequested(milestoneStatus));
 
   const canSubmit =
+    !projectCompleted &&
     !activeDisputeId &&
     canSubmitWorkForMilestone(milestoneStatus) &&
     (!hasSubmission || needsResubmission) &&
@@ -463,19 +539,25 @@ export default function MilestoneDetailPage() {
     activeDisputeId,
   });
 
-  const formTitle = needsResubmission ? "Resubmit Work" : "Submit Work";
-  const formDescription = needsResubmission
+  const formTitle = projectCompleted
+    ? "Milestone Closed"
+    : needsResubmission
+    ? "Resubmit Work"
+    : "Submit Work";
+
+  const formDescription = projectCompleted
+    ? "This project is completed. You can review previous submissions, but no new work or dispute can be submitted."
+    : needsResubmission
     ? "Update your links and notes based on the client's request, then submit this milestone again."
     : "Share your completed work with the client for review.";
 
   const latestClientFeedback = getClientFeedback(latestSubmission);
-  const canOpenDispute = canOpenMilestoneDispute(
-    milestoneStatus,
-    latestSubmission
-  );
+  const canOpenDispute =
+    !projectCompleted &&
+    canOpenMilestoneDispute(milestoneStatus, latestSubmission);
 
   const shouldShowOpenDispute = canOpenDispute && !activeDisputeId;
-  const shouldShowViewDispute = canOpenDispute && activeDisputeId;
+  const shouldShowViewDispute = Boolean(activeDisputeId);
 
   return (
     <ExpertLayout>
@@ -516,8 +598,9 @@ export default function MilestoneDetailPage() {
                   </h1>
 
                   <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-                    Review the brief, submit your work, manage revisions, and
-                    open dispute when the client rejects or requests revision.
+                    {projectCompleted
+                      ? "Review the completed milestone, previous submissions, and any existing dispute."
+                      : "Review the brief, submit your work, manage revisions, and open a dispute when the client rejects or requests revision."}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -662,6 +745,14 @@ export default function MilestoneDetailPage() {
                   />
                 )}
 
+                {projectCompleted && (
+                  <div className="mb-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-4 text-sm leading-6 text-green-100">
+                    This project is completed. You can review previous
+                    submissions, but you cannot submit, resubmit, or open a new
+                    dispute.
+                  </div>
+                )}
+
                 {activeDisputeId && (
                   <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm leading-6 text-red-100">
                     This milestone is currently in dispute. You cannot submit or
@@ -669,7 +760,7 @@ export default function MilestoneDetailPage() {
                   </div>
                 )}
 
-                {!canSubmitWorkForMilestone(milestoneStatus) && (
+                {!projectCompleted && !canSubmitWorkForMilestone(milestoneStatus) && (
                   <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     This milestone is currently closed for submission.
                   </div>
@@ -682,7 +773,7 @@ export default function MilestoneDetailPage() {
                   />
                 )}
 
-                {needsResubmission && (
+                {!projectCompleted && needsResubmission && (
                   <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     <div className="flex gap-3">
                       <span className="material-symbols-outlined text-yellow-300">
@@ -891,34 +982,13 @@ export default function MilestoneDetailPage() {
                       : "If changes are requested, resubmit or open a dispute if you disagree."
                   }
                 />
-              </Card>
-
-              <Card title="Helpful Tips" icon="tips_and_updates">
-                <ul className="space-y-2 text-sm leading-6 text-gray-300">
-                  <li className="flex gap-2">
-                    <span className="text-cyan-300">•</span>
-                    Provide at least one working review link.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-cyan-300">•</span>
-                    Keep the description clear and client-friendly.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-cyan-300">•</span>
-                    Use notes for setup steps, test accounts, or caveats.
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-cyan-300">•</span>
-                    If the client requests changes unfairly, open a dispute.
-                  </li>
-                </ul>
-              </Card>
+              </Card>            
             </aside>
           </div>
         </div>
       </div>
 
-      {showDisputeModal && (
+      {showDisputeModal && !projectCompleted && (
         <DisputeModal
           formData={disputeForm}
           milestone={milestone}
@@ -1482,6 +1552,28 @@ function getProjectIdFromMilestone(milestone) {
     milestone?.raw?.projectID ||
     milestone?.raw?.ProjectID ||
     ""
+  );
+}
+
+function getProjectStatus(project, milestone) {
+  return String(
+    project?.status ||
+      project?.Status ||
+      project?.raw?.status ||
+      project?.raw?.Status ||
+      milestone?.projectStatus ||
+      milestone?.ProjectStatus ||
+      milestone?.raw?.projectStatus ||
+      milestone?.raw?.ProjectStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+}
+
+function isProjectCompletedStatus(status) {
+  return ["COMPLETED", "DONE", "FINISHED", "CLOSED"].includes(
+    String(status || "").trim().toUpperCase()
   );
 }
 

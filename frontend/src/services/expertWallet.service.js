@@ -47,9 +47,14 @@ const unwrapBalanceData = (response) => {
 
   if (!data) return null;
 
-  if (data.balance !== undefined && data.balance !== null) return data.balance;
+  if (data.balance !== undefined && data.balance !== null) {
+    return data.balance;
+  }
 
-  if (data.data?.balance !== undefined && data.data?.balance !== null) {
+  if (
+    data.data?.balance !== undefined &&
+    data.data?.balance !== null
+  ) {
     return data.data.balance;
   }
 
@@ -68,11 +73,25 @@ const unwrapListData = (response) => {
   if (Array.isArray(data?.depositOrders)) return data.depositOrders;
   if (Array.isArray(data?.withdrawals)) return data.withdrawals;
 
-  if (Array.isArray(data?.data?.items)) return data.data.items;
-  if (Array.isArray(data?.data?.result)) return data.data.result;
-  if (Array.isArray(data?.data?.transactions)) return data.data.transactions;
-  if (Array.isArray(data?.data?.depositOrders)) return data.data.depositOrders;
-  if (Array.isArray(data?.data?.withdrawals)) return data.data.withdrawals;
+  if (Array.isArray(data?.data?.items)) {
+    return data.data.items;
+  }
+
+  if (Array.isArray(data?.data?.result)) {
+    return data.data.result;
+  }
+
+  if (Array.isArray(data?.data?.transactions)) {
+    return data.data.transactions;
+  }
+
+  if (Array.isArray(data?.data?.depositOrders)) {
+    return data.data.depositOrders;
+  }
+
+  if (Array.isArray(data?.data?.withdrawals)) {
+    return data.data.withdrawals;
+  }
 
   return [];
 };
@@ -150,6 +169,16 @@ export const normalizeWallet = (wallet) => {
     availableBalance
   );
 
+  /*
+   * Không tự tính:
+   *
+   * availableBalance + pendingEarningsBalance
+   *
+   * vì Available Balance có thể chứa tiền deposit và Expert
+   * có thể đã thực hiện withdrawal trước đó.
+   *
+   * Total Earning phải ưu tiên lấy trực tiếp từ Backend.
+   */
   const totalEarning = toNumber(
     getValue(
       wallet.totalEarning,
@@ -164,9 +193,9 @@ export const normalizeWallet = (wallet) => {
       raw.TotalEarnings,
       raw.totalEarned,
       raw.TotalEarned,
-      availableBalance + pendingEarningsBalance
+      0
     ),
-    availableBalance + pendingEarningsBalance
+    0
   );
 
   const walletId = getValue(
@@ -185,7 +214,13 @@ export const normalizeWallet = (wallet) => {
     walletId,
     id: walletId,
 
-    userId: getValue(wallet.userId, wallet.UserId, raw.userId, raw.UserId, ""),
+    userId: getValue(
+      wallet.userId,
+      wallet.UserId,
+      raw.userId,
+      raw.UserId,
+      ""
+    ),
 
     availableBalance,
     balance: availableBalance,
@@ -195,7 +230,11 @@ export const normalizeWallet = (wallet) => {
 
     totalEarning,
     totalEarnings: totalEarning,
-    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
+
+    totalBalance:
+      availableBalance +
+      lockedBalance +
+      pendingEarningsBalance,
 
     currency: "VND",
 
@@ -233,14 +272,17 @@ export const normalizeBalance = (balanceData) => {
       withdrawableBalance: balanceData,
       pendingEarningsBalance: 0,
       lockedBalance: 0,
-      totalEarning: balanceData,
-      totalEarnings: balanceData,
+      totalEarning: 0,
+      totalEarnings: 0,
       totalBalance: balanceData,
       currency: "VND",
     };
   }
 
-  const raw = balanceData.raw || balanceData.Raw || balanceData;
+  const raw =
+    balanceData.raw ||
+    balanceData.Raw ||
+    balanceData;
 
   const availableBalance = toNumber(
     getValue(
@@ -324,9 +366,9 @@ export const normalizeBalance = (balanceData) => {
       raw.TotalEarnings,
       raw.totalEarned,
       raw.TotalEarned,
-      availableBalance + pendingEarningsBalance
+      0
     ),
-    availableBalance + pendingEarningsBalance
+    0
   );
 
   return {
@@ -335,10 +377,17 @@ export const normalizeBalance = (balanceData) => {
     withdrawableBalance,
     pendingEarningsBalance,
     lockedBalance,
+
     totalEarning,
     totalEarnings: totalEarning,
-    totalBalance: availableBalance + lockedBalance + pendingEarningsBalance,
+
+    totalBalance:
+      availableBalance +
+      lockedBalance +
+      pendingEarningsBalance,
+
     currency: "VND",
+
     raw: balanceData,
   };
 };
@@ -346,10 +395,19 @@ export const normalizeBalance = (balanceData) => {
 export const normalizeTransaction = (transaction) => {
   if (!transaction) return null;
 
-  const raw = transaction.raw || transaction.Raw || transaction;
+  const raw =
+    transaction.raw ||
+    transaction.Raw ||
+    transaction;
 
   const amount = toNumber(
-    getValue(transaction.amount, transaction.Amount, raw.amount, raw.Amount, 0),
+    getValue(
+      transaction.amount,
+      transaction.Amount,
+      raw.amount,
+      raw.Amount,
+      0
+    ),
     0
   );
 
@@ -389,6 +447,26 @@ export const normalizeTransaction = (transaction) => {
     ""
   );
 
+  const category = String(
+    getValue(
+      transaction.category,
+      transaction.Category,
+      raw.category,
+      raw.Category,
+      ""
+    )
+  ).toUpperCase();
+
+  const statusGroup = String(
+    getValue(
+      transaction.statusGroup,
+      transaction.StatusGroup,
+      raw.statusGroup,
+      raw.StatusGroup,
+      ""
+    )
+  ).toUpperCase();
+
   return {
     transactionId,
     id: transactionId,
@@ -409,6 +487,14 @@ export const normalizeTransaction = (transaction) => {
       ""
     ),
 
+    projectTitle: getValue(
+      transaction.projectTitle,
+      transaction.ProjectTitle,
+      raw.projectTitle,
+      raw.ProjectTitle,
+      ""
+    ),
+
     milestoneId: getValue(
       transaction.milestoneId,
       transaction.MilestoneId,
@@ -421,26 +507,27 @@ export const normalizeTransaction = (transaction) => {
       ""
     ),
 
+    milestoneTitle: getValue(
+      transaction.milestoneTitle,
+      transaction.MilestoneTitle,
+      raw.milestoneTitle,
+      raw.MilestoneTitle,
+      ""
+    ),
+
+    disputeId: getValue(
+      transaction.disputeId,
+      transaction.DisputeId,
+      raw.disputeId,
+      raw.DisputeId,
+      ""
+    ),
+
     userId: getValue(
       transaction.userId,
       transaction.UserId,
       raw.userId,
       raw.UserId,
-      ""
-    ),
-
-    type,
-    status,
-
-    amount: Math.abs(amount),
-    signedAmount: amount,
-    direction: getTransactionDirection(type, amount),
-
-    description: getValue(
-      transaction.description,
-      transaction.Description,
-      raw.description,
-      raw.Description,
       ""
     ),
 
@@ -452,13 +539,52 @@ export const normalizeTransaction = (transaction) => {
       ""
     ),
 
-    currency: "VND",
+    type,
+    status,
+    category,
+    statusGroup,
+
+    amount,
+
+    direction: getTransactionDirection(type, amount),
+
+    description: getValue(
+      transaction.description,
+      transaction.Description,
+      raw.description,
+      raw.Description,
+      ""
+    ),
+
+    displayTitle: getValue(
+      transaction.displayTitle,
+      transaction.DisplayTitle,
+      raw.displayTitle,
+      raw.DisplayTitle,
+      ""
+    ),
+
+    displaySubtitle: getValue(
+      transaction.displaySubtitle,
+      transaction.DisplaySubtitle,
+      raw.displaySubtitle,
+      raw.DisplaySubtitle,
+      ""
+    ),
 
     createdAt: getValue(
       transaction.createdAt,
       transaction.CreatedAt,
       raw.createdAt,
       raw.CreatedAt,
+      ""
+    ),
+
+    updatedAt: getValue(
+      transaction.updatedAt,
+      transaction.UpdatedAt,
+      raw.updatedAt,
+      raw.UpdatedAt,
       ""
     ),
 
@@ -474,8 +600,6 @@ export const normalizeDepositOrder = (order) => {
   const depositOrderId = getValue(
     order.depositOrderId,
     order.DepositOrderId,
-    order.depositOrderID,
-    order.DepositOrderID,
     order.id,
     order.Id,
     raw.depositOrderId,
@@ -485,140 +609,86 @@ export const normalizeDepositOrder = (order) => {
     ""
   );
 
-  const amount = toNumber(
-    getValue(order.amount, order.Amount, raw.amount, raw.Amount, 0),
-    0
-  );
-
-  const status = String(
-    getValue(order.status, order.Status, raw.status, raw.Status, "PENDING")
-  ).toUpperCase();
-
-  const paymentUrl = getValue(
-    order.paymentUrl,
-    order.PaymentUrl,
-    order.checkoutUrl,
-    order.CheckoutUrl,
-    order.payUrl,
-    order.PayUrl,
-    order.paymentLink,
-    order.PaymentLink,
-    raw.paymentUrl,
-    raw.PaymentUrl,
-    raw.checkoutUrl,
-    raw.CheckoutUrl,
-    raw.payUrl,
-    raw.PayUrl,
-    raw.paymentLink,
-    raw.PaymentLink,
-    ""
-  );
-
-  const qrCode = getValue(
-    order.qrCode,
-    order.QrCode,
-    order.QRCode,
-    order.qrData,
-    order.QrData,
-    order.qrContent,
-    order.QrContent,
-    order.paymentQrCode,
-    order.PaymentQrCode,
-    raw.qrCode,
-    raw.QrCode,
-    raw.QRCode,
-    raw.qrData,
-    raw.QrData,
-    raw.qrContent,
-    raw.QrContent,
-    raw.paymentQrCode,
-    raw.PaymentQrCode,
-    ""
-  );
-
-  const qrImageUrl = getValue(
-    order.qrImageUrl,
-    order.QrImageUrl,
-    order.qrCodeUrl,
-    order.QrCodeUrl,
-    order.qrUrl,
-    order.QrUrl,
-    order.paymentQrUrl,
-    order.PaymentQrUrl,
-    order.vietQrUrl,
-    order.VietQrUrl,
-    raw.qrImageUrl,
-    raw.QrImageUrl,
-    raw.qrCodeUrl,
-    raw.QrCodeUrl,
-    raw.qrUrl,
-    raw.QrUrl,
-    raw.paymentQrUrl,
-    raw.PaymentQrUrl,
-    raw.vietQrUrl,
-    raw.VietQrUrl,
-    ""
-  );
-
   return {
     depositOrderId,
     id: depositOrderId,
 
-    amount,
-    currency: "VND",
-    status,
+    orderCode: getValue(
+      order.orderCode,
+      order.OrderCode,
+      raw.orderCode,
+      raw.OrderCode,
+      ""
+    ),
 
-    paymentUrl,
-    qrCode,
-    qrImageUrl,
+    amount: toNumber(
+      getValue(
+        order.amount,
+        order.Amount,
+        raw.amount,
+        raw.Amount,
+        0
+      ),
+      0
+    ),
+
+    status: String(
+      getValue(
+        order.status,
+        order.Status,
+        raw.status,
+        raw.Status,
+        "PENDING"
+      )
+    ).toUpperCase(),
+
+    checkoutUrl: getValue(
+      order.checkoutUrl,
+      order.CheckoutUrl,
+      order.paymentUrl,
+      order.PaymentUrl,
+      raw.checkoutUrl,
+      raw.CheckoutUrl,
+      raw.paymentUrl,
+      raw.PaymentUrl,
+      ""
+    ),
+
+    qrCode: getValue(
+      order.qrCode,
+      order.QrCode,
+      order.qrCodeUrl,
+      order.QrCodeUrl,
+      order.qrUrl,
+      order.QrUrl,
+      raw.qrCode,
+      raw.QrCode,
+      raw.qrCodeUrl,
+      raw.QrCodeUrl,
+      raw.qrUrl,
+      raw.QrUrl,
+      ""
+    ),
 
     bankName: getValue(
       order.bankName,
       order.BankName,
-      order.bankCode,
-      order.BankCode,
-      order.providerName,
-      order.ProviderName,
       raw.bankName,
       raw.BankName,
-      raw.bankCode,
-      raw.BankCode,
-      raw.providerName,
-      raw.ProviderName,
       ""
     ),
 
     accountName: getValue(
       order.accountName,
       order.AccountName,
-      order.accountHolderName,
-      order.AccountHolderName,
       order.bankAccountName,
       order.BankAccountName,
-      order.beneficiaryName,
-      order.BeneficiaryName,
-      order.receiverName,
-      order.ReceiverName,
-      order.merchantName,
-      order.MerchantName,
-      order.ownerName,
-      order.OwnerName,
       order.virtualAccountName,
       order.VirtualAccountName,
       raw.accountName,
       raw.AccountName,
-      raw.accountHolderName,
-      raw.AccountHolderName,
       raw.bankAccountName,
       raw.BankAccountName,
-      raw.beneficiaryName,
-      raw.BeneficiaryName,
-      raw.receiverName,
-      raw.ReceiverName,
-      raw.merchantName,
-      raw.MerchantName,
-      raw.ownerName,
-      raw.OwnerName,
       raw.virtualAccountName,
       raw.VirtualAccountName,
       ""
@@ -676,6 +746,27 @@ export const normalizeDepositOrder = (order) => {
       ""
     ),
 
+    /*
+     * Ưu tiên thời gian hết hạn Backend trả về.
+     * ExpertWalletPage chỉ dùng 120 giây làm fallback
+     * nếu Backend không có expiresAt.
+     */
+    expiresAt: getValue(
+      order.expiresAt,
+      order.ExpiresAt,
+      order.expiredAt,
+      order.ExpiredAt,
+      order.expireAt,
+      order.ExpireAt,
+      raw.expiresAt,
+      raw.ExpiresAt,
+      raw.expiredAt,
+      raw.ExpiredAt,
+      raw.expireAt,
+      raw.ExpireAt,
+      ""
+    ),
+
     createdAt: getValue(
       order.createdAt,
       order.CreatedAt,
@@ -699,7 +790,10 @@ export const normalizeDepositOrder = (order) => {
 export const normalizeWithdrawal = (withdrawal) => {
   if (!withdrawal) return null;
 
-  const raw = withdrawal.raw || withdrawal.Raw || withdrawal;
+  const raw =
+    withdrawal.raw ||
+    withdrawal.Raw ||
+    withdrawal;
 
   const withdrawalId = getValue(
     withdrawal.withdrawalId,
@@ -722,12 +816,24 @@ export const normalizeWithdrawal = (withdrawal) => {
     id: withdrawalId,
 
     amount: toNumber(
-      getValue(withdrawal.amount, withdrawal.Amount, raw.amount, raw.Amount, 0),
+      getValue(
+        withdrawal.amount,
+        withdrawal.Amount,
+        raw.amount,
+        raw.Amount,
+        0
+      ),
       0
     ),
 
     status: String(
-      getValue(withdrawal.status, withdrawal.Status, raw.status, raw.Status, "PENDING")
+      getValue(
+        withdrawal.status,
+        withdrawal.Status,
+        raw.status,
+        raw.Status,
+        "PENDING"
+      )
     ).toUpperCase(),
 
     bankName: getValue(
@@ -789,14 +895,57 @@ export const normalizeWithdrawal = (withdrawal) => {
 function getTransactionDirection(type, amount) {
   const value = String(type || "").toUpperCase();
 
+  /*
+   * Các transaction làm giảm số dư của Expert.
+   */
   if (
-    value.includes("ESCROW_RECEIVE") ||
-    value.includes("RECEIVE") ||
-    value.includes("RELEASE") ||
-    value.includes("EARNING") ||
-    value.includes("CREDIT") ||
+    [
+      "EXPERT_PENDING_EARNING_REFUND",
+      "EXPERT_SERVICE_FEE",
+      "WITHDRAWAL_HOLD",
+      "WITHDRAWAL_PAID",
+      "WITHDRAWAL_COMPLETED",
+      "PROPOSAL_CREDIT_PACKAGE_PURCHASE",
+    ].includes(value)
+  ) {
+    return "OUT";
+  }
+
+  /*
+   * HOLD:
+   * Milestone được approve và tiền ròng vào Pending Earnings.
+   *
+   * RELEASE:
+   * Pending Earnings được chuyển sang Available Balance.
+   *
+   * REJECTED/FAILED/EXPIRED:
+   * Tiền withdrawal bị giữ được trả lại Available Balance.
+   */
+  if (
+    [
+      "EXPERT_PENDING_EARNING_HOLD",
+      "EXPERT_PENDING_EARNING_RELEASE",
+      "WITHDRAWAL_REJECTED",
+      "WITHDRAWAL_FAILED",
+      "WITHDRAWAL_EXPIRED",
+    ].includes(value)
+  ) {
+    return "IN";
+  }
+
+  /*
+   * Processing chỉ là trạng thái trung gian.
+   * Không xem là cộng hoặc trừ thêm tiền.
+   */
+  if (value === "WITHDRAWAL_PAYOUT_PROCESSING") {
+    return "NEUTRAL";
+  }
+
+  if (
     value.includes("DEPOSIT") ||
-    value.includes("REFUND") ||
+    value.includes("TOP_UP") ||
+    value.includes("ESCROW_RECEIVE") ||
+    value.includes("CREDIT") ||
     amount > 0
   ) {
     return "IN";
@@ -819,49 +968,76 @@ function getTransactionDirection(type, amount) {
 const expertWalletService = {
   async getMyWallet() {
     const response = await expertWalletApi.getMyWallet();
-    return normalizeWallet(unwrapData(response));
+
+    return normalizeWallet(
+      unwrapData(response)
+    );
   },
 
   async getBalance() {
     const response = await expertWalletApi.getBalance();
-    return normalizeBalance(unwrapBalanceData(response));
+
+    return normalizeBalance(
+      unwrapBalanceData(response)
+    );
   },
 
   async getMyTransactions() {
-    const response = await expertWalletApi.getMyTransactions();
+    const response =
+      await expertWalletApi.getMyTransactions();
 
     return unwrapListData(response)
       .map(normalizeTransaction)
       .filter(Boolean)
       .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
+        const dateA = new Date(
+          a.createdAt || 0
+        ).getTime();
+
+        const dateB = new Date(
+          b.createdAt || 0
+        ).getTime();
+
         return dateB - dateA;
       });
   },
 
   async getMyDepositOrders() {
-    const response = await expertWalletApi.getMyDepositOrders();
+    const response =
+      await expertWalletApi.getMyDepositOrders();
 
     return unwrapListData(response)
       .map(normalizeDepositOrder)
       .filter(Boolean)
       .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
+        const dateA = new Date(
+          a.createdAt || 0
+        ).getTime();
+
+        const dateB = new Date(
+          b.createdAt || 0
+        ).getTime();
+
         return dateB - dateA;
       });
   },
 
   async getMyWithdrawals() {
-    const response = await expertWalletApi.getMyWithdrawals();
+    const response =
+      await expertWalletApi.getMyWithdrawals();
 
     return unwrapListData(response)
       .map(normalizeWithdrawal)
       .filter(Boolean)
       .sort((a, b) => {
-        const dateA = new Date(a.createdAt || 0).getTime();
-        const dateB = new Date(b.createdAt || 0).getTime();
+        const dateA = new Date(
+          a.createdAt || 0
+        ).getTime();
+
+        const dateB = new Date(
+          b.createdAt || 0
+        ).getTime();
+
         return dateB - dateA;
       });
   },
@@ -882,7 +1058,9 @@ const expertWalletService = {
     ]);
 
     const wallet =
-      walletResult.status === "fulfilled" ? walletResult.value : null;
+      walletResult.status === "fulfilled"
+        ? walletResult.value
+        : null;
 
     const balance =
       balanceResult.status === "fulfilled"
@@ -890,65 +1068,97 @@ const expertWalletService = {
         : normalizeBalance(null);
 
     const transactions =
-      transactionResult.status === "fulfilled" ? transactionResult.value : [];
+      transactionResult.status === "fulfilled"
+        ? transactionResult.value
+        : [];
 
     const depositOrders =
-      depositOrderResult.status === "fulfilled" ? depositOrderResult.value : [];
+      depositOrderResult.status === "fulfilled"
+        ? depositOrderResult.value
+        : [];
 
     const withdrawals =
-      withdrawalResult.status === "fulfilled" ? withdrawalResult.value : [];
+      withdrawalResult.status === "fulfilled"
+        ? withdrawalResult.value
+        : [];
 
     return {
       wallet,
-      balance: {
-        ...balance,
 
-        availableBalance:
-          balance.availableBalance || wallet?.availableBalance || 0,
+      balance: (() => {
+        const availableBalance = toNumber(
+          getValue(
+            balance.availableBalance,
+            wallet?.availableBalance,
+            0
+          ),
+          0
+        );
 
-        balance: balance.availableBalance || wallet?.availableBalance || 0,
+        const withdrawableBalance = toNumber(
+          getValue(
+            balance.withdrawableBalance,
+            wallet?.withdrawableBalance,
+            availableBalance
+          ),
+          availableBalance
+        );
 
-        withdrawableBalance:
-          balance.withdrawableBalance ||
-          wallet?.withdrawableBalance ||
-          balance.availableBalance ||
-          wallet?.availableBalance ||
-          0,
+        const pendingEarningsBalance = toNumber(
+          getValue(
+            balance.pendingEarningsBalance,
+            wallet?.pendingEarningsBalance,
+            0
+          ),
+          0
+        );
 
-        pendingEarningsBalance:
-          balance.pendingEarningsBalance ||
-          wallet?.pendingEarningsBalance ||
-          0,
+        const lockedBalance = toNumber(
+          getValue(
+            balance.lockedBalance,
+            wallet?.lockedBalance,
+            0
+          ),
+          0
+        );
 
-        lockedBalance: wallet?.lockedBalance || balance.lockedBalance || 0,
+        /*
+         * Chỉ lấy Total Earning Backend trả về.
+         * Không cộng Available + Pending.
+         */
+        const totalEarning = toNumber(
+          getValue(
+            wallet?.totalEarning,
+            wallet?.totalEarnings,
+            balance.totalEarning,
+            balance.totalEarnings,
+            0
+          ),
+          0
+        );
 
-        totalEarning:
-          wallet?.totalEarning ||
-          balance.totalEarning ||
-          wallet?.totalEarnings ||
-          balance.totalEarnings ||
-          0,
+        return {
+          ...balance,
 
-        totalEarnings:
-          wallet?.totalEarnings ||
-          balance.totalEarnings ||
-          wallet?.totalEarning ||
-          balance.totalEarning ||
-          0,
+          availableBalance,
+          balance: availableBalance,
 
-        totalBalance:
-          wallet?.totalBalance ||
-          balance.totalBalance ||
-          Number(wallet?.availableBalance || balance.availableBalance || 0) +
-            Number(wallet?.lockedBalance || balance.lockedBalance || 0) +
-            Number(
-              wallet?.pendingEarningsBalance ||
-                balance.pendingEarningsBalance ||
-                0
-            ),
+          withdrawableBalance,
+          pendingEarningsBalance,
+          lockedBalance,
 
-        currency: "VND",
-      },
+          totalEarning,
+          totalEarnings: totalEarning,
+
+          totalBalance:
+            availableBalance +
+            lockedBalance +
+            pendingEarningsBalance,
+
+          currency: "VND",
+        };
+      })(),
+
       transactions,
       depositOrders,
       withdrawals,
@@ -956,48 +1166,89 @@ const expertWalletService = {
   },
 
   async createDepositOrder(payload) {
-    const amount = toNumber(payload?.amount, 0);
+    const amount = toNumber(
+      payload?.amount,
+      0
+    );
 
     if (amount <= 0) {
-      throw new Error("Deposit amount must be greater than 0.");
+      throw new Error(
+        "Deposit amount must be greater than 0."
+      );
     }
 
-    const response = await expertWalletApi.createDepositOrder({ amount });
-    return normalizeDepositOrder(unwrapData(response));
+    const response =
+      await expertWalletApi.createDepositOrder({
+        amount,
+      });
+
+    return normalizeDepositOrder(
+      unwrapData(response)
+    );
   },
 
   async getDepositOrderById(depositOrderId) {
     if (isInvalidId(depositOrderId)) {
-      throw new Error("Invalid deposit order id.");
+      throw new Error(
+        "Invalid deposit order id."
+      );
     }
 
-    const response = await expertWalletApi.getDepositOrderById(depositOrderId);
-    return normalizeDepositOrder(unwrapData(response));
+    const response =
+      await expertWalletApi.getDepositOrderById(
+        depositOrderId
+      );
+
+    return normalizeDepositOrder(
+      unwrapData(response)
+    );
   },
 
   async createWithdrawal(form) {
-    const amount = toNumber(form?.amount, 0);
+    const amount = toNumber(
+      form?.amount,
+      0
+    );
 
     if (amount <= 0) {
-      throw new Error("Withdrawal amount must be greater than 0.");
+      throw new Error(
+        "Withdrawal amount must be greater than 0."
+      );
     }
 
-    const bankName = String(form?.bankName || "").trim();
-    const bankAccountNumber = String(form?.bankAccountNumber || "").trim();
-    const bankAccountHolder = String(form?.bankAccountHolder || "").trim();
+    const bankName = String(
+      form?.bankName || ""
+    ).trim();
 
-    if (!bankName || !bankAccountNumber || !bankAccountHolder) {
-      throw new Error("Please fill in all bank information.");
+    const bankAccountNumber = String(
+      form?.bankAccountNumber || ""
+    ).trim();
+
+    const bankAccountHolder = String(
+      form?.bankAccountHolder || ""
+    ).trim();
+
+    if (
+      !bankName ||
+      !bankAccountNumber ||
+      !bankAccountHolder
+    ) {
+      throw new Error(
+        "Please fill in all bank information."
+      );
     }
 
-    const response = await expertWalletApi.createWithdrawal({
-      amount,
-      bankName,
-      bankAccountNumber,
-      bankAccountHolder,
-    });
+    const response =
+      await expertWalletApi.createWithdrawal({
+        amount,
+        bankName,
+        bankAccountNumber,
+        bankAccountHolder,
+      });
 
-    return normalizeWithdrawal(unwrapData(response));
+    return normalizeWithdrawal(
+      unwrapData(response)
+    );
   },
 };
 

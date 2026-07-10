@@ -103,7 +103,16 @@ export default function SubmitProposalPage() {
       setError("");
       setMessage("");
 
-      await Promise.all([loadJobDetailOnly(), loadSubmitAccess()]);
+      const [jobResult] = await Promise.all([
+        loadJobDetailOnly(),
+        loadSubmitAccess(),
+      ]);
+
+      if (jobResult === false) return;
+
+      const guardResult = await guardExistingApplication();
+
+      if (guardResult === "REDIRECTED") return;
 
       if (draftId) {
         await loadDraftDetail(draftId);
@@ -122,10 +131,81 @@ export default function SubmitProposalPage() {
       const data = unwrapData(response);
 
       setJob(data);
+      return true;
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load job detail."));
       setJob(null);
+      return false;
+    }
+  };
+
+  const guardExistingApplication = async () => {
+    try {
+      const [proposalResult, draftResult] = await Promise.allSettled([
+        proposalService.getMyProposals(),
+        proposalService.getMyDraftProposals(),
+      ]);
+
+      const proposals =
+        proposalResult.status === "fulfilled" &&
+        Array.isArray(proposalResult.value)
+          ? proposalResult.value
+          : [];
+
+      const drafts =
+        draftResult.status === "fulfilled" && Array.isArray(draftResult.value)
+          ? draftResult.value
+          : [];
+
+      const submittedProposal = findProposalForJob(proposals, jobId, false);
+
+      if (submittedProposal) {
+        const proposalId = getProposalId(submittedProposal);
+
+        navigate(
+          proposalId
+            ? `/expert/proposals/${proposalId}`
+            : "/expert/proposals",
+          { replace: true }
+        );
+
+        return "REDIRECTED";
+      }
+
+      const existingDraft = findProposalForJob(drafts, jobId, true);
+      const existingDraftId = getProposalId(existingDraft);
+
+      if (!draftId && existingDraftId) {
+        navigate(
+          `/expert/jobs/${jobId}/proposal?draftId=${existingDraftId}`,
+          { replace: true }
+        );
+
+        return "REDIRECTED";
+      }
+
+      if (draftId && existingDraftId && String(draftId) !== String(existingDraftId)) {
+        setError(
+          "This draft does not belong to the selected job. Opening the correct draft."
+        );
+
+        navigate(
+          `/expert/jobs/${jobId}/proposal?draftId=${existingDraftId}`,
+          { replace: true }
+        );
+
+        return "REDIRECTED";
+      }
+
+      return "ALLOWED";
+    } catch (err) {
+      console.warn(
+        "CHECK EXISTING PROPOSAL ERROR:",
+        err?.response?.data || err
+      );
+
+      return "ALLOWED";
     }
   };
 
@@ -534,7 +614,7 @@ export default function SubmitProposalPage() {
     }
   };
 
-  const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
+  const isJobOpen = isOpenJobStatus(getJobStatus(job));
 
   if (loading) {
     return (
@@ -1522,6 +1602,56 @@ function getJobDuration(job) {
     job?.projectDurationDays,
     job?.ProjectDurationDays,
     ""
+  );
+}
+
+
+function findProposalForJob(items, jobId, draftOnly) {
+  if (!Array.isArray(items) || !jobId) return null;
+
+  return (
+    items.find((item) => {
+      const status = String(item?.status || item?.Status || "").toUpperCase();
+      const sameJob = String(getProposalJobId(item)) === String(jobId);
+
+      if (!sameJob) return false;
+      if (draftOnly) return !status || status === "DRAFT";
+      return status !== "DRAFT";
+    }) || null
+  );
+}
+
+function getProposalJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobId ||
+    proposal?.JobPostingId ||
+    proposal?.raw?.jobId ||
+    proposal?.raw?.jobPostingId ||
+    proposal?.raw?.JobId ||
+    proposal?.raw?.JobPostingId ||
+    ""
+  );
+}
+
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.id ||
+    proposal?.ProposalId ||
+    proposal?.Id ||
+    proposal?.raw?.proposalId ||
+    proposal?.raw?.id ||
+    proposal?.raw?.ProposalId ||
+    proposal?.raw?.Id ||
+    ""
+  );
+}
+
+function isOpenJobStatus(status) {
+  return ["OPEN", "ACTIVE", "PUBLISHED", "AVAILABLE"].includes(
+    String(status || "").trim().toUpperCase()
   );
 }
 

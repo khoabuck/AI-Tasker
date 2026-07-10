@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
@@ -35,48 +35,24 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const { refreshUser, handleLoginSuccess } = useAuth();
+  const { user, refreshUser, handleLoginSuccess } = useAuth();
 
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return;
+    const currentUser = user || getStoredUser();
 
-    const user = JSON.parse(storedUser);
-    const role = String(user?.role || "").toUpperCase();
-    const status = String(user?.status || "").toUpperCase();
+    if (!currentUser) return;
 
-    if (status === "PENDING_ROLE" || !role) return;
-
-    if (status === "PENDING_PROFILE") {
-      if (role === "EXPERT") {
-        navigate("/expert/setup-profile", { replace: true });
-        return;
-      }
-
-      if (role === "CLIENT") {
-        navigate("/setup-profile", { replace: true });
-        return;
-      }
-
-      return;
-    }
-
-    if (status === "ACTIVE") {
-      if (role === "CLIENT") navigate("/client/dashboard", { replace: true });
-      else if (role === "EXPERT")
-        navigate("/expert/dashboard", { replace: true });
-      else if (role === "ADMIN")
-        navigate("/admin/dashboard", { replace: true });
-      else navigate("/", { replace: true });
-    }
-  }, [navigate]);
+    redirectUserByStatus(currentUser, navigate);
+  }, [navigate, user]);
 
   const redirectAfterRoleSelected = (role) => {
-    const normalizedRole = String(role || "").toUpperCase();
+    const normalizedRole = String(role || "")
+      .trim()
+      .toUpperCase();
 
     if (normalizedRole === "EXPERT") {
       navigate("/expert/setup-profile", { replace: true });
@@ -88,49 +64,11 @@ export default function SelectRolePage() {
       return;
     }
 
-    navigate("/setup-profile", { replace: true });
-  };
-
-  const redirectExistingUser = () => {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const role = String(user?.role || "").toUpperCase();
-    const status = String(user?.status || "").toUpperCase();
-
-    if (status === "ACTIVE") {
-      if (role === "CLIENT") {
-        navigate("/client/dashboard", { replace: true });
-        return;
-      }
-
-      if (role === "EXPERT") {
-        navigate("/expert/dashboard", { replace: true });
-        return;
-      }
-
-      if (role === "ADMIN") {
-        navigate("/admin/dashboard", { replace: true });
-        return;
-      }
-
-      navigate("/", { replace: true });
-      return;
-    }
-
-    if (status === "PENDING_PROFILE") {
-      if (role === "EXPERT") {
-        navigate("/expert/setup-profile", { replace: true });
-        return;
-      }
-
-      navigate("/setup-profile", { replace: true });
-      return;
-    }
-
-    navigate("/setup-profile", { replace: true });
+    navigate("/select-role", { replace: true });
   };
 
   const handleConfirm = async () => {
-    if (!selected) return;
+    if (!selected || loading) return;
 
     setLoading(true);
     setError("");
@@ -140,59 +78,77 @@ export default function SelectRolePage() {
         role: selected,
       });
 
-      const responseData = selectResponse?.data || {};
+      const responseUser = extractUserFromResponse(selectResponse);
+      let freshUser = null;
 
-      const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
-
-      const userFromResponse =
-        responseData.user ||
-        responseData.User ||
-        responseData.data?.user ||
-        responseData.data?.User ||
-        responseData.data ||
-        responseData;
-
-      const selectedUser = normalizeUser(
-        {
-          ...oldUser,
-          ...userFromResponse,
-          role: selected,
-          status: "PENDING_PROFILE",
-        },
-        selected
-      );
-
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("token");
-      localStorage.removeItem("authToken");
-      localStorage.setItem("user", JSON.stringify(selectedUser));
-
-      if (handleLoginSuccess) {
-        handleLoginSuccess({
-          user: selectedUser,
-        });
+      try {
+        freshUser = await refreshUser();
+      } catch {
+        freshUser = null;
       }
 
-      if (refreshUser) {
-        try {
-          await refreshUser();
-        } catch {
-          // Không chặn flow nếu refresh user lỗi.
-        }
+      const nextUser =
+        freshUser ||
+        normalizeUser(
+          {
+            ...getStoredUser(),
+            ...responseUser,
+            role: selected,
+            status:
+              responseUser?.status ||
+              responseUser?.Status ||
+              "PENDING_PROFILE",
+          },
+          selected
+        );
+
+      if (!nextUser) {
+        throw new Error(
+          "Role was selected, but user information could not be loaded."
+        );
       }
 
-      redirectAfterRoleSelected(selected);
+      handleLoginSuccess({
+        user: nextUser,
+      });
+
+      const nextStatus = String(nextUser.status || "")
+        .trim()
+        .toUpperCase();
+
+      if (nextStatus === "ACTIVE") {
+        redirectUserByStatus(nextUser, navigate);
+        return;
+      }
+
+      redirectAfterRoleSelected(nextUser.role || selected);
     } catch (err) {
-      console.error("SELECT ROLE ERROR:", err?.response?.data || err);
-
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        err?.message ||
         "An error occurred during role selection.";
 
-      if (message === "User is not in pending role status.") {
-        redirectExistingUser();
-        return;
+      if (
+        String(message).toLowerCase().includes(
+          "user is not in pending role status"
+        )
+      ) {
+        try {
+          const freshUser = await refreshUser();
+
+          if (freshUser) {
+            handleLoginSuccess({
+              user: freshUser,
+            });
+
+            redirectUserByStatus(freshUser, navigate);
+            return;
+          }
+        } catch {
+          // Hiển thị lỗi gốc nếu không thể refresh user.
+        }
       }
 
       setError(message);
@@ -279,7 +235,7 @@ export default function SelectRolePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
               gap: 24,
               marginBottom: 32,
             }}
@@ -288,15 +244,17 @@ export default function SelectRolePage() {
               const isSelected = selected === role.key;
 
               return (
-                <div
+                <button
                   key={role.key}
+                  type="button"
+                  disabled={loading}
                   onClick={() => {
-                    if (!loading) {
-                      setSelected(role.key);
-                      setError("");
-                    }
+                    setSelected(role.key);
+                    setError("");
                   }}
                   style={{
+                    width: "100%",
+                    textAlign: "left",
                     background: isSelected
                       ? `rgba(${
                           role.key === "CLIENT" ? "0,240,255" : "173,198,255"
@@ -313,6 +271,7 @@ export default function SelectRolePage() {
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`
                       : "none",
+                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   <div
@@ -423,7 +382,7 @@ export default function SelectRolePage() {
                       Selected
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -446,12 +405,16 @@ export default function SelectRolePage() {
           )}
 
           <button
+            type="button"
             onClick={handleConfirm}
             disabled={!selected || loading}
             style={{
               width: "100%",
-              background: selected ? "#00F0FF" : "rgba(255,255,255,0.05)",
-              color: selected ? "#002022" : "#414754",
+              background:
+                selected && !loading
+                  ? "#00F0FF"
+                  : "rgba(255,255,255,0.05)",
+              color: selected && !loading ? "#002022" : "#414754",
               fontFamily: "Hanken Grotesk, sans-serif",
               fontWeight: 700,
               fontSize: 16,
@@ -460,7 +423,10 @@ export default function SelectRolePage() {
               border: "none",
               cursor: selected && !loading ? "pointer" : "not-allowed",
               transition: "all 0.2s",
-              boxShadow: selected ? "0 0 20px rgba(0,240,255,0.3)" : "none",
+              boxShadow:
+                selected && !loading
+                  ? "0 0 20px rgba(0,240,255,0.3)"
+                  : "none",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -469,7 +435,7 @@ export default function SelectRolePage() {
           >
             {loading ? (
               <>
-                <span className="material-symbols-outlined">
+                <span className="material-symbols-outlined animate-spin">
                   progress_activity
                 </span>
                 <span>Processing...</span>
@@ -487,14 +453,97 @@ export default function SelectRolePage() {
   );
 }
 
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
+}
+
+function extractUserFromResponse(response) {
+  const data = response?.data;
+
+  return (
+    data?.data?.user ||
+    data?.data?.User ||
+    data?.user ||
+    data?.User ||
+    data?.data ||
+    null
+  );
+}
+
 function normalizeUser(user, selectedRole) {
+  if (!user) return null;
+
   return {
-    userId: user?.userId || user?.UserId || 0,
+    userId: user?.userId || user?.UserId || user?.id || user?.Id || 0,
     email: user?.email || user?.Email || "",
     fullName: user?.fullName || user?.FullName || "",
-    role: user?.role || user?.Role || selectedRole,
+    role: user?.role || user?.Role || selectedRole || "",
     status: user?.status || user?.Status || "PENDING_PROFILE",
-    authProvider: user?.authProvider || user?.AuthProvider || "LOCAL",
-    avatarUrl: user?.avatarUrl || user?.AvatarUrl || null,
+    authProvider:
+      user?.authProvider || user?.AuthProvider || user?.provider || "LOCAL",
+    avatarUrl:
+      user?.avatarUrl ||
+      user?.AvatarUrl ||
+      user?.photoUrl ||
+      user?.PhotoUrl ||
+      null,
   };
+}
+
+function redirectUserByStatus(user, navigate) {
+  if (!user) return false;
+
+  const role = String(user.role || "")
+    .trim()
+    .toUpperCase();
+
+  const status = String(user.status || "")
+    .trim()
+    .toUpperCase();
+
+  if (status === "PENDING_ROLE" || !role) {
+    return false;
+  }
+
+  if (status === "PENDING_PROFILE") {
+    if (role === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
+      return true;
+    }
+
+    if (role === "CLIENT") {
+      navigate("/setup-profile", { replace: true });
+      return true;
+    }
+
+    return false;
+  }
+
+  if (status === "ACTIVE") {
+    if (role === "CLIENT") {
+      navigate("/client/dashboard", { replace: true });
+      return true;
+    }
+
+    if (role === "EXPERT") {
+      navigate("/expert/dashboard", { replace: true });
+      return true;
+    }
+
+    if (role === "ADMIN") {
+      navigate("/admin/dashboard", { replace: true });
+      return true;
+    }
+
+    navigate("/", { replace: true });
+    return true;
+  }
+
+  return false;
 }

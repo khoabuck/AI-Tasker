@@ -53,6 +53,7 @@ export default function ProjectMilestonesPage() {
   }
 
   const projectStatus = String(project?.status || "").toUpperCase();
+  const projectCompleted = isProjectCompletedStatus(projectStatus);
 
   return (
     <ExpertLayout>
@@ -111,6 +112,17 @@ export default function ProjectMilestonesPage() {
 
           {error && <Alert title="Milestone error" message={error} />}
 
+          {!error && projectCompleted && (
+            <div className="mb-5 rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-sm text-green-100">
+              <p className="font-bold text-green-300">Project completed</p>
+              <p className="mt-1 leading-6">
+                Milestones are read-only. You can review details and previous
+                deliverables, but you cannot submit, resubmit, or open a new
+                dispute.
+              </p>
+            </div>
+          )}
+
           {!error && milestones.length === 0 && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-12 text-center">
               <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
@@ -137,11 +149,31 @@ export default function ProjectMilestonesPage() {
                     key={milestoneId || index}
                     milestone={milestone}
                     index={index}
-                    onDetail={() => navigate(`/expert/milestones/${milestoneId}`)}
-                    onDeliverables={() =>
-                      navigate(`/expert/milestones/${milestoneId}/deliverables`)
-                    }
-                    onDispute={() => navigate(`/expert/milestones/${milestoneId}`)}
+                    projectCompleted={projectCompleted}
+                    onDetail={() => {
+                      if (!milestoneId) {
+                        setError("Cannot open milestone because milestone id is missing.");
+                        return;
+                      }
+
+                      navigate(`/expert/milestones/${milestoneId}`);
+                    }}
+                    onDeliverables={() => {
+                      if (!milestoneId) {
+                        setError("Cannot open deliverables because milestone id is missing.");
+                        return;
+                      }
+
+                      navigate(`/expert/milestones/${milestoneId}/deliverables`);
+                    }}
+                    onDispute={() => {
+                      if (!milestoneId) {
+                        setError("Cannot open dispute because milestone id is missing.");
+                        return;
+                      }
+
+                      navigate(`/expert/milestones/${milestoneId}`);
+                    }}
                   />
                 );
               })}
@@ -156,12 +188,14 @@ export default function ProjectMilestonesPage() {
 function MilestoneCard({
   milestone,
   index,
+  projectCompleted,
   onDetail,
   onDeliverables,
   onDispute,
 }) {
   const status = String(milestone.status || "").toUpperCase();
-  const canDispute = canOpenDisputeFromMilestoneStatus(status);
+  const canDispute =
+    !projectCompleted && canOpenDisputeFromMilestoneStatus(status);
 
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 transition hover:border-cyan-400/40">
@@ -215,7 +249,7 @@ function MilestoneCard({
                 onClick={onDetail}
                 className="rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Detail
+                {getMilestonePrimaryActionLabel(status, projectCompleted)}
               </button>
 
               <button
@@ -232,7 +266,7 @@ function MilestoneCard({
                   onClick={onDispute}
                   className="rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-semibold text-red-300 transition hover:bg-red-400 hover:text-black"
                 >
-                  Dispute
+                  Open Dispute
                 </button>
               )}
             </div>
@@ -335,6 +369,51 @@ function canOpenDisputeFromMilestoneStatus(status) {
     "REJECTED_BY_CLIENT",
     "CLIENT_REQUESTED_REVISION",
   ].includes(value);
+}
+
+
+function getMilestonePrimaryActionLabel(status, projectCompleted = false) {
+  if (projectCompleted) return "View Details";
+
+  const value = String(status || "").trim().toUpperCase();
+
+  if (
+    [
+      "REVISION_REQUESTED",
+      "REVISION_REQUIRED",
+      "NEEDS_REVISION",
+      "CHANGES_REQUESTED",
+      "REQUEST_REVISION",
+      "RESUBMISSION_REQUESTED",
+      "RESUBMIT_REQUESTED",
+      "REWORK_REQUIRED",
+      "REJECTED",
+      "REJECTED_BY_CLIENT",
+      "CLIENT_REQUESTED_REVISION",
+    ].includes(value)
+  ) {
+    return "Review & Resubmit";
+  }
+
+  if (["SUBMITTED", "UNDER_REVIEW", "WAITING_REVIEW"].includes(value)) {
+    return "View Submission";
+  }
+
+  if (
+    ["COMPLETED", "APPROVED", "PAID", "RELEASED", "DONE", "FINISHED"].includes(
+      value
+    )
+  ) {
+    return "View Details";
+  }
+
+  return "Open Milestone";
+}
+
+function isProjectCompletedStatus(status) {
+  return ["COMPLETED", "DONE", "FINISHED", "CLOSED"].includes(
+    String(status || "").trim().toUpperCase()
+  );
 }
 
 function getExpertFeeRate(entity) {

@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
+import { clearAuth } from "../../../utils/auth.utils";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -20,26 +21,22 @@ export default function LoginPage() {
   const [showSavedAccounts, setShowSavedAccounts] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  const clearAuthSession = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
-  };
-
   useEffect(() => {
     const savedLogins = localStorage.getItem("rememberLogins");
 
-    if (savedLogins) {
-      try {
-        const parsed = JSON.parse(savedLogins);
-        setRememberedLogins(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        localStorage.removeItem("rememberLogins");
-      }
+    if (!savedLogins) return;
+
+    try {
+      const parsed = JSON.parse(savedLogins);
+      setRememberedLogins(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      localStorage.removeItem("rememberLogins");
     }
   }, []);
+
+  const clearAuthSession = () => {
+    clearAuth();
+  };
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
@@ -67,29 +64,38 @@ export default function LoginPage() {
   const saveRememberedLogin = () => {
     const email = form.email.trim();
 
-    if (!form.remember || !email) {
-      return;
-    }
+    if (!form.remember || !email) return;
 
     const existingRaw = localStorage.getItem("rememberLogins");
     let existing = [];
 
     try {
       existing = existingRaw ? JSON.parse(existingRaw) : [];
-      if (!Array.isArray(existing)) existing = [];
+
+      if (!Array.isArray(existing)) {
+        existing = [];
+      }
     } catch {
       existing = [];
     }
 
-    const next = [{ email }, ...existing.filter((item) => item.email !== email)];
+    const next = [
+      { email },
+      ...existing.filter((item) => item.email !== email),
+    ];
 
     localStorage.setItem("rememberLogins", JSON.stringify(next));
     setRememberedLogins(next);
   };
 
-  const goNextByRoleAndStatus = ({ role, status, email, password }) => {
-    const normalizedRole = String(role || "").toUpperCase();
-    const normalizedStatus = String(status || "").toUpperCase();
+  const goNextByRoleAndStatus = ({ role, status, email }) => {
+    const normalizedRole = String(role || "")
+      .trim()
+      .toUpperCase();
+
+    const normalizedStatus = String(status || "")
+      .trim()
+      .toUpperCase();
 
     if (normalizedStatus === "PENDING_EMAIL_VERIFICATION") {
       navigate("/verify-email-notice", {
@@ -102,7 +108,7 @@ export default function LoginPage() {
     if (normalizedStatus === "PENDING_ROLE" || !normalizedRole) {
       navigate("/select-role", {
         replace: true,
-        state: { email, password },
+        state: { email },
       });
       return;
     }
@@ -120,7 +126,7 @@ export default function LoginPage() {
 
       navigate("/select-role", {
         replace: true,
-        state: { email, password },
+        state: { email },
       });
       return;
     }
@@ -142,38 +148,41 @@ export default function LoginPage() {
       }
     }
 
-    if (normalizedStatus === "SUSPENDED") {
+    if (
+      ["LOCKED", "SUSPENDED", "DISABLED", "INACTIVE", "BLOCKED"].includes(
+        normalizedStatus
+      )
+    ) {
       setError(
-        "Your account has been temporarily suspended. Please contact support."
+        "Your account is currently restricted. Please contact support."
       );
       return;
     }
 
-    if (normalizedStatus === "BANNED") {
-      setError("Your account has been permanently banned.");
+    if (["BANNED", "BAN"].includes(normalizedStatus)) {
+      setError("Your account has been banned.");
       return;
     }
 
-    navigate("/select-role", {
-      replace: true,
-      state: { email, password },
-    });
+    setError("Unable to determine the next page for this account.");
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
+    if (loading) return;
 
     setLoading(true);
     setError("");
 
     try {
       const result = await authService.login({
-        email: form.email,
+        email: form.email.trim(),
         password: form.password,
       });
 
-      if (!result.success || !result.user) {
-        setError(result.message || "Login failed.");
+      if (!result?.success || !result?.user) {
+        setError(result?.message || "Login failed.");
         return;
       }
 
@@ -181,47 +190,44 @@ export default function LoginPage() {
         saveRememberedLogin();
       }
 
-      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
-
-      const finalUser = result.user || storedUser || {};
-      const finalRole = finalUser.role || storedUser.role || result.role;
-      const finalStatus = finalUser.status || storedUser.status || result.status;
+      const finalUser = {
+        ...result.user,
+        role: result.user.role || result.role || "",
+        status: result.user.status || result.status || "",
+      };
 
       handleLoginSuccess({
-        user: {
-          ...finalUser,
-          role: finalRole,
-          status: finalStatus,
-        },
+        user: finalUser,
       });
-
-      const sessionId = crypto.randomUUID();
-      sessionStorage.setItem("sessionId", sessionId);
-      localStorage.setItem("activeSessionId", sessionId);
 
       goNextByRoleAndStatus({
-        role: finalRole,
-        status: finalStatus,
-        email: form.email,
-        password: form.password,
+        role: finalUser.role,
+        status: finalUser.status,
+        email: form.email.trim(),
       });
     } catch (err) {
-      console.error("LOGIN ERROR:", err);
-      setError("An error occurred. Please try again.");
+      setError(
+        err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          err?.message ||
+          "An error occurred. Please try again."
+      );
     } finally {
       setLoading(false);
     }
   };
 
   const handleGoogleLogin = () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_BASE_URL;
+    const backendUrl = String(
+      import.meta.env.VITE_BACKEND_BASE_URL || ""
+    ).replace(/\/+$/, "");
 
     if (!backendUrl) {
       setError("Missing VITE_BACKEND_BASE_URL");
       return;
     }
 
-    window.location.href = `${backendUrl}/api/auth/google-login`;
+    window.location.assign(`${backendUrl}/api/auth/google-login`);
   };
 
   return (
@@ -309,7 +315,7 @@ export default function LoginPage() {
                 <input
                   type="email"
                   name="email"
-                  autoComplete="off"
+                  autoComplete="email"
                   value={form.email}
                   onChange={handleChange}
                   required
@@ -342,8 +348,8 @@ export default function LoginPage() {
                       <button
                         key={account.email}
                         type="button"
-                        onMouseDown={(e) => {
-                          e.preventDefault();
+                        onMouseDown={(event) => {
+                          event.preventDefault();
                           selectSavedAccount(account);
                         }}
                         className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.06]"
@@ -400,6 +406,7 @@ export default function LoginPage() {
                 <input
                   type={showPassword ? "text" : "password"}
                   name="password"
+                  autoComplete="current-password"
                   value={form.password}
                   onChange={handleChange}
                   required
@@ -413,15 +420,14 @@ export default function LoginPage() {
                     }`,
                     color: "#e1e2eb",
                   }}
-                  onFocus={() => {
-                    setFocusField("password");
-                  }}
+                  onFocus={() => setFocusField("password")}
                   onBlur={() => setFocusField("")}
                 />
 
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   style={{
                     position: "absolute",
                     right: 14,
@@ -479,20 +485,22 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl py-4 font-bold transition-all disabled:opacity-60"
+              className="w-full rounded-xl py-4 font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background: "#00F0FF",
                 color: "#12151B",
                 boxShadow: "0 0 15px rgba(0,240,255,0.3)",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.boxShadow =
-                  "0 0 25px rgba(0,240,255,0.5)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.boxShadow =
-                  "0 0 15px rgba(0,240,255,0.3)")
-              }
+              onMouseEnter={(event) => {
+                if (!loading) {
+                  event.currentTarget.style.boxShadow =
+                    "0 0 25px rgba(0,240,255,0.5)";
+                }
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.boxShadow =
+                  "0 0 15px rgba(0,240,255,0.3)";
+              }}
             >
               {loading ? "Signing in..." : "Sign In"}
             </button>
@@ -518,19 +526,21 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="flex w-full items-center justify-center gap-3 rounded-xl py-3 font-medium transition-all"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl py-3 font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background: "#232A35",
                 border: "1px solid rgba(255,255,255,0.12)",
                 color: "#e1e2eb",
-                cursor: "pointer",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#32353b")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "#232A35")
-              }
+              onMouseEnter={(event) => {
+                if (!loading) {
+                  event.currentTarget.style.background = "#32353b";
+                }
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = "#232A35";
+              }}
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -550,6 +560,7 @@ export default function LoginPage() {
                   fill="#EA4335"
                 />
               </svg>
+
               Continue with Google
             </button>
 

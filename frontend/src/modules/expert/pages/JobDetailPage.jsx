@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
 import conversationService from "../../../services/conversation.service";
+import proposalService from "../../../services/proposal.service";
 
 export function JobDetailModal({ jobId, onClose }) {
   const navigate = useNavigate();
@@ -34,8 +35,7 @@ export function JobDetailModal({ jobId, onClose }) {
       setLoadError("");
       setActionError("");
 
-      const data = await jobService.getJobById(jobId);
-      const normalizedJob = normalizeLoadedJob(data);
+      const normalizedJob = await loadJobWithApplicationState(jobId);
 
       if (!normalizedJob.id) {
         throw new Error("This job is unavailable right now.");
@@ -52,11 +52,11 @@ export function JobDetailModal({ jobId, onClose }) {
     }
   };
 
-  const handleSubmitProposal = () => {
+  const handleProposalAction = () => {
     if (!job?.id) return;
 
     onClose?.();
-    navigate(`/expert/jobs/${job.id}/proposal`);
+    navigate(getJobProposalTarget(job));
   };
 
   const handleMessageClient = async () => {
@@ -119,7 +119,7 @@ export function JobDetailModal({ jobId, onClose }) {
               startingChat={startingChat}
               compact
               canMessageClient={Boolean(job.clientUserId || job.clientProfileId)}
-              onSubmitProposal={handleSubmitProposal}
+              onProposalAction={handleProposalAction}
               onMessageClient={handleMessageClient}
             />
           )}
@@ -177,8 +177,7 @@ export default function JobDetailPage() {
       setLoadError("");
       setActionError("");
 
-      const data = await jobService.getJobById(jobId);
-      const normalizedJob = normalizeLoadedJob(data);
+      const normalizedJob = await loadJobWithApplicationState(jobId);
 
       if (!normalizedJob.id) {
         throw new Error("This job is unavailable right now.");
@@ -195,9 +194,9 @@ export default function JobDetailPage() {
     }
   };
 
-  const handleSubmitProposal = () => {
+  const handleProposalAction = () => {
     if (!job?.id) return;
-    navigate(`/expert/jobs/${job.id}/proposal`);
+    navigate(getJobProposalTarget(job));
   };
 
   const handleMessageClient = async () => {
@@ -247,7 +246,7 @@ export default function JobDetailPage() {
             actionError={actionError}
             startingChat={startingChat}
             canMessageClient={Boolean(job?.clientUserId || job?.clientProfileId)}
-            onSubmitProposal={handleSubmitProposal}
+            onProposalAction={handleProposalAction}
             onMessageClient={handleMessageClient}
           />
         </div>
@@ -261,7 +260,7 @@ function JobDetailContent({
   actionError,
   startingChat,
   canMessageClient,
-  onSubmitProposal,
+  onProposalAction,
   onMessageClient,
   compact = false,
 }) {
@@ -320,14 +319,14 @@ function JobDetailContent({
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:w-[260px] lg:flex-col">
                 <button
                   type="button"
-                  onClick={onSubmitProposal}
-                  disabled={!canApply}
+                  onClick={onProposalAction}
+                  disabled={!canApply && job.applicationStatus === "NONE"}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
                 >
                   <span className="material-symbols-outlined text-[18px]">
-                    send
+                    {getProposalActionIcon(job)}
                   </span>
-                  Submit Proposal
+                  {getProposalActionLabel(job, canApply)}
                 </button>
 
                 <button
@@ -423,7 +422,7 @@ function JobDetailContent({
             canApply={canApply}
             startingChat={startingChat}
             canMessageClient={canMessageClient}
-            onSubmitProposal={onSubmitProposal}
+            onProposalAction={onProposalAction}
             onMessageClient={onMessageClient}
           />
 
@@ -439,7 +438,7 @@ function ApplyCard({
   canApply,
   startingChat,
   canMessageClient,
-  onSubmitProposal,
+  onProposalAction,
   onMessageClient,
 }) {
   return (
@@ -454,11 +453,11 @@ function ApplyCard({
       <div className="mt-4 space-y-2">
         <button
           type="button"
-          onClick={onSubmitProposal}
-          disabled={!canApply}
+          onClick={onProposalAction}
+          disabled={!canApply && job.applicationStatus === "NONE"}
           className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
         >
-          {canApply ? "Submit Proposal" : "Not accepting proposals"}
+          {getProposalActionLabel(job, canApply)}
         </button>
 
         <button
@@ -695,6 +694,132 @@ async function startConversationFromJob({
   } finally {
     setStartingChat(false);
   }
+}
+
+
+async function loadJobWithApplicationState(jobId) {
+  const [jobResult, proposalsResult, draftsResult] = await Promise.allSettled([
+    jobService.getJobById(jobId),
+    proposalService.getMyProposals(),
+    proposalService.getMyDraftProposals(),
+  ]);
+
+  if (jobResult.status !== "fulfilled") {
+    throw jobResult.reason;
+  }
+
+  const normalizedJob = normalizeLoadedJob(jobResult.value);
+  const proposals =
+    proposalsResult.status === "fulfilled" && Array.isArray(proposalsResult.value)
+      ? proposalsResult.value
+      : [];
+  const drafts =
+    draftsResult.status === "fulfilled" && Array.isArray(draftsResult.value)
+      ? draftsResult.value
+      : [];
+
+  const proposal = findProposalForJob(proposals, normalizedJob.id, false);
+  const draft = proposal
+    ? null
+    : findProposalForJob(drafts, normalizedJob.id, true);
+
+  if (proposal) {
+    return {
+      ...normalizedJob,
+      applicationStatus: "SUBMITTED",
+      proposal,
+      draft: null,
+    };
+  }
+
+  if (draft) {
+    return {
+      ...normalizedJob,
+      applicationStatus: "DRAFT",
+      proposal: null,
+      draft,
+    };
+  }
+
+  return {
+    ...normalizedJob,
+    applicationStatus: "NONE",
+    proposal: null,
+    draft: null,
+  };
+}
+
+function findProposalForJob(items, jobId, draftOnly) {
+  if (!Array.isArray(items) || !jobId) return null;
+
+  return (
+    items.find((item) => {
+      const status = String(item?.status || item?.Status || "").toUpperCase();
+      const sameJob = String(getProposalJobId(item)) === String(jobId);
+
+      if (!sameJob) return false;
+      if (draftOnly) return !status || status === "DRAFT";
+      return status !== "DRAFT";
+    }) || null
+  );
+}
+
+function getProposalJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobId ||
+    proposal?.JobPostingId ||
+    proposal?.raw?.jobId ||
+    proposal?.raw?.jobPostingId ||
+    proposal?.raw?.JobId ||
+    proposal?.raw?.JobPostingId ||
+    ""
+  );
+}
+
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.id ||
+    proposal?.ProposalId ||
+    proposal?.Id ||
+    proposal?.raw?.proposalId ||
+    proposal?.raw?.id ||
+    proposal?.raw?.ProposalId ||
+    proposal?.raw?.Id ||
+    ""
+  );
+}
+
+function getJobProposalTarget(job) {
+  if (job?.applicationStatus === "SUBMITTED") {
+    const proposalId = getProposalId(job.proposal);
+    return proposalId
+      ? `/expert/proposals/${proposalId}`
+      : "/expert/proposals";
+  }
+
+  if (job?.applicationStatus === "DRAFT") {
+    const draftId = getProposalId(job.draft);
+    return draftId
+      ? `/expert/jobs/${job.id}/proposal?draftId=${draftId}`
+      : `/expert/jobs/${job.id}/proposal`;
+  }
+
+  return `/expert/jobs/${job.id}/proposal`;
+}
+
+function getProposalActionLabel(job, canApply) {
+  if (job?.applicationStatus === "SUBMITTED") return "View Proposal";
+  if (job?.applicationStatus === "DRAFT") return "Continue Draft";
+  return canApply ? "Submit Proposal" : "Not accepting proposals";
+}
+
+function getProposalActionIcon(job) {
+  if (job?.applicationStatus === "SUBMITTED") return "visibility";
+  if (job?.applicationStatus === "DRAFT") return "edit_note";
+  return "send";
 }
 
 function normalizeLoadedJob(data) {

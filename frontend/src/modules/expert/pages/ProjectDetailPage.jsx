@@ -18,6 +18,7 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState("");
   const [milestoneError, setMilestoneError] = useState("");
   const [message, setMessage] = useState("");
+  const [showWalletAction, setShowWalletAction] = useState(false);
 
   useEffect(() => {
     loadProject();
@@ -40,11 +41,11 @@ export default function ProjectDetailPage() {
     return getCompletionSummary(displayedMilestones);
   }, [displayedMilestones]);
 
-  const loadProject = async () => {
+  const loadProject = async ({ preserveMessage = false } = {}) => {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
+      if (!preserveMessage) setMessage("");
       setMilestoneError("");
       setMilestones([]);
 
@@ -109,9 +110,12 @@ export default function ProjectDetailPage() {
       setMessage("");
 
       await projectService.completeCheck(realProjectId);
+      await loadProject({ preserveMessage: true });
 
-      setMessage("Completion check finished. Project status has been updated.");
-      await loadProject();
+      setShowWalletAction(true);
+      setMessage(
+        "Completion check finished. If the project is now completed, your pending earnings have been moved to Available Balance."
+      );
     } catch (err) {
       console.error("COMPLETE CHECK ERROR:", err?.response?.data || err);
       setError(
@@ -245,7 +249,10 @@ export default function ProjectDetailPage() {
 
                 <button
                   type="button"
-                  onClick={loadProject}
+                  onClick={() => {
+                    setShowWalletAction(false);
+                    loadProject();
+                  }}
                   disabled={milestoneLoading || completionChecking}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -263,6 +270,22 @@ export default function ProjectDetailPage() {
             <Alert type="danger" title="Project error" message={error} />
           )}
 
+          {showWalletAction && (
+            <div className="mb-5 flex flex-col gap-3 rounded-xl border border-green-400/30 bg-green-400/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm leading-6 text-green-100">
+                Check your wallet to confirm the latest Available Balance and transaction history.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => navigate("/expert/wallet")}
+                className="shrink-0 rounded-xl bg-green-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-green-300"
+              >
+                View Wallet
+              </button>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
               <Card title="Project Overview" icon="description">
@@ -277,13 +300,6 @@ export default function ProjectDetailPage() {
                     type="danger"
                     title="Milestone error"
                     message={milestoneError}
-                  />
-                )}
-
-                {displayedMilestones.length > 0 && (
-                  <MilestoneProgressTimeline
-                    milestones={displayedMilestones}
-                    onSelect={openMilestone}
                   />
                 )}
 

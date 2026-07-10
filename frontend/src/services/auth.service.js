@@ -95,56 +95,6 @@ const normalizeUser = (user) => {
   };
 };
 
-const extractAccessToken = (data) => {
-  return getValue(
-    data?.accessToken,
-    data?.AccessToken,
-    data?.token,
-    data?.Token,
-    data?.data?.accessToken,
-    data?.data?.AccessToken,
-    data?.data?.token,
-    data?.data?.Token
-  );
-};
-
-const decodeJwtPayload = (token) => {
-  try {
-    if (!token || !token.includes(".")) return null;
-
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((char) => {
-          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
-        })
-        .join("")
-    );
-
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-};
-
-const getRoleFromToken = (token) => {
-  const payload = decodeJwtPayload(token);
-
-  return getValue(
-    payload?.role,
-    payload?.Role,
-    payload?.[
-      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-    ],
-    payload?.[
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"
-    ],
-    ""
-  );
-};
-
 const getCurrentUserFromStorage = () => {
   try {
     const user = localStorage.getItem("user");
@@ -181,6 +131,12 @@ const mergeUserToLocalStorage = (newUserData) => {
   return mergedUser;
 };
 
+const clearLegacyTokens = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
+};
+
 const getFriendlyError = (error, fallback) => {
   const data = error?.response?.data;
 
@@ -208,14 +164,13 @@ const authService = {
       }
 
       const { password, ...userInfo } = user;
-      const accessToken = "mock-token-" + userInfo.role;
 
-      localStorage.setItem("accessToken", accessToken);
+      clearLegacyTokens();
       localStorage.setItem("user", JSON.stringify(userInfo));
 
       return {
         success: true,
-        accessToken,
+        accessToken: "",
         user: userInfo,
         role: userInfo.role,
         status: userInfo.status,
@@ -225,35 +180,18 @@ const authService = {
     try {
       const data = await loginApi(credentials);
 
-      const accessToken = extractAccessToken(data);
-
-      if (accessToken) {
-        localStorage.setItem("accessToken", accessToken);
-      } else {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("token");
-        localStorage.removeItem("authToken");
-      }
+      clearLegacyTokens();
 
       let user = normalizeUser(
         data?.user || data?.User || data?.data?.user || data?.data?.User
       );
 
-      const tokenRole = getRoleFromToken(accessToken);
-
       if (!user) {
-        user = normalizeUser({
-          role: tokenRole,
-          status: "ACTIVE",
-        });
-      }
-
-      if (!user?.role || !user?.status) {
-        user = normalizeUser({
-          ...user,
-          role: user?.role || tokenRole || "",
-          status: user?.status || "PENDING_ROLE",
-        });
+        try {
+          user = await authService.refreshCurrentUser();
+        } catch {
+          user = null;
+        }
       }
 
       if (!user) {
@@ -267,7 +205,7 @@ const authService = {
 
       return {
         success: true,
-        accessToken: accessToken || "",
+        accessToken: "",
         user,
         role: user.role,
         status: user.status,
@@ -291,10 +229,8 @@ const authService = {
       // vẫn clear local để không kẹt session ở FE
     }
 
-    localStorage.removeItem("accessToken");
+    clearLegacyTokens();
     localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    localStorage.removeItem("authToken");
     localStorage.removeItem("currentUser");
 
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
@@ -309,7 +245,7 @@ const authService = {
   },
 
   getToken: () => {
-    return localStorage.getItem("accessToken");
+    return null;
   },
 
   refreshCurrentUser: async () => {
@@ -357,9 +293,7 @@ const authService = {
   },
 
   isAuthenticated: () => {
-    return Boolean(
-      localStorage.getItem("user") || localStorage.getItem("accessToken")
-    );
+    return Boolean(localStorage.getItem("user"));
   },
 
   getRole: () => {

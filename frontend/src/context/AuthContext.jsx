@@ -1,11 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState } from "react";
 import { getMeApi, logoutApi } from "../api/auth.api";
-import {
-  getAccessToken,
-  saveAuth,
-  clearAuth,
-  getUserFromStorage,
-} from "../utils/auth.utils";
+import { saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
 import {
   ACCOUNT_BLOCKED_EVENT,
   AUTH_ERROR_EVENT,
@@ -14,6 +9,20 @@ import {
 const AuthContext = createContext(null);
 
 const ACCOUNT_STATUS_CHECK_INTERVAL_MS = 15000;
+
+const PUBLIC_AUTH_PATHS = [
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/verify-email",
+  "/verify-email-notice",
+  "/oauth/callback",
+  "/privacy-policy",
+  "/terms-of-service",
+  "/dispute-policy",
+];
 
 const BLOCKED_STATUSES = [
   "LOCKED",
@@ -24,6 +33,14 @@ const BLOCKED_STATUSES = [
   "INACTIVE",
   "BLOCKED",
 ];
+
+function isPublicAuthPage() {
+  if (typeof window === "undefined") return false;
+
+  const pathname = window.location.pathname;
+
+  return PUBLIC_AUTH_PATHS.includes(pathname);
+}
 
 function getUserStatus(user) {
   return String(
@@ -110,26 +127,29 @@ function getSessionExpiredPayload() {
   };
 }
 
-function getErrorData(err) {
-  return err?.response?.data || {};
+function getErrorData(error) {
+  return error?.response?.data || {};
 }
 
-function getErrorText(err) {
-  const data = getErrorData(err);
+function getErrorText(error) {
+  const data = getErrorData(error);
+
+  if (typeof data === "string") {
+    return data;
+  }
 
   return String(
     data?.message ||
       data?.title ||
       data?.detail ||
       data?.error ||
-      data ||
-      err?.message ||
+      error?.message ||
       ""
   );
 }
 
-function getErrorStatusText(err) {
-  const data = getErrorData(err);
+function getErrorStatusText(error) {
+  const data = getErrorData(error);
 
   return String(
     data?.status ||
@@ -144,8 +164,12 @@ function getErrorStatusText(err) {
     .toUpperCase();
 }
 
-function getErrorReason(err) {
-  const data = getErrorData(err);
+function getErrorReason(error) {
+  const data = getErrorData(error);
+
+  if (typeof data === "string") {
+    return data;
+  }
 
   return (
     data?.reason ||
@@ -160,8 +184,8 @@ function getErrorReason(err) {
   );
 }
 
-function getErrorUntil(err) {
-  const data = getErrorData(err);
+function getErrorUntil(error) {
+  const data = getErrorData(error);
 
   return (
     data?.lockoutEnd ||
@@ -174,27 +198,47 @@ function getErrorUntil(err) {
   );
 }
 
-function getBlockedPayloadFromError(err) {
-  const statusText = getErrorStatusText(err);
-  const text = getErrorText(err).toLowerCase();
-  const reason = getErrorReason(err);
-  const until = getErrorUntil(err);
+function shouldTreatAsBlockedError(error) {
+  const statusText = getErrorStatusText(error);
+  const text = getErrorText(error).toLowerCase();
+
+  return (
+    BLOCKED_STATUSES.includes(statusText) ||
+    text.includes("locked") ||
+    text.includes("lockout") ||
+    text.includes("banned") ||
+    text.includes("suspended") ||
+    text.includes("disabled") ||
+    text.includes("blocked") ||
+    text.includes("inactive") ||
+    text.includes("tạm khóa") ||
+    text.includes("khóa") ||
+    text.includes("khoá") ||
+    text.includes("cấm")
+  );
+}
+
+function getBlockedPayloadFromError(error) {
+  const statusText = getErrorStatusText(error);
+  const text = getErrorText(error).toLowerCase();
+  const reason = getErrorReason(error);
+  const until = getErrorUntil(error);
 
   const isLocked =
     statusText === "LOCKED" ||
     statusText === "SUSPENDED" ||
     text.includes("locked") ||
-    text.includes("lock") ||
+    text.includes("lockout") ||
     text.includes("suspended") ||
     text.includes("tạm khóa") ||
-    text.includes("khoá") ||
-    text.includes("khóa");
+    text.includes("khóa") ||
+    text.includes("khoá");
 
   const isBanned =
     statusText === "BANNED" ||
     statusText === "BAN" ||
     text.includes("banned") ||
-    text.includes("ban") ||
+    text.includes("permanently banned") ||
     text.includes("cấm");
 
   if (isLocked) {
@@ -217,35 +261,45 @@ function getBlockedPayloadFromError(err) {
     };
   }
 
-  return getSessionExpiredPayload();
+  return {
+    title: "Your account is restricted",
+    description:
+      "Your account has been restricted by the administrator. Please contact support if you believe this is a mistake.",
+    reason,
+    until,
+  };
+}
+
+function dispatchAccountEvent(payload) {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
+      detail: payload,
+    })
+  );
 }
 
 function dispatchBlockedEvent(user) {
-  window.dispatchEvent(
-    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
-      detail: getBlockedStatusPayload(user),
-    })
-  );
+  dispatchAccountEvent(getBlockedStatusPayload(user));
 }
 
-function dispatchBlockedErrorEvent(err) {
-  window.dispatchEvent(
-    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
-      detail: getBlockedPayloadFromError(err),
-    })
-  );
+function dispatchBlockedErrorEvent(error) {
+  dispatchAccountEvent(getBlockedPayloadFromError(error));
 }
 
 function dispatchSessionExpiredEvent() {
-  window.dispatchEvent(
-    new CustomEvent(ACCOUNT_BLOCKED_EVENT, {
-      detail: getSessionExpiredPayload(),
-    })
-  );
+  dispatchAccountEvent(getSessionExpiredPayload());
 }
 
-function unwrapMeResponse(res) {
-  return res?.data?.data || res?.data || res;
+function unwrapMeResponse(response) {
+  return (
+    response?.data?.data?.user ||
+    response?.data?.user ||
+    response?.data?.data ||
+    response?.data ||
+    response
+  );
 }
 
 function clearLocalDrafts() {
@@ -254,32 +308,12 @@ function clearLocalDrafts() {
   localStorage.removeItem("aitasker_expert_profile_correction_draft");
 }
 
-function shouldTreatAsBlockedError(err) {
-  const statusText = getErrorStatusText(err);
-  const text = getErrorText(err).toLowerCase();
-
-  return (
-    BLOCKED_STATUSES.includes(statusText) ||
-    text.includes("locked") ||
-    text.includes("lockout") ||
-    text.includes("banned") ||
-    text.includes("ban") ||
-    text.includes("suspended") ||
-    text.includes("disabled") ||
-    text.includes("blocked") ||
-    text.includes("inactive") ||
-    text.includes("tạm khóa") ||
-    text.includes("khóa") ||
-    text.includes("khoá") ||
-    text.includes("cấm")
-  );
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const checkingAuthErrorRef = useRef(false);
+  const userRef = useRef(null);
 
   const [blockedModal, setBlockedModal] = useState({
     open: false,
@@ -289,37 +323,81 @@ export function AuthProvider({ children }) {
     until: "",
   });
 
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  const clearCurrentSession = () => {
+    clearAuth();
+    setUser(null);
+    userRef.current = null;
+  };
+
+  const processAuthError = (
+    error,
+    {
+      hadKnownUser = Boolean(userRef.current),
+      allowSessionPopup = true,
+      allowRestrictedPopup = true,
+    } = {}
+  ) => {
+    const status = error?.response?.status;
+
+    if (status !== 401 && status !== 403) {
+      return false;
+    }
+
+    const isBlocked = shouldTreatAsBlockedError(error);
+
+    if (isBlocked && allowRestrictedPopup) {
+      dispatchBlockedErrorEvent(error);
+    } else if (status === 403 && allowRestrictedPopup) {
+      dispatchAccountEvent({
+        title: "Your account is restricted",
+        description:
+          "Your account has been restricted by the administrator. Please contact support if you believe this is a mistake.",
+        reason: getErrorReason(error),
+        until: getErrorUntil(error),
+      });
+    } else if (
+      status === 401 &&
+      hadKnownUser &&
+      allowSessionPopup &&
+      !isPublicAuthPage()
+    ) {
+      dispatchSessionExpiredEvent();
+    }
+
+    clearCurrentSession();
+    return true;
+  };
+
   const verifyAuthErrorWithMe = async () => {
     if (checkingAuthErrorRef.current) return;
 
     checkingAuthErrorRef.current = true;
 
+    const hadKnownUser = Boolean(userRef.current || getUserFromStorage());
+
     try {
-      const res = await getMeApi();
-      const freshUser = unwrapMeResponse(res);
+      const response = await getMeApi();
+      const freshUser = unwrapMeResponse(response);
 
       if (isBlockedUserStatus(freshUser)) {
         dispatchBlockedEvent(freshUser);
-        clearAuth();
-        setUser(null);
+        clearCurrentSession();
         return;
       }
 
       setUser(freshUser);
+      userRef.current = freshUser;
       saveAuth({ user: freshUser });
-    } catch (err) {
-      const status = err?.response?.status;
-
-      if (status === 401 || status === 403) {
-        if (shouldTreatAsBlockedError(err)) {
-          dispatchBlockedErrorEvent(err);
-        } else if (getAccessToken()) {
-          dispatchSessionExpiredEvent();
-        }
-
-        clearAuth();
-        setUser(null);
-      }
+    } catch (error) {
+      processAuthError(error, {
+        hadKnownUser,
+        allowSessionPopup: hadKnownUser,
+        allowRestrictedPopup: hadKnownUser,
+      });
     } finally {
       checkingAuthErrorRef.current = false;
     }
@@ -329,7 +407,7 @@ export function AuthProvider({ children }) {
     const restore = async () => {
       const storedUser = getUserFromStorage();
 
-      const storedStatus = String(storedUser?.status || "").toUpperCase();
+      const storedStatus = getUserStatus(storedUser);
       const isIncompleteOnboarding = [
         "PENDING_ROLE",
         "PENDING_EMAIL_VERIFICATION",
@@ -337,37 +415,36 @@ export function AuthProvider({ children }) {
 
       if (isIncompleteOnboarding && storedUser) {
         setUser(storedUser);
+        userRef.current = storedUser;
         setLoading(false);
         return;
       }
 
       try {
-        const res = await getMeApi();
-        const freshUser = unwrapMeResponse(res);
+        const response = await getMeApi();
+        const freshUser = unwrapMeResponse(response);
 
         if (isBlockedUserStatus(freshUser)) {
           dispatchBlockedEvent(freshUser);
+          clearCurrentSession();
           return;
         }
 
         setUser(freshUser);
+        userRef.current = freshUser;
         saveAuth({ user: freshUser });
-      } catch (err) {
-        const status = err?.response?.status;
+      } catch (error) {
+        const status = error?.response?.status;
 
         if (status === 401 || status === 403) {
-          if (getAccessToken()) {
-            if (shouldTreatAsBlockedError(err)) {
-              dispatchBlockedErrorEvent(err);
-            } else {
-              dispatchSessionExpiredEvent();
-            }
-          }
-
-          clearAuth();
-          setUser(null);
+          processAuthError(error, {
+            hadKnownUser: Boolean(storedUser),
+            allowSessionPopup: Boolean(storedUser) && !isPublicAuthPage(),
+            allowRestrictedPopup: Boolean(storedUser),
+          });
         } else if (storedUser) {
           setUser(storedUser);
+          userRef.current = storedUser;
         }
       } finally {
         setLoading(false);
@@ -385,7 +462,7 @@ export function AuthProvider({ children }) {
         message:
           event?.detail?.description ||
           event?.detail?.message ||
-          "Your account is currently restricted. Please login again.",
+          "Your account is currently restricted.",
         reason: event?.detail?.reason || "",
         until: event?.detail?.until || "",
       });
@@ -408,27 +485,27 @@ export function AuthProvider({ children }) {
     if (!user) return;
 
     const intervalId = window.setInterval(async () => {
+      const hadKnownUser = Boolean(userRef.current);
+
       try {
-        const res = await getMeApi();
-        const freshUser = unwrapMeResponse(res);
+        const response = await getMeApi();
+        const freshUser = unwrapMeResponse(response);
 
         if (isBlockedUserStatus(freshUser)) {
           dispatchBlockedEvent(freshUser);
+          clearCurrentSession();
           return;
         }
 
         setUser(freshUser);
+        userRef.current = freshUser;
         saveAuth({ user: freshUser });
-      } catch (err) {
-        const status = err?.response?.status;
-
-        if (status === 401 || status === 403) {
-          if (shouldTreatAsBlockedError(err)) {
-            dispatchBlockedErrorEvent(err);
-          } else {
-            dispatchSessionExpiredEvent();
-          }
-        }
+      } catch (error) {
+        processAuthError(error, {
+          hadKnownUser,
+          allowSessionPopup: true,
+          allowRestrictedPopup: true,
+        });
       }
     }, ACCOUNT_STATUS_CHECK_INTERVAL_MS);
 
@@ -438,38 +515,47 @@ export function AuthProvider({ children }) {
   }, [user]);
 
   const handleLoginSuccess = (authData) => {
-    saveAuth(authData);
-    setUser(authData.user);
+    const nextUser = authData?.user || null;
+
+    if (!nextUser) return;
+
+    saveAuth({ user: nextUser });
+    setUser(nextUser);
+    userRef.current = nextUser;
+
+    setBlockedModal({
+      open: false,
+      title: "",
+      message: "",
+      reason: "",
+      until: "",
+    });
   };
 
   const refreshUser = async () => {
+    const hadKnownUser = Boolean(userRef.current || getUserFromStorage());
+
     try {
-      const res = await getMeApi();
-      const freshUser = unwrapMeResponse(res);
+      const response = await getMeApi();
+      const freshUser = unwrapMeResponse(response);
 
       if (isBlockedUserStatus(freshUser)) {
         dispatchBlockedEvent(freshUser);
+        clearCurrentSession();
         return null;
       }
 
       setUser(freshUser);
+      userRef.current = freshUser;
       saveAuth({ user: freshUser });
 
       return freshUser;
-    } catch (err) {
-      if (err?.response?.status === 401 || err?.response?.status === 403) {
-        if (shouldTreatAsBlockedError(err)) {
-          dispatchBlockedErrorEvent(err);
-        } else if (getAccessToken()) {
-          dispatchSessionExpiredEvent();
-        }
-
-        clearAuth();
-        setUser(null);
-      } else {
-        const stored = localStorage.getItem("user");
-        if (stored) setUser(JSON.parse(stored));
-      }
+    } catch (error) {
+      processAuthError(error, {
+        hadKnownUser,
+        allowSessionPopup: hadKnownUser && !isPublicAuthPage(),
+        allowRestrictedPopup: hadKnownUser,
+      });
 
       return null;
     }
@@ -479,26 +565,30 @@ export function AuthProvider({ children }) {
     try {
       await logoutApi();
     } catch {
-      // vẫn clear FE nếu BE logout lỗi
+      // Vẫn clear FE nếu API logout lỗi.
     }
 
-    clearAuth();
+    clearCurrentSession();
     clearLocalDrafts();
 
-    setUser(null);
+    setBlockedModal({
+      open: false,
+      title: "",
+      message: "",
+      reason: "",
+      until: "",
+    });
   };
 
   const handleBlockedModalOk = async () => {
     try {
       await logoutApi();
     } catch {
-      // vẫn clear FE
+      // Vẫn clear FE nếu API logout lỗi.
     }
 
-    clearAuth();
+    clearCurrentSession();
     clearLocalDrafts();
-
-    setUser(null);
 
     setBlockedModal({
       open: false,
@@ -508,7 +598,7 @@ export function AuthProvider({ children }) {
       until: "",
     });
 
-    window.location.href = "/login";
+    window.location.replace("/login");
   };
 
   return (
@@ -538,9 +628,13 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth phải dùng bên trong AuthProvider");
-  return ctx;
+  const context = useContext(AuthContext);
+
+  if (!context) {
+    throw new Error("useAuth phải dùng bên trong AuthProvider");
+  }
+
+  return context;
 }
 
 function AccountBlockedModal({ title, message, reason, until, onOk }) {
@@ -556,10 +650,10 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
   const icon = isSessionExpired
     ? "shield_lock"
     : isBanned
-    ? "block"
-    : isLocked
-    ? "lock_clock"
-    : "admin_panel_settings";
+      ? "block"
+      : isLocked
+        ? "lock_clock"
+        : "admin_panel_settings";
 
   const toneClass = isSessionExpired
     ? "border-yellow-400/40 bg-yellow-400/10 text-yellow-300"
@@ -586,7 +680,7 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
           {message ||
             (isSessionExpired
               ? "Your session is no longer valid. Please login again."
-              : "Your account is currently restricted. Please login again.")}
+              : "Your account is currently restricted.")}
         </p>
 
         {reason && !isSessionExpired && (
@@ -630,7 +724,16 @@ function formatBlockedUntil(value) {
 
   const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return String(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
 
-  return date.toLocaleString();
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }

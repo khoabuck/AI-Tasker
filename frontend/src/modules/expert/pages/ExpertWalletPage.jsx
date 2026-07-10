@@ -5,7 +5,7 @@ import expertWalletService from "../../../services/expertWallet.service";
 
 const quickAmounts = [50000, 100000, 200000, 500000];
 const PAYMENT_CHECK_INTERVAL_MS = 5000;
-const DEPOSIT_EXPIRE_SECONDS = 120;
+const DEFAULT_DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
 
 const popularBanks = [
   "Vietcombank",
@@ -135,6 +135,24 @@ export default function ExpertWalletPage() {
     depositCountdown,
   ]);
 
+  useEffect(() => {
+    if (!showDepositModal || !activeDepositOrder?.depositOrderId) return;
+
+    if (isFinalDepositStatus(activeDepositOrder.status)) {
+      setDepositCountdown(0);
+      setDepositMinimized(false);
+      return;
+    }
+
+    setDepositCountdown(getDepositRemainingSeconds(activeDepositOrder));
+  }, [
+    showDepositModal,
+    activeDepositOrder?.depositOrderId,
+    activeDepositOrder?.createdAt,
+    activeDepositOrder?.expiresAt,
+    activeDepositOrder?.status,
+  ]);
+
   const normalizedTransactions = useMemo(() => {
     return transactions.map((transaction) => ({
       ...transaction,
@@ -142,28 +160,23 @@ export default function ExpertWalletPage() {
     }));
   }, [transactions]);
 
-  const totalDeposited = useMemo(() => {
-    const depositFromTransactions = normalizedTransactions
-      .filter((item) => item.ui.group === "DEPOSIT")
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
-
-    if (depositFromTransactions > 0) return depositFromTransactions;
-
-    return depositOrders
-      .filter((item) => isPaidDepositStatus(item.status))
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
-  }, [normalizedTransactions, depositOrders]);
 
   const totalWithdrawn = useMemo(() => {
     const fromTransactions = normalizedTransactions
-      .filter((item) => item.ui.group === "WITHDRAW")
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
+      .filter((item) => item.ui.group === "WITHDRAW_PAID")
+      .reduce(
+        (total, item) => total + Math.abs(Number(item.amount || 0)),
+        0
+      );
 
     if (fromTransactions > 0) return fromTransactions;
 
     return withdrawals
       .filter((item) => isSuccessStatus(item.status))
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
+      .reduce(
+        (total, item) => total + Math.abs(Number(item.amount || 0)),
+        0
+      );
   }, [normalizedTransactions, withdrawals]);
 
   const activeDepositOrderForPayment = useMemo(() => {
@@ -341,10 +354,15 @@ export default function ExpertWalletPage() {
       const order = await expertWalletService.createDepositOrder({ amount });
 
       if (order) {
-        setActiveDepositOrder(order);
-        setDepositCountdown(getDepositRemainingSeconds(order.createdAt));
+        const normalizedOrder = {
+          ...order,
+          createdAt: order.createdAt || new Date().toISOString(),
+        };
+
+        setActiveDepositOrder(normalizedOrder);
+        setDepositCountdown(getDepositRemainingSeconds(normalizedOrder));
         setDepositMinimized(false);
-        updateDepositOrderInList(order);
+        updateDepositOrderInList(normalizedOrder);
       }
 
       setMessage("Payment QR created. Please transfer the exact amount.");
@@ -378,6 +396,10 @@ export default function ExpertWalletPage() {
       if (detail) {
         setActiveDepositOrder(detail);
         updateDepositOrderInList(detail);
+
+        if (!isFinalDepositStatus(detail.status)) {
+          setDepositCountdown(getDepositRemainingSeconds(detail));
+        }
 
         const currentStatus = String(detail.status || "").toUpperCase();
 
@@ -415,7 +437,7 @@ export default function ExpertWalletPage() {
 
     const isExpired =
       String(order.status || "").toUpperCase() === "PENDING" &&
-      getDepositRemainingSeconds(order.createdAt) <= 0;
+      getDepositRemainingSeconds(order) <= 0;
 
     if (isExpired) return;
 
@@ -430,17 +452,17 @@ export default function ExpertWalletPage() {
       const selectedOrder = detail || order;
       const selectedExpired =
         String(selectedOrder.status || "").toUpperCase() === "PENDING" &&
-        getDepositRemainingSeconds(selectedOrder.createdAt) <= 0;
+        getDepositRemainingSeconds(selectedOrder) <= 0;
 
       if (selectedExpired) return;
 
       setActiveDepositOrder(selectedOrder);
-      setDepositCountdown(getDepositRemainingSeconds(selectedOrder?.createdAt));
+      setDepositCountdown(getDepositRemainingSeconds(selectedOrder));
       setDepositMinimized(false);
       setShowDepositModal(true);
     } catch {
       setActiveDepositOrder(order);
-      setDepositCountdown(getDepositRemainingSeconds(order?.createdAt));
+      setDepositCountdown(getDepositRemainingSeconds(order));
       setDepositMinimized(false);
       setShowDepositModal(true);
     }
@@ -549,9 +571,9 @@ export default function ExpertWalletPage() {
     }
   };
 
-  const openMilestone = (milestoneId) => {
-    if (!milestoneId) return;
-    navigate(`/expert/milestones/${milestoneId}`);
+  const openTransactionTarget = (target) => {
+    if (!target?.path) return;
+    navigate(target.path);
   };
 
   if (loading) {
@@ -648,7 +670,9 @@ export default function ExpertWalletPage() {
               value={formatMoney(balance?.availableBalance)}
               icon="account_balance_wallet"
               tone="cyan"
-              description="Money currently available in your wallet."
+              description={`Withdrawable now: ${formatMoney(
+                withdrawableBalance
+              )}`}
             />
 
             <BalanceCard
@@ -676,17 +700,6 @@ export default function ExpertWalletPage() {
             />
           </section>
 
-          <section className="mb-8 rounded-[1.5rem] border border-yellow-400/20 bg-yellow-400/10 p-5">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-yellow-300">info</span>
-              <div>
-                <h2 className="font-black text-white">How expert earnings work</h2>
-                <p className="mt-2 text-sm leading-6 text-yellow-100/80">
-                  When a milestone is released, the expert service fee is deducted immediately. The net amount goes to pending earnings and becomes available for withdrawal after the project is completed.
-                </p>
-              </div>
-            </div>
-          </section>
 
           <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_430px]">
             <div className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
@@ -731,7 +744,7 @@ export default function ExpertWalletPage() {
                         <TransactionRow
                           key={transaction.transactionId || index}
                           transaction={transaction}
-                          onOpenMilestone={openMilestone}
+                          onOpenTarget={openTransactionTarget}
                         />
                       ))}
                     </tbody>
@@ -1128,7 +1141,7 @@ function DepositModal({
           <div>
             <h2 className="text-xl font-black text-white">Scan QR to pay</h2>
             <p className="mt-1.5 text-xs leading-5 text-gray-500">
-              Complete this payment within 2 minutes.
+              Complete the payment before the countdown reaches zero.
             </p>
           </div>
 
@@ -1452,8 +1465,10 @@ function TableHead({ children }) {
   );
 }
 
-function TransactionRow({ transaction, onOpenMilestone }) {
+function TransactionRow({ transaction, onOpenTarget }) {
   const ui = transaction.ui;
+  const target = getTransactionTarget(transaction);
+  const displayAmount = Math.abs(Number(transaction.amount || 0));
 
   return (
     <tr className="border-b border-white/10 transition hover:bg-white/[0.025]">
@@ -1467,7 +1482,15 @@ function TransactionRow({ transaction, onOpenMilestone }) {
             </span>
           </div>
 
-          <span className="font-bold text-gray-300">{ui.typeLabel}</span>
+          <div>
+            <span className="font-bold text-gray-300">{ui.typeLabel}</span>
+
+            {ui.balanceMovement && (
+              <p className="mt-1 text-[11px] text-gray-600">
+                {ui.balanceMovement}
+              </p>
+            )}
+          </div>
         </div>
       </td>
 
@@ -1476,13 +1499,26 @@ function TransactionRow({ transaction, onOpenMilestone }) {
           {ui.description}
         </p>
 
-        {transaction.milestoneId && (
+        {(transaction.milestoneTitle || transaction.projectTitle) && (
+          <p
+            className="mt-1 max-w-[320px] truncate text-xs text-gray-500"
+            title={[transaction.milestoneTitle, transaction.projectTitle]
+              .filter(Boolean)
+              .join(" • ")}
+          >
+            {[transaction.milestoneTitle, transaction.projectTitle]
+              .filter(Boolean)
+              .join(" • ")}
+          </p>
+        )}
+
+        {target && (
           <button
             type="button"
-            onClick={() => onOpenMilestone(transaction.milestoneId)}
+            onClick={() => onOpenTarget(target)}
             className="mt-2 text-xs font-bold text-cyan-300 transition hover:text-cyan-200"
           >
-            View milestone
+            {target.label}
           </button>
         )}
       </td>
@@ -1493,13 +1529,14 @@ function TransactionRow({ transaction, onOpenMilestone }) {
 
       <td className="px-6 py-5">
         <span className={`font-black ${ui.amountClass}`}>
-          {ui.sign}
-          {formatMoney(transaction.amount)}
+          {ui.hideZeroAmount
+            ? "—"
+            : `${ui.sign}${formatMoney(displayAmount)}`}
         </span>
       </td>
 
       <td className="px-6 py-5">
-        <StatusBadge status={transaction.status} />
+        <StatusBadge status={transaction.statusGroup || transaction.status} />
       </td>
     </tr>
   );
@@ -1508,7 +1545,7 @@ function TransactionRow({ transaction, onOpenMilestone }) {
 function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
   const isPaid = isPaidDepositStatus(order.status);
   const isFinal = isFinalDepositStatus(order.status);
-  const remain = getDepositRemainingSeconds(order.createdAt);
+  const remain = getDepositRemainingSeconds(order);
   const isLocalExpired =
     String(order.status || "").toUpperCase() === "PENDING" && remain <= 0;
 
@@ -1619,16 +1656,170 @@ function Alert({ type, message }) {
 }
 
 function getTransactionPresentation(transaction) {
-  const type = String(transaction.type || "").toUpperCase();
+  const type = normalizeTransactionType(transaction?.type);
   const signedAmount = Number(
-    transaction.signedAmount || transaction.amount || 0
+    transaction?.signedAmount ?? transaction?.amount ?? 0
   );
+
+  if (type === "EXPERT_PENDING_EARNING_RELEASE") {
+    return {
+      group: "INCOME",
+      typeLabel: "Earnings Available",
+      description: cleanDescription(
+        transaction.description,
+        "Project completed. Pending earnings were moved to your available balance."
+      ),
+      balanceMovement: "Pending Earnings → Available Balance",
+      icon: "paid",
+      iconClass:
+        "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: "+",
+      amountClass: "text-green-300",
+    };
+  }
+
+  if (type === "EXPERT_PENDING_EARNING_REFUND") {
+    return {
+      group: "REFUND",
+      typeLabel: "Pending Earning Refunded",
+      description: cleanDescription(
+        transaction.description,
+        "Held earnings were returned to the client."
+      ),
+      balanceMovement: "Pending Earnings → Client Refund",
+      icon: "undo",
+      iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type === "EXPERT_SERVICE_FEE") {
+    return {
+      group: "FEE",
+      typeLabel: "Expert Service Fee",
+      description: cleanDescription(
+        transaction.description,
+        "Expert service fee deducted from the milestone payment."
+      ),
+      balanceMovement: "Milestone Payment → Service Fee",
+      icon: "percent",
+      iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (
+    type === "EXPERT_PENDING_EARNING_HOLD" ||
+    type === "MILESTONE_APPROVED"
+  ) {
+    return {
+      group: "PENDING",
+      typeLabel: "Pending Earning",
+      description: cleanDescription(
+        transaction.description,
+        "Milestone approved. Net earnings are held until project completion."
+      ),
+      balanceMovement: "Milestone Payment → Pending Earnings",
+      icon: "hourglass_top",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "+",
+      amountClass: "text-yellow-300",
+    };
+  }
+
+  if (type === "WITHDRAWAL_HOLD") {
+    return {
+      group: "WITHDRAW_PENDING",
+      typeLabel: "Withdrawal Pending",
+      description: cleanDescription(
+        transaction.description,
+        "The requested amount was moved to locked balance."
+      ),
+      balanceMovement: "Available Balance → Locked Balance",
+      icon: "lock_clock",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type === "WITHDRAWAL_PAYOUT_PROCESSING") {
+    return {
+      group: "WITHDRAW_PROCESSING",
+      typeLabel: "Withdrawal Processing",
+      description: cleanDescription(
+        transaction.description,
+        "The payout provider is processing your withdrawal."
+      ),
+      balanceMovement: "Locked Balance → Payout Processing",
+      icon: "sync",
+      iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      sign: "",
+      amountClass: "text-cyan-300",
+    };
+  }
+
+  if (
+    type === "WITHDRAWAL_PAID" ||
+    type === "WITHDRAWAL_COMPLETED"
+  ) {
+    return {
+      group: "WITHDRAW_PAID",
+      typeLabel: "Withdrawal Paid",
+      description: cleanDescription(
+        transaction.description,
+        "The withdrawal was transferred successfully."
+      ),
+      balanceMovement: "Locked Balance → Bank Account",
+      icon: "account_balance",
+      iconClass:
+        "border-orange-400/20 bg-orange-400/10 text-orange-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (
+    type === "WITHDRAWAL_REJECTED" ||
+    type === "WITHDRAWAL_FAILED" ||
+    type === "WITHDRAWAL_EXPIRED"
+  ) {
+    const label =
+      type === "WITHDRAWAL_REJECTED"
+        ? "Withdrawal Rejected"
+        : type === "WITHDRAWAL_EXPIRED"
+          ? "Withdrawal Expired"
+          : "Withdrawal Failed";
+
+    return {
+      group: "WITHDRAW_REFUND",
+      typeLabel: label,
+      description: cleanDescription(
+        transaction.description,
+        "The held withdrawal amount was returned to your available balance."
+      ),
+      balanceMovement: "Locked Balance → Available Balance",
+      icon: "undo",
+      iconClass:
+        "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: "+",
+      amountClass: "text-green-300",
+    };
+  }
 
   if (type.includes("DEPOSIT") || type.includes("TOP_UP")) {
     return {
       group: "DEPOSIT",
-      typeLabel: "Deposit",
-      description: "Wallet deposit confirmed",
+      typeLabel: "Wallet Deposit",
+      description: cleanDescription(
+        transaction.description,
+        "Wallet deposit confirmed."
+      ),
+      balanceMovement: "Payment Provider → Available Balance",
       icon: "add_card",
       iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
       sign: "+",
@@ -1636,37 +1827,47 @@ function getTransactionPresentation(transaction) {
     };
   }
 
-  if (type.includes("WITHDRAW")) {
+  if (
+    type === "ESCROW_FROZEN" ||
+    type.includes("ESCROW_FROZEN")
+  ) {
     return {
-      group: "WITHDRAW",
-      typeLabel: "Withdrawal",
+      group: "ESCROW",
+      typeLabel: "Escrow Frozen",
       description: cleanDescription(
         transaction.description,
-        "Wallet withdrawal"
+        "The milestone escrow has been frozen."
       ),
-      icon: "account_balance",
-      iconClass: "border-orange-400/20 bg-orange-400/10 text-orange-300",
-      sign: "-",
-      amountClass: "text-red-300",
+      balanceMovement: "Escrow locked during dispute",
+      icon: "lock",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "",
+      amountClass: "text-gray-400",
+      hideZeroAmount: true,
     };
   }
 
   if (
-    type.includes("PENDING_EARNING") ||
-    type.includes("EXPERT_PENDING") ||
-    type.includes("MILESTONE_APPROVED")
+    type.includes("PROPOSAL_CREDIT_PACKAGE") ||
+    type.includes("PACKAGE_PURCHASE") ||
+    type.includes("PROPOSAL_PACKAGE") ||
+    type.includes("SUBSCRIPTION") ||
+    type.includes("PURCHASE")
   ) {
     return {
-      group: "PENDING",
-      typeLabel: "Pending Earning",
+      group: "PAYMENT",
+      typeLabel: "Proposal Credit Package",
       description: cleanDescription(
         transaction.description,
-        "Milestone approved. Earnings are pending project completion."
+        "Proposal credits were purchased."
       ),
-      icon: "hourglass_top",
-      iconClass: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
-      sign: "+",
-      amountClass: "text-yellow-300",
+      balanceMovement: "Available Balance → Package Purchase",
+      icon: "shopping_bag",
+      iconClass:
+        "border-purple-400/20 bg-purple-400/10 text-purple-300",
+      sign: "-",
+      amountClass: "text-red-300",
     };
   }
 
@@ -1676,7 +1877,8 @@ function getTransactionPresentation(transaction) {
     type.includes("ESCROW_RELEASE") ||
     type.includes("MILESTONE")
   ) {
-    const isOutgoing = signedAmount < 0 || transaction.direction === "OUT";
+    const isOutgoing =
+      signedAmount < 0 || transaction.direction === "OUT";
 
     return {
       group: isOutgoing ? "PAYMENT" : "INCOME",
@@ -1684,11 +1886,12 @@ function getTransactionPresentation(transaction) {
       description: cleanDescription(
         transaction.description,
         isOutgoing
-          ? "Escrow payment released"
-          : transaction.milestoneId
-          ? `Payment received for Milestone ${transaction.milestoneId}`
-          : "Expert earning received"
+          ? "Escrow payment released."
+          : "Expert earning received."
       ),
+      balanceMovement: isOutgoing
+        ? "Wallet → Escrow"
+        : "Escrow → Expert Wallet",
       icon: isOutgoing ? "logout" : "paid",
       iconClass: isOutgoing
         ? "border-red-400/20 bg-red-400/10 text-red-300"
@@ -1698,34 +1901,15 @@ function getTransactionPresentation(transaction) {
     };
   }
 
-  if (
-    type.includes("PACKAGE") ||
-    type.includes("PROPOSAL_PACKAGE") ||
-    type.includes("SUBSCRIPTION") ||
-    type.includes("PURCHASE")
-  ) {
-    return {
-      group: "PAYMENT",
-      typeLabel: "Package Purchase",
-      description: cleanDescription(
-        transaction.description,
-        "Proposal package purchase"
-      ),
-      icon: "shopping_bag",
-      iconClass: "border-purple-400/20 bg-purple-400/10 text-purple-300",
-      sign: "-",
-      amountClass: "text-red-300",
-    };
-  }
-
   if (type.includes("FEE")) {
     return {
       group: "FEE",
-      typeLabel: "Expert Service Fee",
+      typeLabel: "Service Fee",
       description: cleanDescription(
         transaction.description,
-        "Service fee deducted from released milestone payment"
+        "A service fee was deducted."
       ),
+      balanceMovement: "Wallet → Service Fee",
       icon: "percent",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
       sign: "-",
@@ -1734,18 +1918,110 @@ function getTransactionPresentation(transaction) {
   }
 
   const isOut = transaction.direction === "OUT" || signedAmount < 0;
+  const isNeutral =
+    transaction.direction === "NEUTRAL" || signedAmount === 0;
 
   return {
-    group: isOut ? "PAYMENT" : "INCOME",
-    typeLabel: isOut ? "Payment" : "Income",
-    description: cleanDescription(transaction.description, "Wallet transaction"),
-    icon: isOut ? "north_east" : "south_west",
-    iconClass: isOut
-      ? "border-red-400/20 bg-red-400/10 text-red-300"
-      : "border-green-400/20 bg-green-400/10 text-green-300",
-    sign: isOut ? "-" : "+",
-    amountClass: isOut ? "text-red-300" : "text-green-300",
+    group: isNeutral
+      ? "OTHER"
+      : isOut
+        ? "PAYMENT"
+        : "INCOME",
+
+    /*
+     * Do not use displayTitle as the transaction type because
+     * the backend may return a long project title in this field.
+     */
+    typeLabel: formatTransactionTypeLabel(
+      transaction.type,
+      isNeutral
+        ? "Wallet Update"
+        : isOut
+          ? "Payment"
+          : "Income"
+    ),
+
+    description: cleanDescription(
+      transaction.description || transaction.displaySubtitle,
+      "Wallet transaction"
+    ),
+
+    balanceMovement: "",
+
+    icon: isNeutral
+      ? "info"
+      : isOut
+        ? "north_east"
+        : "south_west",
+
+    iconClass: isNeutral
+      ? "border-gray-400/20 bg-gray-400/10 text-gray-300"
+      : isOut
+        ? "border-red-400/20 bg-red-400/10 text-red-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
+
+    sign: isNeutral ? "" : isOut ? "-" : "+",
+
+    amountClass: isNeutral
+      ? "text-gray-400"
+      : isOut
+        ? "text-red-300"
+        : "text-green-300",
+
+    hideZeroAmount: isNeutral && signedAmount === 0,
   };
+}
+
+function normalizeTransactionType(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
+function formatTransactionTypeLabel(
+  type,
+  fallback = "Wallet Transaction"
+) {
+  const normalized = normalizeTransactionType(type);
+
+  if (!normalized || normalized === "TRANSACTION") {
+    return fallback;
+  }
+
+  return normalized
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getTransactionTarget(transaction) {
+  const type = normalizeTransactionType(transaction?.type);
+
+  if (
+    type === "EXPERT_PENDING_EARNING_REFUND" &&
+    transaction?.disputeId
+  ) {
+    return {
+      label: "View dispute",
+      path: `/expert/disputes/${transaction.disputeId}`,
+    };
+  }
+
+  if (transaction?.milestoneId) {
+    return {
+      label: "View milestone",
+      path: `/expert/milestones/${transaction.milestoneId}`,
+    };
+  }
+
+  if (transaction?.projectId) {
+    return {
+      label: "View project",
+      path: `/expert/projects/${transaction.projectId}`,
+    };
+  }
+
+  return null;
 }
 
 function getWithdrawalStatusMessage(status) {
@@ -1855,16 +2131,61 @@ function formatFriendlyStatus(status) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function getDepositRemainingSeconds(createdAt) {
-  if (!createdAt) return DEPOSIT_EXPIRE_SECONDS;
+function getDepositRemainingSeconds(orderOrCreatedAt) {
+  const order =
+    orderOrCreatedAt && typeof orderOrCreatedAt === "object"
+      ? orderOrCreatedAt
+      : { createdAt: orderOrCreatedAt };
 
-  const createdTime = new Date(createdAt).getTime();
+  const expiresTime = parseDepositDateTime(order?.expiresAt);
 
-  if (Number.isNaN(createdTime)) return DEPOSIT_EXPIRE_SECONDS;
+  if (Number.isFinite(expiresTime)) {
+    return Math.max(
+      Math.ceil((expiresTime - Date.now()) / 1000),
+      0
+    );
+  }
 
-  const elapsedSeconds = Math.floor((Date.now() - createdTime) / 1000);
+  const createdTime = parseDepositDateTime(order?.createdAt);
 
-  return Math.max(DEPOSIT_EXPIRE_SECONDS - elapsedSeconds, 0);
+  if (Number.isFinite(createdTime)) {
+    const fallbackExpiresAt =
+      createdTime + DEFAULT_DEPOSIT_EXPIRE_SECONDS * 1000;
+
+    return Math.max(
+      Math.ceil((fallbackExpiresAt - Date.now()) / 1000),
+      0
+    );
+  }
+
+  return DEFAULT_DEPOSIT_EXPIRE_SECONDS;
+}
+
+function parseDepositDateTime(value) {
+  if (!value) return Number.NaN;
+
+  const text = String(value).trim();
+
+  /*
+   * Temporary FE workaround:
+   * POST currently returns Vietnam local time with a trailing Z,
+   * while GET returns the same local time without Z.
+   * Remove Z so both responses are interpreted as local time.
+   */
+  if (/Z$/i.test(text)) {
+    const localText = text.replace(/Z$/i, "");
+    const localTime = new Date(localText).getTime();
+
+    if (Number.isFinite(localTime)) {
+      return localTime;
+    }
+  }
+
+  const normalTime = new Date(text).getTime();
+
+  return Number.isFinite(normalTime)
+    ? normalTime
+    : Number.NaN;
 }
 
 function formatRemainingTime(seconds) {
@@ -1901,7 +2222,14 @@ function formatShortDate(value) {
 
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("vi-VN");
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function maskBankAccount(value) {
@@ -1920,7 +2248,7 @@ function isActiveDepositOrder(order) {
 
   return (
     ["PENDING", "PROCESSING", "WAITING"].includes(status) &&
-    getDepositRemainingSeconds(order.createdAt) > 0
+    getDepositRemainingSeconds(order) > 0
   );
 }
 

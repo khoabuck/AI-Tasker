@@ -32,8 +32,8 @@ export default function MyDisputesPage() {
   const filteredDisputes = useMemo(() => {
     if (filter === "ALL") return disputes;
 
-    return disputes.filter(
-      (item) => String(item.status || "").toUpperCase() === filter
+    return disputes.filter((item) =>
+      matchesDisputeFilter(item?.status, filter)
     );
   }, [disputes, filter]);
 
@@ -43,7 +43,7 @@ export default function MyDisputesPage() {
       setError("");
 
       const data = await disputeService.getMyDisputes();
-      setDisputes(data);
+      setDisputes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD MY DISPUTES ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load disputes."));
@@ -117,7 +117,7 @@ export default function MyDisputesPage() {
               </h2>
 
               <p className="mt-2 text-sm text-gray-400">
-                You can open a dispute from a project detail page.
+                You can open a dispute from an eligible milestone detail page.
               </p>
 
               <button
@@ -268,12 +268,14 @@ function Info({ label, value }) {
 }
 
 function StatusBadge({ status }) {
+  const group = getDisputeStatusGroup(status);
+
   const style =
-    status === "RESOLVED" || status === "CLOSED"
+    group === "RESOLVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "UNDER_REVIEW" || status === "OPEN"
+      : group === "ACTIVE"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "REJECTED"
+      : group === "REJECTED"
       ? "border-red-400/30 bg-red-400/10 text-red-300"
       : "border-gray-400/30 bg-gray-400/10 text-gray-300";
 
@@ -293,6 +295,50 @@ function Alert({ title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+
+function getDisputeStatusGroup(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (
+    ["OPEN", "UNDER_REVIEW", "PENDING", "INVESTIGATING", "EVIDENCE_REQUIRED"].includes(
+      value
+    )
+  ) {
+    return "ACTIVE";
+  }
+
+  if (["RESOLVED", "CLOSED", "COMPLETED"].includes(value)) {
+    return "RESOLVED";
+  }
+
+  if (["REJECTED", "CANCELLED", "CANCELED"].includes(value)) {
+    return "REJECTED";
+  }
+
+  return "OTHER";
+}
+
+function matchesDisputeFilter(status, filter) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (filter === "ALL") return true;
+  if (filter === "OPEN") return value === "OPEN";
+  if (filter === "UNDER_REVIEW") {
+    return ["UNDER_REVIEW", "PENDING", "INVESTIGATING", "EVIDENCE_REQUIRED"].includes(
+      value
+    );
+  }
+  if (filter === "RESOLVED") {
+    return ["RESOLVED", "COMPLETED"].includes(value);
+  }
+  if (filter === "CLOSED") return value === "CLOSED";
+  if (filter === "REJECTED") {
+    return ["REJECTED", "CANCELLED", "CANCELED"].includes(value);
+  }
+
+  return value === filter;
 }
 
 function formatMoney(value) {

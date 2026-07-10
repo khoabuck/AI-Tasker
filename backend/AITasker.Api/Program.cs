@@ -192,84 +192,133 @@ builder.Services
             ClockSkew = TimeSpan.Zero
         };
 
-        options.Events = new JwtBearerEvents
+       options.Events = new JwtBearerEvents
+{
+    OnMessageReceived = context =>
+    {
+        var cookieToken = context.Request.Cookies["access_token"];
+
+        if (!string.IsNullOrWhiteSpace(cookieToken))
         {
-            OnMessageReceived = context =>
-            {
-                var cookieToken = context.Request.Cookies["access_token"];
+            context.Token = cookieToken;
+            return Task.CompletedTask;
+        }
 
-                if (!string.IsNullOrWhiteSpace(cookieToken))
-                {
-                    context.Token = cookieToken;
-                    return Task.CompletedTask;
-                }
+        var accessToken = context.Request.Query["access_token"];
+        var path = context.HttpContext.Request.Path;
 
-                var accessToken = context.Request.Query["access_token"];
-                var path = context.HttpContext.Request.Path;
+        if (!string.IsNullOrEmpty(accessToken)
+            && path.StartsWithSegments("/hubs"))
+        {
+            context.Token = accessToken;
+        }
 
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
-                {
-                    context.Token = accessToken;
-                }
+        return Task.CompletedTask;
+    },
 
-                return Task.CompletedTask;
-            },
+    OnTokenValidated = async context =>
+    {
+        var userIdValue =
+            context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? context.Principal?.FindFirstValue("userId");
 
-            OnTokenValidated = async context =>
-            {
-                var userIdValue =
-                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
-                    ?? context.Principal?.FindFirstValue("userId");
+        if (!int.TryParse(userIdValue, out var userId))
+        {
+            context.Fail("INVALID_USER_TOKEN");
+            return;
+        }
 
-                if (!int.TryParse(userIdValue, out var userId))
-                {
-                    context.Fail("Invalid user token.");
-                    return;
-                }
+        var dbContext = context.HttpContext.RequestServices
+            .GetRequiredService<AITaskerDbContext>();
 
-                var dbContext = context.HttpContext.RequestServices
-                    .GetRequiredService<AITaskerDbContext>();
+        var user = await dbContext.Users
+            .FirstOrDefaultAsync(x => x.UserId == userId);
 
-                var user = await dbContext.Users
-                    .FirstOrDefaultAsync(x => x.UserId == userId);
+        if (user == null)
+        {
+            context.Fail("USER_NOT_FOUND");
+            return;
+        }
 
-                if (user == null)
-                {
-                    context.Fail("User account no longer exists.");
-                    return;
-                }
+        var nowUtc = DateTime.UtcNow;
 
-                var nowUtc = DateTime.UtcNow;
+        // Tự động mở khóa khi hết thời gian suspend
+        if (user.Status == "SUSPENDED"
+            && user.LockoutEnd.HasValue
+            && user.LockoutEnd.Value <= nowUtc)
+        {
+            user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
+                ? "ACTIVE"
+                : user.StatusBeforeSuspension;
 
-                if (user.Status == "SUSPENDED"
-                    && user.LockoutEnd.HasValue
-                    && user.LockoutEnd.Value <= nowUtc)
-                {
-                    user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
-                        ? "ACTIVE"
-                        : user.StatusBeforeSuspension;
+            user.StatusBeforeSuspension = null;
+            user.LockoutEnd = null;
+            user.LockReason = null;
+            user.UpdatedAt = nowUtc;
 
-                    user.StatusBeforeSuspension = null;
-                    user.LockoutEnd = null;
-                    user.LockReason = null;
-                    user.UpdatedAt = nowUtc;
+            await dbContext.SaveChangesAsync();
+        }
 
-                    await dbContext.SaveChangesAsync();
-                }
+        if (user.Status == "BANNED")
+        {
+            context.HttpContext.Items["AccountStatus"] = "BANNED";
+            context.HttpContext.Items["AccountMessage"] =
+                "Your account has been banned.";
+            context.HttpContext.Items["AccountReason"] =
+                user.BanReason ?? "";
 
-                if (user.Status == "BANNED")
-                {
-                    context.Fail("Your account is banned.");
-                    return;
-                }
+            context.Fail("ACCOUNT_BANNED");
+            return;
+        }
 
-                if (user.Status == "SUSPENDED")
-                {
-                    context.Fail("Your account is temporarily locked.");
-                    return;
-                }
-            }
+        if (user.Status == "SUSPENDED")
+        {
+            context.HttpContext.Items["AccountStatus"] = "SUSPENDED";
+            context.HttpContext.Items["AccountMessage"] =
+                "Your account is temporarily locked.";
+            context.HttpContext.Items["AccountReason"] =
+                user.LockReason ?? "";
+            context.HttpContext.Items["AccountLockedUntil"] =
+                user.LockoutEnd;
+
+            context.Fail("ACCOUNT_SUSPENDED");
+            return;
+        }
+    },
+
+    OnChallenge = async context =>
+    {
+        var accountStatus =
+            context.HttpContext.Items["AccountStatus"]?.ToString();
+
+        if (accountStatus != "BANNED"
+            && accountStatus != "SUSPENDED")
+        {
+            return;
+        }
+
+        context.HandleResponse();
+
+        context.Response.StatusCode =
+            StatusCodes.Status401Unauthorized;
+
+        context.Response.ContentType = "application/json";
+
+        var response = new
+        {
+            success = false,
+            status = accountStatus,
+            message =
+                context.HttpContext.Items["AccountMessage"]?.ToString(),
+            reason =
+                context.HttpContext.Items["AccountReason"]?.ToString(),
+            lockedUntil =
+                context.HttpContext.Items["AccountLockedUntil"]
         };
+
+        await context.Response.WriteAsJsonAsync(response);
+    }
+};
     })
     .AddCookie("External", options =>
     {

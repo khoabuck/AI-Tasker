@@ -5,7 +5,6 @@ import disputeService from "../../../services/dispute.service";
 import {
   DISPUTE_STATUS_LABEL,
   RESOLUTION_TYPE_LABEL,
-  isDisputeResolved,
 } from "../../../constants/disputeStatus";
 
 const emptyEvidenceForm = {
@@ -33,11 +32,11 @@ export default function DisputeDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disputeId]);
 
-  const loadDispute = async () => {
+  const loadDispute = async ({ preserveMessage = false } = {}) => {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
+      if (!preserveMessage) setMessage("");
 
       const data = await disputeService.getDisputeById(disputeId);
 
@@ -110,10 +109,9 @@ export default function DisputeDetailPage() {
         await disputeService.addDisputeEvidence(disputeId, evidenceForm);
       }
 
-      setMessage("Evidence submitted successfully.");
       setEvidenceForm(emptyEvidenceForm);
-
-      await loadDispute();
+      await loadDispute({ preserveMessage: true });
+      setMessage("Evidence submitted successfully.");
     } catch (err) {
       console.error("ADD EVIDENCE ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot submit evidence."));
@@ -157,7 +155,8 @@ export default function DisputeDetailPage() {
   }
 
   const status = String(dispute.status || "").toUpperCase();
-  const resolved = isDisputeResolved(status);
+  const resolved = isDisputeClosed(status);
+  const evidences = Array.isArray(dispute.evidences) ? dispute.evidences : [];
 
   return (
     <ExpertLayout>
@@ -282,7 +281,7 @@ export default function DisputeDetailPage() {
               </Card>
 
               <Card title="Evidence Timeline">
-                {dispute.evidences.length === 0 ? (
+                {evidences.length === 0 ? (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
                     <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
                       folder_open
@@ -298,7 +297,7 @@ export default function DisputeDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {dispute.evidences.map((item) => (
+                    {evidences.map((item) => (
                       <EvidenceItem key={item.evidenceId} evidence={item} />
                     ))}
                   </div>
@@ -361,13 +360,12 @@ export default function DisputeDetailPage() {
                 </Card>
               )}
 
-              <Card title="Add Evidence">
-                {resolved && (
-                  <div className="mb-5 rounded-xl border border-yellow-400/30 bg-yellow-400/10 px-5 py-4 text-sm text-yellow-200">
-                    This dispute is resolved. You should not submit new evidence.
+              <Card title={resolved ? "Evidence Closed" : "Add Evidence"}>
+                {resolved ? (
+                  <div className="rounded-xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-sm leading-6 text-green-100">
+                    This dispute is closed. The evidence form is no longer available.
                   </div>
-                )}
-
+                ) : (
                 <form onSubmit={handleSubmitEvidence} className="space-y-5">
                   <Field label="Evidence Text">
                     <textarea
@@ -432,6 +430,7 @@ export default function DisputeDetailPage() {
                     {submittingEvidence ? "Submitting..." : "Submit Evidence"}
                   </button>
                 </form>
+                )}
               </Card>
             </aside>
           </div>
@@ -523,10 +522,12 @@ function Info({ label, value }) {
 }
 
 function StatusBadge({ status }) {
+  const group = getDisputeStatusGroup(status);
+
   const style =
-    status === "RESOLVED"
+    group === "RESOLVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "UNDER_REVIEW"
+      : group === "ACTIVE"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
       : "border-red-400/30 bg-red-400/10 text-red-300";
 
@@ -551,6 +552,29 @@ function Alert({ type, title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+
+function getDisputeStatusGroup(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (
+    ["OPEN", "UNDER_REVIEW", "PENDING", "INVESTIGATING", "EVIDENCE_REQUIRED"].includes(
+      value
+    )
+  ) {
+    return "ACTIVE";
+  }
+
+  if (["RESOLVED", "CLOSED", "COMPLETED"].includes(value)) {
+    return "RESOLVED";
+  }
+
+  return "REJECTED";
+}
+
+function isDisputeClosed(status) {
+  return getDisputeStatusGroup(status) !== "ACTIVE";
 }
 
 function formatMoney(value) {
