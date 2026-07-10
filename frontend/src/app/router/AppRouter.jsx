@@ -10,8 +10,8 @@ import VerifyEmailNoticePage from "../../modules/auth/pages/VerifyEmailNoticePag
 import ForgotPasswordPage from "../../modules/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
-import SelectRolePage from "../../modules/auth/pages/SelectrolePage";
-import SetupProfilePage from "../../modules/auth/pages/SetupprofilePage";
+import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
+import SetupProfilePage from "../../modules/auth/pages/SetupProfilePage";
 import { useAuth } from "../../context/AuthContext";
 
 // Guest pages
@@ -25,7 +25,7 @@ import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
-import ProjectsPage from "../../modules/client/pages/ProjectsPage";
+import ProjectsPage from "../../modules/client/pages/ProjectPage";
 import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
