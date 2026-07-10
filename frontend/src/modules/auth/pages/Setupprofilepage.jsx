@@ -111,21 +111,24 @@ export default function SetupProfilePage() {
         const data = res.data;
 
         if (data?.userStatus === "ACTIVE") {
-        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+          const meRes = await axiosInstance.get("/auth/me");
+          const meData = meRes?.data;
 
-        const updatedUser = {
-          ...currentUser,
-          role: "CLIENT",
-          status: "ACTIVE",
-        };
+          const freshUser =
+            meData?.data?.user ||
+            meData?.data?.User ||
+            meData?.data ||
+            meData?.user ||
+            meData?.User ||
+            meData;
 
-        handleLoginSuccess({
-          user: updatedUser,
-        });
+          handleLoginSuccess({
+            user: freshUser,
+          });
 
-        navigate("/client/dashboard", { replace: true });
-        return;
-      }
+          navigate("/client/dashboard", { replace: true });
+          return;
+        }
 
         const bp = data?.businessProfile || null;
         const isBusiness = data?.clientType === "BUSINESS" || Boolean(bp);

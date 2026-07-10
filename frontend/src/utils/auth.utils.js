@@ -1,5 +1,5 @@
 // Chỉ lưu user để hiển thị UI.
-// JWT/accessToken nằm trong HttpOnly cookie do backend set.
+// Phiên đăng nhập nằm trong HttpOnly cookie do backend set.
 export const saveAuth = (authData) => {
   if (!authData) return;
 
@@ -8,25 +8,19 @@ export const saveAuth = (authData) => {
   }
 };
 
-// Giữ hàm này để tránh lỗi import cũ.
-// Không dùng localStorage để xác thực nữa.
-export const getAccessToken = () => null;
-
 export const getUserFromStorage = () => {
   const raw = localStorage.getItem("user");
   if (!raw) return null;
+
   try {
     return JSON.parse(raw);
   } catch {
+    localStorage.removeItem("user");
     return null;
   }
 };
 
 export const clearAuth = () => {
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("token");
-  localStorage.removeItem("authToken");
-  localStorage.removeItem("refreshToken");
   localStorage.removeItem("user");
   localStorage.removeItem("role");
   localStorage.removeItem("currentUser");

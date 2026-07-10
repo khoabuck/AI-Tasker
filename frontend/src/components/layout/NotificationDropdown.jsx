@@ -39,6 +39,11 @@ const TYPE_CONFIG = {
     color: "text-cyan-400",
     bg: "bg-cyan-400/10",
   },
+  DEPOSIT_EXPIRED: {
+  icon: "schedule",
+  color: "text-red-400",
+  bg: "bg-red-400/10",
+},
   WITHDRAWAL: {
     icon: "outbox",
     color: "text-yellow-400",
@@ -245,6 +250,7 @@ function getNotificationTargetUrl(notification) {
         : "/client/wallet";
 
     case "DEPOSIT":
+    case "DEPOSIT_EXPIRED":
     case "WITHDRAWAL":
     case "WITHDRAWAL_APPROVED":
     case "WITHDRAWAL_REJECTED":

@@ -37,7 +37,7 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const { handleLoginSuccess } = useAuth();
+  const { user, handleLoginSuccess, refreshUser } = useAuth();
 
   const [selected, setSelected] = useState(null);
   const [lockedRole, setLockedRole] = useState(null);
@@ -45,12 +45,10 @@ export default function SelectRolePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) return;
+    if (!user) return;
 
-    const user = JSON.parse(storedUser);
-    const role = String(user?.role || "").toUpperCase();
-    const status = String(user?.status || "").toUpperCase();
+    const role = String(user?.role || "").trim().toUpperCase();
+    const status = String(user?.status || "").trim().toUpperCase();
 
     if (status === "PENDING_ROLE" || !role) {
       setLockedRole(null);
@@ -58,8 +56,6 @@ export default function SelectRolePage() {
     }
 
     if (status === "PENDING_PROFILE") {
-      // User đã chọn role rồi, cho hiện lại trang chọn role
-      // nhưng khóa role hiện tại, không tự đá về setup nữa.
       setSelected(role);
       setLockedRole(role);
       return;
@@ -71,7 +67,7 @@ export default function SelectRolePage() {
       else if (role === "ADMIN") navigate("/admin/dashboard", { replace: true });
       else navigate("/", { replace: true });
     }
-  }, [navigate]);
+  }, [navigate, user]);
 
   const redirectAfterRoleSelected = (role) => {
     const normalizedRole = String(role || "").toUpperCase();
@@ -89,43 +85,51 @@ export default function SelectRolePage() {
     navigate("/setup-profile", { replace: true });
   };
 
-  const redirectExistingUser = () => {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    const role = String(user?.role || "").toUpperCase();
-    const status = String(user?.status || "").toUpperCase();
+  const redirectExistingUser = async () => {
+  let latestUser = user;
 
-    if (status === "ACTIVE") {
-      if (role === "CLIENT") {
-        navigate("/client/dashboard", { replace: true });
-        return;
-      }
+  try {
+    const refreshedUser = await refreshUser();
+    if (refreshedUser) latestUser = refreshedUser;
+  } catch {
+    // Nếu refresh lỗi thì dùng user hiện tại trong context.
+  }
 
-      if (role === "EXPERT") {
-        navigate("/expert/dashboard", { replace: true });
-        return;
-      }
+  const role = String(latestUser?.role || "").trim().toUpperCase();
+  const status = String(latestUser?.status || "").trim().toUpperCase();
 
-      if (role === "ADMIN") {
-        navigate("/admin/dashboard", { replace: true });
-        return;
-      }
-
-      navigate("/", { replace: true });
+  if (status === "ACTIVE") {
+    if (role === "CLIENT") {
+      navigate("/client/dashboard", { replace: true });
       return;
     }
 
-    if (status === "PENDING_PROFILE") {
-      if (role === "EXPERT") {
-        navigate("/expert/setup-profile", { replace: true });
-        return;
-      }
+    if (role === "EXPERT") {
+      navigate("/expert/dashboard", { replace: true });
+      return;
+    }
 
-      navigate("/setup-profile", { replace: true });
+    if (role === "ADMIN") {
+      navigate("/admin/dashboard", { replace: true });
+      return;
+    }
+
+    navigate("/", { replace: true });
+    return;
+  }
+
+  if (status === "PENDING_PROFILE") {
+    if (role === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
       return;
     }
 
     navigate("/setup-profile", { replace: true });
-  };
+    return;
+  }
+
+  navigate("/setup-profile", { replace: true });
+};
 
   const handleConfirm = async () => {
     if (!selected) return;
@@ -146,7 +150,6 @@ export default function SelectRolePage() {
       });
 
       const responseData = selectResponse?.data || {};
-      const oldUser = JSON.parse(localStorage.getItem("user") || "{}");
 
       const userFromResponse =
         responseData.user ||
@@ -157,13 +160,14 @@ export default function SelectRolePage() {
         responseData;
 
       const selectedUser = authService.normalizeUser({
-        ...oldUser,
+        ...(user || {}),
         ...userFromResponse,
         role: selected,
-        status: userFromResponse?.status || userFromResponse?.Status || "PENDING_PROFILE",
+        status:
+          userFromResponse?.status ||
+          userFromResponse?.Status ||
+          "PENDING_PROFILE",
       });
-
-      localStorage.setItem("user", JSON.stringify(selectedUser));
 
       if (handleLoginSuccess) {
         handleLoginSuccess({
@@ -181,7 +185,7 @@ export default function SelectRolePage() {
         "An error occurred during role selection.";
 
       if (message === "User is not in pending role status.") {
-        redirectExistingUser();
+        await redirectExistingUser();
         return;
       }
 

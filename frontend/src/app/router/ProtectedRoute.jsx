@@ -38,7 +38,6 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     ROUTES.EXPERT_LOCKED,
   ].includes(pathname);
 
-  const isExpertLockedPage = pathname === "/expert/profile-locked";
 
   if (status === "PENDING_ROLE") {
     return <Navigate to="/select-role" replace />;
@@ -74,7 +73,19 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   const normalizedRoles = allowedRoles?.map(r => String(r).toUpperCase());
 
   if (normalizedRoles?.length && !normalizedRoles.includes(role)) {
-    return <Navigate to="/unauthorized" replace />;
+    if (role === "CLIENT") {
+      return <Navigate to="/client/dashboard" replace />;
+    }
+
+    if (role === "EXPERT") {
+      return <Navigate to="/expert/dashboard" replace />;
+    }
+
+    if (role === "ADMIN") {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+
+    return <Navigate to="/" replace />;
   }
 
   return children;

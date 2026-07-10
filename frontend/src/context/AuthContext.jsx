@@ -1,34 +1,44 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getMeApi } from "../api/auth.api";
 import authService from "../services/auth.service";
-import { saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
+import { saveAuth, clearAuth } from "../utils/auth.utils";
 
 const AuthContext = createContext(null);
+
+const extractUser = (res) => {
+  const data = res?.data ?? res;
+
+  return (
+    data?.data?.user ||
+    data?.data?.User ||
+    data?.data ||
+    data?.user ||
+    data?.User ||
+    data
+  );
+};
+
+const isValidUser = (user) => {
+  return Boolean(user?.userId || user?.UserId || user?.email || user?.Email);
+};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Khi reload trang: gọi /auth/me để backend kiểm tra HttpOnly cookie
+  // Khi reload trang: luôn gọi /auth/me để backend kiểm tra HttpOnly cookie.
+  // Không dùng localStorage làm nguồn xác thực/phân quyền.
   useEffect(() => {
     const restore = async () => {
-      const storedUser = getUserFromStorage();
-      const storedStatus = String(storedUser?.status || "").toUpperCase();
-
-      const isIncompleteOnboarding = [
-        "PENDING_ROLE",
-        "PENDING_EMAIL_VERIFICATION",
-      ].includes(storedStatus);
-
-      if (isIncompleteOnboarding && storedUser) {
-        setUser(storedUser);
-        setLoading(false);
-        return;
-      }
-
       try {
         const res = await getMeApi();
-        const freshUser = res?.data?.data || res?.data || res;
+        const freshUser = extractUser(res);
+
+        if (!isValidUser(freshUser)) {
+          clearAuth();
+          setUser(null);
+          return;
+        }
 
         setUser(freshUser);
         saveAuth({ user: freshUser });
@@ -45,6 +55,12 @@ export function AuthProvider({ children }) {
 
   // Gọi sau khi login thành công
   const handleLoginSuccess = (authData) => {
+    if (!authData?.user) {
+      clearAuth();
+      setUser(null);
+      return;
+    }
+
     saveAuth({ user: authData.user });
     setUser(authData.user);
   };
@@ -53,18 +69,25 @@ export function AuthProvider({ children }) {
   const refreshUser = async () => {
     try {
       const res = await getMeApi();
-      const freshUser = res?.data?.data || res?.data || res;
+      const freshUser = extractUser(res);
+
+      if (!isValidUser(freshUser)) {
+        clearAuth();
+        setUser(null);
+        return null;
+      }
 
       setUser(freshUser);
       saveAuth({ user: freshUser });
+
+      return freshUser;
     } catch (err) {
       if (err?.response?.status === 401 || err?.response?.status === 403) {
         clearAuth();
         setUser(null);
-      } else {
-        const stored = getUserFromStorage();
-        if (stored) setUser(stored);
       }
+
+      throw err;
     }
   };
 
@@ -76,6 +99,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("aitasker_expert_profile_setup_draft");
     localStorage.removeItem("aitasker_expert_profile_edit_draft");
     localStorage.removeItem("aitasker_expert_profile_correction_draft");
+
+    sessionStorage.clear();
 
     setUser(null);
   };

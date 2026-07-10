@@ -17,17 +17,6 @@ export default function LoginPage() {
   const [focusField, setFocusField] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const clearAuthSession = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
-    localStorage.removeItem("currentUser");
-  };
-
-
   const handleChange = (event) => {
     const { name, value } = event.target;
 
@@ -135,19 +124,23 @@ export default function LoginPage() {
       }
 
 
-      const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+      const finalUser = result.user;
 
-      const finalUser = result.user || storedUser || {};
-      const finalRole = finalUser.role || storedUser.role || result.role;
-      const finalStatus = finalUser.status || storedUser.status || result.status;
+    if (!finalUser) {
+      setError("Login response does not contain user information.");
+      return;
+    }
 
-      handleLoginSuccess({
-        user: {
-          ...finalUser,
-          role: finalRole,
-          status: finalStatus,
-        },
-      });
+    const finalRole = finalUser.role || result.role;
+    const finalStatus = finalUser.status || result.status;
+
+    handleLoginSuccess({
+      user: {
+        ...finalUser,
+        role: finalRole,
+        status: finalStatus,
+      },
+    });
 
 
       goNextByRoleAndStatus({
@@ -482,7 +475,6 @@ export default function LoginPage() {
               Don&apos;t have an account?{" "}
               <Link
                 to="/register"
-                onClick={clearAuthSession}
                 className="ml-1 font-semibold text-neon-cyan hover:underline"
               >
                 Register

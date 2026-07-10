@@ -23,6 +23,11 @@ const TYPE_CONFIG = {
   CONTRACT_CONFIRMED_ESCROW_LOCKED: { icon: "lock", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
 
   DEPOSIT: { icon: "add_card", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
+  DEPOSIT_EXPIRED: {
+  icon: "schedule",
+  color: "#ef4444",
+  bg: "rgba(239,68,68,0.1)",
+},
   WITHDRAWAL: { icon: "outbox", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
   WITHDRAWAL_APPROVED: { icon: "check_circle", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
   WITHDRAWAL_REJECTED: { icon: "cancel", color: "#ef4444", bg: "rgba(239,68,68,0.1)" },
@@ -170,6 +175,7 @@ function getNotificationTargetUrl(notification) {
         : "/client/wallet";
 
     case "DEPOSIT":
+    case "DEPOSIT_EXPIRED":
     case "WITHDRAWAL":
     case "WITHDRAWAL_APPROVED":
     case "WITHDRAWAL_REJECTED":

@@ -10,8 +10,8 @@ import VerifyEmailNoticePage from "../../modules/auth/pages/VerifyEmailNoticePag
 import ForgotPasswordPage from "../../modules/auth/pages/ForgotPasswordPage";
 import ResetPasswordPage from "../../modules/auth/pages/ResetPasswordPage";
 import OAuthCallbackPage from "../../modules/auth/pages/OAuthCallbackPage";
-import SelectRolePage from "../../modules/auth/pages/SelectRolePage";
-import SetupProfilePage from "../../modules/auth/pages/SetupProfilepage";
+import SelectRolePage from "../../modules/auth/pages/SelectrolePage";
+import SetupProfilePage from "../../modules/auth/pages/SetupprofilePage";
 import { useAuth } from "../../context/AuthContext";
 
 // Guest pages

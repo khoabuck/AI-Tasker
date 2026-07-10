@@ -6,34 +6,7 @@ import {
   updateMyAvatarApi,
 } from "../api/auth.api";
 
-const USE_MOCK = false;
 
-const MOCK_USERS = [
-  {
-    email: "client@test.com",
-    password: "123456",
-    role: "CLIENT",
-    status: "ACTIVE",
-    userId: 1,
-    fullName: "Test Client",
-  },
-  {
-    email: "expert@test.com",
-    password: "123456",
-    role: "EXPERT",
-    status: "ACTIVE",
-    userId: 2,
-    fullName: "Test Expert",
-  },
-  {
-    email: "admin@test.com",
-    password: "123456",
-    role: "ADMIN",
-    status: "ACTIVE",
-    userId: 3,
-    fullName: "Test Admin",
-  },
-];
 
 const getValue = (...values) => {
   return values.find(
@@ -95,6 +68,10 @@ const normalizeUser = (user) => {
   };
 };
 
+const isValidUser = (user) => {
+  return Boolean(Number(user?.userId) > 0 && user?.email);
+};
+
 
 
 const getCurrentUserFromStorage = () => {
@@ -102,6 +79,7 @@ const getCurrentUserFromStorage = () => {
     const user = localStorage.getItem("user");
     return user ? JSON.parse(user) : null;
   } catch {
+    localStorage.removeItem("user");
     return null;
   }
 };
@@ -111,9 +89,12 @@ const saveUserToLocalStorage = (user) => {
 
   const normalizedUser = normalizeUser(user);
 
-  if (normalizedUser) {
-    localStorage.setItem("user", JSON.stringify(normalizedUser));
+  if (!isValidUser(normalizedUser)) {
+    localStorage.removeItem("user");
+    return null;
   }
+
+  localStorage.setItem("user", JSON.stringify(normalizedUser));
 
   return normalizedUser;
 };
@@ -126,9 +107,11 @@ const mergeUserToLocalStorage = (newUserData) => {
     ...(newUserData || {}),
   });
 
-  if (mergedUser) {
-    localStorage.setItem("user", JSON.stringify(mergedUser));
+  if (!isValidUser(mergedUser)) {
+    return null;
   }
+
+  localStorage.setItem("user", JSON.stringify(mergedUser));
 
   return mergedUser;
 };
@@ -143,34 +126,6 @@ const getFriendlyError = (error, fallback) => {
 
 const authService = {
   login: async (credentials) => {
-  if (USE_MOCK) {
-    await new Promise((res) => setTimeout(res, 500));
-
-    const user = MOCK_USERS.find(
-      (item) =>
-        item.email === credentials.email &&
-        item.password === credentials.password
-    );
-
-    if (!user) {
-      return {
-        success: false,
-        message: "Invalid email or password.",
-      };
-    }
-
-    const { password, ...userInfo } = user;
-
-    localStorage.setItem("user", JSON.stringify(userInfo));
-
-    return {
-      success: true,
-      user: userInfo,
-      role: userInfo.role,
-      status: userInfo.status,
-    };
-  }
-
   try {
     const data = await loginApi(credentials);
 
@@ -193,10 +148,10 @@ const authService = {
       }
     }
 
-    if (!user) {
+    if (!isValidUser(user)) {
       return {
         success: false,
-        message: "Login response does not contain user information.",
+        message: "Login response does not contain valid user information.",
       };
     }
 
@@ -227,10 +182,6 @@ const authService = {
       // Vẫn xóa local state nếu BE logout lỗi.
     }
 
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("refreshToken");
     localStorage.removeItem("user");
     localStorage.removeItem("role");
     localStorage.removeItem("currentUser");
@@ -242,24 +193,32 @@ const authService = {
     sessionStorage.clear();
 
     // Báo cho các tab khác biết user đã logout.
-    localStorage.setItem("aitasker_logout_at", String(Date.now()));
+    localStorage.setItem(
+      "aitasker_logout_at",
+      `${Date.now()}-${Math.random()}`
+    );
   },
 
-  getCurrentUser: () => {
-    return getCurrentUserFromStorage();
-  },
+    // Chỉ dùng làm UI cache, ví dụ hiển thị tên/avatar.
+    // Không dùng hàm này để phân quyền route.
+    getCurrentUser: () => {
+      return getCurrentUserFromStorage();
+    },
 
-  getToken: () => {
-    return null;
-  },
+    getToken: () => {
+      return null;
+    },
 
-  refreshCurrentUser: async () => {
+    refreshCurrentUser: async () => {
     const data = await getMeApi();
     const user = normalizeUser(unwrapUserData(data));
 
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
+    if (!isValidUser(user)) {
+      localStorage.removeItem("user");
+      return null;
     }
+
+    localStorage.setItem("user", JSON.stringify(user));
 
     return user;
   },
@@ -280,7 +239,7 @@ const authService = {
 
     let updatedUser = normalizeUser(unwrapUserData(data));
 
-    if (updatedUser?.userId) {
+    if (isValidUser(updatedUser)) {
       return saveUserToLocalStorage(updatedUser);
     }
 
@@ -297,18 +256,7 @@ const authService = {
     });
   },
 
-  isAuthenticated: () => {
-    return Boolean(authService.getCurrentUser());
-  },
-
-  getRole: () => {
-    return authService.getCurrentUser()?.role || null;
-  },
-
-  getStatus: () => {
-    return authService.getCurrentUser()?.status || null;
-  },
-
+  
   normalizeUser,
 };
 

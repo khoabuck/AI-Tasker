@@ -7,7 +7,7 @@ if (!BACKEND_BASE_URL) {
 }
 
 // POST /api/auth/register
-// Không trả accessToken — user phải verify email trước
+// Không trả token đăng nhập về frontend — user phải verify email trước
 export const registerApi = async ({ fullName, email, password }) => {
   const res = await axiosInstance.post("/auth/register", {
     fullName,
