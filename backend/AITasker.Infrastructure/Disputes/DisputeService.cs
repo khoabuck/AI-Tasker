@@ -150,6 +150,7 @@ namespace AITasker.Infrastructure.Disputes
                 }
 
                 Milestone? milestone = null;
+                Deliverable? disputedDeliverable = null;
                 Escrow? escrow = null;
 
                 if (request.MilestoneId.HasValue)
@@ -160,6 +161,10 @@ namespace AITasker.Infrastructure.Disputes
                     {
                         throw new InvalidOperationException("Milestone does not belong to this project.");
                     }
+
+                    disputedDeliverable = await ResolveDisputedDeliverableAsync(
+                        request.DeliverableId,
+                        milestone.MilestoneId);
 
                     EnsureMilestoneReadyForDispute(
                         milestone);
@@ -215,6 +220,12 @@ namespace AITasker.Infrastructure.Disputes
                 }
                 else
                 {
+                    if (request.DeliverableId.HasValue)
+                    {
+                        throw new InvalidOperationException(
+                            "DeliverableId can only be provided for a milestone-level dispute.");
+                    }
+
                     var lockedEscrows = await _context.Escrows
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
@@ -275,6 +286,7 @@ namespace AITasker.Infrastructure.Disputes
                 {
                     ProjectId = project.ProjectId,
                     MilestoneId = request.MilestoneId,
+                    DeliverableId = disputedDeliverable?.DeliverableId,
                     OpenedByUserId = currentUserId,
                     RespondentUserId = respondentUserId,
                     Reason = request.Reason.Trim(),
@@ -730,7 +742,8 @@ namespace AITasker.Infrastructure.Disputes
                             ? PaymentStatusReleased
                             : PaymentStatusRefunded;
 
-                        await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                        await MarkDisputedDeliverableAfterResolutionAsync(
+                            dispute,
                             projectMilestone.MilestoneId,
                             normalizedResolutionType);
                     }
@@ -743,7 +756,8 @@ namespace AITasker.Infrastructure.Disputes
                         ? PaymentStatusReleased
                         : PaymentStatusRefunded;
 
-                    await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                    await MarkDisputedDeliverableAfterResolutionAsync(
+                        dispute,
                         milestone.MilestoneId,
                         normalizedResolutionType);
                 }
@@ -801,33 +815,80 @@ namespace AITasker.Infrastructure.Disputes
             }
         }
 
-        private async Task MarkLatestDeliverableAfterDisputeResolutionAsync(
+        /// <summary>
+        /// Updates the exact deliverable version captured when the dispute was opened.
+        /// Legacy disputes without a captured deliverable fall back to the latest submitted version.
+        /// </summary>
+        private async Task MarkDisputedDeliverableAfterResolutionAsync(
+            Dispute dispute,
             int milestoneId,
             string normalizedResolutionType)
         {
-            var latestDeliverable = await _context.Deliverables
+            Deliverable? deliverable = null;
+
+            if (dispute.DeliverableId.HasValue)
+            {
+                deliverable = await _context.Deliverables
+                    .FirstOrDefaultAsync(d =>
+                        d.DeliverableId == dispute.DeliverableId.Value &&
+                        d.MilestoneId == milestoneId);
+            }
+
+            deliverable ??= await _context.Deliverables
                 .Where(d =>
                     d.MilestoneId == milestoneId &&
                     d.Status == DeliverableStatusSubmitted)
                 .OrderByDescending(d => d.VersionNumber)
                 .FirstOrDefaultAsync();
 
-            if (latestDeliverable == null)
+            if (deliverable == null)
             {
                 return;
             }
 
-            latestDeliverable.ReviewedAt ??= VietnamDateTime.Now;
+            deliverable.ReviewedAt ??= VietnamDateTime.Now;
 
             if (normalizedResolutionType == ResolutionReleaseToExpert)
             {
-                latestDeliverable.Status = DeliverableStatusApproved;
-                latestDeliverable.ClientFeedback = null;
+                deliverable.Status = DeliverableStatusApproved;
+                deliverable.ClientFeedback = null;
             }
             else if (normalizedResolutionType == ResolutionRefundToClient)
             {
-                latestDeliverable.ClientFeedback = "Dispute resolved with refund to Client.";
+                deliverable.ClientFeedback = "Dispute resolved with refund to Client.";
             }
+        }
+
+        /// <summary>
+        /// Resolves and snapshots the deliverable version connected to a milestone dispute.
+        /// </summary>
+        private async Task<Deliverable?> ResolveDisputedDeliverableAsync(
+            int? deliverableId,
+            int milestoneId)
+        {
+            if (deliverableId.HasValue)
+            {
+                var selectedDeliverable = await _context.Deliverables
+                    .FirstOrDefaultAsync(d => d.DeliverableId == deliverableId.Value);
+
+                if (selectedDeliverable == null)
+                {
+                    throw new InvalidOperationException("Deliverable not found.");
+                }
+
+                if (selectedDeliverable.MilestoneId != milestoneId)
+                {
+                    throw new InvalidOperationException(
+                        "Deliverable does not belong to the selected milestone.");
+                }
+
+                return selectedDeliverable;
+            }
+
+            return await _context.Deliverables
+                .Where(d => d.MilestoneId == milestoneId)
+                .OrderByDescending(d => d.VersionNumber)
+                .FirstOrDefaultAsync();
         }
 
         private static void ValidateOpenRequest(OpenDisputeRequest request)
@@ -840,6 +901,11 @@ namespace AITasker.Infrastructure.Disputes
             if (request.ProjectId <= 0)
             {
                 throw new InvalidOperationException("ProjectId is required.");
+            }
+
+            if (request.DeliverableId.HasValue && request.DeliverableId.Value <= 0)
+            {
+                throw new InvalidOperationException("DeliverableId must be greater than 0 when provided.");
             }
 
             if (request.DisputedAmount <= 0)
@@ -1256,6 +1322,12 @@ namespace AITasker.Infrastructure.Disputes
                     .FirstOrDefaultAsync(m => m.MilestoneId == dispute.MilestoneId.Value)
                 : null;
 
+            var disputedDeliverable = dispute.DeliverableId.HasValue
+                ? await _context.Deliverables
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.DeliverableId == dispute.DeliverableId.Value)
+                : null;
+
             var evidences = await _context.DisputeEvidences
                 .AsNoTracking()
                 .Where(e => e.DisputeId == dispute.DisputeId)
@@ -1290,6 +1362,9 @@ namespace AITasker.Infrastructure.Disputes
                 ProjectTitle = project.Title,
                 MilestoneId = dispute.MilestoneId,
                 MilestoneTitle = milestone?.Title,
+                DeliverableId = dispute.DeliverableId,
+                DeliverableVersionNumber = dispute.Deliverable?.VersionNumber,
+                DeliverableStatus = disputedDeliverable?.Status,
 
                 ClientProfileId = clientProfile.ClientProfileId,
                 ClientUserId = clientProfile.UserId,

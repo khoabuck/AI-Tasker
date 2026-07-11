@@ -1557,7 +1557,8 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Total milestone amount must equal proposed price.");
             }
 
-            var totalDurationDays = milestones.Sum(x => x.DeadlineOffsetDays);
+            // DeadlineOffsetDays is cumulative, so the largest offset represents the full timeline.
+            var totalDurationDays = milestones.Max(x => x.DeadlineOffsetDays);
 
             if (totalDurationDays > proposal.ProposedTimelineDays)
             {

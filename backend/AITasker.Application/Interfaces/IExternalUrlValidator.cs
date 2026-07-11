@@ -7,6 +7,7 @@ namespace AITasker.Application.Interfaces
             string fieldName,
             int maxLength,
             bool requireImage = false,
+            bool requireReachable = true,
             CancellationToken cancellationToken = default);
     }
 }

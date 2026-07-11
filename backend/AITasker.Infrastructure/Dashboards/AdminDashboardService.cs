@@ -1,7 +1,8 @@
-﻿using AITasker.Application.DTOs.Responses;
+using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Banking;
 using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
@@ -198,6 +199,9 @@ namespace AITasker.Infrastructure.Dashboards
                 .Where(c => !IsStatus(c.Status, "DRAFT"))
                 .ToList();
 
+            var transactionContexts = await TransactionDisplayResolver
+                .LoadTransactionContextsAsync(_context, transactions);
+
             return new AdminRevenueResponse
             {
                 GeneratedAt = VietnamDateTime.Now,
@@ -250,7 +254,14 @@ namespace AITasker.Infrastructure.Dashboards
 
                 RecentTransactions = transactions
                     .Take(20)
-                    .Select(MapTransaction)
+                    .Select(transaction =>
+                    {
+                        transactionContexts.TryGetValue(
+                            transaction.TransactionId,
+                            out var context);
+
+                        return MapTransaction(transaction, context);
+                    })
                     .ToList()
             };
         }
@@ -537,21 +548,17 @@ namespace AITasker.Infrastructure.Dashboards
                 .Take(take)
                 .ToListAsync();
 
+            var contexts = await TransactionDisplayResolver
+                .LoadPlatformTransactionContextsAsync(_context, transactions);
+
             return transactions
-                .Select(x => new PlatformTransactionResponse
+                .Select(transaction =>
                 {
-                    PlatformTransactionId = x.PlatformTransactionId,
-                    PlatformWalletId = x.PlatformWalletId,
-                    ProjectId = x.ProjectId,
-                    ContractId = x.ContractId,
-                    WithdrawalRequestId = x.WithdrawalRequestId,
-                    UserId = x.UserId,
-                    Type = x.Type,
-                    Amount = x.Amount,
-                    Status = x.Status,
-                    Description = x.Description,
-                    ReferenceId = x.ReferenceId,
-                    CreatedAt = x.CreatedAt
+                    contexts.TryGetValue(
+                        transaction.PlatformTransactionId,
+                        out var context);
+
+                    return MapPlatformTransaction(transaction, context);
                 })
                 .ToList();
         }
@@ -623,8 +630,15 @@ namespace AITasker.Infrastructure.Dashboards
                 .Take(take)
                 .ToListAsync();
 
+            var contexts = await TransactionDisplayResolver
+                .LoadTransactionContextsAsync(_context, transactions);
+
             return transactions
-                .Select(MapTransaction)
+                .Select(transaction =>
+                {
+                    contexts.TryGetValue(transaction.TransactionId, out var context);
+                    return MapTransaction(transaction, context);
+                })
                 .ToList();
         }
 
@@ -683,19 +697,81 @@ namespace AITasker.Infrastructure.Dashboards
         }
 
         private static AdminRevenueTransactionItemResponse MapTransaction(
-            Transaction transaction)
+            Transaction transaction,
+            TransactionDisplayContext? context)
         {
+            var display = TransactionDisplayResolver.Resolve(
+                transaction.Type,
+                transaction.Status,
+                transaction.Description,
+                transaction.ReferenceId,
+                context);
+
             return new AdminRevenueTransactionItemResponse
             {
                 TransactionId = transaction.TransactionId,
                 UserId = transaction.UserId,
                 ProjectId = transaction.ProjectId,
+                ProjectTitle = context?.ProjectTitle,
                 MilestoneId = transaction.MilestoneId,
+                MilestoneTitle = context?.MilestoneTitle,
+                ContractId = context?.ContractId,
+                ContractTitle = context?.ContractTitle,
+                ProposalId = context?.ProposalId,
+                ProposalTitle = context?.ProposalTitle,
+                JobId = context?.JobId,
+                JobTitle = context?.JobTitle,
                 EscrowId = transaction.EscrowId,
+                Type = transaction.Type,
+                Category = display.Category,
+                StatusGroup = display.StatusGroup,
+                Amount = transaction.Amount,
+                Status = transaction.Status,
+                Description = transaction.Description,
+                DisplayTitle = display.DisplayTitle,
+                DisplaySubtitle = display.DisplaySubtitle,
+                DisplayDescription = display.DisplayDescription,
+                ReferenceType = display.ReferenceType,
+                ReferenceDisplayName = display.ReferenceDisplayName,
+                ReferenceId = transaction.ReferenceId,
+                CreatedAt = transaction.CreatedAt
+            };
+        }
+
+        private static PlatformTransactionResponse MapPlatformTransaction(
+            PlatformTransaction transaction,
+            TransactionDisplayContext? context)
+        {
+            var display = TransactionDisplayResolver.Resolve(
+                transaction.Type,
+                transaction.Status,
+                transaction.Description,
+                transaction.ReferenceId,
+                context);
+
+            return new PlatformTransactionResponse
+            {
+                PlatformTransactionId = transaction.PlatformTransactionId,
+                PlatformWalletId = transaction.PlatformWalletId,
+                ProjectId = transaction.ProjectId,
+                ProjectTitle = context?.ProjectTitle,
+                ContractId = transaction.ContractId ?? context?.ContractId,
+                ContractTitle = context?.ContractTitle,
+                ProposalId = context?.ProposalId,
+                ProposalTitle = context?.ProposalTitle,
+                JobId = context?.JobId,
+                JobTitle = context?.JobTitle,
+                WithdrawalRequestId = transaction.WithdrawalRequestId,
+                UserId = transaction.UserId,
                 Type = transaction.Type,
                 Amount = transaction.Amount,
                 Status = transaction.Status,
                 Description = transaction.Description,
+                DisplayTitle = display.DisplayTitle,
+                DisplaySubtitle = display.DisplaySubtitle,
+                DisplayDescription = display.DisplayDescription,
+                ReferenceType = display.ReferenceType,
+                ReferenceDisplayName = display.ReferenceDisplayName,
                 ReferenceId = transaction.ReferenceId,
                 CreatedAt = transaction.CreatedAt
             };

@@ -47,6 +47,7 @@ namespace AITasker.Api.Controllers
                     {
                         ProjectId = request.ProjectId,
                         MilestoneId = request.MilestoneId,
+                        DeliverableId = request.DeliverableId,
                         RespondentUserId = request.RespondentUserId,
                         DisputedAmount = request.DisputedAmount,
                         Reason = request.Reason ?? string.Empty,
@@ -306,6 +307,8 @@ namespace AITasker.Api.Controllers
             public int ProjectId { get; set; }
 
             public int? MilestoneId { get; set; }
+
+            public int? DeliverableId { get; set; }
 
             public int? RespondentUserId { get; set; }
 

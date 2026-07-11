@@ -860,15 +860,15 @@ namespace AITasker.Infrastructure.Conversations
 
                 LastMessageContent = lastMessage?.Content,
 
-                CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(conversation.CreatedAt)),
-                CreatedAtUtc = SpecifyUtc(conversation.CreatedAt),
+                CreatedAt = SpecifyVietnamTime(conversation.CreatedAt),
+                CreatedAtUtc = ConvertVietnamTimeToUtc(conversation.CreatedAt),
 
                 LastMessageAt = conversation.LastMessageAt.HasValue
-                    ? ConvertUtcToVietnamTime(SpecifyUtc(conversation.LastMessageAt.Value))
+                    ? SpecifyVietnamTime(conversation.LastMessageAt.Value)
                     : null,
 
                 LastMessageAtUtc = conversation.LastMessageAt.HasValue
-                    ? SpecifyUtc(conversation.LastMessageAt.Value)
+                    ? ConvertVietnamTimeToUtc(conversation.LastMessageAt.Value)
                     : null,
 
                 TimeZone = VietnamTimeZoneName
@@ -893,8 +893,8 @@ namespace AITasker.Infrastructure.Conversations
                 Content = message.Content,
                 MessageType = message.MessageType,
                 AttachmentUrl = message.AttachmentUrl,
-                CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(message.CreatedAt)),
-                CreatedAtUtc = SpecifyUtc(message.CreatedAt),
+                CreatedAt = SpecifyVietnamTime(message.CreatedAt),
+                CreatedAtUtc = ConvertVietnamTimeToUtc(message.CreatedAt),
                 TimeZone = VietnamTimeZoneName
             };
         }
@@ -904,30 +904,39 @@ namespace AITasker.Infrastructure.Conversations
             return string.Equals(user.Role, RoleAdmin, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static DateTime SpecifyUtc(DateTime value)
+        /// <summary>
+        /// Marks a timestamp stored as Vietnam local wall-clock time without applying another timezone conversion.
+        /// </summary>
+        private static DateTime SpecifyVietnamTime(DateTime value)
         {
-            if (value.Kind == DateTimeKind.Utc)
-            {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
+            return DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
         }
 
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
+        /// <summary>
+        /// Converts a timestamp stored as Vietnam local wall-clock time to its equivalent UTC value.
+        /// </summary>
+        private static DateTime ConvertVietnamTimeToUtc(DateTime vietnamDateTime)
         {
+            var localVietnamTime = DateTime.SpecifyKind(
+                vietnamDateTime,
+                DateTimeKind.Unspecified);
+
             try
             {
                 var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
+                return TimeZoneInfo.ConvertTimeToUtc(localVietnamTime, timeZone);
             }
             catch (TimeZoneNotFoundException)
             {
-                return utcDateTime.AddHours(7);
+                return DateTime.SpecifyKind(
+                    localVietnamTime.AddHours(-7),
+                    DateTimeKind.Utc);
             }
             catch (InvalidTimeZoneException)
             {
-                return utcDateTime.AddHours(7);
+                return DateTime.SpecifyKind(
+                    localVietnamTime.AddHours(-7),
+                    DateTimeKind.Utc);
             }
         }
 

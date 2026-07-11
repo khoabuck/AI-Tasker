@@ -4,6 +4,7 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
+using AITasker.Infrastructure.Banking;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Services;
@@ -634,6 +635,13 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
 
     private static TransactionResponse MapTransaction(Transaction transaction)
     {
+        var display = TransactionDisplayResolver.Resolve(
+            transaction.Type,
+            transaction.Status,
+            transaction.Description,
+            transaction.ReferenceId,
+            context: null);
+
         return new TransactionResponse
         {
             TransactionId = transaction.TransactionId,
@@ -642,9 +650,16 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
             MilestoneId = transaction.MilestoneId,
             UserId = transaction.UserId,
             Type = transaction.Type,
+            Category = display.Category,
+            StatusGroup = display.StatusGroup,
             Amount = transaction.Amount,
             Status = transaction.Status,
             Description = transaction.Description,
+            DisplayTitle = display.DisplayTitle,
+            DisplaySubtitle = display.DisplaySubtitle,
+            DisplayDescription = display.DisplayDescription,
+            ReferenceType = display.ReferenceType,
+            ReferenceDisplayName = display.ReferenceDisplayName,
             ReferenceId = transaction.ReferenceId,
             CreatedAt = transaction.CreatedAt
         };

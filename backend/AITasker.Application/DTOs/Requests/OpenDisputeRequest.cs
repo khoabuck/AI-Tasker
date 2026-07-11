@@ -6,6 +6,10 @@ namespace AITasker.Application.DTOs.Requests
 
         public int? MilestoneId { get; set; }
 
+        // Optional explicit deliverable version under dispute. When omitted for a milestone dispute,
+        // backend snapshots the latest deliverable of that milestone if one exists.
+        public int? DeliverableId { get; set; }
+
         public int? RespondentUserId { get; set; }
 
         public decimal DisputedAmount { get; set; }

@@ -84,6 +84,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<Deliverable> Deliverables { get; set; }
 
+    public DbSet<DeliverableArtifact> DeliverableArtifacts { get; set; }
+
     public DbSet<Dispute> Disputes { get; set; }
 
     public DbSet<DisputeEvidence> DisputeEvidences { get; set; }
@@ -2596,6 +2598,14 @@ public class AITaskerDbContext : DbContext
                 t.HasCheckConstraint(
                 "CK_Deliverables_Status",
                 "[Status] IN ('SUBMITTED','APPROVED','AUTO_APPROVED','REVISION_REQUESTED')");
+
+                t.HasCheckConstraint(
+                "CK_Deliverables_DemoValidationStatus",
+                "[DemoValidationStatus] IS NULL OR [DemoValidationStatus] IN ('VALID','AUTH_REQUIRED')");
+
+                t.HasCheckConstraint(
+                "CK_Deliverables_TestValidationStatus",
+                "[TestValidationStatus] IS NULL OR [TestValidationStatus] IN ('VALID','AUTH_REQUIRED')");
             });
 
             entity.HasKey(d => d.DeliverableId);
@@ -2614,8 +2624,20 @@ public class AITaskerDbContext : DbContext
             entity.Property(d => d.DemoUrl)
                 .HasMaxLength(500);
 
+            entity.Property(d => d.DemoInstructions)
+                .HasMaxLength(2000);
+
+            entity.Property(d => d.DemoValidationStatus)
+                .HasMaxLength(30);
+
             entity.Property(d => d.TestResultUrl)
                 .HasMaxLength(500);
+
+            entity.Property(d => d.TestSummary)
+                .HasMaxLength(2000);
+
+            entity.Property(d => d.TestValidationStatus)
+                .HasMaxLength(30);
 
             entity.Property(d => d.HandoverNotes)
                 .HasMaxLength(4000);
@@ -2662,6 +2684,77 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.MilestoneId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Deliverable Artifact
+        // =========================
+        modelBuilder.Entity<DeliverableArtifact>(entity =>
+        {
+            entity.ToTable("DeliverableArtifacts", t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_ArtifactType",
+                    "[ArtifactType] IN ('FILE','FOLDER','ARCHIVE','SOURCE_REPOSITORY','DOCUMENTATION','DESIGN','DATASET','MODEL','BUILD','OTHER')");
+
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_AccessLevel",
+                    "[AccessLevel] IN ('PUBLIC','RESTRICTED')");
+
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_ValidationStatus",
+                    "[ValidationStatus] IN ('VALID','AUTH_REQUIRED')");
+            });
+
+            entity.HasKey(x => x.DeliverableArtifactId);
+
+            entity.Property(x => x.ArtifactType)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Label)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(x => x.Url)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.AccessLevel)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.Version)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.CommitHash)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Checksum)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ValidationStatus)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(x => x.DeliverableId);
+
+            entity.HasIndex(x => new
+            {
+                x.DeliverableId,
+                x.Url
+            }).IsUnique();
+
+            entity.HasOne(x => x.Deliverable)
+                .WithMany(x => x.Artifacts)
+                .HasForeignKey(x => x.DeliverableId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -2723,6 +2816,8 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(d => d.RespondentUserId);
 
+            entity.HasIndex(d => d.DeliverableId);
+
             entity.HasIndex(d => new
             {
                 d.MilestoneId,
@@ -2748,6 +2843,11 @@ public class AITaskerDbContext : DbContext
             entity.HasOne(d => d.Milestone)
                 .WithMany()
                 .HasForeignKey(d => d.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Deliverable)
+                .WithMany()
+                .HasForeignKey(d => d.DeliverableId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.OpenedByUser)
@@ -2781,9 +2881,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.FileUrl)
                 .HasMaxLength(500);
-
-            entity.Property(e => e.ImageUrl)
-                .HasMaxLength(1000);
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired();

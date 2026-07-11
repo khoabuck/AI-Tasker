@@ -120,112 +120,14 @@ namespace AITasker.Infrastructure.Banking
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
 
-            var projectIds = transactions
-                .Where(x => x.ProjectId.HasValue)
-                .Select(x => x.ProjectId!.Value)
-                .Distinct()
-                .ToList();
-
-            var milestoneIds = transactions
-                .Where(x => x.MilestoneId.HasValue)
-                .Select(x => x.MilestoneId!.Value)
-                .Distinct()
-                .ToList();
-
-            var projects = projectIds.Count == 0
-                ? new Dictionary<int, Project>()
-                : await _context.Projects
-                    .AsNoTracking()
-                    .Where(x => projectIds.Contains(x.ProjectId))
-                    .ToDictionaryAsync(x => x.ProjectId);
-
-            var milestones = milestoneIds.Count == 0
-                ? new Dictionary<int, Milestone>()
-                : await _context.Milestones
-                    .AsNoTracking()
-                    .Where(x => milestoneIds.Contains(x.MilestoneId))
-                    .ToDictionaryAsync(x => x.MilestoneId);
-
-            var contractIds = projects.Values
-                .Select(x => x.ContractId)
-                .Distinct()
-                .ToList();
-
-            var contracts = contractIds.Count == 0
-                ? new Dictionary<int, ProjectContract>()
-                : await _context.ProjectContracts
-                    .AsNoTracking()
-                    .Where(x => contractIds.Contains(x.ContractId))
-                    .ToDictionaryAsync(x => x.ContractId);
-
-            var proposalIds = contracts.Values
-                .Select(x => x.ProposalId)
-                .Distinct()
-                .ToList();
-
-            var proposals = proposalIds.Count == 0
-                ? new Dictionary<int, Proposal>()
-                : await _context.Proposals
-                    .AsNoTracking()
-                    .Where(x => proposalIds.Contains(x.ProposalId))
-                    .ToDictionaryAsync(x => x.ProposalId);
-
-            var jobIds = proposals.Values
-                .Select(x => x.JobId)
-                .Distinct()
-                .ToList();
-
-            var jobs = jobIds.Count == 0
-                ? new Dictionary<int, JobPosting>()
-                : await _context.JobPostings
-                    .AsNoTracking()
-                    .Where(x => jobIds.Contains(x.JobPostingId))
-                    .ToDictionaryAsync(x => x.JobPostingId);
+            var contexts = await TransactionDisplayResolver
+                .LoadTransactionContextsAsync(_context, transactions);
 
             var responses = transactions
                 .Select(transaction =>
                 {
-                    Project? project = null;
-                    Milestone? milestone = null;
-                    ProjectContract? contract = null;
-                    Proposal? proposal = null;
-                    JobPosting? job = null;
-
-                    if (transaction.ProjectId.HasValue)
-                    {
-                        projects.TryGetValue(transaction.ProjectId.Value, out project);
-                    }
-
-                    if (transaction.MilestoneId.HasValue)
-                    {
-                        milestones.TryGetValue(transaction.MilestoneId.Value, out milestone);
-                    }
-
-                    if (project != null)
-                    {
-                        contracts.TryGetValue(project.ContractId, out contract);
-                    }
-
-                    if (contract != null)
-                    {
-                        proposals.TryGetValue(contract.ProposalId, out proposal);
-                    }
-
-                    if (proposal != null)
-                    {
-                        jobs.TryGetValue(proposal.JobId, out job);
-                    }
-
-                    return MapTransaction(new TransactionContextRow(
-                        transaction,
-                        project?.Title,
-                        milestone?.Title,
-                        contract?.ContractId,
-                        project?.Title ?? job?.Title,
-                        proposal?.ProposalId,
-                        job?.Title,
-                        job?.JobPostingId,
-                        job?.Title));
+                    contexts.TryGetValue(transaction.TransactionId, out var displayContext);
+                    return MapTransaction(transaction, displayContext);
                 })
                 .ToList();
 
@@ -1282,124 +1184,46 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static TransactionResponse MapTransaction(TransactionContextRow row)
+        private static TransactionResponse MapTransaction(
+            Transaction transaction,
+            TransactionDisplayContext? context = null)
         {
-            var transaction = row.Transaction;
-            var category = ResolveTransactionCategory(transaction.Type);
-            var statusGroup = ResolveTransactionStatusGroup(transaction.Status, transaction.Type);
-            var displayTitle = ResolveTransactionDisplayTitle(transaction, row);
-            var displaySubtitle = ResolveTransactionDisplaySubtitle(transaction, row);
+            var display = TransactionDisplayResolver.Resolve(
+                transaction.Type,
+                transaction.Status,
+                transaction.Description,
+                transaction.ReferenceId,
+                context);
 
             return new TransactionResponse
             {
                 TransactionId = transaction.TransactionId,
                 EscrowId = transaction.EscrowId,
                 ProjectId = transaction.ProjectId,
-                ProjectTitle = row.ProjectTitle,
+                ProjectTitle = context?.ProjectTitle,
                 MilestoneId = transaction.MilestoneId,
-                MilestoneTitle = row.MilestoneTitle,
-                ContractId = row.ContractId,
-                ContractTitle = row.ContractTitle,
-                ProposalId = row.ProposalId,
-                ProposalTitle = row.ProposalTitle,
-                JobId = row.JobId,
-                JobTitle = row.JobTitle,
+                MilestoneTitle = context?.MilestoneTitle,
+                ContractId = context?.ContractId,
+                ContractTitle = context?.ContractTitle,
+                ProposalId = context?.ProposalId,
+                ProposalTitle = context?.ProposalTitle,
+                JobId = context?.JobId,
+                JobTitle = context?.JobTitle,
                 UserId = transaction.UserId,
                 Type = transaction.Type,
-                Category = category,
-                StatusGroup = statusGroup,
+                Category = display.Category,
+                StatusGroup = display.StatusGroup,
                 Amount = transaction.Amount,
                 Status = transaction.Status,
                 Description = transaction.Description,
-                DisplayTitle = displayTitle,
-                DisplaySubtitle = displaySubtitle,
+                DisplayTitle = display.DisplayTitle,
+                DisplaySubtitle = display.DisplaySubtitle,
+                DisplayDescription = display.DisplayDescription,
+                ReferenceType = display.ReferenceType,
+                ReferenceDisplayName = display.ReferenceDisplayName,
                 ReferenceId = transaction.ReferenceId,
                 CreatedAt = transaction.CreatedAt
             };
-        }
-
-        private static TransactionResponse MapTransaction(Transaction transaction)
-        {
-            return MapTransaction(new TransactionContextRow(transaction, null, null, null, null, null, null, null, null));
-        }
-
-        private sealed record TransactionContextRow(
-            Transaction Transaction,
-            string? ProjectTitle,
-            string? MilestoneTitle,
-            int? ContractId,
-            string? ContractTitle,
-            int? ProposalId,
-            string? ProposalTitle,
-            int? JobId,
-            string? JobTitle);
-
-        private static string ResolveTransactionCategory(string type)
-        {
-            var normalized = type.Trim().ToUpperInvariant();
-
-            if (normalized.Contains("WITHDRAWAL")) return "WITHDRAWAL";
-            if (normalized.Contains("DEPOSIT")) return "DEPOSIT";
-            if (normalized.Contains("ESCROW")) return "ESCROW";
-            if (normalized.Contains("PLATFORM_FEE")) return "PLATFORM_FEE";
-            if (normalized.Contains("REFUND")) return "REFUND";
-            if (normalized.Contains("PENDING_EARNING")) return "PENDING_EARNING";
-
-            return "WALLET";
-        }
-
-        private static string ResolveTransactionStatusGroup(string status, string type)
-        {
-            var normalizedStatus = status.Trim().ToUpperInvariant();
-            var normalizedType = type.Trim().ToUpperInvariant();
-
-            if (normalizedType.Contains("EXPIRED")) return "EXPIRED";
-            if (normalizedType.Contains("PROCESSING")) return "PROCESSING";
-            if (normalizedType.Contains("REJECTED") || normalizedType.Contains("CANCELLED") || normalizedType.Contains("CANCELED")) return "CANCELLED";
-            if (normalizedType.Contains("REFUND")) return "REFUNDED";
-            if (normalizedStatus is "SUCCESS" or "PAID") return "COMPLETED";
-            if (normalizedStatus is "FAILED") return "FAILED";
-            if (normalizedStatus is "PENDING") return "PENDING";
-
-            return normalizedStatus;
-        }
-
-        private static string ResolveTransactionDisplayTitle(Transaction transaction, TransactionContextRow row)
-        {
-            if (!string.IsNullOrWhiteSpace(row.MilestoneTitle))
-            {
-                return row.MilestoneTitle!;
-            }
-
-            if (!string.IsNullOrWhiteSpace(row.ProjectTitle))
-            {
-                return row.ProjectTitle!;
-            }
-
-            var normalizedType = transaction.Type.Trim().ToUpperInvariant();
-
-            if (normalizedType.Contains("WITHDRAWAL")) return "Withdrawal request";
-            if (normalizedType.Contains("DEPOSIT")) return "Wallet deposit";
-            if (normalizedType.Contains("PLATFORM_FEE")) return "Platform fee";
-
-            return string.IsNullOrWhiteSpace(transaction.Description)
-                ? transaction.Type
-                : transaction.Description;
-        }
-
-        private static string ResolveTransactionDisplaySubtitle(Transaction transaction, TransactionContextRow row)
-        {
-            var parts = new List<string>();
-
-            if (!string.IsNullOrWhiteSpace(row.ProjectTitle) &&
-                !string.Equals(row.ProjectTitle, row.MilestoneTitle, StringComparison.OrdinalIgnoreCase))
-            {
-                parts.Add(row.ProjectTitle!);
-            }
-
-            parts.Add(transaction.Type);
-
-            return string.Join(" • ", parts);
         }
 
         private async Task<EscrowResponse> MapEscrowAsync(Escrow escrow)
