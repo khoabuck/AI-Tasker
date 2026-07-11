@@ -4,7 +4,6 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Constants;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Conversations
@@ -35,8 +34,6 @@ namespace AITasker.Infrastructure.Conversations
         private const string MessageTypeDeliverable = "DELIVERABLE";
         private const string MessageTypeDisputeEvidence = "DISPUTE_EVIDENCE";
 
-        private const string VietnamTimeZoneId = "SE Asia Standard Time";
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
         
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -111,7 +108,7 @@ namespace AITasker.Infrastructure.Conversations
                 RelatedMilestoneId = resolution.RelatedMilestoneId,
                 RelatedDisputeId = resolution.RelatedDisputeId,
                 Status = StatusActive,
-                CreatedAt = VietnamDateTime.Now,
+                CreatedAt = DateTime.UtcNow,
                 LastMessageAt = null
             };
 
@@ -266,7 +263,7 @@ namespace AITasker.Infrastructure.Conversations
                 Content = content,
                 MessageType = messageType,
                 AttachmentUrl = attachmentUrl,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.ConversationMessages.Add(message);
@@ -860,18 +857,8 @@ namespace AITasker.Infrastructure.Conversations
 
                 LastMessageContent = lastMessage?.Content,
 
-                CreatedAt = SpecifyVietnamTime(conversation.CreatedAt),
-                CreatedAtUtc = ConvertVietnamTimeToUtc(conversation.CreatedAt),
-
-                LastMessageAt = conversation.LastMessageAt.HasValue
-                    ? SpecifyVietnamTime(conversation.LastMessageAt.Value)
-                    : null,
-
-                LastMessageAtUtc = conversation.LastMessageAt.HasValue
-                    ? ConvertVietnamTimeToUtc(conversation.LastMessageAt.Value)
-                    : null,
-
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = conversation.CreatedAt,
+                LastMessageAt = conversation.LastMessageAt
             };
         }
 
@@ -893,51 +880,13 @@ namespace AITasker.Infrastructure.Conversations
                 Content = message.Content,
                 MessageType = message.MessageType,
                 AttachmentUrl = message.AttachmentUrl,
-                CreatedAt = SpecifyVietnamTime(message.CreatedAt),
-                CreatedAtUtc = ConvertVietnamTimeToUtc(message.CreatedAt),
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = message.CreatedAt
             };
         }
 
         private static bool IsAdmin(User user)
         {
             return string.Equals(user.Role, RoleAdmin, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>
-        /// Marks a timestamp stored as Vietnam local wall-clock time without applying another timezone conversion.
-        /// </summary>
-        private static DateTime SpecifyVietnamTime(DateTime value)
-        {
-            return DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
-        }
-
-        /// <summary>
-        /// Converts a timestamp stored as Vietnam local wall-clock time to its equivalent UTC value.
-        /// </summary>
-        private static DateTime ConvertVietnamTimeToUtc(DateTime vietnamDateTime)
-        {
-            var localVietnamTime = DateTime.SpecifyKind(
-                vietnamDateTime,
-                DateTimeKind.Unspecified);
-
-            try
-            {
-                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeToUtc(localVietnamTime, timeZone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return DateTime.SpecifyKind(
-                    localVietnamTime.AddHours(-7),
-                    DateTimeKind.Utc);
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return DateTime.SpecifyKind(
-                    localVietnamTime.AddHours(-7),
-                    DateTimeKind.Utc);
-            }
         }
 
         private static bool IsClient(User user)

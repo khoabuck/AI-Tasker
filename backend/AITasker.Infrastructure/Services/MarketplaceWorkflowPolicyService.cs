@@ -4,7 +4,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Services;
@@ -76,7 +75,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.DisputeLostWarningThreshold = request.DisputeLostWarningThreshold;
         policy.UpdatedByAdminId = adminId;
         policy.UpdateReason = request.Reason?.Trim();
-        policy.UpdatedAt = VietnamDateTime.Now;
+        policy.UpdatedAt = DateTime.UtcNow;
 
         var newValue = JsonSerializer.Serialize(MapToResponse(policy));
 
@@ -143,7 +142,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
 
         if (changed)
         {
-            policy.UpdatedAt = VietnamDateTime.Now;
+            policy.UpdatedAt = DateTime.UtcNow;
         }
     }
 
@@ -169,8 +168,8 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             DisputeLostWarningThreshold = DefaultDisputeLostWarningThreshold,
             IsActive = true,
             UpdateReason = "Default marketplace workflow policy.",
-            CreatedAt = VietnamDateTime.Now,
-            UpdatedAt = VietnamDateTime.Now
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
         };
     }
 

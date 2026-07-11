@@ -4,7 +4,6 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Disputes
@@ -199,7 +198,7 @@ namespace AITasker.Infrastructure.Disputes
                     }
 
                     escrow.Status = EscrowStatusFrozen;
-                    escrow.UpdatedAt = VietnamDateTime.Now;
+                    escrow.UpdatedAt = DateTime.UtcNow;
 
                     milestone.Status = MilestoneStatusDisputed;
                     milestone.PaymentStatus = PaymentStatusFrozen;
@@ -215,7 +214,7 @@ namespace AITasker.Infrastructure.Disputes
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Open] Escrow frozen for Milestone ID {milestone.MilestoneId}",
                         ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
                 else
@@ -251,7 +250,7 @@ namespace AITasker.Infrastructure.Disputes
                     foreach (var projectEscrow in lockedEscrows)
                     {
                         projectEscrow.Status = EscrowStatusFrozen;
-                        projectEscrow.UpdatedAt = VietnamDateTime.Now;
+                        projectEscrow.UpdatedAt = DateTime.UtcNow;
 
                         if (projectEscrow.MilestoneId.HasValue)
                         {
@@ -271,7 +270,7 @@ namespace AITasker.Infrastructure.Disputes
                             Status = TransactionStatusSuccess,
                             Description = $"[Dispute Open] Escrow frozen for Project ID {project.ProjectId}",
                             ReferenceId = $"PROJECT_{project.ProjectId}",
-                            CreatedAt = VietnamDateTime.Now
+                            CreatedAt = DateTime.UtcNow
                         });
                     }
                 }
@@ -292,7 +291,7 @@ namespace AITasker.Infrastructure.Disputes
                     Reason = request.Reason.Trim(),
                     DisputedAmount = request.DisputedAmount,
                     Status = DisputeStatusOpen,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Disputes.Add(dispute);
@@ -315,7 +314,7 @@ namespace AITasker.Infrastructure.Disputes
                             : evidenceText,
                         FileUrl = evidenceFileUrl,
                         ImageUrl = evidenceImageUrl,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -329,7 +328,7 @@ namespace AITasker.Infrastructure.Disputes
                             ? "Image evidence submitted."
                             : evidenceText,
                         ImageUrl = uploadedImageUrl,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -451,7 +450,7 @@ namespace AITasker.Infrastructure.Disputes
                     EvidenceText = evidenceText,
                     FileUrl = fileUrl,
                     ImageUrl = imageUrl,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
             else if (!string.IsNullOrWhiteSpace(request.EvidenceText))
@@ -461,7 +460,7 @@ namespace AITasker.Infrastructure.Disputes
                     DisputeId = dispute.DisputeId,
                     UploadedByUserId = currentUserId,
                     EvidenceText = request.EvidenceText.Trim(),
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
 
@@ -473,7 +472,7 @@ namespace AITasker.Infrastructure.Disputes
                     UploadedByUserId = currentUserId,
                     EvidenceText = evidenceText,
                     ImageUrl = uploadedImageUrl,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
 
@@ -648,7 +647,7 @@ namespace AITasker.Infrastructure.Disputes
                 if (lockedDisputedAmount > 0)
                 {
                     clientWallet.LockedBalance -= lockedDisputedAmount;
-                    clientWallet.UpdatedAt = VietnamDateTime.Now;
+                    clientWallet.UpdatedAt = DateTime.UtcNow;
                 }
 
                 var referenceId = dispute.MilestoneId.HasValue
@@ -660,7 +659,7 @@ namespace AITasker.Infrastructure.Disputes
                     if (lockedDisputedAmount > 0)
                     {
                         clientWallet.AvailableBalance += lockedDisputedAmount;
-                        clientWallet.UpdatedAt = VietnamDateTime.Now;
+                        clientWallet.UpdatedAt = DateTime.UtcNow;
 
                         _context.Transactions.Add(new Transaction
                         {
@@ -673,7 +672,7 @@ namespace AITasker.Infrastructure.Disputes
                             Status = TransactionStatusSuccess,
                             Description = $"[Dispute Resolution] Client refund from locked escrow in Dispute ID {dispute.DisputeId}",
                             ReferenceId = referenceId,
-                            CreatedAt = VietnamDateTime.Now
+                            CreatedAt = DateTime.UtcNow
                         });
                     }
 
@@ -691,7 +690,7 @@ namespace AITasker.Infrastructure.Disputes
                 {
                     expertWallet.PendingEarningsBalance += lockedDisputedAmount;
                     expertWallet.TotalEarning += lockedDisputedAmount;
-                    expertWallet.UpdatedAt = VietnamDateTime.Now;
+                    expertWallet.UpdatedAt = DateTime.UtcNow;
 
                     _context.Transactions.Add(new Transaction
                     {
@@ -704,7 +703,7 @@ namespace AITasker.Infrastructure.Disputes
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Resolution] Expert earning held from locked escrow in Dispute ID {dispute.DisputeId} until project completion",
                         ReferenceId = referenceId,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -722,7 +721,7 @@ namespace AITasker.Infrastructure.Disputes
                         ? EscrowStatusReleased
                         : EscrowStatusRefunded;
 
-                    escrow.UpdatedAt = VietnamDateTime.Now;
+                    escrow.UpdatedAt = DateTime.UtcNow;
                 }
 
                 foreach (var projectEscrow in projectEscrows)
@@ -731,7 +730,7 @@ namespace AITasker.Infrastructure.Disputes
                         ? EscrowStatusReleased
                         : EscrowStatusRefunded;
 
-                    projectEscrow.UpdatedAt = VietnamDateTime.Now;
+                    projectEscrow.UpdatedAt = DateTime.UtcNow;
 
                     if (projectEscrow.MilestoneId.HasValue)
                     {
@@ -767,7 +766,7 @@ namespace AITasker.Infrastructure.Disputes
                 dispute.AdminDecision = string.IsNullOrWhiteSpace(request.AdminDecision)
                     ? $"Admin resolved dispute with {normalizedResolutionType}."
                     : request.AdminDecision.Trim();
-                dispute.ResolvedAt = VietnamDateTime.Now;
+                dispute.ResolvedAt = DateTime.UtcNow;
 
                 await ApplyLostDisputePolicyAsync(
                     loserUserId,
@@ -846,7 +845,7 @@ namespace AITasker.Infrastructure.Disputes
                 return;
             }
 
-            deliverable.ReviewedAt ??= VietnamDateTime.Now;
+            deliverable.ReviewedAt ??= DateTime.UtcNow;
 
             if (normalizedResolutionType == ResolutionReleaseToExpert)
             {
@@ -1158,7 +1157,7 @@ namespace AITasker.Infrastructure.Disputes
                 LockedBalance = 0,
                 PendingEarningsBalance = 0,
                 TotalEarning = 0,
-                UpdatedAt = VietnamDateTime.Now
+                UpdatedAt = DateTime.UtcNow
             };
 
             _context.Wallets.Add(wallet);
@@ -1421,7 +1420,7 @@ namespace AITasker.Infrastructure.Disputes
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = VietnamDateTime.Now;
+            job.UpdatedAt = DateTime.UtcNow;
         }
 
         private async Task ApplyLostDisputePolicyAsync(
@@ -1477,7 +1476,7 @@ namespace AITasker.Infrastructure.Disputes
 
             if (lostCountAfterCurrent >= warningThreshold + 2)
             {
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
                 if (!string.Equals(loser.Status, UserStatusBanned, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))

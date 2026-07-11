@@ -2,7 +2,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
@@ -23,7 +22,7 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<PlatformWalletResponse> GetPlatformWalletAsync()
         {
-            var wallet = await GetOrCreateMainWalletAsync(VietnamDateTime.Now);
+            var wallet = await GetOrCreateMainWalletAsync(DateTime.UtcNow);
 
             await _context.SaveChangesAsync();
 

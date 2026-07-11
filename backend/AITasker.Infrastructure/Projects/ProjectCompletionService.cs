@@ -1,7 +1,6 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Projects;
@@ -155,9 +154,9 @@ public class ProjectCompletionService : IProjectCompletionService
         if (!wasCompleted)
         {
             project.Status = ProjectStatusCompleted;
-            project.EndDate = VietnamDateTime.Now;
+            project.EndDate = DateTime.UtcNow;
             job.Status = JobStatusCompleted;
-            job.UpdatedAt = VietnamDateTime.Now;
+            job.UpdatedAt = DateTime.UtcNow;
         }
 
         await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(

@@ -3,7 +3,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -236,7 +235,7 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("User not found.");
             }
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
             var orderCode = await GenerateDepositOrderCodeAsync(userId);
             var payOsOrderCode = await GeneratePayOsOrderCodeAsync();
 
@@ -336,7 +335,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Only PENDING deposit orders can be confirmed.");
                 }
 
-                if (order.ExpiresAt <= VietnamDateTime.Now)
+                if (order.ExpiresAt <= DateTime.UtcNow)
                 {
                     order.Status = DepositOrderExpired;
                     await _context.SaveChangesAsync();
@@ -357,7 +356,7 @@ namespace AITasker.Infrastructure.Banking
                 if (!existingDepositTransaction)
                 {
                     wallet.AvailableBalance += order.Amount;
-                    wallet.UpdatedAt = VietnamDateTime.Now;
+                    wallet.UpdatedAt = DateTime.UtcNow;
 
                     _context.Transactions.Add(new Transaction
                     {
@@ -370,12 +369,12 @@ namespace AITasker.Infrastructure.Banking
                         Status = TransactionStatusSuccess,
                         Description = $"[Deposit] payOS payment confirmed for order {order.OrderCode}",
                         ReferenceId = order.OrderCode,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
                 order.Status = DepositOrderPaid;
-                order.PaidAt = VietnamDateTime.Now;
+                order.PaidAt = DateTime.UtcNow;
                 order.ProviderReference = string.IsNullOrWhiteSpace(reference)
                     ? paymentLinkId
                     : reference;
@@ -455,7 +454,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetOrCreateWalletAsync(userId);
 
                 wallet.AvailableBalance += amount;
-                wallet.UpdatedAt = VietnamDateTime.Now;
+                wallet.UpdatedAt = DateTime.UtcNow;
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -468,7 +467,7 @@ namespace AITasker.Infrastructure.Banking
                     Status = TransactionStatusSuccess,
                     Description = description,
                     ReferenceId = referenceId,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
 
                 await _context.SaveChangesAsync();
@@ -522,7 +521,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
                 }
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
 
                 if (project.EscrowLockedAt != null)
@@ -795,7 +794,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Client locked balance is not enough to release escrow.");
                 }
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
                 var expertServiceFeeAmount = CalculateExpertServiceFee(escrow.Amount, contract.ExpertFeeRate);
                 var expertNetAmount = escrow.Amount - expertServiceFeeAmount;
 
@@ -967,7 +966,7 @@ namespace AITasker.Infrastructure.Banking
                 LockedBalance = 0m,
                 PendingEarningsBalance = 0m,
                 TotalEarning = 0m,
-                UpdatedAt = VietnamDateTime.Now
+                UpdatedAt = DateTime.UtcNow
             };
 
             _context.Wallets.Add(wallet);
@@ -1288,7 +1287,7 @@ namespace AITasker.Infrastructure.Banking
         {
             for (var attempt = 0; attempt < 5; attempt++)
             {
-                var orderCode = $"DEP{userId}{VietnamDateTime.Now:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
+                var orderCode = $"DEP{userId}{DateTime.UtcNow:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
 
                 var exists = await _context.DepositOrders
                     .AnyAsync(x => x.OrderCode == orderCode);
