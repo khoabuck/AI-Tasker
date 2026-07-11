@@ -67,8 +67,8 @@ public class AdminAuditLogService : IAdminAuditLogService
             request.Action,
             request.EntityName,
             request.EntityId,
-            request.From,
-            request.To,
+            request.From?.UtcDateTime,
+            request.To?.UtcDateTime,
             pageNumber,
             pageSize
         );

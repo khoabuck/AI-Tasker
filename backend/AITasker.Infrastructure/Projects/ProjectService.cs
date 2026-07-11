@@ -3,7 +3,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Projects
@@ -89,7 +88,7 @@ namespace AITasker.Infrastructure.Projects
                 StartDate = null,
                 EndDate = null,
                 EscrowLockedAt = null,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.Projects.Add(project);
@@ -177,7 +176,7 @@ namespace AITasker.Infrastructure.Projects
                         StartDate = null,
                         EndDate = null,
                         EscrowLockedAt = null,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     };
 
                     _context.Projects.Add(project);
@@ -485,13 +484,13 @@ namespace AITasker.Infrastructure.Projects
                 Deadline = request.Deadline,
                 PaymentStatus = PaymentStatusPending,
                 Status = MilestoneStatusPending,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
         }
 
         private static int CalculateDurationDaysFromDeadline(DateTime deadline)
         {
-            var durationDays = (int)Math.Ceiling((deadline - VietnamDateTime.Now).TotalDays);
+            var durationDays = (int)Math.Ceiling((deadline - DateTime.UtcNow).TotalDays);
 
             return Math.Max(1, durationDays);
         }
@@ -553,7 +552,7 @@ namespace AITasker.Infrastructure.Projects
                 throw new InvalidOperationException("Milestone order index must be greater than 0.");
             }
 
-            if (request.Deadline <= VietnamDateTime.Now)
+            if (request.Deadline <= DateTime.UtcNow)
             {
                 throw new InvalidOperationException("Milestone deadline must be in the future.");
             }
@@ -901,7 +900,7 @@ namespace AITasker.Infrastructure.Projects
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = VietnamDateTime.Now;
+            job.UpdatedAt = DateTime.UtcNow;
         }
     }
 }

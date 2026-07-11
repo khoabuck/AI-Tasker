@@ -3,7 +3,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Deliverables
@@ -117,7 +116,7 @@ namespace AITasker.Infrastructure.Deliverables
                 .Where(d => d.MilestoneId == milestone.MilestoneId)
                 .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
             var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
 
             var deliverable = new Deliverable
@@ -264,7 +263,7 @@ namespace AITasker.Infrastructure.Deliverables
                     "Milestone must be SUBMITTED before approving deliverable.");
             }
 
-            deliverable.ReviewedAt = VietnamDateTime.Now;
+            deliverable.ReviewedAt = DateTime.UtcNow;
             deliverable.ClientFeedback = null;
 
             var escrowResult = await _walletService.ReleaseEscrowAsync(
@@ -343,7 +342,7 @@ namespace AITasker.Infrastructure.Deliverables
                 deliverable.Status = DeliverableStatusRevisionRequested;
 
                 deliverable.ClientFeedback = request.Feedback.Trim();
-                deliverable.ReviewedAt = VietnamDateTime.Now;
+                deliverable.ReviewedAt = DateTime.UtcNow;
                 milestone.Status = MilestoneStatusRevisionRequested;
                 milestone.RevisionUsed += 1;
 
@@ -532,7 +531,7 @@ namespace AITasker.Infrastructure.Deliverables
                     accessLevel == ArtifactAccessPublic
                         ? ArtifactValidationValid
                         : ArtifactValidationAuthRequired,
-                    VietnamDateTime.Now));
+                    DateTime.UtcNow));
             }
 
             var demoUrl = await _externalUrlValidator.ValidateOptionalUrlAsync(
@@ -902,7 +901,7 @@ namespace AITasker.Infrastructure.Deliverables
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = VietnamDateTime.Now;
+            job.UpdatedAt = DateTime.UtcNow;
         }
     }
 }

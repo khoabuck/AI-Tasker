@@ -2,6 +2,7 @@
 using System.Net;
 using System.Net.Sockets;
 using AITasker.Api.Hubs;
+using AITasker.Api.Serialization;
 using AITasker.Application.Interfaces;
 using AITasker.Application.Services;
 using AITasker.Infrastructure.Auth;
@@ -32,12 +33,24 @@ var builder = WebApplication.CreateBuilder(args);
 // =========================
 // Controllers
 // =========================
-builder.Services.AddControllers();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.Converters.Add(
+            new UtcDateTimeJsonConverter());
+    });
 
 // =========================
 // SignalR
 // =========================
-builder.Services.AddSignalR();
+builder.Services
+    .AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.Converters.Add(
+            new UtcDateTimeJsonConverter());
+    });
 
 // =========================
 // Swagger/OpenAPI + JWT Authorize

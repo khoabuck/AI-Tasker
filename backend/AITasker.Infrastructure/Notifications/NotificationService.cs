@@ -10,9 +10,6 @@ namespace AITasker.Infrastructure.Notifications
 {
     public class NotificationService : INotificationService
     {
-        private const string VietnamTimeZoneId = "SE Asia Standard Time";
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
-
         private readonly AITaskerDbContext _context;
         private readonly INotificationRealtimeService _realtimeService;
         private readonly ILogger<NotificationService> _logger;
@@ -280,18 +277,13 @@ namespace AITasker.Infrastructure.Notifications
 
         private static NotificationResponse MapToResponse(Notification notification)
         {
-            var createdAtUtc = SpecifyUtc(notification.CreatedAt);
-            var createdAtVietnam = ConvertUtcToVietnamTime(createdAtUtc);
-
             return new NotificationResponse
             {
                 NotificationId = notification.NotificationId,
                 UserId = notification.UserId,
                 Title = notification.Title,
                 Content = notification.Content,
-                
                 Type = notification.Type,
-
                 RelatedEntityType = notification.RelatedEntityType,
                 RelatedEntityId = notification.RelatedEntityId,
                 RelatedJobId = notification.RelatedJobId,
@@ -302,45 +294,15 @@ namespace AITasker.Infrastructure.Notifications
                 RelatedDeliverableId = notification.RelatedDeliverableId,
                 RelatedDisputeId = notification.RelatedDisputeId,
                 RelatedConversationId = notification.RelatedConversationId,
-
                 IsRead = notification.IsRead,
-                CreatedAt = createdAtVietnam,
-                CreatedAtUtc = createdAtUtc,
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = notification.CreatedAt
             };
-        }
-
-        private static DateTime SpecifyUtc(DateTime value)
-        {
-            if (value.Kind == DateTimeKind.Utc)
-            {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        }
-
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
-        {
-            try
-            {
-                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return utcDateTime.AddHours(7);
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return utcDateTime.AddHours(7);
-            }
         }
 
         private async Task<JobDigestNotificationPayload> BuildJobDigestPayloadAsync(
             Notification notification)
         {
-            var windowEndUtc = SpecifyUtc(notification.CreatedAt);
+            var windowEndUtc = notification.CreatedAt;
             var windowStartUtc = windowEndUtc.AddHours(-24);
 
             var jobsQuery = _context.JobPostings
@@ -361,11 +323,8 @@ namespace AITasker.Infrastructure.Notifications
 
             return new JobDigestNotificationPayload
             {
-                WindowStartUtc = windowStartUtc,
-                WindowEndUtc = windowEndUtc,
-                WindowStart = ConvertUtcToVietnamTime(windowStartUtc),
-                WindowEnd = ConvertUtcToVietnamTime(windowEndUtc),
-                TimeZone = VietnamTimeZoneName,
+                WindowStart = windowStartUtc,
+                WindowEnd = windowEndUtc,
                 TotalJobs = totalJobs,
                 DisplayedJobs = jobs.Count,
                 Jobs = jobs.Select(j => new JobDigestJobItemResponse
@@ -378,8 +337,7 @@ namespace AITasker.Infrastructure.Notifications
                     Complexity = j.Complexity,
                     Status = j.Status,
                     Deadline = j.Deadline,
-                    CreatedAtUtc = SpecifyUtc(j.CreatedAt),
-                    CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(j.CreatedAt)),
+                    CreatedAt = j.CreatedAt,
                     Skills = j.JobSkills.Select(js => new JobSkillResponse
                     {
                         SkillId = js.SkillId,

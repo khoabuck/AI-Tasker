@@ -4,7 +4,6 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Contracts
@@ -85,9 +84,9 @@ namespace AITasker.Infrastructure.Contracts
                     existingContract.ClientConfirmed = false;
                     existingContract.ExpertConfirmed = false;
                     existingContract.ConfirmedAt = null;
-                    existingContract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicy.ContractSignWindowHours);
+                    existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
                     existingContract.SignExpiredAt = null;
-                    existingContract.CreatedAt = VietnamDateTime.Now;
+                    existingContract.CreatedAt = DateTime.UtcNow;
                 }
 
                 if (string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
@@ -107,9 +106,9 @@ namespace AITasker.Infrastructure.Contracts
 
                     if (!existingContract.ClientConfirmed &&
                         !existingContract.ExpertConfirmed &&
-                        (existingContract.SignDeadlineAt == null || existingContract.SignDeadlineAt <= VietnamDateTime.Now))
+                        (existingContract.SignDeadlineAt == null || existingContract.SignDeadlineAt <= DateTime.UtcNow))
                     {
-                        existingContract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicy.ContractSignWindowHours);
+                        existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
                         existingContract.SignExpiredAt = null;
                     }
                 }
@@ -243,13 +242,13 @@ namespace AITasker.Infrastructure.Contracts
 
             if (!contract.ClientConfirmed &&
                 !contract.ExpertConfirmed &&
-                (contract.SignDeadlineAt == null || contract.SignDeadlineAt.Value <= VietnamDateTime.Now))
+                (contract.SignDeadlineAt == null || contract.SignDeadlineAt.Value <= DateTime.UtcNow))
             {
-                contract.SignDeadlineAt = VietnamDateTime.Now.AddHours(workflowPolicyForDeadline.ContractSignWindowHours);
+                contract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicyForDeadline.ContractSignWindowHours);
                 contract.SignExpiredAt = null;
             }
 
-            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= VietnamDateTime.Now)
+            if (contract.SignDeadlineAt.HasValue && contract.SignDeadlineAt.Value <= DateTime.UtcNow)
             {
                 throw new InvalidOperationException("Contract signing deadline has expired. The contract will be cancelled by the deadline job and the job will be reopened.");
             }
@@ -327,10 +326,10 @@ namespace AITasker.Infrastructure.Contracts
 
                 contract.ExpertConfirmed = true;
                 contract.Status = ContractStatusConfirmed;
-                contract.ConfirmedAt = VietnamDateTime.Now;
+                contract.ConfirmedAt = DateTime.UtcNow;
 
                 job.Status = JobStatusActive;
-                job.UpdatedAt = VietnamDateTime.Now;
+                job.UpdatedAt = DateTime.UtcNow;
 
                 var project = await EnsureProjectForAutomaticEscrowAsync(
                     contract,
@@ -411,7 +410,7 @@ namespace AITasker.Infrastructure.Contracts
                 throw new InvalidOperationException("Cannot cancel contract after the project has started. Please use dispute or project cancellation flow.");
             }
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
 
             await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
                 contract,
@@ -519,9 +518,9 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = false,
                 ExpertConfirmed = false,
                 Status = ContractStatusDraft,
-                SignDeadlineAt = VietnamDateTime.Now.AddHours(contractSignWindowHours),
+                SignDeadlineAt = DateTime.UtcNow.AddHours(contractSignWindowHours),
                 SignExpiredAt = null,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
         }
 
@@ -532,7 +531,7 @@ namespace AITasker.Infrastructure.Contracts
             var existingProject = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
 
             if (existingProject != null)
             {
@@ -1038,7 +1037,7 @@ namespace AITasker.Infrastructure.Contracts
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
             var previousDeadlineOffsetDays = 0;
             var milestones = new List<Milestone>();
 
@@ -1106,7 +1105,7 @@ namespace AITasker.Infrastructure.Contracts
                 ResubmitNote = "Initial proposal version generated before contract creation.",
                 CreatedByUserId = expertProfile.UserId,
                 CreatedAt = proposal.CreatedAt == default
-                    ? VietnamDateTime.Now
+                    ? DateTime.UtcNow
                     : proposal.CreatedAt
             };
 
@@ -1160,7 +1159,7 @@ namespace AITasker.Infrastructure.Contracts
                     Amount = x.Amount,
                     OrderIndex = x.OrderIndex,
                     DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 })
                 .ToList();
 

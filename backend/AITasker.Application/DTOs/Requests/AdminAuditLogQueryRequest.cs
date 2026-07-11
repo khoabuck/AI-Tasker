@@ -10,9 +10,9 @@ public class AdminAuditLogQueryRequest
 
     public int? EntityId { get; set; }
 
-    public DateTime? From { get; set; }
+    public DateTimeOffset? From { get; set; }
 
-    public DateTime? To { get; set; }
+    public DateTimeOffset? To { get; set; }
 
     public int PageNumber { get; set; } = 1;
 

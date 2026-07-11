@@ -3211,5 +3211,33 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(w => w.ProcessedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+        ApplyUtcDateTimeConverters(modelBuilder);
+    }
+
+    private static void ApplyUtcDateTimeConverters(ModelBuilder modelBuilder)
+    {
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                // Certificate issue dates are calendar dates, not UTC timestamps.
+                if (entityType.ClrType == typeof(ExpertCertificate) &&
+                    (property.Name == nameof(ExpertCertificate.IssuedAt) ||
+                     property.Name == nameof(ExpertCertificate.DetectedIssuedAt)))
+                {
+                    continue;
+                }
+
+                if (property.ClrType == typeof(DateTime))
+                {
+                    property.SetValueConverter(new UtcDateTimeConverter());
+                }
+                else if (property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(new NullableUtcDateTimeConverter());
+                }
+            }
+        }
     }
 }
