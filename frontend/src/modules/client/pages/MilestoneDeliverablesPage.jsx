@@ -306,7 +306,7 @@ export default function MilestoneDeliverablesPage() {
         {!deliverable ? (
           <div style={cardStyle}>
             <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>
-              Expert chưa nộp deliverable cho milestone này.
+              Expert has not yet submitted a deliverable for this milestone.
             </p>
           </div>
         ) : (

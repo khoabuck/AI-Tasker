@@ -261,7 +261,7 @@ export default function ClientJobDetailPage() {
             onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
             onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-            Back to Jobs
+            Back 
           </button>
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>

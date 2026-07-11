@@ -69,6 +69,11 @@ const TYPE_CONFIG = {
   color: "text-emerald-400",
   bg: "bg-emerald-400/10",
 },
+MILESTONE_OVERDUE: {
+  icon: "event_busy",
+  color: "text-red-400",
+  bg: "bg-red-400/10",
+},
 DELIVERABLE_APPROVED: {
   icon: "verified",
   color: "text-emerald-400",
@@ -230,6 +235,11 @@ function getNotificationTargetUrl(notification) {
     case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
     case "ESCROW_LOCKED":
     case "ESCROW_LOCK_EXPIRED":
+      return projectId
+        ? `/client/projects/${projectId}`
+        : "/client/projects";
+
+    case "MILESTONE_OVERDUE":
       return projectId
         ? `/client/projects/${projectId}`
         : "/client/projects";

@@ -276,7 +276,7 @@ export default function SubmitProposalPage() {
                 onClick={() => navigate("/expert/jobs")}
                 className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Back to Jobs
+                Back 
               </button>
             </div>
           )}

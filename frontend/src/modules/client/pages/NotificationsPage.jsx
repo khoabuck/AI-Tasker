@@ -14,6 +14,7 @@ const TYPE_CONFIG = {
 
   DELIVERABLE_SUBMITTED: { icon: "upload_file", color: "#00F0FF", bg: "rgba(0,240,255,0.1)" },
   DELIVERABLE_APPROVED: { icon: "verified", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
+  MILESTONE_OVERDUE: { icon: "event_busy", color: "#ef4444", bg: "rgba(239,68,68,0.1)",},
 
   ESCROW_LOCKED: { icon: "lock", color: "#facc15", bg: "rgba(250,204,21,0.1)" },
   ESCROW_RELEASED: { icon: "payments", color: "#22c55e", bg: "rgba(34,197,94,0.1)" },
@@ -155,6 +156,11 @@ function getNotificationTargetUrl(notification) {
     case "CONTRACT_CONFIRMED_ESCROW_LOCKED":
     case "ESCROW_LOCKED":
     case "ESCROW_LOCK_EXPIRED":
+      return projectId
+        ? `/client/projects/${projectId}`
+        : "/client/projects";
+
+    case "MILESTONE_OVERDUE":
       return projectId
         ? `/client/projects/${projectId}`
         : "/client/projects";
