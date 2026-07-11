@@ -25,7 +25,7 @@ const disputeApi = {
 
   addDisputeImageEvidence(disputeId, data) {
     return axiosInstance.post(
-      `/disputes/${disputeId}/evidences/image`,
+      `/disputes/${disputeId}/evidences/images`,
       data,
       multipartConfig
     );

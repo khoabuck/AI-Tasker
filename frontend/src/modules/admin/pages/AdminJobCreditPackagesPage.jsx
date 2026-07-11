@@ -36,6 +36,7 @@ export default function AdminJobCreditPackagesPage() {
   const [action, setAction] = useState(EMPTY_ACTION);
   const [form, setForm] = useState(EMPTY_FORM);
   const [reason, setReason] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   useEffect(() => {
     loadPackages();
@@ -52,8 +53,7 @@ export default function AdminJobCreditPackagesPage() {
       const matchSearch =
         !search ||
         String(item.packageName || "").toLowerCase().includes(search) ||
-        String(item.description || "").toLowerCase().includes(search) ||
-        String(item.packageId || "").toLowerCase().includes(search);
+        String(item.description || "").toLowerCase().includes(search);
 
       const matchActive =
         activeFilter === "ALL" ||
@@ -181,7 +181,7 @@ export default function AdminJobCreditPackagesPage() {
     }));
   };
 
-  const handleCreateOrUpdate = async () => {
+  const requestCreateOrUpdate = () => {
     const validation = validateForm(form);
 
     if (!validation.valid) {
@@ -190,22 +190,33 @@ export default function AdminJobCreditPackagesPage() {
       return;
     }
 
+    setModalError("");
+    setShowSaveConfirm(true);
+  };
+
+  const handleCreateOrUpdate = async () => {
     try {
       setSaving(true);
       setModalError("");
       setFieldErrors({});
       setError("");
       setSuccess("");
+      setShowSaveConfirm(false);
+
+      const payload = {
+        ...form,
+        currency: "VND",
+      };
 
       if (action.type === "CREATE") {
-        await adminJobCreditPackageService.createPackage(form);
+        await adminJobCreditPackageService.createPackage(payload);
         setSuccess("Job credit package has been created successfully.");
       }
 
       if (action.type === "EDIT") {
         await adminJobCreditPackageService.updatePackage(
           action.packageItem.packageId,
-          form
+          payload
         );
         setSuccess("Job credit package has been updated successfully.");
       }
@@ -375,7 +386,7 @@ export default function AdminJobCreditPackagesPage() {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by package name, description, or package id..."
+                  placeholder="Search by package name or description..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
@@ -433,10 +444,21 @@ export default function AdminJobCreditPackagesPage() {
             errors={fieldErrors}
             modalError={modalError}
             onClose={closeModal}
-            onConfirm={handleCreateOrUpdate}
+            onConfirm={requestCreateOrUpdate}
             onChange={handleFormChange}
           />
         )}
+
+        {showSaveConfirm &&
+          (action.type === "CREATE" || action.type === "EDIT") && (
+            <SavePackageConfirmModal
+              packageName={form.packageName}
+              actionType={action.type}
+              loading={saving}
+              onCancel={() => !saving && setShowSaveConfirm(false)}
+              onConfirm={handleCreateOrUpdate}
+            />
+          )}
 
         {(action.type === "ACTIVATE" || action.type === "DEACTIVATE") && (
           <ReasonModal
@@ -468,6 +490,60 @@ export default function AdminJobCreditPackagesPage() {
   );
 }
 
+
+function SavePackageConfirmModal({
+  packageName,
+  actionType,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const isCreate = actionType === "CREATE";
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-cyan-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined">
+            {isCreate ? "add_box" : "edit_note"}
+          </span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">
+          {isCreate ? "Create this package?" : "Save package changes?"}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          {isCreate ? "Create" : "Update"}{" "}
+          <span className="font-bold text-white">
+            {packageName || "this package"}
+          </span>{" "}
+          with the values currently entered.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
+          >
+            {loading ? "Saving..." : isCreate ? "Create Package" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ensureHiddenScrollbarStyle() {
   if (typeof document === "undefined") return;
@@ -505,8 +581,7 @@ function PackageRow({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge active={packageItem.isActive} />
-            <Badge label={`Package #${packageItem.packageId || "N/A"}`} />
-            <Badge label={`Order ${packageItem.displayOrder || 0}`} />
+            <Badge label={`Display order ${packageItem.displayOrder || 0}`} />
           </div>
 
           <h3 className="line-clamp-1 font-bold text-white">
@@ -526,7 +601,7 @@ function PackageRow({
             Job: {formatNumber(packageItem.jobPostCredits)}
           </p>
           <p className="mt-1 text-sm font-bold text-white">
-            AI: {formatNumber(packageItem.aiGenerationCredits)}
+            AI Assistant: {formatNumber(packageItem.aiGenerationCredits)}
           </p>
         </div>
 
@@ -586,11 +661,11 @@ function PackageFormModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-5 py-4">
           <h2 className="text-lg font-bold text-white">{title}</h2>
           <p className="mt-1 text-xs text-gray-400">
-            Fill package information and provide an admin reason.
+            Enter the package details and explain why this change is needed.
           </p>
         </div>
 
@@ -630,7 +705,7 @@ function PackageFormModal({
             />
 
             <NumberInput
-              label="AI Generation Credits"
+              label="AI Assistant Credits"
               required
               error={errors.aiGenerationCredits}
               value={form.aiGenerationCredits}
@@ -644,15 +719,6 @@ function PackageFormModal({
               value={form.price}
               onChange={(value) => onChange("price", value)}
               step="0.01"
-            />
-
-            <TextInput
-              label="Currency"
-              required
-              error={errors.currency}
-              value={form.currency}
-              onChange={(value) => onChange("currency", value)}
-              placeholder="VND"
             />
 
             <NumberInput
@@ -1080,11 +1146,11 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage job credit packages.";
   }
 
   if (status === 404) {
-    return "Job credit packages API was not found. Please check backend route.";
+    return "Job credit packages are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

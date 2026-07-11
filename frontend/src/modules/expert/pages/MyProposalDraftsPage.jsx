@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import proposalService, {
   getFriendlyProposalError,
+  mapProposalToForm,
 } from "../../../services/proposal.service";
+import { validateProposalForm } from "../../../utils/validateProposal";
 import proposalCreditPackageService from "../../../services/proposalCreditPackage.service";
 import expertWalletService from "../../../services/expertWallet.service";
 
@@ -24,6 +26,7 @@ export default function MyProposalDraftsPage() {
 
   const [selectedDraft, setSelectedDraft] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -97,7 +100,7 @@ export default function MyProposalDraftsPage() {
     navigate(`/expert/jobs/${jobId}/proposal?draftId=${draft.proposalId}`);
   };
 
-  const deleteDraft = async (draft) => {
+  const executeDeleteDraft = async (draft) => {
     const proposalId = draft?.proposalId;
 
     if (!proposalId) {
@@ -105,11 +108,6 @@ export default function MyProposalDraftsPage() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Delete draft for "${draft.jobTitle || "this job"}"?`
-    );
-
-    if (!confirmed) return;
 
     try {
       setDeletingId(String(proposalId));
@@ -128,7 +126,7 @@ export default function MyProposalDraftsPage() {
     }
   };
 
-  const submitDraft = async (draft) => {
+  const executeSubmitDraft = async (draft) => {
     const proposalId = draft?.proposalId;
 
     if (!proposalId) {
@@ -136,17 +134,39 @@ export default function MyProposalDraftsPage() {
       return;
     }
 
-    if (submissionsLeft <= 0 || getCanSubmitNewProposal(proposalCredits) === false) {
+    const draftForm = mapProposalToForm(draft);
+    const validationErrors = validateProposalForm(draftForm, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
+
+    if (Object.keys(validationErrors).length > 0) {
+      const jobId = getDraftJobId(draft);
+
+      setError(
+        "This draft is not ready to submit. Complete the highlighted fields, make the milestone total equal the proposed price, and keep the milestone duration within the proposed timeline."
+      );
+
+      if (jobId) {
+        navigate(`/expert/jobs/${jobId}/proposal?draftId=${proposalId}`, {
+          state: { reviewDraftBeforeSubmit: true },
+        });
+      }
+      return;
+    }
+
+    const creditAccessKnown =
+      proposalCredits !== null && proposalCredits !== undefined;
+
+    if (
+      creditAccessKnown &&
+      (submissionsLeft <= 0 ||
+        getCanSubmitNewProposal(proposalCredits) === false)
+    ) {
       setSelectedDraft(draft);
       setShowUpgradeModal(true);
       return;
     }
-
-    const confirmed = window.confirm(
-      `Submit draft for "${draft.jobTitle || "this job"}"?`
-    );
-
-    if (!confirmed) return;
 
     try {
       setSubmittingId(String(proposalId));
@@ -179,6 +199,42 @@ export default function MyProposalDraftsPage() {
       }
     } finally {
       setSubmittingId("");
+    }
+  };
+
+  const requestDeleteDraft = (draft) => {
+    setConfirmAction({
+      type: "DELETE",
+      draft,
+      title: "Delete this draft?",
+      message: `The saved proposal for "${draft?.jobTitle || "this job"}" will be permanently removed.`,
+      confirmLabel: "Delete Draft",
+      tone: "red",
+    });
+  };
+
+  const requestSubmitDraft = (draft) => {
+    setConfirmAction({
+      type: "SUBMIT",
+      draft,
+      title: "Submit this draft?",
+      message: `The proposal for "${draft?.jobTitle || "this job"}" will be sent to the client and one submission will be used.`,
+      confirmLabel: "Submit Draft",
+      tone: "cyan",
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmAction;
+    setConfirmAction(null);
+
+    if (action?.type === "DELETE") {
+      await executeDeleteDraft(action.draft);
+      return;
+    }
+
+    if (action?.type === "SUBMIT") {
+      await executeSubmitDraft(action.draft);
     }
   };
 
@@ -327,8 +383,8 @@ export default function MyProposalDraftsPage() {
                     submitting={String(submittingId) === String(draft.proposalId)}
                     deleting={String(deletingId) === String(draft.proposalId)}
                     onEdit={() => editDraft(draft)}
-                    onSubmit={() => submitDraft(draft)}
-                    onDelete={() => deleteDraft(draft)}
+                    onSubmit={() => requestSubmitDraft(draft)}
+                    onDelete={() => requestDeleteDraft(draft)}
                   />
                 ))}
               </div>
@@ -336,6 +392,18 @@ export default function MyProposalDraftsPage() {
           </section>
         </div>
       </div>
+
+      {confirmAction && (
+        <ConfirmModal
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmLabel={confirmAction.confirmLabel}
+          tone={confirmAction.tone}
+          busy={Boolean(submittingId || deletingId)}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={handleConfirmAction}
+        />
+      )}
 
       {showUpgradeModal && (
         <UpgradeDraftModal
@@ -434,6 +502,53 @@ function DraftCard({
         </button>
       </div>
     </article>
+  );
+}
+
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  tone = "cyan",
+  busy,
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-2xl">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+          <span className="material-symbols-outlined text-cyan-300">help</span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {busy ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

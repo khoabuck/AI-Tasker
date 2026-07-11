@@ -1557,12 +1557,16 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Total milestone amount must equal proposed price.");
             }
 
-            var totalDurationDays = milestones.Sum(x => x.DeadlineOffsetDays);
+            var totalDurationDays = milestones.Count == 0
+    ? 0
+    : milestones.Max(x => x.DeadlineOffsetDays);
 
-            if (totalDurationDays > proposal.ProposedTimelineDays)
-            {
-                throw new InvalidOperationException("Total milestone duration cannot exceed proposed timeline.");
-            }
+if (totalDurationDays > proposal.ProposedTimelineDays)
+{
+    throw new InvalidOperationException(
+        "Total milestone duration cannot exceed proposed timeline."
+    );
+}
         }
 
         private async Task NotifyProposalCreditUsedAsync(

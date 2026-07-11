@@ -48,6 +48,7 @@ export default function SubmitProposalPage() {
   const [creditPackages, setCreditPackages] = useState([]);
   const [walletBalance, setWalletBalance] = useState(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
   const [buyingPackageId, setBuyingPackageId] = useState("");
 
   const [loading, setLoading] = useState(true);
@@ -103,16 +104,7 @@ export default function SubmitProposalPage() {
       setError("");
       setMessage("");
 
-      const [jobResult] = await Promise.all([
-        loadJobDetailOnly(),
-        loadSubmitAccess(),
-      ]);
-
-      if (jobResult === false) return;
-
-      const guardResult = await guardExistingApplication();
-
-      if (guardResult === "REDIRECTED") return;
+      await Promise.all([loadJobDetailOnly(), loadSubmitAccess()]);
 
       if (draftId) {
         await loadDraftDetail(draftId);
@@ -131,81 +123,10 @@ export default function SubmitProposalPage() {
       const data = unwrapData(response);
 
       setJob(data);
-      return true;
     } catch (err) {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load job detail."));
       setJob(null);
-      return false;
-    }
-  };
-
-  const guardExistingApplication = async () => {
-    try {
-      const [proposalResult, draftResult] = await Promise.allSettled([
-        proposalService.getMyProposals(),
-        proposalService.getMyDraftProposals(),
-      ]);
-
-      const proposals =
-        proposalResult.status === "fulfilled" &&
-        Array.isArray(proposalResult.value)
-          ? proposalResult.value
-          : [];
-
-      const drafts =
-        draftResult.status === "fulfilled" && Array.isArray(draftResult.value)
-          ? draftResult.value
-          : [];
-
-      const submittedProposal = findProposalForJob(proposals, jobId, false);
-
-      if (submittedProposal) {
-        const proposalId = getProposalId(submittedProposal);
-
-        navigate(
-          proposalId
-            ? `/expert/proposals/${proposalId}`
-            : "/expert/proposals",
-          { replace: true }
-        );
-
-        return "REDIRECTED";
-      }
-
-      const existingDraft = findProposalForJob(drafts, jobId, true);
-      const existingDraftId = getProposalId(existingDraft);
-
-      if (!draftId && existingDraftId) {
-        navigate(
-          `/expert/jobs/${jobId}/proposal?draftId=${existingDraftId}`,
-          { replace: true }
-        );
-
-        return "REDIRECTED";
-      }
-
-      if (draftId && existingDraftId && String(draftId) !== String(existingDraftId)) {
-        setError(
-          "This draft does not belong to the selected job. Opening the correct draft."
-        );
-
-        navigate(
-          `/expert/jobs/${jobId}/proposal?draftId=${existingDraftId}`,
-          { replace: true }
-        );
-
-        return "REDIRECTED";
-      }
-
-      return "ALLOWED";
-    } catch (err) {
-      console.warn(
-        "CHECK EXISTING PROPOSAL ERROR:",
-        err?.response?.data || err
-      );
-
-      return "ALLOWED";
     }
   };
 
@@ -422,23 +343,50 @@ export default function SubmitProposalPage() {
     }
   };
 
-  const handleSubmitDraft = async () => {
-    if (!currentDraftId) {
-      await handleSaveDraft();
-      setMessage("Draft saved. Please click Submit Draft again.");
-      return;
-    }
-
+  const executeSubmitDraft = async () => {
     setSubmitted(true);
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData);
+    const errors = validateProposalForm(formData, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
 
     if (Object.keys(errors).length > 0) {
       setError("Please check the highlighted fields before submitting.");
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
+    }
+
+    let draftIdToSubmit = currentDraftId;
+
+    if (!draftIdToSubmit) {
+      if (!jobId) {
+        setError("Job information is missing. Please go back and choose a job.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      try {
+        setSavingDraft(true);
+        const savedDraft = await proposalService.createDraftProposal(jobId, formData);
+        draftIdToSubmit = savedDraft?.proposalId || savedDraft?.id || "";
+
+        if (!draftIdToSubmit) {
+          throw new Error("Draft was saved but its id was not returned.");
+        }
+
+        setCurrentDraftId(draftIdToSubmit);
+        setSearchParams({ draftId: String(draftIdToSubmit) });
+      } catch (err) {
+        console.error("SAVE DRAFT BEFORE SUBMIT ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot save draft before submitting."));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      } finally {
+        setSavingDraft(false);
+      }
     }
 
     if (shouldRequireUpgrade) {
@@ -453,10 +401,10 @@ export default function SubmitProposalPage() {
     try {
       setSubmittingDraft(true);
 
-      await proposalService.updateDraftProposal(currentDraftId, jobId, formData);
+      await proposalService.updateDraftProposal(draftIdToSubmit, jobId, formData);
 
-      const proposal = await proposalService.submitDraftProposal(currentDraftId);
-      const proposalId = proposal?.proposalId || proposal?.id || currentDraftId;
+      const proposal = await proposalService.submitDraftProposal(draftIdToSubmit);
+      const proposalId = proposal?.proposalId || proposal?.id || draftIdToSubmit;
 
       setMessage("Draft submitted successfully.");
       await loadSubmitAccess();
@@ -482,6 +430,59 @@ export default function SubmitProposalPage() {
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setSubmittingDraft(false);
+    }
+  };
+
+  const requestSubmitDraft = () => {
+    setConfirmAction({
+      type: "SUBMIT_DRAFT",
+      title: "Submit this proposal draft?",
+      message:
+        "Your draft will be sent to the client and one proposal submission will be used. Please confirm that the price, timeline, and milestones are final.",
+      confirmLabel: "Submit Draft",
+      tone: "cyan",
+    });
+  };
+
+  const requestSubmitProposal = (event) => {
+    event.preventDefault();
+    setConfirmAction({
+      type: "SUBMIT_PROPOSAL",
+      title: "Submit this proposal?",
+      message:
+        "Your proposal will be sent to the client and one proposal submission will be used. Please review the price, timeline, and milestones before continuing.",
+      confirmLabel: "Submit Proposal",
+      tone: "cyan",
+    });
+  };
+
+  const requestCancel = () => {
+    setConfirmAction({
+      type: "CANCEL",
+      title: "Leave this proposal?",
+      message:
+        "Any changes that have not been saved as a draft will be lost.",
+      confirmLabel: "Leave Page",
+      tone: "red",
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (action === "SUBMIT_DRAFT") {
+      await executeSubmitDraft();
+      return;
+    }
+
+    if (action === "SUBMIT_PROPOSAL") {
+      await executeSubmitProposal();
+      return;
+    }
+
+    if (action === "CANCEL") {
+      navigate(`/expert/jobs/${jobId}`);
     }
   };
 
@@ -547,14 +548,16 @@ export default function SubmitProposalPage() {
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+  const executeSubmitProposal = async () => {
 
     setSubmitted(true);
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData);
+    const errors = validateProposalForm(formData, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
 
     if (Object.keys(errors).length > 0) {
       setError("Please check the highlighted fields before submitting.");
@@ -614,7 +617,7 @@ export default function SubmitProposalPage() {
     }
   };
 
-  const isJobOpen = isOpenJobStatus(getJobStatus(job));
+  const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
 
   if (loading) {
     return (
@@ -683,7 +686,7 @@ export default function SubmitProposalPage() {
 
           {job && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={requestSubmitProposal} className="space-y-6">
                 {!isJobOpen && (
                   <Alert
                     type="warning"
@@ -900,7 +903,7 @@ export default function SubmitProposalPage() {
                 <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => navigate(`/expert/jobs/${jobId}`)}
+                    onClick={requestCancel}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
                   >
                     Cancel
@@ -922,7 +925,7 @@ export default function SubmitProposalPage() {
                   {currentDraftId ? (
                     <button
                       type="button"
-                      onClick={handleSubmitDraft}
+                      onClick={requestSubmitDraft}
                       disabled={
                         submittingDraft ||
                         submitting ||
@@ -1024,12 +1027,8 @@ export default function SubmitProposalPage() {
                     />
 
                     <Info
-                      label="Duration"
-                      value={
-                        getJobDuration(job)
-                          ? `${getJobDuration(job)} days`
-                          : "N/A"
-                      }
+                      label="Application Deadline"
+                      value={formatDeadline(getJobDeadline(job))}
                     />
 
                     <Info label="Status" value={getJobStatus(job) || "OPEN"} />
@@ -1049,6 +1048,18 @@ export default function SubmitProposalPage() {
           )}
         </div>
       </div>
+
+      {confirmAction && (
+        <ConfirmModal
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmLabel={confirmAction.confirmLabel}
+          tone={confirmAction.tone}
+          busy={submitting || submittingDraft}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={handleConfirmAction}
+        />
+      )}
 
       {showUpgradeModal && (
         <UpgradeProposalModal
@@ -1071,6 +1082,53 @@ export default function SubmitProposalPage() {
         />
       )}
     </ExpertLayout>
+  );
+}
+
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  tone = "cyan",
+  busy,
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-2xl">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+          <span className="material-symbols-outlined text-cyan-300">help</span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {busy ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1595,64 +1653,48 @@ function getJobStatus(job) {
   return getValue(job?.status, job?.Status, "OPEN");
 }
 
-function getJobDuration(job) {
+function getJobDeadline(job) {
   return getValue(
-    job?.durationDays,
-    job?.DurationDays,
-    job?.projectDurationDays,
-    job?.ProjectDurationDays,
+    job?.deadline,
+    job?.Deadline,
+    job?.applicationDeadline,
+    job?.ApplicationDeadline,
+    job?.proposalDeadline,
+    job?.ProposalDeadline,
+    job?.expiredAt,
+    job?.ExpiredAt,
+    job?.expiresAt,
+    job?.ExpiresAt,
+    job?.endDate,
+    job?.EndDate,
+    job?.raw?.deadline,
+    job?.raw?.Deadline,
+    job?.raw?.applicationDeadline,
+    job?.raw?.ApplicationDeadline,
+    job?.raw?.proposalDeadline,
+    job?.raw?.ProposalDeadline,
+    job?.raw?.expiredAt,
+    job?.raw?.ExpiredAt,
+    job?.raw?.expiresAt,
+    job?.raw?.ExpiresAt,
     ""
   );
 }
 
+function formatDeadline(value) {
+  if (!value) return "No deadline provided";
 
-function findProposalForJob(items, jobId, draftOnly) {
-  if (!Array.isArray(items) || !jobId) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No deadline provided";
 
-  return (
-    items.find((item) => {
-      const status = String(item?.status || item?.Status || "").toUpperCase();
-      const sameJob = String(getProposalJobId(item)) === String(jobId);
-
-      if (!sameJob) return false;
-      if (draftOnly) return !status || status === "DRAFT";
-      return status !== "DRAFT";
-    }) || null
-  );
-}
-
-function getProposalJobId(proposal) {
-  return (
-    proposal?.jobId ||
-    proposal?.jobPostingId ||
-    proposal?.JobId ||
-    proposal?.JobPostingId ||
-    proposal?.raw?.jobId ||
-    proposal?.raw?.jobPostingId ||
-    proposal?.raw?.JobId ||
-    proposal?.raw?.JobPostingId ||
-    ""
-  );
-}
-
-function getProposalId(proposal) {
-  return (
-    proposal?.proposalId ||
-    proposal?.id ||
-    proposal?.ProposalId ||
-    proposal?.Id ||
-    proposal?.raw?.proposalId ||
-    proposal?.raw?.id ||
-    proposal?.raw?.ProposalId ||
-    proposal?.raw?.Id ||
-    ""
-  );
-}
-
-function isOpenJobStatus(status) {
-  return ["OPEN", "ACTIVE", "PUBLISHED", "AVAILABLE"].includes(
-    String(status || "").trim().toUpperCase()
-  );
+  return date.toLocaleString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function isWalletError(message) {

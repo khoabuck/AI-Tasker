@@ -12,6 +12,7 @@ export default function ProposalDetailPage() {
   const [proposal, setProposal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -54,15 +55,17 @@ export default function ProposalDetailPage() {
     }
   };
 
+  const requestCancelProposal = () => {
+    setError("");
+    setShowCancelConfirm(true);
+  };
+
   const handleCancelProposal = async () => {
-    const ok = window.confirm("Are you sure you want to cancel this proposal?");
-
-    if (!ok) return;
-
     try {
       setActionLoading(true);
       setError("");
       setMessage("");
+      setShowCancelConfirm(false);
 
       await proposalService.withdrawProposal(proposalId);
 
@@ -87,7 +90,7 @@ export default function ProposalDetailPage() {
       return;
     }
 
-    setError("Cannot open contract because proposal id is missing.");
+    setError("Contract information is unavailable. Please refresh and try again.");
   };
 
   if (loading) {
@@ -216,7 +219,7 @@ export default function ProposalDetailPage() {
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={handleCancelProposal}
+                        onClick={requestCancelProposal}
                         className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {actionLoading ? "Cancelling..." : "Cancel"}
@@ -381,7 +384,52 @@ export default function ProposalDetailPage() {
           )}
         </div>
       </div>
+      {showCancelConfirm && (
+        <ProposalConfirmModal
+          loading={actionLoading}
+          onCancel={() => !actionLoading && setShowCancelConfirm(false)}
+          onConfirm={handleCancelProposal}
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+function ProposalConfirmModal({ loading, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-red-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-red-400/20 bg-red-400/10 text-red-300">
+          <span className="material-symbols-outlined">cancel</span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">Cancel this proposal?</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          The proposal will be withdrawn and the client will no longer be able
+          to accept it.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Keep Proposal
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Cancelling..." : "Cancel Proposal"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -43,7 +43,6 @@ export default function AdminReviewReportsPage() {
     return reports.filter((report) => {
       const matchSearch =
         !keyword ||
-        String(report.reviewReportId || "").toLowerCase().includes(keyword) ||
         String(report.projectTitle || "").toLowerCase().includes(keyword) ||
         String(report.expertName || "").toLowerCase().includes(keyword) ||
         String(report.clientName || "").toLowerCase().includes(keyword) ||
@@ -103,7 +102,7 @@ export default function AdminReviewReportsPage() {
     const reportId = getReportId(report);
 
     if (!reportId) {
-      setError("Cannot open report detail because report id is missing.");
+      setError("Review report information is unavailable. Please refresh and try again.");
       return;
     }
 
@@ -186,7 +185,7 @@ export default function AdminReviewReportsPage() {
     const reportId = getReportId(resolveTarget);
 
     if (!reportId) {
-      setError("Cannot resolve report because report id is missing.");
+      setError("Review report information is unavailable. Please refresh and try again.");
       return;
     }
 
@@ -216,7 +215,7 @@ export default function AdminReviewReportsPage() {
           ? "accepted and the review has been hidden"
           : "rejected and the review remains visible";
 
-      setMessage(`Review report #${reportId} has been ${actionText}.`);
+      setMessage(`The review report has been ${actionText}.`);
     } catch (err) {
       console.error("RESOLVE REVIEW REPORT ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot resolve review report."));
@@ -324,7 +323,7 @@ export default function AdminReviewReportsPage() {
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Search by project, expert, client, reason, comment, or report id..."
+                    placeholder="Search by project, expert, client, reason, or comment..."
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                   />
                 </div>
@@ -424,8 +423,6 @@ function ReportCard({ report, disabled, onView, onAccept, onReject }) {
         <div className="flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Badge label={`Report #${getReportId(report) || "N/A"}`} />
-            <Badge label={`Review #${report.reviewId || "N/A"}`} />
             <Badge label={`${report.rating || 0}/5 stars`} tone="yellow" />
           </div>
 
@@ -525,7 +522,7 @@ function ReportDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-6xl rounded-3xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
@@ -537,7 +534,7 @@ function ReportDetailModal({
             </h2>
 
             <p className="mt-1 text-sm text-gray-400">
-              Report #{getReportId(report)} · Review #{report.reviewId}
+              Review moderation details
             </p>
           </div>
 
@@ -683,7 +680,7 @@ function ResolveReportModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-3xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <div
             className={`mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border ${
@@ -697,7 +694,7 @@ function ResolveReportModal({
             </span>
           </div>
 
-          <h2 className="text-2xl font-black text-white">
+          <h2 className="text-xl font-black text-white">
             {isAccept ? "Accept Review Report" : "Reject Review Report"}
           </h2>
 
@@ -771,7 +768,6 @@ function MilestoneItem({ milestone }) {
   return (
     <article className="rounded-xl border border-white/10 bg-black/10 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Badge label={`Milestone #${milestone.milestoneId || "N/A"}`} />
         <StatusBadge status={milestone.status} />
         {milestone.paymentStatus && (
           <Badge label={`Payment: ${formatLabel(milestone.paymentStatus)}`} />
@@ -797,8 +793,7 @@ function MilestoneItem({ milestone }) {
               className="rounded-lg border border-white/10 bg-white/[0.03] p-3"
             >
               <div className="mb-1 flex flex-wrap items-center gap-2">
-                <Badge label={`Deliverable #${deliverable.deliverableId}`} />
-                <Badge label={`Version ${deliverable.versionNumber || 0}`} />
+                <Badge label={`Submission version ${deliverable.versionNumber || 1}`} />
                 <StatusBadge status={deliverable.status} />
               </div>
 
@@ -823,7 +818,6 @@ function DisputeItem({ dispute }) {
   return (
     <article className="rounded-xl border border-white/10 bg-black/10 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Badge label={`Dispute #${dispute.disputeId || "N/A"}`} />
         <StatusBadge status={dispute.status} />
         {dispute.resolutionType && (
           <Badge label={formatLabel(dispute.resolutionType)} />
@@ -1074,11 +1068,11 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to moderate review reports.";
   }
 
   if (status === 404) {
-    return "Review reports API was not found. Please check backend route.";
+    return "Review moderation is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

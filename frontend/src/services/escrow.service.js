@@ -86,7 +86,6 @@ const escrowService = {
   async getProjectEscrows(projectId) {
     const response = await escrowApi.getProjectEscrows(projectId);
 
-    console.log("GET PROJECT ESCROWS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeEscrow).filter(Boolean);
   },
@@ -94,7 +93,6 @@ const escrowService = {
   async lockProjectEscrow(projectId) {
     const response = await escrowApi.lockProjectEscrow(projectId);
 
-    console.log("LOCK PROJECT ESCROW RESPONSE:", response?.data);
 
     return normalizeEscrow(unwrapData(response));
   },
@@ -102,7 +100,6 @@ const escrowService = {
   async lockMilestoneEscrow(milestoneId) {
     const response = await escrowApi.lockMilestoneEscrow(milestoneId);
 
-    console.log("LOCK MILESTONE ESCROW RESPONSE:", response?.data);
 
     return normalizeEscrow(unwrapData(response));
   },
@@ -110,7 +107,6 @@ const escrowService = {
   async releaseMilestoneEscrow(milestoneId) {
     const response = await escrowApi.releaseMilestoneEscrow(milestoneId);
 
-    console.log("RELEASE MILESTONE ESCROW RESPONSE:", response?.data);
 
     return normalizeEscrow(unwrapData(response));
   },
@@ -118,7 +114,6 @@ const escrowService = {
   async refundMilestoneEscrow(milestoneId) {
     const response = await escrowApi.refundMilestoneEscrow(milestoneId);
 
-    console.log("REFUND MILESTONE ESCROW RESPONSE:", response?.data);
 
     return normalizeEscrow(unwrapData(response));
   },
@@ -126,7 +121,6 @@ const escrowService = {
   async freezeMilestoneEscrow(milestoneId) {
     const response = await escrowApi.freezeMilestoneEscrow(milestoneId);
 
-    console.log("FREEZE MILESTONE ESCROW RESPONSE:", response?.data);
 
     return normalizeEscrow(unwrapData(response));
   },

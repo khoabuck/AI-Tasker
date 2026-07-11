@@ -167,6 +167,7 @@ export default function AdminWorkflowPolicyPage() {
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -284,7 +285,7 @@ export default function AdminWorkflowPolicyPage() {
     return nextErrors;
   };
 
-  const handleSaveSection = async () => {
+  const requestSaveSection = () => {
     const validationErrors = validateSection();
 
     if (Object.keys(validationErrors).length > 0) {
@@ -293,10 +294,16 @@ export default function AdminWorkflowPolicyPage() {
       return;
     }
 
+    setError("");
+    setShowSaveConfirm(true);
+  };
+
+  const handleSaveSection = async () => {
     try {
       setSaving(true);
       setError("");
       setMessage("");
+      setShowSaveConfirm(false);
 
       const updated = await adminWorkflowPolicyService.updatePolicy(editForm);
 
@@ -386,12 +393,68 @@ export default function AdminWorkflowPolicyPage() {
               saving={saving}
               onClose={closeEditModal}
               onChange={updateField}
-              onSave={handleSaveSection}
+              onSave={requestSaveSection}
+            />
+          )}
+
+          {showSaveConfirm && editSection && (
+            <PolicySaveConfirmModal
+              sectionTitle={editSection.title}
+              loading={saving}
+              onCancel={() => !saving && setShowSaveConfirm(false)}
+              onConfirm={handleSaveSection}
             />
           )}
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function PolicySaveConfirmModal({
+  sectionTitle,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-cyan-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined">policy</span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">
+          Save policy changes?
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          These changes will update{" "}
+          <span className="font-bold text-white">{sectionTitle}</span> for the
+          platform. Please confirm that the values are correct.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Saving..." : "Confirm Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -429,7 +492,11 @@ function PolicySummary({ policy }) {
           />
           <MiniStat
             label="Updated By"
-            value={policy?.updatedByAdminId || "N/A"}
+            value={
+              policy?.updatedByAdminName ||
+              policy?.updatedByAdminEmail ||
+              "Administrator"
+            }
           />
         </div>
       </div>
@@ -800,10 +867,10 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
 
   if (status === 401) return "Your session has expired. Please login again.";
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to update workflow policies.";
   }
   if (status === 404) {
-    return "Workflow policy API was not found. Please check backend route.";
+    return "Workflow policy settings are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

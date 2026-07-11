@@ -601,34 +601,34 @@ export default function ExpertWalletPage() {
         `}
       </style>
 
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-7xl">
-          <section className="mb-8 rounded-[2rem] border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-6 shadow-[0_24px_90px_rgba(0,0,0,0.35)] md:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <div className="overflow-x-hidden px-4 py-5 md:px-6">
+        <div className="mx-auto max-w-6xl">
+          <section className="mb-5 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.3)] md:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300">
                   <span className="material-symbols-outlined text-[17px]">
                     account_balance_wallet
                   </span>
                   Expert Wallet
                 </div>
 
-                <h1 className="text-4xl font-black text-white md:text-5xl">
+                <h1 className="text-2xl font-black text-white md:text-3xl">
                   Wallet Overview
                 </h1>
 
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400 md:text-base">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
                   Track your balance, deposits, proposal credit payments, and
                   withdrawal requests in one place.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={openWithdrawalModal}
                   disabled={withdrawableBalance <= 0}
-                  className="flex items-center gap-2 rounded-2xl border border-green-400/60 bg-green-400/10 px-6 py-4 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     account_balance
@@ -639,7 +639,7 @@ export default function ExpertWalletPage() {
                 <button
                   type="button"
                   onClick={openDepositModal}
-                  className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 text-sm font-black text-white shadow-[0_18px_45px_rgba(0,240,255,0.2)] transition hover:scale-[1.01]"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_30px_rgba(0,240,255,0.18)] transition hover:brightness-110"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     add_card
@@ -650,7 +650,7 @@ export default function ExpertWalletPage() {
                 <button
                   type="button"
                   onClick={goToProposalCredits}
-                  className="flex items-center gap-2 rounded-2xl border border-purple-400/50 bg-purple-400/10 px-6 py-4 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                  className="flex items-center gap-2 rounded-xl border border-purple-400/40 bg-purple-400/10 px-4 py-2.5 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     workspace_premium
@@ -664,13 +664,13 @@ export default function ExpertWalletPage() {
           {message && <Alert type="success" message={message} />}
           {error && <Alert type="danger" message={error} />}
 
-          <section className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <BalanceCard
               label="Available Balance"
               value={formatMoney(balance?.availableBalance)}
               icon="account_balance_wallet"
               tone="cyan"
-              description={`Withdrawable now: ${formatMoney(
+              description={`Ready to withdraw: ${formatMoney(
                 withdrawableBalance
               )}`}
             />
@@ -680,15 +680,7 @@ export default function ExpertWalletPage() {
               value={formatMoney(balance?.pendingEarningsBalance)}
               icon="hourglass_top"
               tone="yellow"
-              description="Net milestone earnings after service fee, waiting for project completion."
-            />
-
-            <BalanceCard
-              label="Total Withdrawn"
-              value={formatMoney(totalWithdrawn)}
-              icon="logout"
-              tone="green"
-              description="Total amount successfully withdrawn from your wallet."
+              description="Net milestone earnings waiting for project completion."
             />
 
             <BalanceCard
@@ -696,14 +688,22 @@ export default function ExpertWalletPage() {
               value={formatMoney(balance?.totalEarnings)}
               icon="trending_up"
               tone="purple"
-              description="Total net earnings tracked for your Expert account."
+              description="Total net earnings recorded for your Expert account."
+            />
+
+            <BalanceCard
+              label="Total Withdrawn"
+              value={formatMoney(totalWithdrawn)}
+              icon="account_balance"
+              tone="green"
+              description="Successfully transferred to your bank account."
             />
           </section>
 
 
-          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_430px]">
-            <div className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
-              <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 md:flex-row md:items-center md:justify-between">
+          <section className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_12px_36px_rgba(0,0,0,0.24)]">
+              <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-black text-white">
                     Transaction History
@@ -727,8 +727,15 @@ export default function ExpertWalletPage() {
               {normalizedTransactions.length === 0 ? (
                 <EmptyState />
               ) : (
-                <div className="wallet-scrollbar-hide max-h-[520px] overflow-auto">
-                  <table className="w-full min-w-[850px] text-left">
+                <div className="wallet-scrollbar-hide max-h-[480px] overflow-y-auto overflow-x-hidden">
+                  <table className="w-full table-fixed text-left">
+                    <colgroup>
+                      <col className="w-[24%]" />
+                      <col className="w-[36%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[10%]" />
+                    </colgroup>
                     <thead className="sticky top-0 z-10 border-b border-white/10 bg-[#151a22]">
                       <tr>
                         <TableHead>Type</TableHead>
@@ -753,12 +760,12 @@ export default function ExpertWalletPage() {
               )}
             </div>
 
-            <aside className="space-y-6">
+            <aside className="min-w-0 space-y-4">
               <HistoryPanel
-                title="Withdrawal Requests"
+                title="Withdrawal History"
                 subtitle="Payout status and bank transfer requests"
                 empty="No withdrawal requests yet."
-                bodyClassName="max-h-[390px]"
+                bodyClassName="max-h-[330px]"
               >
                 {latestWithdrawals.map((item, index) => (
                   <WithdrawalHistoryItem
@@ -772,7 +779,7 @@ export default function ExpertWalletPage() {
                 title="Deposit History"
                 subtitle="Recent QR payment orders"
                 empty="No deposit orders yet."
-                bodyClassName="max-h-[390px]"
+                bodyClassName="max-h-[330px]"
               >
                 {latestDepositOrders.map((order, index) => (
                   <DepositHistoryItem
@@ -1059,14 +1066,14 @@ function HistoryPanel({
     : Boolean(children);
 
   return (
-    <aside className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
-      <div className="border-b border-white/10 px-6 py-5">
+    <aside className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
+      <div className="border-b border-white/10 px-4 py-4">
         <h2 className="text-xl font-black text-white">{title}</h2>
         <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
       </div>
 
       {!hasChildren ? (
-        <div className="p-6 text-sm text-gray-400">{empty}</div>
+        <div className="p-4 text-sm text-gray-400">{empty}</div>
       ) : (
         <div
           className={`wallet-scrollbar-hide divide-y divide-white/10 overflow-y-auto ${bodyClassName}`}
@@ -1080,7 +1087,7 @@ function HistoryPanel({
 
 function WithdrawalHistoryItem({ withdrawal }) {
   return (
-    <article className="p-6">
+    <article className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-lg font-black text-white">
@@ -1437,18 +1444,24 @@ function BalanceCard({ label, value, icon, tone, description }) {
       : "border-red-400/20 bg-red-400/10 text-red-300";
 
   return (
-    <article className="rounded-[1.5rem] border border-white/10 bg-[#151a22] p-7 shadow-[0_15px_45px_rgba(0,0,0,0.22)]">
-      <div
-        className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border ${toneClass}`}
-      >
-        <span className="material-symbols-outlined text-[28px]">{icon}</span>
+    <article className="min-w-0 rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
+            {label}
+          </p>
+
+          <p className="mt-2 break-words text-xl font-black text-white">
+            {value}
+          </p>
+        </div>
+
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${toneClass}`}
+        >
+          <span className="material-symbols-outlined text-[19px]">{icon}</span>
+        </div>
       </div>
-
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-gray-500">
-        {label}
-      </p>
-
-      <p className="mt-4 text-3xl font-black text-white">{value}</p>
 
       {description && (
         <p className="mt-3 text-xs leading-5 text-gray-500">{description}</p>
@@ -1459,7 +1472,7 @@ function BalanceCard({ label, value, icon, tone, description }) {
 
 function TableHead({ children }) {
   return (
-    <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.22em] text-gray-500">
+    <th className="px-3 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">
       {children}
     </th>
   );
@@ -1471,22 +1484,24 @@ function TransactionRow({ transaction, onOpenTarget }) {
   const displayAmount = Math.abs(Number(transaction.amount || 0));
 
   return (
-    <tr className="border-b border-white/10 transition hover:bg-white/[0.025]">
-      <td className="px-6 py-5">
-        <div className="flex items-center gap-3">
+    <tr className="border-b border-white/10 align-top transition hover:bg-white/[0.025]">
+      <td className="px-3 py-3">
+        <div className="flex min-w-0 items-start gap-2.5">
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl border ${ui.iconClass}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${ui.iconClass}`}
           >
-            <span className="material-symbols-outlined text-[20px]">
+            <span className="material-symbols-outlined text-[17px]">
               {ui.icon}
             </span>
           </div>
 
-          <div>
-            <span className="font-bold text-gray-300">{ui.typeLabel}</span>
+          <div className="min-w-0">
+            <p className="break-words text-sm font-bold leading-5 text-gray-200">
+              {ui.typeLabel}
+            </p>
 
             {ui.balanceMovement && (
-              <p className="mt-1 text-[11px] text-gray-600">
+              <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-gray-600">
                 {ui.balanceMovement}
               </p>
             )}
@@ -1494,14 +1509,14 @@ function TransactionRow({ transaction, onOpenTarget }) {
         </div>
       </td>
 
-      <td className="px-6 py-5">
-        <p className="max-w-[360px] truncate font-semibold text-white">
+      <td className="px-3 py-3">
+        <p className="line-clamp-2 break-words text-sm font-semibold leading-5 text-white">
           {ui.description}
         </p>
 
         {(transaction.milestoneTitle || transaction.projectTitle) && (
           <p
-            className="mt-1 max-w-[320px] truncate text-xs text-gray-500"
+            className="mt-1 line-clamp-1 break-words text-[11px] text-gray-500"
             title={[transaction.milestoneTitle, transaction.projectTitle]
               .filter(Boolean)
               .join(" • ")}
@@ -1516,26 +1531,30 @@ function TransactionRow({ transaction, onOpenTarget }) {
           <button
             type="button"
             onClick={() => onOpenTarget(target)}
-            className="mt-2 text-xs font-bold text-cyan-300 transition hover:text-cyan-200"
+            className="mt-1.5 text-[11px] font-bold text-cyan-300 transition hover:text-cyan-200"
           >
             {target.label}
           </button>
         )}
       </td>
 
-      <td className="px-6 py-5 text-gray-400">
-        {formatShortDate(transaction.createdAt)}
+      <td className="px-3 py-3 text-[12px] leading-5 text-gray-400">
+        <span className="block whitespace-normal break-words">
+          {formatShortDate(transaction.createdAt)}
+        </span>
       </td>
 
-      <td className="px-6 py-5">
-        <span className={`font-black ${ui.amountClass}`}>
+      <td className="px-3 py-3 text-right">
+        <span
+          className={`whitespace-nowrap text-sm font-black ${ui.amountClass}`}
+        >
           {ui.hideZeroAmount
             ? "—"
             : `${ui.sign}${formatMoney(displayAmount)}`}
         </span>
       </td>
 
-      <td className="px-6 py-5">
+      <td className="px-3 py-3 text-center">
         <StatusBadge status={transaction.statusGroup || transaction.status} />
       </td>
     </tr>
@@ -1553,7 +1572,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
   const displayStatus = isLocalExpired ? "EXPIRED" : order.status;
 
   return (
-    <article className="p-6">
+    <article className="p-4">
       <div className="flex w-full items-start justify-between gap-4 text-left">
         <div>
           <p className="text-lg font-black text-white">
@@ -1618,7 +1637,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${style}`}
+      className={`inline-flex max-w-full items-center justify-center rounded-md border px-2 py-1 text-[9px] font-black uppercase leading-none ${style}`}
     >
       {formatStatusForUser(value)}
     </span>

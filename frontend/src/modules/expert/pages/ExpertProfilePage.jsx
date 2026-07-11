@@ -36,12 +36,6 @@ export default function ExpertProfilePage() {
 
       const result = await expertProfileService.getMyExpertProfile();
       const data = unwrapProfileData(result);
-
-      console.log("EXPERT PROFILE RESULT:", result);
-      console.log("EXPERT PROFILE DATA:", data);
-      console.log("CATEGORY:", data?.expertCategory);
-      console.log("LEVEL:", data?.level);
-
       setProfile(data);
       updateLocalUserStatus(getUserStatus(data));
     } catch (err) {

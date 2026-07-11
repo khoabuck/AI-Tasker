@@ -111,8 +111,16 @@ export default function ManageDisputesPage() {
     }
   };
 
-  const openDetailModal = async (dispute) => {
+  const toggleDisputeDetail = async (dispute) => {
     if (!dispute?.disputeId) return;
+
+    const isCurrent =
+      String(selectedDispute?.disputeId) === String(dispute.disputeId);
+
+    if (isCurrent) {
+      setSelectedDispute(null);
+      return;
+    }
 
     try {
       setDetailLoading(true);
@@ -176,8 +184,6 @@ export default function ManageDisputesPage() {
         resolutionType: resolveForm.resolutionType,
         adminDecision: resolveForm.adminDecision,
       });
-
-      const resolvedId = resolveTarget.disputeId;
 
       closeResolveModal();
       setSelectedDispute(null);
@@ -324,31 +330,29 @@ export default function ManageDisputesPage() {
             <EmptyState />
           ) : (
             <div className="divide-y divide-white/10">
-              {filteredDisputes.map((dispute) => (
-                <DisputeRow
-                  key={dispute.disputeId || dispute.id}
-                  dispute={dispute}
-                  disabled={resolving}
-                  onView={() => openDetailModal(dispute)}
-                  onResolve={() => openResolveModal(dispute)}
-                />
-              ))}
+              {filteredDisputes.map((dispute) => {
+                const isExpanded =
+                  String(selectedDispute?.disputeId) ===
+                  String(dispute.disputeId);
+
+                return (
+                  <DisputeRow
+                    key={dispute.disputeId || dispute.id}
+                    dispute={dispute}
+                    detail={isExpanded ? selectedDispute : null}
+                    detailLoading={isExpanded && detailLoading}
+                    expanded={isExpanded}
+                    disabled={resolving}
+                    onView={() => toggleDisputeDetail(dispute)}
+                    onResolve={() => openResolveModal(dispute)}
+                  />
+                );
+              })}
             </div>
           )}
         </section>
 
-        {selectedDispute && (
-          <DisputeDetailModal
-            dispute={selectedDispute}
-            loading={detailLoading}
-            onClose={() => setSelectedDispute(null)}
-            onResolve={() => {
-              const dispute = selectedDispute;
-              setSelectedDispute(null);
-              openResolveModal(dispute);
-            }}
-          />
-        )}
+
 
         {resolveTarget && (
           <ResolveDisputeModal
@@ -378,180 +382,231 @@ export default function ManageDisputesPage() {
   );
 }
 
-function DisputeRow({ dispute, disabled, onView, onResolve }) {
+function DisputeRow({
+  dispute,
+  detail,
+  detailLoading,
+  expanded,
+  disabled,
+  onView,
+  onResolve,
+}) {
   const status = String(dispute.status || "OPEN").toUpperCase();
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
     status
   );
 
   return (
-    <article className="p-5 transition hover:bg-white/[0.02]">
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1fr_170px_170px_220px] xl:items-center">
-        <div className="min-w-0">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <StatusBadge status={status} />
+    <article className="transition hover:bg-white/[0.015]">
+      <div className="p-4 md:p-5">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_150px_150px_190px] xl:items-center">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <StatusBadge status={status} />
+            </div>
+
+            <h3 className="line-clamp-1 font-bold text-white">
+              {dispute.projectTitle || "Untitled Project"}
+            </h3>
+
+            <p className="mt-1.5 line-clamp-2 text-sm leading-5 text-gray-400">
+              {dispute.reason ||
+                dispute.description ||
+                "No dispute reason provided."}
+            </p>
+
+            <p className="mt-2 text-xs text-gray-500">
+              Client: {dispute.clientName || "Client"} · Expert:{" "}
+              {dispute.expertName || "Expert"}
+            </p>
           </div>
 
-          <h3 className="line-clamp-1 font-bold text-white">
-            {dispute.projectTitle || "Untitled Project"}
-          </h3>
+          <CompactInfo
+            label="Amount"
+            value={formatMoney(dispute.disputedAmount)}
+          />
 
-          <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
-            {dispute.reason ||
-              dispute.description ||
-              "No dispute reason provided."}
-          </p>
+          <CompactInfo label="Created" value={formatDate(dispute.createdAt)} />
 
-          <p className="mt-2 text-xs text-gray-500">
-            Client: {dispute.clientName || "Client"} · Expert:{" "}
-            {dispute.expertName || "Expert"}
-          </p>
+          <div className="flex flex-col gap-2 sm:flex-row xl:justify-end">
+            <button
+              type="button"
+              onClick={onView}
+              disabled={disabled}
+              className={`inline-flex items-center justify-center gap-1 rounded-xl border px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                expanded
+                  ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300"
+                  : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-cyan-400/40 hover:text-cyan-300"
+              }`}
+            >
+              {expanded ? "Hide Detail" : "View Detail"}
+              <span
+                className={`material-symbols-outlined text-[17px] transition ${
+                  expanded ? "rotate-180" : ""
+                }`}
+              >
+                expand_more
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onResolve}
+              disabled={disabled || !canResolve}
+              className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Resolve
+            </button>
+          </div>
         </div>
 
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Amount
-          </p>
-          <p className="text-lg font-extrabold text-white">
-            {formatMoney(dispute.disputedAmount)}
-          </p>
-        </div>
+        {expanded && (
+          <InlineDisputeDetail
+            dispute={detail || dispute}
+            loading={detailLoading}
+            onResolve={onResolve}
+          />
+        )}
 
-        <div>
-          <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Created
-          </p>
-          <p className="text-sm font-bold text-white">
-            {formatDate(dispute.createdAt)}
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row xl:justify-end">
-          <button
-            type="button"
-            onClick={onView}
-            disabled={disabled}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Detail
-          </button>
-
-          <button
-            type="button"
-            onClick={onResolve}
-            disabled={disabled || !canResolve}
-            className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Resolve
-          </button>
-        </div>
+        {!expanded && dispute.adminDecision && (
+          <div className="mt-3 rounded-xl border border-green-400/20 bg-green-400/10 px-4 py-3 text-sm text-green-100/80">
+            <span className="font-bold text-green-300">Admin decision:</span>{" "}
+            {dispute.adminDecision}
+          </div>
+        )}
       </div>
-
-      {dispute.adminDecision && (
-        <div className="mt-4 rounded-xl border border-green-400/20 bg-green-400/10 p-4 text-sm text-green-100/80">
-          <span className="font-bold text-green-300">Admin decision:</span>{" "}
-          {dispute.adminDecision}
-        </div>
-      )}
     </article>
   );
 }
 
-function DisputeDetailModal({ dispute, loading, onClose, onResolve }) {
+function CompactInfo({ label, value }) {
+  return (
+    <div>
+      <p className="mb-1 text-[11px] font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+      <p className="text-sm font-bold text-white">{value}</p>
+    </div>
+  );
+}
+
+function InlineDisputeDetail({ dispute, loading, onResolve }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
     status
   );
   const evidences = Array.isArray(dispute.evidences) ? dispute.evidences : [];
 
+  if (loading) {
+    return (
+      <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.04] px-4 py-6 text-center text-sm text-gray-400">
+        <span className="material-symbols-outlined mr-2 animate-spin align-middle text-[18px] text-cyan-300">
+          progress_activity
+        </span>
+        Loading dispute detail...
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
-          <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
-              Dispute Detail
-            </p>
-
-            <h2 className="text-xl font-bold text-white">
-              {dispute.projectTitle || "Dispute Detail"}
-            </h2>
-
-            <p className="mt-1 text-sm text-gray-400">
-              Client: {dispute.clientName || "Client"} · Expert:{" "}
-              {dispute.expertName || "Expert"}
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-bold text-gray-300 hover:text-white"
-          >
-            Close
-          </button>
+    <section className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#10161f]">
+      <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
+            Dispute Detail
+          </p>
+          <p className="mt-1 text-sm text-gray-400">
+            Review the case information and evidence directly here.
+          </p>
         </div>
 
-        {loading ? (
-          <div className="p-10 text-center text-gray-400">Loading detail...</div>
-        ) : (
-          <div className="space-y-5 px-6 py-5">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-              <InfoBox label="Status" value={formatLabel(status)} />
-              <InfoBox label="Amount" value={formatMoney(dispute.disputedAmount)} />
-              <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
-            </div>
-
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="mb-2 text-sm font-bold text-white">Reason</h3>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-400">
-                {dispute.reason || dispute.description || "No reason provided."}
-              </p>
-            </section>
-
-            {dispute.adminDecision && (
-              <section className="rounded-xl border border-green-400/20 bg-green-400/10 p-4">
-                <h3 className="mb-2 text-sm font-bold text-green-200">
-                  Admin Decision
-                </h3>
-                <p className="whitespace-pre-wrap text-sm leading-6 text-green-100/80">
-                  {dispute.adminDecision}
-                </p>
-              </section>
-            )}
-
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="mb-3 text-sm font-bold text-white">Evidence</h3>
-
-              {evidences.length === 0 ? (
-                <p className="text-sm text-gray-500">No evidence uploaded.</p>
-              ) : (
-                <div className="space-y-3">
-                  {evidences.map((evidence, index) => (
-                    <EvidenceItem
-                      key={evidence.evidenceId || evidence.id || index}
-                      evidence={evidence}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {canResolve && (
-              <div className="flex justify-end border-t border-white/10 pt-5">
-                <button
-                  type="button"
-                  onClick={onResolve}
-                  className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                >
-                  Resolve Dispute
-                </button>
-              </div>
-            )}
-          </div>
+        {canResolve && (
+          <button
+            type="button"
+            onClick={onResolve}
+            className="w-fit rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-xs font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+          >
+            Resolve Dispute
+          </button>
         )}
       </div>
-    </div>
+
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="min-w-0 space-y-4">
+          <DetailSection title="Reason" icon="report_problem">
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
+              {dispute.reason || dispute.description || "No reason provided."}
+            </p>
+          </DetailSection>
+
+          <DetailSection
+            title={`Evidence (${evidences.length})`}
+            icon="fact_check"
+          >
+            {evidences.length === 0 ? (
+              <p className="text-sm text-gray-500">No evidence uploaded.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {evidences.map((evidence, index) => (
+                  <EvidenceItem
+                    key={evidence.evidenceId || evidence.id || index}
+                    evidence={evidence}
+                    compact
+                  />
+                ))}
+              </div>
+            )}
+          </DetailSection>
+
+          {dispute.adminDecision && (
+            <DetailSection title="Admin Decision" icon="gavel" tone="green">
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-green-100/80">
+                {dispute.adminDecision}
+              </p>
+            </DetailSection>
+          )}
+        </div>
+
+        <aside className="space-y-3">
+          <InfoBox label="Status" value={formatLabel(status)} />
+          <InfoBox
+            label="Disputed Amount"
+            value={formatMoney(dispute.disputedAmount)}
+          />
+          <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
+          <InfoBox
+            label="Client"
+            value={dispute.clientName || "Client"}
+          />
+          <InfoBox
+            label="Expert"
+            value={dispute.expertName || "Expert"}
+          />
+          {dispute.milestoneTitle && (
+            <InfoBox label="Milestone" value={dispute.milestoneTitle} />
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function DetailSection({ title, icon, tone = "default", children }) {
+  const toneClass =
+    tone === "green"
+      ? "border-green-400/20 bg-green-400/[0.05]"
+      : "border-white/10 bg-white/[0.025]";
+
+  return (
+    <section className={`rounded-xl border p-4 ${toneClass}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="material-symbols-outlined text-[18px] text-cyan-300">
+          {icon}
+        </span>
+        <h4 className="text-sm font-bold text-white">{title}</h4>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -703,7 +758,7 @@ function InfoBox({ label, value }) {
   );
 }
 
-function EvidenceItem({ evidence }) {
+function EvidenceItem({ evidence, compact = false }) {
   const title =
     evidence.title ||
     evidence.Title ||
@@ -737,23 +792,51 @@ function EvidenceItem({ evidence }) {
     "";
 
   return (
-    <div className="rounded-xl border border-white/10 bg-black/10 p-4">
-      <p className="text-sm font-bold text-white">{title}</p>
+    <article
+      className={`min-w-0 rounded-xl border border-white/10 bg-black/10 ${
+        compact ? "p-3" : "p-4"
+      }`}
+    >
+      <p className="truncate text-sm font-bold text-white">{title}</p>
 
       {description && (
-        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-400">
+        <p
+          className={`mt-2 whitespace-pre-wrap break-words text-sm leading-5 text-gray-400 ${
+            compact ? "line-clamp-4" : ""
+          }`}
+        >
           {description}
         </p>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-3">
+      {imageUrl && (
+        <a
+          href={imageUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-3 block overflow-hidden rounded-lg border border-white/10 bg-black/20"
+        >
+          <img
+            src={imageUrl}
+            alt="Evidence"
+            className={`w-full object-contain ${
+              compact ? "max-h-36" : "max-h-72"
+            }`}
+          />
+        </a>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2">
         {fileUrl && (
           <a
             href={fileUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+            className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
           >
+            <span className="material-symbols-outlined text-[15px]">
+              open_in_new
+            </span>
             Open File
           </a>
         )}
@@ -763,21 +846,16 @@ function EvidenceItem({ evidence }) {
             href={imageUrl}
             target="_blank"
             rel="noreferrer"
-            className="inline-flex rounded-lg border border-purple-400/40 bg-purple-400/10 px-3 py-2 text-xs font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
+            className="inline-flex items-center gap-1 rounded-lg border border-purple-400/40 bg-purple-400/10 px-3 py-1.5 text-xs font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
           >
-            Open Image
+            <span className="material-symbols-outlined text-[15px]">
+              image
+            </span>
+            Full Image
           </a>
         )}
       </div>
-
-      {imageUrl && (
-        <img
-          src={imageUrl}
-          alt="Evidence"
-          className="mt-4 max-h-72 rounded-xl border border-white/10 object-contain"
-        />
-      )}
-    </div>
+    </article>
   );
 }
 

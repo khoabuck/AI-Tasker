@@ -58,7 +58,6 @@ export default function ManageUsersPage() {
 
       const matchSearch =
         !search ||
-        String(user.userId || "").toLowerCase().includes(search) ||
         String(user.fullName || "").toLowerCase().includes(search) ||
         String(user.email || "").toLowerCase().includes(search) ||
         String(user.phoneNumber || "").toLowerCase().includes(search);
@@ -181,11 +180,11 @@ setUsers(visibleUsers);
     const durationText = String(lockForm.durationMinutes ?? "").trim();
 
     if (!durationText) {
-      errors.durationMinutes = "Duration Minutes is required.";
+      errors.durationMinutes = "Lock duration is required.";
     } else if (!/^\d+$/.test(durationText)) {
-      errors.durationMinutes = "Duration Minutes must be a number.";
+      errors.durationMinutes = "Lock duration must be a whole number.";
     } else if (Number(durationText) <= 0) {
-      errors.durationMinutes = "Duration Minutes must be greater than 0.";
+      errors.durationMinutes = "Lock duration must be greater than 0.";
     }
 
     if (!lockForm.reason.trim()) {
@@ -397,7 +396,7 @@ setUsers(visibleUsers);
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by name, email, phone, or user id..."
+                  placeholder="Search by name, email, or phone..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
@@ -468,7 +467,7 @@ setUsers(visibleUsers);
           >
             <div className="space-y-4">
               <NumberInput
-                label="Duration Minutes"
+                label="Lock Duration (minutes)"
                 required
                 value={lockForm.durationMinutes}
                 error={fieldErrors.durationMinutes}
@@ -603,7 +602,6 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Badge label={`ID: ${user.userId || "N/A"}`} />
             <Badge label={user.authProvider || "Local"} />
           </div>
         </div>
@@ -764,7 +762,7 @@ function ActionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
@@ -836,7 +834,7 @@ function NumberInput({
         <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
       ) : (
         <p className="mt-2 text-xs leading-5 text-gray-500">
-          Backend expects duration in minutes. Example: 60 means 1 hour.
+          Example: 60 minutes means the account will be locked for 1 hour.
         </p>
       )}
     </div>
@@ -1070,11 +1068,11 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage user accounts.";
   }
 
   if (status === 404) {
-    return "Admin users API was not found. Please check backend route.";
+    return "User management is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

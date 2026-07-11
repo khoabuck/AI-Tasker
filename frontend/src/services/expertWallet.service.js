@@ -1104,10 +1104,16 @@ const expertWalletService = {
           availableBalance
         );
 
+        /*
+         * GET /wallets/balance của Backend hiện chỉ trả AvailableBalance dạng số.
+         * normalizeBalance(number) sẽ tạo Pending/Locked = 0 để đủ shape.
+         * Vì vậy Pending và Locked phải ưu tiên dữ liệu từ GET /wallets/me,
+         * nếu ưu tiên balance trước thì số 0 giả sẽ che mất số thật của Backend.
+         */
         const pendingEarningsBalance = toNumber(
           getValue(
-            balance.pendingEarningsBalance,
             wallet?.pendingEarningsBalance,
+            balance.pendingEarningsBalance,
             0
           ),
           0
@@ -1115,8 +1121,8 @@ const expertWalletService = {
 
         const lockedBalance = toNumber(
           getValue(
-            balance.lockedBalance,
             wallet?.lockedBalance,
+            balance.lockedBalance,
             0
           ),
           0

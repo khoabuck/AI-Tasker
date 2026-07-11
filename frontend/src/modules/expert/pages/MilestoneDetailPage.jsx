@@ -18,8 +18,7 @@ const emptyDisputeForm = {
   reason: "",
   evidenceText: "",
   evidenceFileUrl: "",
-  evidenceImageUrl: "",
-  image: null,
+  images: [],
 };
 
 export default function MilestoneDetailPage() {
@@ -36,10 +35,13 @@ export default function MilestoneDetailPage() {
   const [disputeForm, setDisputeForm] = useState(emptyDisputeForm);
   const [creatingDispute, setCreatingDispute] = useState(false);
   const [disputeError, setDisputeError] = useState("");
+  const [disputeFieldErrors, setDisputeFieldErrors] = useState({});
+  const [showDisputeConfirm, setShowDisputeConfirm] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [submissionLoading, setSubmissionLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmissionConfirm, setShowSubmissionConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -109,13 +111,7 @@ export default function MilestoneDetailPage() {
               .trim()
               .toUpperCase();
 
-            const isActive = [
-              "OPEN",
-              "PENDING",
-              "UNDER_REVIEW",
-              "INVESTIGATING",
-              "EVIDENCE_REQUIRED",
-            ].includes(status);
+            const isActive = status === "OPEN";
 
             const disputeProjectId =
               item?.projectId ||
@@ -197,6 +193,10 @@ export default function MilestoneDetailPage() {
 
   const updateDisputeField = (name, value) => {
     setDisputeError("");
+    setDisputeFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
 
     setDisputeForm((prev) => ({
       ...prev,
@@ -205,13 +205,46 @@ export default function MilestoneDetailPage() {
   };
 
   const handleDisputeImageChange = (event) => {
-    const file = event.target.files?.[0] || null;
+    const selectedFiles = Array.from(event.target.files || []);
 
     setDisputeError("");
 
+    setDisputeForm((prev) => {
+      const existingKeys = new Set(
+        prev.images.map(
+          (file) => `${file.name}-${file.size}-${file.lastModified}`
+        )
+      );
+
+      const uniqueNewFiles = selectedFiles.filter((file) => {
+        const key = `${file.name}-${file.size}-${file.lastModified}`;
+        return !existingKeys.has(key);
+      });
+
+      const mergedImages = [...prev.images, ...uniqueNewFiles];
+      const limitedImages = mergedImages.slice(0, 10);
+
+      setDisputeFieldErrors((current) => ({
+        ...current,
+        images:
+          mergedImages.length > 10
+            ? "You can upload up to 10 images. Extra images were not added."
+            : "",
+      }));
+
+      return {
+        ...prev,
+        images: limitedImages,
+      };
+    });
+
+    event.target.value = "";
+  };
+
+  const removeDisputeImage = (indexToRemove) => {
     setDisputeForm((prev) => ({
       ...prev,
-      image: file,
+      images: prev.images.filter((_, index) => index !== indexToRemove),
     }));
   };
 
@@ -242,6 +275,7 @@ export default function MilestoneDetailPage() {
     }
 
     setDisputeError("");
+    setDisputeFieldErrors({});
     setDisputeForm({
       ...emptyDisputeForm,
       reason: buildDefaultDisputeReason(milestone),
@@ -253,8 +287,10 @@ export default function MilestoneDetailPage() {
     if (creatingDispute) return;
 
     setShowDisputeModal(false);
+    setShowDisputeConfirm(false);
     setDisputeError("");
-    setDisputeForm(emptyDisputeForm);
+    setDisputeFieldErrors({});
+    setDisputeForm({ ...emptyDisputeForm });
   };
 
   const validateSubmission = () => {
@@ -278,26 +314,49 @@ export default function MilestoneDetailPage() {
   };
 
   const validateDispute = () => {
+    const fieldErrors = {};
+
     if (!disputeForm.reason.trim()) {
-      return "Reason is required.";
+      fieldErrors.reason = "Reason is required.";
+    } else if (disputeForm.reason.trim().length < 10) {
+      fieldErrors.reason = "Reason must be at least 10 characters.";
     }
 
-    if (disputeForm.reason.trim().length < 10) {
-      return "Reason must be at least 10 characters.";
+    if (
+      disputeForm.evidenceFileUrl.trim() &&
+      !isValidHttpUrl(disputeForm.evidenceFileUrl)
+    ) {
+      fieldErrors.evidenceFileUrl =
+        "Evidence file URL must be a valid HTTP or HTTPS URL.";
     }
 
-    if (!disputeForm.evidenceText.trim()) {
-      return "Evidence text is required.";
+    if (disputeForm.images.length > 10) {
+      fieldErrors.images = "You can upload up to 10 images.";
     }
 
-    if (disputeForm.evidenceText.trim().length < 20) {
-      return "Evidence text must be at least 20 characters.";
+    const invalidImage = disputeForm.images.find(
+      (file) => !String(file.type || "").startsWith("image/")
+    );
+
+    if (invalidImage) {
+      fieldErrors.images = `Only image files are allowed: ${invalidImage.name}`;
     }
 
-    return "";
+    const totalSize = disputeForm.images.reduce(
+      (sum, file) => sum + Number(file.size || 0),
+      0
+    );
+
+    if (totalSize > 60 * 1024 * 1024) {
+      fieldErrors.images = "The total image size cannot exceed 60 MB.";
+    }
+
+    setDisputeFieldErrors(fieldErrors);
+
+    return Object.values(fieldErrors)[0] || "";
   };
 
-  const handleSubmitWork = async (event) => {
+  const handleSubmitWork = (event) => {
     event.preventDefault();
 
     if (isProjectCompletedStatus(getProjectStatus(project, milestone))) {
@@ -341,6 +400,19 @@ export default function MilestoneDetailPage() {
       return;
     }
 
+    setSubmissionError("");
+    setShowSubmissionConfirm(true);
+  };
+
+  const confirmSubmitWork = async () => {
+    const realMilestoneId = getMilestoneId(milestone) || milestoneId;
+    const latestSubmission = getLatestSubmission(submissions);
+
+    const isResubmission =
+      Boolean(latestSubmission) &&
+      (isChangeRequested(latestSubmission.status) ||
+        isChangeRequested(milestone?.status));
+
     try {
       setSubmitting(true);
       setError("");
@@ -352,6 +424,7 @@ export default function MilestoneDetailPage() {
         submissionForm
       );
 
+      setShowSubmissionConfirm(false);
       setMessage(
         isResubmission
           ? "Your updated work has been resubmitted successfully."
@@ -363,6 +436,7 @@ export default function MilestoneDetailPage() {
       await loadSubmissions(realMilestoneId);
     } catch (err) {
       console.error("SUBMIT WORK ERROR:", err?.response?.data || err);
+      setShowSubmissionConfirm(false);
       setSubmissionError(
         getFriendlyError(
           err,
@@ -374,7 +448,7 @@ export default function MilestoneDetailPage() {
     }
   };
 
-  const handleCreateDispute = async (event) => {
+  const handleCreateDispute = (event) => {
     event.preventDefault();
 
     if (isProjectCompletedStatus(getProjectStatus(project, milestone))) {
@@ -396,14 +470,12 @@ export default function MilestoneDetailPage() {
     const disputedAmount = getMilestoneDisputableAmount(milestone);
 
     if (!projectId || !realMilestoneId) {
-      setDisputeError(
-        "Cannot create dispute because project or milestone id is missing."
-      );
+      setDisputeError("Cannot identify the current project or milestone.");
       return;
     }
 
     if (!disputedAmount || disputedAmount <= 0) {
-      setDisputeError("Cannot detect locked escrow amount for this milestone.");
+      setDisputeError("Locked escrow amount is unavailable for this milestone.");
       return;
     }
 
@@ -413,6 +485,15 @@ export default function MilestoneDetailPage() {
       setDisputeError(validationError);
       return;
     }
+
+    setDisputeError("");
+    setShowDisputeConfirm(true);
+  };
+
+  const confirmCreateDispute = async () => {
+    const projectId = getProjectIdFromMilestone(milestone);
+    const realMilestoneId = getMilestoneId(milestone) || milestoneId;
+    const disputedAmount = getMilestoneDisputableAmount(milestone);
 
     try {
       setCreatingDispute(true);
@@ -424,22 +505,53 @@ export default function MilestoneDetailPage() {
         reason: disputeForm.reason,
         evidenceText: disputeForm.evidenceText,
         evidenceFileUrl: disputeForm.evidenceFileUrl,
-        evidenceImageUrl: disputeForm.evidenceImageUrl,
-        image: disputeForm.image,
+        images: disputeForm.images,
       });
 
       const disputeId = getDisputeId(createdDispute);
+
+      setShowDisputeConfirm(false);
 
       if (disputeId) {
         navigate(`/expert/disputes/${disputeId}`, { replace: true });
         return;
       }
 
-      setShowDisputeModal(false);
-      setMessage("Dispute opened successfully.");
-      await loadMilestone();
+      /*
+       * Một số response chỉ trả message mà không trả disputeId.
+       * Tải lại danh sách để tìm dispute vừa tạo rồi điều hướng thẳng tới detail.
+       */
+      const latestDisputes = await disputeService.getMyDisputes();
+      const createdItem = Array.isArray(latestDisputes)
+        ? latestDisputes.find((item) => {
+            const itemStatus = String(item?.status || "")
+              .trim()
+              .toUpperCase();
+
+            return (
+              itemStatus === "OPEN" &&
+              String(item?.projectId || "") === String(projectId) &&
+              String(item?.milestoneId || "") === String(realMilestoneId)
+            );
+          })
+        : null;
+
+      const createdItemId = getDisputeId(createdItem);
+
+      if (createdItemId) {
+        navigate(`/expert/disputes/${createdItemId}`, { replace: true });
+        return;
+      }
+
+      navigate("/expert/disputes", {
+        replace: true,
+        state: {
+          message: "Dispute opened successfully.",
+        },
+      });
     } catch (err) {
       console.error("CREATE DISPUTE ERROR:", err?.response?.data || err);
+      setShowDisputeConfirm(false);
       setDisputeError(getFriendlyError(err, "Cannot open dispute."));
     } finally {
       setCreatingDispute(false);
@@ -561,12 +673,12 @@ export default function MilestoneDetailPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-6 md:px-8">
-        <div className="mx-auto max-w-7xl">
+      <div className="px-4 py-5 md:px-6">
+        <div className="mx-auto max-w-6xl">
           <button
             type="button"
             onClick={goBackToProject}
-            className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
+            className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300"
           >
             <span className="material-symbols-outlined text-[18px]">
               arrow_back
@@ -582,8 +694,8 @@ export default function MilestoneDetailPage() {
             />
           )}
 
-          <section className="mb-5 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_50px_rgba(0,0,0,0.28)]">
-            <div className="relative overflow-hidden border-b border-white/10 p-5 md:p-6">
+          <section className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_12px_35px_rgba(0,0,0,0.24)]">
+            <div className="relative overflow-hidden border-b border-white/10 p-4 md:p-5">
               <div className="absolute right-0 top-0 h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" />
               <div className="absolute bottom-0 right-28 h-36 w-36 rounded-full bg-purple-400/10 blur-3xl" />
 
@@ -593,11 +705,11 @@ export default function MilestoneDetailPage() {
                     Milestone Workspace
                   </p>
 
-                  <h1 className="max-w-4xl text-2xl font-black leading-tight text-white md:text-4xl">
+                  <h1 className="max-w-4xl text-xl font-black leading-tight text-white md:text-3xl">
                     {milestone.title || "Untitled Milestone"}
                   </h1>
 
-                  <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
                     {projectCompleted
                       ? "Review the completed milestone, previous submissions, and any existing dispute."
                       : "Review the brief, submit your work, manage revisions, and open a dispute when the client rejects or requests revision."}
@@ -607,7 +719,7 @@ export default function MilestoneDetailPage() {
                     <FriendlyStatusBadge ui={milestoneUi} />
 
                     {shouldShowOpenDispute && (
-                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-xs font-bold text-red-300">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-3 py-1 text-xs font-bold text-red-300">
                         <span className="material-symbols-outlined text-sm">
                           gavel
                         </span>
@@ -616,7 +728,7 @@ export default function MilestoneDetailPage() {
                     )}
 
                     {shouldShowViewDispute && (
-                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-4 py-1.5 text-xs font-bold text-red-300">
+                      <span className="inline-flex items-center gap-2 rounded-full border border-red-400/30 bg-red-400/10 px-3 py-1 text-xs font-bold text-red-300">
                         <span className="material-symbols-outlined text-sm">
                           report_problem
                         </span>
@@ -631,7 +743,7 @@ export default function MilestoneDetailPage() {
                     <button
                       type="button"
                       onClick={openDisputeModal}
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         gavel
@@ -646,7 +758,7 @@ export default function MilestoneDetailPage() {
                       onClick={() =>
                         navigate(`/expert/disputes/${activeDisputeId}`)
                       }
-                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-400/50 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         visibility
@@ -659,7 +771,7 @@ export default function MilestoneDetailPage() {
                     type="button"
                     onClick={loadMilestone}
                     disabled={submissionLoading}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <span className="material-symbols-outlined text-[18px]">
                       refresh
@@ -679,8 +791,8 @@ export default function MilestoneDetailPage() {
 
               <HeroInfo
                 icon="payments"
-                label="Net Earning"
-                value={formatMoney(getMilestoneNetEarning(milestone))}
+                label="Price"
+                value={formatMoney(getMilestoneAmount(milestone))}
               />
 
               <HeroInfo
@@ -699,8 +811,8 @@ export default function MilestoneDetailPage() {
             <Alert type="danger" title="Milestone error" message={error} />
           )}
 
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_330px]">
-            <main className="space-y-5">
+          <div className="space-y-4">
+            <main className="space-y-4">
               <Card
                 title="Work Brief"
                 subtitle="Review what the client expects before submitting."
@@ -950,40 +1062,6 @@ export default function MilestoneDetailPage() {
                 )}
               </Card>
             </main>
-
-            <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start">
-              <MilestonePaymentCard milestone={milestone} />
-
-              <Card title="Review Flow" icon="route">
-                <Step
-                  active={!hasSubmission}
-                  done={hasSubmission}
-                  number="1"
-                  title="Submit your work"
-                  description="Send the work links and notes for client review."
-                />
-
-                <Step
-                  active={hasSubmission && !needsResubmission}
-                  done={isApprovedStatus(latestSubmission?.status)}
-                  number="2"
-                  title="Client reviews"
-                  description="The client checks your submitted milestone."
-                />
-
-                <Step
-                  active={needsResubmission || Boolean(activeDisputeId)}
-                  done={false}
-                  number="3"
-                  title={activeDisputeId ? "Admin dispute review" : "Update or dispute"}
-                  description={
-                    activeDisputeId
-                      ? "This milestone is waiting for admin dispute resolution."
-                      : "If changes are requested, resubmit or open a dispute if you disagree."
-                  }
-                />
-              </Card>            
-            </aside>
           </div>
         </div>
       </div>
@@ -993,60 +1071,45 @@ export default function MilestoneDetailPage() {
           formData={disputeForm}
           milestone={milestone}
           error={disputeError}
+          fieldErrors={disputeFieldErrors}
           creating={creatingDispute}
           onClose={closeDisputeModal}
           onChange={updateDisputeField}
           onImageChange={handleDisputeImageChange}
+          onRemoveImage={removeDisputeImage}
           onSubmit={handleCreateDispute}
         />
       )}
-    </ExpertLayout>
-  );
-}
 
-function MilestonePaymentCard({ milestone }) {
-  const amount = getMilestoneAmount(milestone);
-  const feeRate = getExpertFeeRate(milestone);
-  const fee = getMilestoneServiceFee(milestone);
-  const net = getMilestoneNetEarning(milestone);
-
-  return (
-    <section className="rounded-3xl border border-green-400/20 bg-green-400/10 p-5">
-      <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-green-400/20 bg-green-400/10 text-green-300">
-          <span className="material-symbols-outlined">payments</span>
-        </div>
-        <div>
-          <h2 className="text-lg font-extrabold text-white">Milestone Payment</h2>
-          <p className="text-xs text-green-100/70">After expert service fee</p>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        <PaymentLine label="Milestone Amount" value={formatMoney(amount)} />
-        <PaymentLine
-          label={`Service Fee${feeRate ? ` (${feeRate}%)` : ""}`}
-          value={`-${formatMoney(fee)}`}
+      {showSubmissionConfirm && (
+        <ConfirmDialog
+          title={needsResubmission ? "Resubmit this milestone?" : "Submit this milestone?"}
+          message={
+            needsResubmission
+              ? "Your updated work will be sent to the client for another review. Please confirm that all links and notes are correct."
+              : "Your work will be sent to the client for review. Please confirm that all links and delivery details are correct."
+          }
+          confirmLabel={needsResubmission ? "Confirm Resubmission" : "Confirm Submission"}
+          loading={submitting}
+          onCancel={() => !submitting && setShowSubmissionConfirm(false)}
+          onConfirm={confirmSubmitWork}
         />
-      </div>
+      )}
 
-      <div className="mt-4 rounded-2xl border border-green-400/30 bg-black/20 p-4">
-        <p className="text-xs uppercase tracking-wider text-green-100/70">Net earning</p>
-        <p className="mt-1 text-2xl font-black text-green-300">{formatMoney(net)}</p>
-        <p className="mt-2 text-xs leading-5 text-green-100/70">
-          When this milestone is released, net earning goes to pending earnings until the project is completed.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-function PaymentLine({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-      <p className="text-sm text-green-100/80">{label}</p>
-      <p className="font-bold text-white">{value}</p>
-    </div>
+      {showDisputeConfirm && (
+        <ConfirmDialog
+          title="Open this dispute?"
+          message={`The milestone will enter dispute review for ${formatMoney(
+            getMilestoneDisputableAmount(milestone)
+          )}. You can continue adding evidence while the dispute is open.`}
+          confirmLabel="Confirm Open Dispute"
+          danger
+          loading={creatingDispute}
+          onCancel={() => !creatingDispute && setShowDisputeConfirm(false)}
+          onConfirm={confirmCreateDispute}
+        />
+      )}
+    </ExpertLayout>
   );
 }
 
@@ -1054,31 +1117,32 @@ function DisputeModal({
   formData,
   milestone,
   error,
+  fieldErrors,
   creating,
   onClose,
   onChange,
   onImageChange,
+  onRemoveImage,
   onSubmit,
 }) {
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[999] flex items-center justify-center overflow-hidden bg-black/70 px-4 py-5 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl"
+        className="max-h-[82vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-2xl [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
-        <div className="mb-5 flex items-start justify-between gap-4">
+        <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-red-300">
               Open Dispute
             </p>
 
-            <h2 className="text-2xl font-black text-white">
+            <h2 className="text-xl font-black text-white">
               Milestone dispute
             </h2>
 
-            <p className="mt-2 text-sm leading-6 text-gray-400">
-              Provide a clear reason and evidence. After submitting, you will be
-              redirected to the dispute detail page.
+            <p className="mt-1.5 text-sm leading-5 text-gray-400">
+              Enter the required reason. Evidence can be added now or later.
             </p>
           </div>
 
@@ -1092,7 +1156,7 @@ function DisputeModal({
           </button>
         </div>
 
-        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
             Milestone
           </p>
@@ -1105,30 +1169,34 @@ function DisputeModal({
           </p>
         </div>
 
+        <div className="mb-4 rounded-xl border border-yellow-400/25 bg-yellow-400/10 px-3 py-2.5 text-xs leading-5 text-yellow-100">
+          Fields marked <span className="font-black text-red-300">*</span> are required.
+        </div>
+
         {error && (
-          <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2.5 text-sm text-red-300">
             {error}
           </div>
         )}
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           <ModalTextArea
             label="Reason"
             value={formData.reason}
             disabled={creating}
             required
-            rows={4}
-            placeholder="Explain why you disagree with the client rejection or revision request..."
+            error={fieldErrors?.reason}
+            rows={3}
+            placeholder="Explain why you disagree with the client decision..."
             onChange={(value) => onChange("reason", value)}
           />
 
           <ModalTextArea
-            label="Evidence Text"
+            label="Evidence Description"
             value={formData.evidenceText}
             disabled={creating}
-            required
-            rows={5}
-            placeholder="Describe your evidence, timeline, links, messages, screenshots, or submitted work..."
+            rows={3}
+            placeholder="Describe evidence, timeline, messages, or submitted work..."
             onChange={(value) => onChange("evidenceText", value)}
           />
 
@@ -1137,44 +1205,88 @@ function DisputeModal({
             value={formData.evidenceFileUrl}
             disabled={creating}
             placeholder="https://drive.google.com/..."
+            error={fieldErrors?.evidenceFileUrl}
             onChange={(value) => onChange("evidenceFileUrl", value)}
           />
 
-          <ModalInput
-            label="Evidence Image URL"
-            value={formData.evidenceImageUrl}
-            disabled={creating}
-            placeholder="https://image-url..."
-            onChange={(value) => onChange("evidenceImageUrl", value)}
-          />
+          <div className="block">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+                Upload Images
+              </span>
 
-          <label className="block">
-            <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
-              Upload Image
-            </span>
+              <span className="text-xs font-semibold text-gray-500">
+                {formData.images.length}/10 selected
+              </span>
+            </div>
 
-            <input
-              type="file"
-              accept="image/*"
-              disabled={creating}
-              onChange={onImageChange}
-              className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm text-gray-300 file:mr-4 file:rounded-lg file:border-0 file:bg-red-400/10 file:px-3 file:py-2 file:text-sm file:font-bold file:text-red-300 disabled:cursor-not-allowed disabled:opacity-60"
-            />
+            <label
+              className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed bg-red-400/[0.05] px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400/10 ${
+                fieldErrors?.images
+                  ? "border-red-400/70"
+                  : "border-red-400/30 hover:border-red-400/60"
+              } ${creating ? "cursor-not-allowed opacity-60" : ""}`}
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                add_photo_alternate
+              </span>
 
-            {formData.image && (
-              <p className="mt-2 text-xs text-gray-500">
-                Selected: {formData.image.name}
+              {formData.images.length > 0
+                ? "Add More Images"
+                : "Choose Images"}
+
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                disabled={creating}
+                onChange={onImageChange}
+                className="hidden"
+              />
+            </label>
+
+            <p className="mt-1.5 text-xs leading-5 text-gray-500">
+              You can choose images multiple times. New images will be added to
+              the current list. Maximum 10 images and 60 MB total.
+            </p>
+
+            {fieldErrors?.images && (
+              <p className="mt-1.5 text-xs font-semibold text-red-300">
+                {fieldErrors.images}
               </p>
             )}
-          </label>
+
+            {formData.images.length > 0 && (
+              <div className="mt-3 space-y-2">
+                {formData.images.map((file, index) => (
+                  <div
+                    key={`${file.name}-${file.size}-${index}`}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 px-3 py-2"
+                  >
+                    <span className="min-w-0 truncate text-xs text-gray-300">
+                      {file.name}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveImage(index)}
+                      disabled={creating}
+                      className="text-xs font-bold text-red-300 hover:text-red-200"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="mt-7 flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+        <div className="mt-5 flex flex-col gap-2 border-t border-white/10 pt-4 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
             disabled={creating}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1182,7 +1294,7 @@ function DisputeModal({
           <button
             type="submit"
             disabled={creating}
-            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {creating ? "Opening..." : "Open Dispute"}
           </button>
@@ -1192,7 +1304,7 @@ function DisputeModal({
   );
 }
 
-function ModalInput({ label, value, disabled, placeholder, onChange }) {
+function ModalInput({ label, value, disabled, placeholder, error, onChange }) {
   return (
     <label className="block">
       <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
@@ -1205,8 +1317,16 @@ function ModalInput({ label, value, disabled, placeholder, onChange }) {
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className={`w-full rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+          error ? "border-red-400/70 focus:border-red-400" : "border-white/10 focus:border-red-400"
+        }`}
       />
+
+      {error && (
+        <span className="mt-1.5 block text-xs font-semibold text-red-300">
+          {error}
+        </span>
+      )}
     </label>
   );
 }
@@ -1216,6 +1336,7 @@ function ModalTextArea({
   value,
   disabled,
   required,
+  error,
   rows,
   placeholder,
   onChange,
@@ -1232,9 +1353,57 @@ function ModalTextArea({
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className={`w-full resize-none rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm leading-5 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+          error ? "border-red-400/70 focus:border-red-400" : "border-white/10 focus:border-red-400"
+        }`}
       />
+
+      {error && (
+        <span className="mt-1.5 block text-xs font-semibold text-red-300">
+          {error}
+        </span>
+      )}
     </label>
+  );
+}
+
+function ConfirmDialog({
+  title,
+  message,
+  confirmLabel,
+  danger = false,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-2xl">
+        <div className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl ${danger ? "bg-red-400/10 text-red-300" : "bg-cyan-400/10 text-cyan-300"}`}>
+          <span className="material-symbols-outlined">{danger ? "gavel" : "help"}</span>
+        </div>
+        <h3 className="text-xl font-black text-white">{title}</h3>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className={`rounded-xl px-4 py-2.5 text-sm font-black transition disabled:opacity-50 ${danger ? "bg-red-400 text-black hover:bg-red-300" : "bg-cyan-400 text-black hover:bg-cyan-300"}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1361,10 +1530,10 @@ function SubmissionCard({ submission, onDetail }) {
 
 function Card({ title, subtitle, icon, children }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_12px_35px_rgba(0,0,0,0.2)]">
-      <div className="mb-4 flex items-start gap-3">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
+      <div className="mb-3 flex items-start gap-3">
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
             <span className="material-symbols-outlined text-lg text-cyan-300">
               {icon}
             </span>
@@ -1372,7 +1541,7 @@ function Card({ title, subtitle, icon, children }) {
         )}
 
         <div>
-          <h2 className="text-lg font-extrabold text-white">{title}</h2>
+          <h2 className="text-base font-extrabold text-white">{title}</h2>
 
           {subtitle && (
             <p className="mt-1 text-sm leading-5 text-gray-500">{subtitle}</p>
@@ -1387,8 +1556,8 @@ function Card({ title, subtitle, icon, children }) {
 
 function HeroInfo({ icon, label, value }) {
   return (
-    <div className="p-4">
-      <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+    <div className="p-3">
+      <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
         <span className="material-symbols-outlined text-lg">{icon}</span>
       </div>
 
@@ -1396,7 +1565,7 @@ function HeroInfo({ icon, label, value }) {
         {label}
       </p>
 
-      <p className="mt-1 text-base font-black text-white">
+      <p className="mt-1 text-sm font-black text-white">
         {formatInfoValue(value)}
       </p>
     </div>
@@ -1847,6 +2016,15 @@ function getMilestoneNetEarning(milestone) {
   if (direct > 0) return direct;
 
   return Math.max(getMilestoneAmount(milestone) - getMilestoneServiceFee(milestone), 0);
+}
+
+function isValidHttpUrl(value) {
+  try {
+    const url = new URL(String(value || "").trim());
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 function formatMoney(value) {

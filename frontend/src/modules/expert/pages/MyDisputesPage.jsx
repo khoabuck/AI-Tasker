@@ -177,7 +177,7 @@ function DisputeCard({ dispute, onDetail, onProject }) {
           </div>
 
           <h2 className="text-xl font-bold text-white">
-            {dispute.projectTitle || `Dispute #${dispute.disputeId}`}
+            {dispute.projectTitle || "Project dispute"}
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
@@ -223,7 +223,7 @@ function DisputeCard({ dispute, onDetail, onProject }) {
               value={
                 dispute.milestoneTitle ||
                 (dispute.milestoneId
-                  ? `#${dispute.milestoneId}`
+                  ? "Related milestone"
                   : "Whole project")
               }
             />
@@ -369,11 +369,28 @@ function formatDate(value) {
 }
 
 function getFriendlyError(err, fallback) {
+  const status = err?.response?.status;
+
+  if (status === 401) {
+    return "Your session has expired. Please sign in again.";
+  }
+
+  if (status === 403) {
+    return "You do not have access to these dispute records.";
+  }
+
+  if (status === 404) {
+    return "Dispute information is temporarily unavailable.";
+  }
+
+  const data = err?.response?.data;
+
+  if (typeof data === "string" && data.trim()) return data;
+
   return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data?.detail ||
-    err?.response?.data ||
+    data?.message ||
+    data?.title ||
+    data?.detail ||
     err?.message ||
     fallback
   );

@@ -227,9 +227,8 @@ export default function ProjectDetailPage() {
 
                   <InfoPill
                     icon="flag"
-                    label={`${displayedMilestones.length} milestone${
-                      displayedMilestones.length === 1 ? "" : "s"
-                    }`}
+                    label={`${displayedMilestones.length} milestone${displayedMilestones.length === 1 ? "" : "s"
+                      }`}
                   />
                 </div>
               </div>
@@ -347,88 +346,18 @@ export default function ProjectDetailPage() {
                 <Info label="You Receive" value={formatMoney(getProjectNetEarning(project, displayedMilestones))} />
                 <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
-                  label="Completed"
-                  value={`${completionSummary.completed}/${displayedMilestones.length}`}
+                  label="Start Date"
+                  value={formatDate(getProjectStartDate(project, displayedMilestones))}
                 />
                 <Info
-                  label="Progress"
-                  value={`${Math.round(
-                    Number(project.progressPercent || completionSummary.progress)
-                  )}%`}
-                />
-                <Info label="Start Date" value={formatDate(project.startDate)} />
-                <Info
-                  label="Deadline"
-                  value={formatDate(project.deadline || project.endDate)}
+                  label={isProjectCompleted(status) ? "Completed Date" : "Project Deadline"}
+                  value={formatDate(
+                    isProjectCompleted(status)
+                      ? getProjectCompletedDate(project)
+                      : getProjectDeadline(project, displayedMilestones)
+                  )}
                 />
               </Card>
-
-              <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-cyan-300">
-                    tips_and_updates
-                  </span>
-
-                  <div>
-                    <h3 className="font-bold text-white">How to continue</h3>
-
-                    <ul className="mt-3 space-y-2 text-sm leading-6 text-gray-300">
-                      <li>Open a milestone to view requirements.</li>
-                      <li>Submit work directly inside milestone detail.</li>
-                      <li>Track client feedback from your submissions.</li>
-                    </ul>
-                  </div>
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-5">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-yellow-300">
-                    payments
-                  </span>
-
-                  <div>
-                    <h3 className="font-bold text-white">Earning rule</h3>
-
-                    <p className="mt-2 text-sm leading-6 text-yellow-100/80">
-                      Service fee is deducted when each milestone is released. Net earnings become pending first, then withdrawable after project completion.
-                    </p>
-                  </div>
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-green-400/20 bg-green-400/10 p-5">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-green-300">
-                    task_alt
-                  </span>
-
-                  <div>
-                    <h3 className="font-bold text-white">Completion Check</h3>
-
-                    <p className="mt-2 text-sm leading-6 text-green-100/80">
-                      Run this check after all milestones are approved or
-                      completed. The system will verify whether the project can
-                      move to completed status.
-                    </p>
-
-                    <button
-                      type="button"
-                      disabled={!canRunCompletionCheck || completionChecking}
-                      onClick={handleCompleteCheck}
-                      className="mt-4 w-full rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {completionChecking
-                        ? "Checking..."
-                        : canRunCompletionCheck
-                        ? "Run Completion Check"
-                        : isProjectCompleted(status)
-                        ? "Project Completed"
-                        : "Complete all milestones first"}
-                    </button>
-                  </div>
-                </div>
-              </section>
             </aside>
           </div>
         </div>
@@ -471,11 +400,10 @@ function MilestoneCard({ milestone, onOpen }) {
         <button
           type="button"
           onClick={onOpen}
-          className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-            completed
+          className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${completed
               ? "border-white/10 bg-white/[0.04] text-gray-300 hover:text-white"
               : "border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
-          }`}
+            }`}
         >
           {completed ? "View Details" : "Open Milestone"}
         </button>
@@ -509,18 +437,18 @@ function MilestoneProgressTimeline({ milestones, onSelect }) {
     count <= 2
       ? "max-w-[420px]"
       : count === 3
-      ? "max-w-[620px]"
-      : count === 4
-      ? "max-w-[760px]"
-      : count === 5
-      ? "max-w-[900px]"
-      : "";
+        ? "max-w-[620px]"
+        : count === 4
+          ? "max-w-[760px]"
+          : count === 5
+            ? "max-w-[900px]"
+            : "";
 
   const desktopStyle =
     count > 5
       ? {
-          minWidth: `${count * 150}px`,
-        }
+        minWidth: `${count * 150}px`,
+      }
       : undefined;
 
   return (
@@ -716,10 +644,10 @@ function StatusBadge({ status }) {
     group === "COMPLETED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
       : group === "DISPUTED" || group === "CANCELLED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : group === "IN_PROGRESS"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+        ? "border-red-400/30 bg-red-400/10 text-red-300"
+        : group === "IN_PROGRESS"
+          ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+          : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
 
   return (
     <span
@@ -735,13 +663,13 @@ function MilestoneStatusBadge({ status }) {
     status === "COMPLETED" || status === "APPROVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
       : status === "REVISION_REQUESTED"
-      ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "CANCELLED" ||
-        status === "CANCELED" ||
-        status === "REJECTED" ||
-        status === "DISPUTED"
-      ? "border-red-400/30 bg-red-400/10 text-red-300"
-      : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
+        ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
+        : status === "CANCELLED" ||
+          status === "CANCELED" ||
+          status === "REJECTED" ||
+          status === "DISPUTED"
+          ? "border-red-400/30 bg-red-400/10 text-red-300"
+          : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
 
   return (
     <span
@@ -1039,6 +967,156 @@ function firstPositiveNumber(...values) {
     if (Number.isFinite(number) && number > 0) return number;
   }
   return 0;
+}
+
+
+function getProjectStartDate(project, milestones = []) {
+  const directStartDate = getValue(
+    project?.startDate,
+    project?.StartDate,
+    project?.escrowLockedAt,
+    project?.EscrowLockedAt,
+    project?.createdAt,
+    project?.CreatedAt,
+    project?.raw?.startDate,
+    project?.raw?.StartDate,
+    project?.raw?.escrowLockedAt,
+    project?.raw?.EscrowLockedAt,
+    project?.raw?.createdAt,
+    project?.raw?.CreatedAt,
+    ""
+  );
+
+  if (directStartDate) return directStartDate;
+
+  const milestoneDates = (Array.isArray(milestones) ? milestones : [])
+    .map((milestone) =>
+      getValue(
+        milestone?.startDate,
+        milestone?.StartDate,
+        milestone?.createdAt,
+        milestone?.CreatedAt,
+        milestone?.raw?.startDate,
+        milestone?.raw?.StartDate,
+        milestone?.raw?.createdAt,
+        milestone?.raw?.CreatedAt,
+        ""
+      )
+    )
+    .map(toValidDate)
+    .filter(Boolean);
+
+  if (milestoneDates.length === 0) return null;
+
+  return new Date(
+    Math.min(...milestoneDates.map((date) => date.getTime()))
+  ).toISOString();
+}
+
+function getProjectDeadline(project, milestones = []) {
+  const directDeadline = getValue(
+    project?.deadline,
+    project?.Deadline,
+    project?.projectDeadline,
+    project?.ProjectDeadline,
+    project?.expectedEndDate,
+    project?.ExpectedEndDate,
+    project?.dueDate,
+    project?.DueDate,
+    project?.raw?.deadline,
+    project?.raw?.Deadline,
+    project?.raw?.projectDeadline,
+    project?.raw?.ProjectDeadline,
+    project?.raw?.expectedEndDate,
+    project?.raw?.ExpectedEndDate,
+    project?.raw?.dueDate,
+    project?.raw?.DueDate,
+    ""
+  );
+
+  if (directDeadline) return directDeadline;
+
+  const milestoneDeadlines = (Array.isArray(milestones) ? milestones : [])
+    .map((milestone) =>
+      getValue(
+        milestone?.deadline,
+        milestone?.Deadline,
+        milestone?.dueDate,
+        milestone?.DueDate,
+        milestone?.endDate,
+        milestone?.EndDate,
+        milestone?.raw?.deadline,
+        milestone?.raw?.Deadline,
+        milestone?.raw?.dueDate,
+        milestone?.raw?.DueDate,
+        milestone?.raw?.endDate,
+        milestone?.raw?.EndDate,
+        ""
+      )
+    )
+    .map(toValidDate)
+    .filter(Boolean);
+
+  if (milestoneDeadlines.length > 0) {
+    return new Date(
+      Math.max(...milestoneDeadlines.map((date) => date.getTime()))
+    ).toISOString();
+  }
+
+  const startDate = toValidDate(getProjectStartDate(project, milestones));
+  const totalDurationDays = (Array.isArray(milestones) ? milestones : []).reduce(
+    (total, milestone) => {
+      const duration = Number(
+        getValue(
+          milestone?.durationDays,
+          milestone?.DurationDays,
+          milestone?.raw?.durationDays,
+          milestone?.raw?.DurationDays,
+          0
+        )
+      );
+
+      return total + (Number.isFinite(duration) && duration > 0 ? duration : 0);
+    },
+    0
+  );
+
+  if (!startDate || totalDurationDays <= 0) return null;
+
+  const calculatedDeadline = new Date(startDate);
+  calculatedDeadline.setDate(calculatedDeadline.getDate() + totalDurationDays);
+  return calculatedDeadline.toISOString();
+}
+
+function getProjectCompletedDate(project) {
+  return getValue(
+    project?.endDate,
+    project?.EndDate,
+    project?.completedAt,
+    project?.CompletedAt,
+    project?.updatedAt,
+    project?.UpdatedAt,
+    project?.raw?.endDate,
+    project?.raw?.EndDate,
+    project?.raw?.completedAt,
+    project?.raw?.CompletedAt,
+    project?.raw?.updatedAt,
+    project?.raw?.UpdatedAt,
+    ""
+  );
+}
+
+function toValidDate(value) {
+  if (!value) return null;
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function getValue(...values) {
+  return values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
 }
 
 function formatMoney(value) {

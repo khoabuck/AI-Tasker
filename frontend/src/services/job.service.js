@@ -174,17 +174,11 @@ const normalizeJob = (job) => {
 const jobService = {
   async getOpenJobs(params = {}) {
     const response = await jobApi.getOpenJobs(params);
-
-    console.log("GET OPEN JOBS RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },
 
   async getRecommendedJobs(limit = 10) {
     const response = await jobApi.getRecommendedJobs(limit);
-
-    console.log("GET RECOMMENDED JOBS RESPONSE:", response?.data);
-
     return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },
 
@@ -195,7 +189,6 @@ const jobService = {
 
     const response = await jobApi.getJobById(jobId);
 
-    console.log("GET JOB DETAIL RESPONSE:", response?.data);
 
     return normalizeJob(unwrapDetailData(response));
   },
@@ -203,7 +196,6 @@ const jobService = {
   async getMyJobs() {
     const response = await jobApi.getMyJobs();
 
-    console.log("GET MY JOBS RESPONSE:", response?.data);
 
     return unwrapListData(response).map(normalizeJob).filter(Boolean);
   },

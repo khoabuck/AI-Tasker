@@ -54,7 +54,6 @@ export default function ManageJobsPage() {
 
       const matchSearch =
         !keyword ||
-        String(job.jobId || "").toLowerCase().includes(keyword) ||
         String(job.title || "").toLowerCase().includes(keyword) ||
         String(job.description || "").toLowerCase().includes(keyword) ||
         String(job.clientName || "").toLowerCase().includes(keyword) ||
@@ -114,7 +113,7 @@ export default function ManageJobsPage() {
     const jobId = getJobId(job);
 
     if (!jobId) {
-      setError("Cannot open job detail because job id is missing.");
+      setError("Job information is unavailable. Please refresh and try again.");
       return;
     }
 
@@ -168,7 +167,7 @@ export default function ManageJobsPage() {
     const jobId = getJobId(cancelTarget);
 
     if (!jobId) {
-      setError("Cannot cancel job because job id is missing.");
+      setError("Job information is unavailable. Please refresh and try again.");
       return;
     }
 
@@ -202,7 +201,7 @@ export default function ManageJobsPage() {
       setJobProposals([]);
 
       await loadJobs({ keepMessage: true });
-      setMessage(`Job #${jobId} has been cancelled successfully.`);
+      setMessage("The job has been cancelled successfully.");
     } catch (err) {
       console.error("CANCEL JOB ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot cancel job."));
@@ -309,7 +308,7 @@ export default function ManageJobsPage() {
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Search by title, description, client, category, or job id..."
+                    placeholder="Search by title, description, client, or category..."
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                   />
                 </div>
@@ -427,7 +426,6 @@ function JobCard({ job, disabled, onView, onCancel }) {
         <div className="flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge status={status} />
-            <Badge label={`Job #${jobId || "N/A"}`} />
             {job.proposalCount > 0 && (
               <Badge label={`${job.proposalCount} proposals`} tone="cyan" />
             )}
@@ -503,7 +501,7 @@ function JobDetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-5xl rounded-3xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
             <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
@@ -515,7 +513,7 @@ function JobDetailModal({
             </h2>
 
             <p className="mt-1 text-sm text-gray-400">
-              Client: {job.clientName || "Client"} · Job #{getJobId(job)}
+              Client: {job.clientName || "Client"}
             </p>
           </div>
 
@@ -594,7 +592,6 @@ function ProposalItem({ proposal }) {
   return (
     <article className="rounded-xl border border-white/10 bg-black/10 p-4">
       <div className="mb-2 flex flex-wrap items-center gap-2">
-        <Badge label={`Proposal #${proposal.proposalId || "N/A"}`} />
         <StatusBadge status={proposal.status || "PENDING"} />
         {proposal.createdAt && (
           <Badge label={`Submitted ${formatDate(proposal.createdAt)}`} />
@@ -625,7 +622,7 @@ function CancelJobModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-3xl border border-red-400/20 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-lg rounded-2xl border border-red-400/20 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
             <span className="material-symbols-outlined text-2xl text-red-300">
@@ -633,12 +630,12 @@ function CancelJobModal({
             </span>
           </div>
 
-          <h2 className="text-2xl font-black text-white">Cancel Job</h2>
+          <h2 className="text-xl font-black text-white">Cancel this job?</h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-400">
             You are about to cancel{" "}
             <span className="font-bold text-white">
-              {job.title || `Job #${getJobId(job)}`}
+              {job.title || "Untitled Job"}
             </span>
             . This action should only be used when the job violates policy,
             contains incorrect information, or needs admin moderation.
@@ -647,7 +644,7 @@ function CancelJobModal({
 
         <div className="space-y-5 px-6 py-5">
           <div className="grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:grid-cols-2">
-            <InfoBox label="Job" value={job.title || `Job #${getJobId(job)}`} />
+            <InfoBox label="Job" value={job.title || "Untitled Job"} />
             <InfoBox label="Client" value={job.clientName || "Client"} />
             <InfoBox label="Status" value={formatLabel(job.status)} />
             <InfoBox label="Budget" value={formatBudget(job)} />
@@ -932,11 +929,11 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage jobs.";
   }
 
   if (status === 404) {
-    return "Admin jobs API was not found. Please check backend route.";
+    return "Job management is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

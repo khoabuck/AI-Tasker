@@ -18,7 +18,7 @@ export default function AdminAuditLogDetailPage() {
 
   const loadAuditLogDetail = async () => {
     if (!auditLogId) {
-      setError("Audit log id is missing.");
+      setError("Audit log information is unavailable.");
       setLoading(false);
       return;
     }
@@ -59,12 +59,7 @@ export default function AdminAuditLogDetailPage() {
   }, [auditLog]);
 
   const displayEntity = useMemo(() => {
-    const entityName = auditLog?.entityName || "Unknown Entity";
-    const entityId = auditLog?.entityId && auditLog.entityId !== "N/A"
-      ? ` #${auditLog.entityId}`
-      : "";
-
-    return `${toReadableText(entityName)}${entityId}`;
+    return toReadableText(auditLog?.entityName || "Affected Record");
   }, [auditLog]);
 
   const changes = useMemo(() => {
@@ -169,9 +164,9 @@ export default function AdminAuditLogDetailPage() {
                     icon="person"
                     label="Performed By"
                     value={
-                      auditLog.adminEmail ||
                       auditLog.adminName ||
-                      `Admin #${auditLog.adminId || "N/A"}`
+                      auditLog.adminEmail ||
+                      "Administrator"
                     }
                   />
 
@@ -218,8 +213,8 @@ export default function AdminAuditLogDetailPage() {
 
                         <p className="mt-2 text-sm leading-6 text-gray-400">
                           This audit log does not include structured old and new
-                          values. Check the action summary or advanced details
-                          below.
+                          values. Review the action summary and reason for more
+                          context.
                         </p>
                       </div>
                     ) : (
@@ -241,9 +236,9 @@ export default function AdminAuditLogDetailPage() {
                         icon="login"
                         title="Admin action recorded"
                         description={
-                          auditLog.adminEmail
-                            ? `${auditLog.adminEmail} performed this action.`
-                            : `Admin #${auditLog.adminId || "N/A"} performed this action.`
+                          auditLog.adminName || auditLog.adminEmail
+                            ? `${auditLog.adminName || auditLog.adminEmail} performed this action.`
+                            : "An administrator performed this action."
                         }
                         time={formatDateTime(auditLog.createdAt)}
                         tone="cyan"
@@ -267,7 +262,6 @@ export default function AdminAuditLogDetailPage() {
                     </div>
                   </section>
 
-                  <AdvancedDetails auditLog={auditLog} />
                 </main>
 
                 <aside className="space-y-6">
@@ -300,7 +294,6 @@ export default function AdminAuditLogDetailPage() {
                     </h2>
 
                     <div className="space-y-4">
-                      <DetailItem label="Name" value={auditLog.adminName} />
                       <DetailItem label="Email" value={auditLog.adminEmail} />
                     </div>
                   </section>
@@ -430,52 +423,6 @@ function DetailItem({ label, value }) {
       <p className="mt-1 break-words text-sm font-bold text-white">
         {value || "N/A"}
       </p>
-    </div>
-  );
-}
-
-function AdvancedDetails({ auditLog }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
-      >
-        <div>
-          <h2 className="text-xl font-bold text-white">Advanced Details</h2>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Technical data for troubleshooting and backend verification.
-          </p>
-        </div>
-
-        <span className="material-symbols-outlined text-gray-400">
-          {open ? "expand_less" : "expand_more"}
-        </span>
-      </button>
-
-      {open && (
-        <div className="space-y-5 border-t border-white/10 p-6">
-          <JsonPanel title="Old Values" value={auditLog.oldValues} />
-          <JsonPanel title="New Values" value={auditLog.newValues} />
-          <JsonPanel title="Raw Audit Log" value={auditLog.raw || auditLog} />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function JsonPanel({ title, value }) {
-  return (
-    <div>
-      <h3 className="mb-3 font-bold text-white">{title}</h3>
-
-      <pre className="max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-[#0d1117] p-4 text-xs leading-6 text-gray-300">
-        {formatJsonValue(value)}
-      </pre>
     </div>
   );
 }
@@ -642,11 +589,11 @@ function getFriendlyError(err) {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to view this audit record.";
   }
 
   if (status === 404) {
-    return "Audit log detail API was not found. Please check backend route.";
+    return "This audit record is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

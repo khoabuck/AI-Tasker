@@ -57,10 +57,8 @@ export default function AdminAuditLogsPage() {
       setError("");
 
       const result = await adminAuditLogService.getAuditLogs({
-        AdminId: nextFilters.adminId,
         Action: nextFilters.action,
         EntityName: nextFilters.entityName,
-        EntityId: nextFilters.entityId,
         From: toDateTimeStart(nextFilters.from),
         To: toDateTimeEnd(nextFilters.to),
         PageNumber: nextFilters.pageNumber,
@@ -232,20 +230,7 @@ export default function AdminAuditLogsPage() {
           </section>
 
           <section className={`${cardStyle} mb-6 p-6`}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className={labelStyle}>Admin ID</label>
-
-                <input
-                  type="number"
-                  value={filters.adminId}
-                  onChange={(event) =>
-                    handleChange("adminId", event.target.value)
-                  }
-                  placeholder="Example: 1"
-                  className={inputStyle}
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 
               <div>
                 <label className={labelStyle}>Action</label>
@@ -271,20 +256,6 @@ export default function AdminAuditLogsPage() {
                     handleChange("entityName", event.target.value)
                   }
                   placeholder="Example: JobPostingAiPolicy"
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>Entity ID</label>
-
-                <input
-                  type="number"
-                  value={filters.entityId}
-                  onChange={(event) =>
-                    handleChange("entityId", event.target.value)
-                  }
-                  placeholder="Example: 1"
                   className={inputStyle}
                 />
               </div>
@@ -442,12 +413,12 @@ function AuditLogRow({ log, onViewDetail }) {
             </span>
 
             <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
-              {log.entityName || "N/A"} #{log.entityId || "N/A"}
+              {toReadableText(log.entityName || "Affected record")}
             </span>
           </div>
 
           <h3 className="font-bold text-white">
-            {log.action || "UNKNOWN"} on {log.entityName || "N/A"}
+            {toReadableText(log.action || "Admin action")} · {toReadableText(log.entityName || "Record")}
           </h3>
 
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
@@ -457,8 +428,11 @@ function AuditLogRow({ log, onViewDetail }) {
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
-            <span>Admin ID: {log.adminId || "N/A"}</span>
-            {log.adminEmail && <span>• {log.adminEmail}</span>}
+            {(log.adminName || log.adminEmail) && (
+              <span>
+                Performed by {log.adminName || log.adminEmail}
+              </span>
+            )}
             {log.ipAddress && <span>• IP: {log.ipAddress}</span>}
           </div>
         </div>
@@ -547,6 +521,16 @@ function ActionBadge({ action }) {
   );
 }
 
+function toReadableText(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function EmptyState() {
   return (
     <div className="p-12 text-center">
@@ -600,11 +584,11 @@ function getFriendlyError(err) {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to view audit logs.";
   }
 
   if (status === 404) {
-    return "Audit logs API was not found. Please check backend route.";
+    return "Audit logs are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

@@ -22,6 +22,7 @@ export default function ManageSkillsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changingStatusId, setChangingStatusId] = useState(null);
+  const [inactiveTarget, setInactiveTarget] = useState(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -73,14 +74,11 @@ export default function ManageSkillsPage() {
       const skillName = String(skill.skillName || "").toLowerCase();
       const description = String(skill.description || "").toLowerCase();
       const category = String(skill.category || "").toLowerCase();
-      const skillId = String(skill.skillId || "").toLowerCase();
-
       const matchSearch =
         !keyword ||
         skillName.includes(keyword) ||
         description.includes(keyword) ||
-        category.includes(keyword) ||
-        skillId.includes(keyword);
+        category.includes(keyword);
 
       const matchCategory =
         !categoryFilter || String(skill.category || "") === categoryFilter;
@@ -235,19 +233,23 @@ export default function ManageSkillsPage() {
     }
   };
 
-  const handleSetInactive = async (skill) => {
+  const requestSetInactive = (skill) => {
     if (!skill?.skillId) return;
+    setError("");
+    setMessage("");
+    setInactiveTarget(skill);
+  };
 
-    const confirmed = window.confirm(
-      `Set skill "${skill.skillName}" to inactive? You can activate it again later.`
-    );
+  const handleSetInactive = async () => {
+    const skill = inactiveTarget;
 
-    if (!confirmed) return;
+    if (!skill?.skillId) return;
 
     try {
       setChangingStatusId(skill.skillId);
       setMessage("");
       setError("");
+      setInactiveTarget(null);
 
       await adminSkillService.deleteSkill(skill.skillId);
 
@@ -499,7 +501,7 @@ export default function ManageSkillsPage() {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                handleSetInactive(skill);
+                                requestSetInactive(skill);
                               }}
                               disabled={isChanging}
                               className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
@@ -539,7 +541,7 @@ export default function ManageSkillsPage() {
 
                       <p className="mt-1 text-sm text-gray-500">
                         {selectedSkill
-                          ? `Skill #${selectedSkill.skillId}`
+                          ? "Update the selected skill details"
                           : "Add a new system skill"}
                       </p>
                     </div>
@@ -652,7 +654,55 @@ export default function ManageSkillsPage() {
           )}
         </div>
       </div>
+
+      {inactiveTarget && (
+        <InactiveSkillModal
+          skill={inactiveTarget}
+          loading={Boolean(changingStatusId)}
+          onCancel={() => !changingStatusId && setInactiveTarget(null)}
+          onConfirm={handleSetInactive}
+        />
+      )}
     </AdminLayout>
+  );
+}
+
+function InactiveSkillModal({ skill, loading, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-red-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-red-400/20 bg-red-400/10 text-red-300">
+          <span className="material-symbols-outlined">block</span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">Set skill to inactive?</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          <span className="font-bold text-white">{skill?.skillName}</span> will
+          no longer be available for new expert profiles or job requirements.
+          You can activate it again later.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Updating..." : "Set Inactive"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -717,11 +767,11 @@ function getFriendlyError(err) {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage skills.";
   }
 
   if (status === 404) {
-    return "Skills API was not found. Please check backend route.";
+    return "Skills management is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

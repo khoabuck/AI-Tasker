@@ -74,7 +74,6 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     if (import.meta.env.DEV) {
-      console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
     }
 
     return config;

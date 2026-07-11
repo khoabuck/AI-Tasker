@@ -792,8 +792,7 @@ function ModelsTab({ models, onCreate, onEdit }) {
                 <div className="min-w-0">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <StatusBadge active={item.isEnabled} />
-                    <Badge label={item.provider || "Provider"} />
-                    <Badge label={`ID #${item.aiAllowedModelId || "N/A"}`} />
+                    {item.provider && <Badge label={item.provider} />}
                   </div>
 
                   <h3 className="font-bold text-white">
@@ -911,7 +910,7 @@ function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
         <div className="mb-5">
           <h2 className="text-xl font-bold text-white">Test Result</h2>
           <p className="mt-1 text-sm text-gray-400">
-            Response and metadata returned by the AI test endpoint.
+            Review the generated response and basic performance information.
           </p>
         </div>
 
@@ -1222,7 +1221,7 @@ function UsageTab({
       <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
         <h2 className="text-xl font-bold text-white">Recent AI Logs</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Latest AI calls and error details.
+          Recent AI activity and failed request summaries.
         </p>
 
         <div className="mt-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1250,8 +1249,8 @@ function UsageTab({
                   <Td>{formatNumber(item.totalTokens)}</Td>
                   <Td>
                     <p className="max-w-[360px] whitespace-normal text-xs text-gray-400">
-                      {item.errorCode || item.errorMessage
-                        ? `${item.errorCode || ""} ${item.errorMessage || ""}`
+                      {item.errorMessage
+                        ? getFriendlyAiLogError(item.errorMessage)
                         : "-"}
                     </p>
                   </Td>
@@ -1943,7 +1942,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   if (status === 401) return "Your session has expired. Please login again.";
   if (status === 403) return "You do not have permission to manage AI settings.";
   if (status === 404)
-    return "AI management API was not found. Please check backend route.";
+    return "AI management is temporarily unavailable. Please try again later.";
 
   const data = err?.response?.data;
 
@@ -1958,6 +1957,22 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   return err?.message || fallback;
+}
+
+function getFriendlyAiLogError(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "-";
+
+  const lower = text.toLowerCase();
+
+  if (lower.includes("timeout")) return "The AI request timed out.";
+  if (lower.includes("rate limit")) return "The AI request limit was reached.";
+  if (lower.includes("unauthorized") || lower.includes("forbidden")) {
+    return "The AI provider rejected the request.";
+  }
+
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
 }
 
 function extractAiContent(result) {
