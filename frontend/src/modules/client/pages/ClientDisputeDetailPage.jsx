@@ -67,37 +67,63 @@ export default function ClientDisputeDetailPage() {
   // GET /disputes/me rồi lọc ra đúng dispute khớp projectId.
   // code mới
   const fetchDispute = useCallback(async (signal, silent = false) => {
-    if (!silent) {
-      setLoading(true);
-      setError("");
-    }
-    try {
-      const res = await axiosInstance.get("/disputes/me", { signal });
-      const raw = res.data?.data ?? res.data;
-      const list = Array.isArray(raw) ? raw : raw?.items ?? [];
+  if (!silent) {
+    setLoading(true);
+    setError("");
+  }
 
-      const match = projectId
-        ? list.find((d) => String(d.projectId) === String(projectId))
-        : list[0];
+  try {
+    const res = await axiosInstance.get("/disputes/me", { signal });
 
-      if (!match) {
-        if (!silent) setError("No complaints were found for this project.");
-        return;
-      }
+    if (signal?.aborted) return;
 
-      // Lấy chi tiết đầy đủ qua disputeId (list /me có thể chỉ trả tóm tắt)
-      const detailRes = await axiosInstance.get(`/disputes/${match.disputeId}`, { signal });
-      const detail = detailRes.data?.data ?? detailRes.data;
-      setDispute(detail ?? match);
-    } catch (err) {
-      if (err?.code === "ERR_CANCELED") return;
+    const raw = res.data?.data ?? res.data;
+    const list = Array.isArray(raw) ? raw : raw?.items ?? [];
+
+    const match = projectId
+      ? list.find((d) => String(d.projectId) === String(projectId))
+      : list[0];
+
+    if (!match) {
       if (!silent) {
-        setError(err?.response?.data?.message || "Unable to load complaint information.");
+        setError("No complaints were found for this project.");
       }
-    } finally {
-      if (!silent) setLoading(false);
+      return;
     }
-  }, [projectId]);
+
+    const detailRes = await axiosInstance.get(
+      `/disputes/${match.disputeId}`,
+      { signal }
+    );
+
+    if (signal?.aborted) return;
+
+    const detail = detailRes.data?.data ?? detailRes.data;
+
+    setDispute(detail ?? match);
+    setError("");
+  } catch (err) {
+    if (
+      err?.code === "ERR_CANCELED" ||
+      err?.name === "CanceledError" ||
+      signal?.aborted
+    ) {
+      return;
+    }
+
+    if (!silent) {
+      setError(
+        err?.response?.data?.message ||
+        "Unable to load complaint information."
+      );
+    }
+  } finally {
+    // Không tắt loading đối với request đã bị hủy
+    if (!silent && !signal?.aborted) {
+      setLoading(false);
+    }
+  }
+}, [projectId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -150,8 +176,6 @@ export default function ClientDisputeDetailPage() {
       });
 
       const raw = res.data?.data ?? res.data;
-
-      console.log("UPLOAD IMAGE API RESPONSE:", res.data);
 
       const imageUrl =
         typeof raw === "string"
@@ -250,19 +274,37 @@ export default function ClientDisputeDetailPage() {
   }
 
   if (error || !dispute) {
-    return (
-      <ClientLayout>
-        <div style={{ textAlign: "center", padding: "120px 24px" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Dispute not found."}</p>
-          <button onClick={() => navigate("/client/projects")}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Back to Projects
-          </button>
-        </div>
-      </ClientLayout>
-    );
-  }
+  return (
+    <ClientLayout>
+      <div style={{ textAlign: "center", padding: "120px 24px" }}>
+        <p
+          style={{
+            color: "#8c90a0",
+            fontSize: 15,
+            marginBottom: 20,
+          }}
+        >
+          Complaint information is currently unavailable.
+        </p>
+
+        <button
+          onClick={() => navigate("/client/projects")}
+          style={{
+            padding: "10px 24px",
+            background: "#00F0FF",
+            color: "#002022",
+            border: "none",
+            borderRadius: 8,
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Back to Projects
+        </button>
+      </div>
+    </ClientLayout>
+  );
+}
 
   const dStatus = DISPUTE_STATUS[dispute.status] || DISPUTE_STATUS.OPEN;
   const isClosed = ["RESOLVED", "REJECTED", "CLOSED"].includes(dispute.status);

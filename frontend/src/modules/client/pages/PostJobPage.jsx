@@ -335,7 +335,7 @@ const toggleSkill = (skill) => {
         complexityHint: "",
       });
       const data = res.data?.data ?? res.data;
-      console.log(data);
+      
 
       const normalizeComplexity = (value) => {
         const v = String(value || "").trim().toUpperCase();

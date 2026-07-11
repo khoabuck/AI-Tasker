@@ -266,7 +266,7 @@ useEffect(() => {
 
         
         {/* Filters */}
-        <div className="relative z-[100] mb-6 flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-[#0d1017]/70 p-3 backdrop-blur-2xl">
+        <div className="relative z-10 mb-6 flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-[#0d1017]/70 p-3 backdrop-blur-2xl">
 
           {/* Date */}
           <div className="relative">
@@ -296,7 +296,7 @@ useEffect(() => {
             </button>
 
             {dateOpen && (
-              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-50 max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {DATE_OPTIONS.map((item) => (
                   <button
                     key={item.value}
@@ -346,7 +346,7 @@ useEffect(() => {
             </button>
 
             {typeOpen && (
-              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-50 max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {TYPE_OPTIONS.map((item) => (
                   <button
                     key={item}
@@ -396,7 +396,7 @@ useEffect(() => {
             </button>
 
             {statusOpen && (
-              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-50 max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {STATUS_OPTIONS.map((item) => (
                   <button
                     key={item}
@@ -446,7 +446,7 @@ useEffect(() => {
             </button>
 
             {rowsOpen && (
-              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-50 max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {ROW_OPTIONS.map((item) => (
                   <button
                     key={item}

@@ -25,16 +25,26 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function formatMessageTime(dateStr) {
-  if (!dateStr) return "";
+function formatMessageTime(value) {
+  if (!value) return "";
 
-  const date = new Date(dateStr);
+  // Tin nhắn vừa gửi, chưa lấy lại từ API
+  if (value instanceof Date) {
+    return value.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
 
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  // createdAt của BE đã là giờ Việt Nam, lấy trực tiếp HH:mm
+  const match = String(value).match(/T(\d{2}):(\d{2})/);
+
+  if (match) {
+    return `${match[1]}:${match[2]}`;
+  }
+
+  return "";
 }
 
 // ── Proposal Review Modal — Client xem proposal, Accept hoặc Yêu cầu sửa ──
@@ -211,8 +221,7 @@ export default function MessagesPage() {
   const fetchConversations = useCallback(async () => {
     try {
       const res = await axiosInstance.get("/conversations/me");
-      console.log("CURRENT USER", currentUser);
-      console.log("CONVERSATIONS RESPONSE", res.data);
+      
       const raw = res.data?.data ?? res.data;
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
@@ -321,7 +330,7 @@ export default function MessagesPage() {
           : (m.isMine ?? m.senderType === "CLIENT" ?? false);
 
       return {
-        id: m.messageId ?? m.id,
+        id: m.conversationMessageId ?? m.messageId ?? m.id,
         text: m.content,
         isMe,
         time: formatMessageTime(m.createdAt),

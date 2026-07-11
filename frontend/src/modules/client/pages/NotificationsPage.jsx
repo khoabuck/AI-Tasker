@@ -291,10 +291,6 @@ export default function NotificationsPage() {
 
   const handleClick = async (n) => {
     const targetUrl = getNotificationTargetUrl(n);
-
-    console.log("Notification:", n);
-    console.log("Target URL:", targetUrl);
-
     try {
       if (!n.isRead && n.notificationId) {
         await markRead(n.notificationId);

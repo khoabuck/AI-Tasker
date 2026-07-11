@@ -548,6 +548,52 @@ function WithdrawModal({ onClose, onSuccess }) {
 const getTxType = (tx) =>
   (tx.type ?? tx.transactionType ?? "").toUpperCase();
 
+const TX_TYPE_LABELS = {
+  ESCROW_LOCK: "Escrow Lock",
+  PLATFORM_FEE: "Platform Fee",
+  ESCROW_RELEASE: "Escrow Release",
+  ESCROW_FREEZE: "Escrow Freeze",
+  REFUND: "Refund",
+  WITHDRAWAL_HOLD: "Withdrawal Hold",
+  WITHDRAWAL_PAYOUT_PROCESSING: "Withdrawal Processing",
+  WITHDRAWAL: "Withdrawal",
+  WITHDRAW: "Withdrawal",
+  DEPOSIT: "Deposit",
+};
+
+const formatTxType = (tx) => {
+  const type = getTxType(tx);
+
+  if (!type) return "—";
+
+  return (
+    TX_TYPE_LABELS[type] ||
+    type
+      .toLowerCase()
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ")
+  );
+};
+
+const formatTxDescription = (tx) => {
+  const description = String(tx.description || "").trim();
+
+  if (!description) return "—";
+
+  return description
+    .replace(
+      /\s+(for|from|to)\s+(Project|Milestone|Contract|Proposal|Escrow)\s+ID\s+#?\d+/gi,
+      ""
+    )
+    .replace(
+      /\s+(Project|Milestone|Contract|Proposal|Escrow)\s+ID\s+#?\d+/gi,
+      ""
+    )
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
 // Trang này là ví CLIENT — với Client, ESCROW_RELEASE là lúc tiền trong escrow
 // được giải ngân trả cho Expert, tức tiền RỜI khỏi phía Client → phải tính là
 // chi tiêu (dấu trừ), không phải tiền vào. (Trước đây từng bỏ field này ra vì
@@ -825,8 +871,24 @@ const metrics = balance
                             style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", transition: "background 0.2s", cursor: "pointer" }}
                             onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
                             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>{tx.type ?? "—"}</td>
-                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#e1e2eb", maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{tx.description ?? "—"}</td>
+                            <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>
+                              {formatTxType(tx)}
+                            </td>
+
+                            <td
+                              title={formatTxDescription(tx)}
+                              style={{
+                                padding: "14px 20px",
+                                fontSize: 13,
+                                color: "#e1e2eb",
+                                maxWidth: 280,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {formatTxDescription(tx)}
+</td>
                             <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
                             <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: isExpenseTx(tx) ? "#ffb4ab" : "#00F0FF" }}>
                               {getTxAmountText(tx)}

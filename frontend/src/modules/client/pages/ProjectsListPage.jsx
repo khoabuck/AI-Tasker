@@ -153,29 +153,28 @@ export default function ProjectsListPage() {
 
       setAllProjects(projects);
 
-      const completedProjects = projects.filter(
-        (p) => String(p.status || "").toUpperCase() === "COMPLETED"
-      );
+      try {
+        const reviewRes = await axiosInstance.get("/reviews/me", { signal });
+        const rawReviews = reviewRes.data;
 
-      const results = await Promise.allSettled(
-        completedProjects.map((p) =>
-          axiosInstance.get(`/projects/${p.projectId}/review`, { signal })
-        )
-      );
+        const reviews = Array.isArray(rawReviews)
+          ? rawReviews
+          : rawReviews.items ?? rawReviews.data ?? [];
 
-      const reviewedIds = new Set();
+        const reviewedIds = new Set(
+          reviews
+            .map((review) => review.projectId ?? review.project?.projectId)
+            .filter(Boolean)
+        );
 
-      results.forEach((result, index) => {
-        if (result.status === "fulfilled") {
-          const reviewData = result.value.data?.data ?? result.value.data;
+        setReviewedProjectIds(reviewedIds);
+      } catch (reviewErr) {
+        if (reviewErr?.code === "ERR_CANCELED") return;
 
-          if (reviewData?.reviewId) {
-            reviewedIds.add(completedProjects[index].projectId);
-          }
-        }
-      });
-
-      setReviewedProjectIds(reviewedIds);
+        // Không cho lỗi review làm hỏng trang Projects.
+        // Nếu API reviews/me lỗi, chỉ coi như chưa có review nào.
+        setReviewedProjectIds(new Set());
+      }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(err?.response?.data?.message || "Unable to load the list of projects.");

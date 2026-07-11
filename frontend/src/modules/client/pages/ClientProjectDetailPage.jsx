@@ -247,9 +247,6 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
       }, 800);
 
     } catch (err) {
-        console.log("DISPUTE_ERROR_STATUS:", err?.response?.status);
-        console.log("DISPUTE_ERROR_DATA:", err?.response?.data);
-
         setError(
           err?.response?.data?.message ||
           err?.response?.data?.title ||
