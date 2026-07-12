@@ -39,6 +39,16 @@ export default function AdminJobCreditPackagesPage() {
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
 
   useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
+
+  useEffect(() => {
     loadPackages();
   }, []);
 
@@ -328,14 +338,7 @@ export default function AdminJobCreditPackagesPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
@@ -412,12 +415,7 @@ export default function AdminJobCreditPackagesPage() {
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-gray-400">
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading job credit packages...
-            </div>
+            <ListSkeleton rows={6} />
           ) : filteredPackages.length === 0 ? (
             <EmptyState />
           ) : (
@@ -487,6 +485,53 @@ export default function AdminJobCreditPackagesPage() {
         )}
       </div>
     </AdminLayout>
+  );
+}
+
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3 p-5">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-white/[0.025] p-5"
+        >
+          <div className="h-4 w-1/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+          <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
   );
 }
 

@@ -295,7 +295,7 @@ export default function MessagesPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-4 py-6 md:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
@@ -318,7 +318,7 @@ export default function MessagesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
             <section className={`${cardStyle} overflow-hidden`}>
               <div className="border-b border-white/10 p-5">
                 <h2 className="text-lg font-bold text-white">
@@ -344,10 +344,10 @@ export default function MessagesPage() {
                 </div>
               </div>
 
-              <div className="max-h-[650px] overflow-y-auto">
+              <div className="max-h-[620px] overflow-y-auto">
                 {loadingConversations && (
-                  <div className="p-8 text-center text-sm text-gray-400">
-                    Loading conversations...
+                  <div className="p-4">
+                    <ConversationListSkeleton />
                   </div>
                 )}
 
@@ -419,7 +419,7 @@ export default function MessagesPage() {
               </div>
             </section>
 
-            <section className={`${cardStyle} flex min-h-[650px] flex-col`}>
+            <section className={`${cardStyle} flex min-h-[620px] flex-col`}>
               {!selectedConversation && (
                 <div className="flex flex-1 items-center justify-center p-8 text-center">
                   <div>
@@ -458,11 +458,7 @@ export default function MessagesPage() {
                   </div>
 
                   <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                    {loadingMessages && (
-                      <div className="p-8 text-center text-sm text-gray-400">
-                        Loading messages...
-                      </div>
-                    )}
+                    {loadingMessages && <MessageThreadSkeleton />}
 
                     {!loadingMessages && messages.length === 0 && (
                       <div className="p-8 text-center">
@@ -748,4 +744,35 @@ function getFriendlyError(err, fallback) {
   }
 
   return err?.message || fallback || "Something went wrong.";
+}
+
+function ConversationListSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="flex animate-pulse gap-3 rounded-xl p-2">
+          <div className="h-11 w-11 shrink-0 rounded-full bg-white/10" />
+          <div className="min-w-0 flex-1">
+            <div className="h-4 w-2/3 rounded bg-white/10" />
+            <div className="mt-2 h-3 w-full rounded bg-white/[0.06]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageThreadSkeleton() {
+  return (
+    <div className="space-y-4 py-4">
+      {[false, true, false, true, false].map((mine, index) => (
+        <div
+          key={index}
+          className={`flex animate-pulse ${mine ? "justify-end" : "justify-start"}`}
+        >
+          <div className="h-16 w-[55%] rounded-2xl bg-white/[0.06]" />
+        </div>
+      ))}
+    </div>
+  );
 }

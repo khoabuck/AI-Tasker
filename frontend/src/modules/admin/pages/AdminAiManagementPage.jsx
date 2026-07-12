@@ -84,10 +84,21 @@ export default function AdminAiManagementPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const enabledModels = useMemo(() => {
     return models.filter((item) => item.isEnabled);
   }, [models]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadInitialData();
@@ -278,7 +289,26 @@ export default function AdminAiManagementPage() {
     }));
   };
 
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = () => {
+    const validation = validateSettings(settingsForm);
+
+    if (!validation.valid) {
+      setSettingsErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setConfirmAction({
+      type: "SAVE_SETTINGS",
+      title: "Save AI settings?",
+      message:
+        "These settings affect AI behavior and usage limits across the platform. Review the model, token limits, and reason before continuing.",
+      confirmLabel: "Save Settings",
+      tone: "cyan",
+    });
+  };
+
+  const executeSaveSettings = async () => {
     const validation = validateSettings(settingsForm);
 
     if (!validation.valid) {
@@ -393,7 +423,40 @@ export default function AdminAiManagementPage() {
     }
   };
 
-  const handleTestAi = async () => {
+  const handleTestAi = () => {
+    const validation = validateTest(testForm);
+
+    if (!validation.valid) {
+      setTestErrors(validation.errors);
+      setError("Please fix the highlighted fields before running the test.");
+      return;
+    }
+
+    setConfirmAction({
+      type: "TEST_AI",
+      title: "Run this AI test?",
+      message:
+        "The selected model will receive the test prompt and usage will be recorded in AI logs.",
+      confirmLabel: "Run Test",
+      tone: "cyan",
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (action === "SAVE_SETTINGS") {
+      await executeSaveSettings();
+      return;
+    }
+
+    if (action === "TEST_AI") {
+      await executeTestAi();
+    }
+  };
+
+  const executeTestAi = async () => {
     const validation = validateTest(testForm);
 
     if (!validation.valid) {
@@ -460,22 +523,10 @@ export default function AdminAiManagementPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400">
-            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading AI management...
-          </div>
+          <PageSkeleton cards={4} admin />
         ) : (
           <>
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -602,10 +653,133 @@ export default function AdminAiManagementPage() {
             onSave={handleSaveModel}
           />
         )}
+
+        {confirmAction && (
+          <ConfirmActionModal
+            title={confirmAction.title}
+            message={confirmAction.message}
+            confirmLabel={confirmAction.confirmLabel}
+            tone={confirmAction.tone}
+            loading={savingSettings || testing}
+            onCancel={() => setConfirmAction(null)}
+            onConfirm={handleConfirmAction}
+          />
+        )}
       </div>
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, admin = false }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: cards }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+
+        <div className="mt-6 h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "verified"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
   return (

@@ -22,6 +22,16 @@ export default function ExpertReviewsPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  useEffect(() => {
     loadReviews();
   }, []);
 
@@ -220,14 +230,7 @@ export default function ExpertReviewsPage() {
             </button>
           </div>
 
-          {message && (
-            <Alert
-              type="success"
-              title="Success"
-              message={message}
-              onClose={() => setMessage("")}
-            />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {error && (
             <Alert
@@ -321,9 +324,7 @@ export default function ExpertReviewsPage() {
             </div>
 
             {loading ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center text-gray-400">
-                Loading reviews...
-              </div>
+              <ReviewListSkeleton />
             ) : filteredReviews.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
@@ -356,6 +357,55 @@ export default function ExpertReviewsPage() {
     </ExpertLayout>
   );
 }
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ReviewListSkeleton() {
+  return (
+    <div className="space-y-4">
+      {[0, 1, 2].map((item) => (
+        <div
+          key={item}
+          className="animate-pulse rounded-2xl border border-white/10 bg-white/[0.03] p-5"
+        >
+          <div className="flex gap-4">
+            <div className="h-12 w-12 rounded-full bg-white/10" />
+            <div className="flex-1">
+              <div className="h-5 w-40 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-56 rounded bg-white/[0.06]" />
+              <div className="mt-4 h-16 rounded-xl bg-white/[0.04]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function SummaryCard({ icon, label, value, tone }) {
   const toneClass =

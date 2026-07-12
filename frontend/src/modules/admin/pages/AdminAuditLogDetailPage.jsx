@@ -117,12 +117,7 @@ export default function AdminAuditLogDetailPage() {
           )}
 
           {loading ? (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading audit log detail...
-            </div>
+            <PageSkeleton cards={4} admin />
           ) : !auditLog ? (
             <div className={`${cardStyle} p-12 text-center`}>
               <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
@@ -319,6 +314,35 @@ export default function AdminAuditLogDetailPage() {
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, admin = false }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: cards }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+
+        <div className="mt-6 h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
 
 function OverviewItem({ icon, label, value }) {
   return (

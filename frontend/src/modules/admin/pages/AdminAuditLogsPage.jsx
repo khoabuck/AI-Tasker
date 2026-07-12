@@ -334,11 +334,8 @@ export default function AdminAuditLogsPage() {
             </div>
 
             {loading ? (
-              <div className="p-12 text-center text-gray-400">
-                <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                  hourglass_empty
-                </span>
-                Loading audit logs...
+              <div className="p-5">
+                <ListSkeleton rows={6} />
               </div>
             ) : logs.length === 0 ? (
               <EmptyState />
@@ -400,6 +397,30 @@ export default function AdminAuditLogsPage() {
     </AdminLayout>
   );
 }
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="flex gap-4">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-white/10" />
+            <div className="min-w-0 flex-1">
+              <div className="h-4 w-1/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function AuditLogRow({ log, onViewDetail }) {
   return (

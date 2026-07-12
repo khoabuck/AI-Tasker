@@ -412,11 +412,7 @@ export default function BrowseJobsPage() {
             </div>
           </section>
 
-          {loading && (
-            <div className="flex min-h-[40vh] items-center justify-center rounded-3xl border border-white/10 bg-[#151a22] text-gray-400">
-              Loading active jobs...
-            </div>
-          )}
+          {loading && <ListSkeleton rows={5} />}
 
           {!loading && error && (
             <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-5 text-red-300">
@@ -474,6 +470,32 @@ export default function BrowseJobsPage() {
     </ExpertLayout>
   );
 }
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div>
+              <div className="h-5 w-28 rounded-full bg-white/10" />
+              <div className="mt-4 h-6 w-2/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-full rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-4/5 rounded bg-white/[0.05]" />
+            </div>
+
+            <div className="h-28 rounded-xl border border-white/10 bg-white/[0.03]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function JobRow({ job, onViewDetail, onSubmit }) {
   const visibleSkills = job.skills.slice(0, 5);

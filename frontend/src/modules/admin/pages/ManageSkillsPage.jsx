@@ -24,10 +24,21 @@ export default function ManageSkillsPage() {
   const [saving, setSaving] = useState(false);
   const [changingStatusId, setChangingStatusId] = useState(null);
   const [inactiveTarget, setInactiveTarget] = useState(null);
+  const [pendingAction, setPendingAction] = useState(null);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     loadSkills();
@@ -159,8 +170,21 @@ export default function ManageSkillsPage() {
     };
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
+
+    setPendingAction({
+      type: selectedSkill ? "UPDATE" : "CREATE",
+      title: selectedSkill ? "Update this skill?" : "Create this skill?",
+      message: selectedSkill
+        ? `Save changes to ${formData.skillName || "this skill"}?`
+        : `Create ${formData.skillName || "this skill"} for platform matching and job profiles?`,
+      confirmLabel: selectedSkill ? "Update Skill" : "Create Skill",
+      tone: "cyan",
+    });
+  };
+
+  const executeSaveSkill = async () => {
 
     setMessage("");
     setError("");
@@ -206,6 +230,19 @@ export default function ManageSkillsPage() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const requestActivate = (skill) => {
+    if (!skill?.skillId) return;
+
+    setPendingAction({
+      type: "ACTIVATE",
+      skill,
+      title: "Activate this skill?",
+      message: `${skill.skillName || "This skill"} will become available to experts, jobs, and matching features.`,
+      confirmLabel: "Activate Skill",
+      tone: "green",
+    });
   };
 
   const handleActivate = async (skill) => {
@@ -270,6 +307,22 @@ export default function ManageSkillsPage() {
     }
   };
 
+  const executePendingAction = async () => {
+    const action = pendingAction;
+    setPendingAction(null);
+
+    if (!action) return;
+
+    if (action.type === "CREATE" || action.type === "UPDATE") {
+      await executeSaveSkill();
+      return;
+    }
+
+    if (action.type === "ACTIVATE") {
+      await handleActivate(action.skill);
+    }
+  };
+
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
 
@@ -319,11 +372,7 @@ export default function ManageSkillsPage() {
             </div>
           </section>
 
-          {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
-            </div>
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {error && (
             <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
@@ -425,14 +474,7 @@ export default function ManageSkillsPage() {
             </div>
           </section>
 
-          {loading && (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading skills...
-            </div>
-          )}
+          {loading && <ListSkeleton rows={6} />}
 
           {!loading && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_430px]">
@@ -514,7 +556,7 @@ export default function ManageSkillsPage() {
                               type="button"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                handleActivate(skill);
+                                requestActivate(skill);
                               }}
                               disabled={isChanging}
                               className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
@@ -664,9 +706,122 @@ export default function ManageSkillsPage() {
           onConfirm={handleSetInactive}
         />
       )}
+
+      {pendingAction && (
+        <ConfirmActionModal
+          title={pendingAction.title}
+          message={pendingAction.message}
+          confirmLabel={pendingAction.confirmLabel}
+          tone={pendingAction.tone}
+          loading={saving || Boolean(changingStatusId)}
+          onCancel={() => setPendingAction(null)}
+          onConfirm={executePendingAction}
+        />
+      )}
     </AdminLayout>
   );
 }
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3 p-5">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-white/[0.025] p-5"
+        >
+          <div className="h-4 w-1/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+          <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "policy"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function InactiveSkillModal({ skill, loading, onCancel, onConfirm }) {
   return (

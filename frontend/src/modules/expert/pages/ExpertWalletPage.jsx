@@ -75,6 +75,16 @@ export default function ExpertWalletPage() {
   const [nowTick, setNowTick] = useState(Date.now());
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  useEffect(() => {
     loadWallet();
   }, []);
 
@@ -575,9 +585,7 @@ export default function ExpertWalletPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading wallet...
-        </div>
+        <PageSkeleton rows={4} />
       </ExpertLayout>
     );
   }
@@ -657,7 +665,7 @@ export default function ExpertWalletPage() {
             </div>
           </section>
 
-          {message && <Alert type="success" message={message} />}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
           {error && <Alert type="danger" message={error} />}
 
           <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -846,6 +854,68 @@ export default function ExpertWalletPage() {
     </ExpertLayout>
   );
 }
+
+function PageSkeleton({ rows = 4 }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-28 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div
+                key={item}
+                className="h-20 rounded-2xl border border-white/10 bg-white/[0.03]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: rows }).map((_, index) => (
+              <div
+                key={index}
+                className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+          <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function WithdrawalModal({
   form,

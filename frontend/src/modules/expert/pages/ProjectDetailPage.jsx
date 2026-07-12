@@ -20,6 +20,17 @@ export default function ProjectDetailPage() {
   const [milestoneError, setMilestoneError] = useState("");
   const [message, setMessage] = useState("");
   const [showWalletAction, setShowWalletAction] = useState(false);
+  const [showCompletionConfirm, setShowCompletionConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     loadProject();
@@ -144,9 +155,7 @@ export default function ProjectDetailPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading project...
-        </div>
+        <PageSkeleton cards={4} />
       </ExpertLayout>
     );
   }
@@ -247,6 +256,17 @@ export default function ProjectDetailPage() {
                   </button>
                 )}
 
+                {canRunCompletionCheck && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCompletionConfirm(true)}
+                    disabled={completionChecking}
+                    className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {completionChecking ? "Checking..." : "Check Completion"}
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {
@@ -262,9 +282,7 @@ export default function ProjectDetailPage() {
             </div>
           </section>
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {error && (
             <Alert type="danger" title="Project error" message={error} />
@@ -363,9 +381,136 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       </div>
+      {showCompletionConfirm && (
+        <ConfirmActionModal
+          title="Run project completion check?"
+          message="This will ask the server to verify every milestone. If all requirements are complete, pending earnings may be released to your available balance."
+          confirmLabel="Run Check"
+          tone="green"
+          loading={completionChecking}
+          onCancel={() => !completionChecking && setShowCompletionConfirm(false)}
+          onConfirm={async () => {
+            setShowCompletionConfirm(false);
+            await handleCompleteCheck();
+          }}
+        />
+      )}
     </ExpertLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1300] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "verified"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function MilestoneCard({ milestone, onOpen }) {
   const status = String(milestone.status || "PENDING").toUpperCase();

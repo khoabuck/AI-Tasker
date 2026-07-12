@@ -99,11 +99,7 @@ export function JobDetailModal({ jobId, onClose }) {
         </div>
 
         <div className="custom-scrollbar max-h-[84vh] overflow-y-auto p-4 md:p-5">
-          {loading && (
-            <div className="flex min-h-[40vh] items-center justify-center text-gray-400">
-              Loading job detail...
-            </div>
-          )}
+          {loading && <JobDetailSkeleton compact />}
 
           {!loading && loadError && (
             <FriendlyError
@@ -212,9 +208,7 @@ export default function JobDetailPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job detail...
-        </div>
+        <PageSkeleton cards={4} compact />
       </ExpertLayout>
     );
   }
@@ -255,6 +249,63 @@ export default function JobDetailPage() {
     </ExpertLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function JobDetailSkeleton({ compact = false }) {
+  return (
+    <div className="animate-pulse">
+      <div className="mb-4 rounded-2xl border border-white/10 bg-[#151a22] p-5">
+        <div className="h-5 w-32 rounded-full bg-white/10" />
+        <div className="mt-4 h-8 w-3/4 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+      </div>
+
+      <div className={`grid grid-cols-1 gap-4 ${compact ? "xl:grid-cols-[1fr_280px]" : "xl:grid-cols-[1fr_320px]"}`}>
+        <div className="space-y-4">
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+        <div className="h-64 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
 
 function JobDetailContent({
   job,

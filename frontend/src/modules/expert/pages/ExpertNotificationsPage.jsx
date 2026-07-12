@@ -21,6 +21,16 @@ export default function ExpertNotificationsPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  useEffect(() => {
     loadNotifications();
   }, []);
 
@@ -200,7 +210,7 @@ export default function ExpertNotificationsPage() {
             </div>
           </div>
 
-          {message && <Alert type="success" message={message} />}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
           {error && <Alert type="danger" message={error} />}
 
           <section className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -269,9 +279,7 @@ export default function ExpertNotificationsPage() {
             </div>
 
             {loading ? (
-              <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center text-gray-400">
-                Loading notifications...
-              </div>
+              <ListSkeleton rows={6} />
             ) : filteredNotifications.length === 0 ? (
               <EmptyState filter={filter} />
             ) : (
@@ -315,6 +323,58 @@ export default function ExpertNotificationsPage() {
     </ExpertLayout>
   );
 }
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="flex gap-4">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-white/10" />
+            <div className="min-w-0 flex-1">
+              <div className="h-4 w-1/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 
 function SummaryCard({ label, value, icon, tone }) {
   const toneClass =

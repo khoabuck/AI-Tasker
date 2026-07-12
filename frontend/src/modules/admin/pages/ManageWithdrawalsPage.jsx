@@ -45,6 +45,16 @@ export default function ManageWithdrawalsPage() {
   const [syncTarget, setSyncTarget] = useState(null);
 
   useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
+
+  useEffect(() => {
     loadWithdrawals();
   }, []);
 
@@ -404,14 +414,7 @@ export default function ManageWithdrawalsPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <StatCard
@@ -512,12 +515,7 @@ export default function ManageWithdrawalsPage() {
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-gray-400">
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading withdrawal requests...
-            </div>
+            <ListSkeleton />
           ) : filteredWithdrawals.length === 0 ? (
             <EmptyState />
           ) : (
@@ -610,6 +608,90 @@ export default function ManageWithdrawalsPage() {
     </AdminLayout>
   );
 }
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="divide-y divide-white/10">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div key={index} className="animate-pulse p-5">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_160px_160px_220px] xl:items-center">
+            <div>
+              <div className="h-5 w-48 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-72 max-w-full rounded bg-white/[0.06]" />
+            </div>
+            <div className="h-8 w-24 rounded-full bg-white/[0.06]" />
+            <div className="h-8 w-24 rounded-full bg-white/[0.06]" />
+            <div className="h-10 rounded-xl bg-white/[0.06]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+function PageSkeleton({ rows = 4 }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-28 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div
+                key={item}
+                className="h-20 rounded-2xl border border-white/10 bg-white/[0.03]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: rows }).map((_, index) => (
+              <div
+                key={index}
+                className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+          <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SyncWithdrawalConfirmModal({
   withdrawal,
