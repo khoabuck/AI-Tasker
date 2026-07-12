@@ -196,7 +196,16 @@ export default function AdminExpertScoringPolicyPage() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
     setError("");
+    setFieldErrors({});
     setShowSaveConfirm(true);
   };
 
@@ -450,7 +459,7 @@ export default function AdminExpertScoringPolicyPage() {
         {showSaveConfirm && (
           <ConfirmActionModal
             title="Save policy changes?"
-            message="These values affect platform behavior for users. Confirm that all fields and the update reason are correct."
+            message={`This update changes expert profile review rules. Pass threshold: ${form.passThreshold} · Total maximum score: ${totalMaxScore} · Review attempts: ${form.maxReviewSubmissions} · Lock duration: ${form.reviewLockDurationHours} hours. Reason: ${form.reason.trim()}.`}
             confirmLabel="Confirm Save"
             loading={saving}
             onCancel={() => !saving && setShowSaveConfirm(false)}

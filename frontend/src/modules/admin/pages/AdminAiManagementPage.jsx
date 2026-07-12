@@ -301,8 +301,13 @@ export default function AdminAiManagementPage() {
     setConfirmAction({
       type: "SAVE_SETTINGS",
       title: "Save AI settings?",
-      message:
-        "These settings affect AI behavior and usage limits across the platform. Review the model, token limits, and reason before continuing.",
+      message: `These settings affect every AI feature on the platform. Model: ${
+        settingsForm.model || "N/A"
+      } · AI: ${settingsForm.isEnabled ? "Enabled" : "Disabled"} · Monthly token limit: ${
+        settingsForm.monthlyTokenLimit || "N/A"
+      } · Monthly request limit: ${
+        settingsForm.monthlyRequestLimit || "N/A"
+      }. Reason: ${settingsForm.reason.trim()}.`,
       confirmLabel: "Save Settings",
       tone: "cyan",
     });
@@ -382,7 +387,31 @@ export default function AdminAiManagementPage() {
     setModelModalError("");
   };
 
-  const handleSaveModel = async () => {
+  const requestSaveModel = () => {
+    const validation = validateModel(modelForm, Boolean(editingModel));
+
+    if (!validation.valid) {
+      setModelErrors(validation.errors);
+      setModelModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    const actionLabel = editingModel ? "update" : "create";
+
+    setConfirmAction({
+      type: "SAVE_MODEL",
+      title: editingModel ? "Save AI model changes?" : "Create this AI model?",
+      message: `You are about to ${actionLabel} ${
+        modelForm.displayName || modelForm.model || "this AI model"
+      }. Model: ${modelForm.model || "N/A"} · Max output tokens: ${
+        modelForm.maxOutputTokens || "N/A"
+      } · Status: ${modelForm.isEnabled ? "Enabled" : "Disabled"}.`,
+      confirmLabel: editingModel ? "Save Model" : "Create Model",
+      tone: "cyan",
+    });
+  };
+
+  const executeSaveModel = async () => {
     const validation = validateModel(modelForm, Boolean(editingModel));
 
     if (!validation.valid) {
@@ -435,8 +464,11 @@ export default function AdminAiManagementPage() {
     setConfirmAction({
       type: "TEST_AI",
       title: "Run this AI test?",
-      message:
-        "The selected model will receive the test prompt and usage will be recorded in AI logs.",
+      message: `The prompt will be sent to ${
+        testForm.model || "the selected model"
+      } with max ${testForm.maxTokens || "N/A"} tokens and temperature ${
+        testForm.temperature || "N/A"
+      }. This request will be recorded in AI usage logs.`,
       confirmLabel: "Run Test",
       tone: "cyan",
     });
@@ -453,6 +485,11 @@ export default function AdminAiManagementPage() {
 
     if (action === "TEST_AI") {
       await executeTestAi();
+      return;
+    }
+
+    if (action === "SAVE_MODEL") {
+      await executeSaveModel();
     }
   };
 
@@ -650,7 +687,7 @@ export default function AdminAiManagementPage() {
             loading={savingModel}
             onChange={updateModelField}
             onClose={closeModelModal}
-            onSave={handleSaveModel}
+            onSave={requestSaveModel}
           />
         )}
 

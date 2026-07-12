@@ -45,6 +45,7 @@ export default function ManageUsersPage() {
   const [lockForm, setLockForm] = useState(EMPTY_LOCK_FORM);
   const [unlockForm, setUnlockForm] = useState(EMPTY_UNLOCK_FORM);
   const [banForm, setBanForm] = useState(EMPTY_BAN_FORM);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     if (!success) return;
@@ -184,7 +185,7 @@ setUsers(visibleUsers);
     setFieldErrors({});
   };
 
-  const handleLockUser = async () => {
+  const executeLockUser = async () => {
     if (!action.user?.userId) return;
 
     const errors = {};
@@ -233,7 +234,7 @@ setUsers(visibleUsers);
     }
   };
 
-  const handleUnlockUser = async () => {
+  const executeUnlockUser = async () => {
     if (!action.user?.userId) return;
 
     const errors = {};
@@ -272,7 +273,7 @@ setUsers(visibleUsers);
     }
   };
 
-  const handleBanUser = async () => {
+  const executeBanUser = async () => {
     if (!action.user?.userId) return;
 
     const errors = {};
@@ -308,6 +309,140 @@ setUsers(visibleUsers);
       setModalError(getFriendlyError(err, "Cannot ban user."));
     } finally {
       setActionLoading(false);
+    }
+  };
+
+const requestLockUser = () => {
+    if (!action.user?.userId) return;
+
+    const errors = {};
+    const durationText = String(lockForm.durationMinutes ?? "").trim();
+
+    if (!durationText) {
+      errors.durationMinutes = "Lock duration is required.";
+    } else if (!/^\d+$/.test(durationText)) {
+      errors.durationMinutes = "Lock duration must be a whole number.";
+    } else if (Number(durationText) <= 0) {
+      errors.durationMinutes = "Lock duration must be greater than 0.";
+    }
+
+    if (!lockForm.reason.trim()) {
+      errors.reason = "Lock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    setFieldErrors({});
+    setModalError("");
+    setConfirmAction({
+      type: "LOCK",
+      title: "Confirm temporary account lock",
+      description:
+        "The user will be signed out and unable to access protected features until the lock expires or an admin unlocks the account.",
+      confirmLabel: "Confirm Lock",
+      tone: "yellow",
+      rows: [
+        {
+          label: "User",
+          value: action.user?.email || action.user?.fullName || "User",
+        },
+        { label: "Duration", value: `${durationText} minutes` },
+        { label: "Reason", value: lockForm.reason.trim() },
+      ],
+    });
+  };
+
+  const requestUnlockUser = () => {
+    if (!action.user?.userId) return;
+
+    const errors = {};
+
+    if (!unlockForm.reason.trim()) {
+      errors.reason = "Unlock Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    setFieldErrors({});
+    setModalError("");
+    setConfirmAction({
+      type: "UNLOCK",
+      title: "Confirm account unlock",
+      description:
+        "The temporary restriction will be removed and the user can access the platform again.",
+      confirmLabel: "Confirm Unlock",
+      tone: "green",
+      rows: [
+        {
+          label: "User",
+          value: action.user?.email || action.user?.fullName || "User",
+        },
+        { label: "New Status", value: "Active" },
+        { label: "Reason", value: unlockForm.reason.trim() },
+      ],
+    });
+  };
+
+  const requestBanUser = () => {
+    if (!action.user?.userId) return;
+
+    const errors = {};
+
+    if (!banForm.reason.trim()) {
+      errors.reason = "Ban Reason is required.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    setFieldErrors({});
+    setModalError("");
+    setConfirmAction({
+      type: "BAN",
+      title: "Permanently ban this account?",
+      description:
+        "This is a high-impact restriction. The user will lose platform access and the ban remains until backend/admin policy provides a supported reversal.",
+      confirmLabel: "Confirm Ban",
+      tone: "red",
+      rows: [
+        {
+          label: "User",
+          value: action.user?.email || action.user?.fullName || "User",
+        },
+        { label: "Current Status", value: getUserStatus(action.user) },
+        { label: "New Status", value: "Banned" },
+        { label: "Reason", value: banForm.reason.trim() },
+      ],
+    });
+  };
+
+  const executeConfirmedUserAction = async () => {
+    const type = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (type === "LOCK") {
+      await executeLockUser();
+      return;
+    }
+
+    if (type === "UNLOCK") {
+      await executeUnlockUser();
+      return;
+    }
+
+    if (type === "BAN") {
+      await executeBanUser();
     }
   };
 
@@ -462,7 +597,7 @@ setUsers(visibleUsers);
             loading={actionLoading}
             error={modalError}
             onClose={closeActionModal}
-            onConfirm={handleLockUser}
+            onConfirm={requestLockUser}
           >
             <div className="space-y-4">
               <NumberInput
@@ -515,7 +650,7 @@ setUsers(visibleUsers);
             loading={actionLoading}
             error={modalError}
             onClose={closeActionModal}
-            onConfirm={handleUnlockUser}
+            onConfirm={requestUnlockUser}
           >
             <TextArea
               label="Unlock Reason"
@@ -547,7 +682,7 @@ setUsers(visibleUsers);
             loading={actionLoading}
             error={modalError}
             onClose={closeActionModal}
-            onConfirm={handleBanUser}
+            onConfirm={requestBanUser}
           >
             <TextArea
               label="Ban Reason"
@@ -569,8 +704,132 @@ setUsers(visibleUsers);
             />
           </ActionModal>
         )}
+        {confirmAction && (
+          <ReviewConfirmationModal
+            title={confirmAction.title}
+            description={confirmAction.description}
+            rows={confirmAction.rows}
+            confirmLabel={confirmAction.confirmLabel}
+            tone={confirmAction.tone}
+            loading={actionLoading}
+            warning={
+              confirmAction.type === "BAN"
+                ? "Verify the account and reason carefully before applying a permanent restriction."
+                : ""
+            }
+            onCancel={() => !actionLoading && setConfirmAction(null)}
+            onConfirm={executeConfirmedUserAction}
+          />
+        )}
       </div>
     </AdminLayout>
+  );
+}
+
+function ReviewConfirmationModal({
+  title,
+  description,
+  rows = [],
+  warning = "",
+  confirmLabel,
+  tone = "cyan",
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const toneMap = {
+    cyan: {
+      icon: "verified",
+      iconClass: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+      button:
+        "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black",
+    },
+    green: {
+      icon: "task_alt",
+      iconClass: "border-green-400/30 bg-green-400/10 text-green-300",
+      button:
+        "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black",
+    },
+    yellow: {
+      icon: "lock_clock",
+      iconClass: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+      button:
+        "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black",
+    },
+    red: {
+      icon: "warning",
+      iconClass: "border-red-400/30 bg-red-400/10 text-red-300",
+      button:
+        "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black",
+    },
+  };
+
+  const config = toneMap[tone] || toneMap.cyan;
+
+  return (
+    <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-confirmation-title"
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
+      >
+        <div
+          className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${config.iconClass}`}
+        >
+          <span className="material-symbols-outlined">{config.icon}</span>
+        </div>
+
+        <h2
+          id="review-confirmation-title"
+          className="text-xl font-black text-white"
+        >
+          {title}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">{description}</p>
+
+        <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          {rows.map((row, index) => (
+            <div
+              key={`${row.label}-${index}`}
+              className="grid grid-cols-[125px_minmax(0,1fr)] gap-3 text-sm"
+            >
+              <span className="font-bold text-gray-500">{row.label}</span>
+              <span className="break-words text-right font-semibold text-white">
+                {row.value || "N/A"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {warning && (
+          <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+            {warning}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

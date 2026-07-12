@@ -109,7 +109,16 @@ export default function AdminPlatformFeePolicyPage() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
     setError("");
+    setFieldErrors({});
     setShowSaveConfirm(true);
   };
 
@@ -318,7 +327,7 @@ export default function AdminPlatformFeePolicyPage() {
         {showSaveConfirm && (
           <ConfirmActionModal
             title="Save policy changes?"
-            message="These values affect platform behavior for users. Confirm that all fields and the update reason are correct."
+            message={`This update changes fees applied to future platform transactions. Individual client fee: ${form.individualClientFeeRate} · Business client fee: ${form.businessClientFeeRate} · Expert fee: ${form.expertFeeRate}. Reason: ${form.reason.trim()}.`}
             confirmLabel="Confirm Save"
             loading={saving}
             onCancel={() => !saving && setShowSaveConfirm(false)}

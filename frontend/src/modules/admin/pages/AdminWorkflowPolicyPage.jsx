@@ -403,7 +403,8 @@ export default function AdminWorkflowPolicyPage() {
 
           {showSaveConfirm && editSection && (
             <PolicySaveConfirmModal
-              sectionTitle={editSection.title}
+              section={editSection}
+              form={editForm}
               loading={saving}
               onCancel={() => !saving && setShowSaveConfirm(false)}
               onConfirm={handleSaveSection}
@@ -472,7 +473,8 @@ function SuccessToast({ message, onClose }) {
 
 
 function PolicySaveConfirmModal({
-  sectionTitle,
+  section,
+  form,
   loading,
   onCancel,
   onConfirm,
@@ -490,9 +492,32 @@ function PolicySaveConfirmModal({
 
         <p className="mt-2 text-sm leading-6 text-gray-400">
           These changes will update{" "}
-          <span className="font-bold text-white">{sectionTitle}</span> for the
-          platform. Please confirm that the values are correct.
+          <span className="font-bold text-white">{section?.title}</span> for the
+          platform. Review every changed value and the audit reason before saving.
         </p>
+
+        <div className="mt-5 max-h-64 space-y-3 overflow-y-auto rounded-xl border border-white/10 bg-white/[0.03] p-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {section?.fields?.map((field) => (
+            <div
+              key={field.name}
+              className="grid grid-cols-[1fr_auto] gap-3 text-sm"
+            >
+              <span className="text-gray-500">{field.label}</span>
+              <span className="font-bold text-white">
+                {formatPolicyValue(form?.[field.name], field)}
+              </span>
+            </div>
+          ))}
+
+          <div className="border-t border-white/10 pt-3">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              Update Reason
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-gray-300">
+              {form?.reason || "N/A"}
+            </p>
+          </div>
+        </div>
 
         <div className="mt-5 flex justify-end gap-2">
           <button

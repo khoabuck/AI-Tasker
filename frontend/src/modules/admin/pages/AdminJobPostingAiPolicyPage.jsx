@@ -153,7 +153,16 @@ export default function AdminJobPostingAiPolicyPage() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
     setError("");
+    setFieldErrors({});
     setShowSaveConfirm(true);
   };
 
@@ -397,7 +406,7 @@ export default function AdminJobPostingAiPolicyPage() {
         {showSaveConfirm && (
           <ConfirmActionModal
             title="Save policy changes?"
-            message="These values affect platform behavior for users. Confirm that all fields and the update reason are correct."
+            message={`This update changes the client job-posting flow. Free job credits: ${form.initialFreeJobPostCredits} · Free AI credits: ${form.initialFreeAiGenerationCredits} · Draft limit: ${form.maxDraftJobsPerClient} · Minimum match score: ${form.minimumRecommendationMatchScore}. Reason: ${form.reason.trim()}.`}
             confirmLabel="Confirm Save"
             loading={saving}
             onCancel={() => !saving && setShowSaveConfirm(false)}

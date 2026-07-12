@@ -29,6 +29,7 @@ export default function AdminReviewReportsPage() {
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [showResolveConfirm, setShowResolveConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -192,7 +193,7 @@ export default function AdminReviewReportsPage() {
     return errors;
   };
 
-  const handleResolveReport = async () => {
+  const requestResolveReport = () => {
     const reportId = getReportId(resolveTarget);
 
     if (!reportId) {
@@ -205,6 +206,19 @@ export default function AdminReviewReportsPage() {
     if (Object.keys(errors).length > 0) {
       setResolveErrors(errors);
       setError("Please check the highlighted fields before submitting.");
+      return;
+    }
+
+    setResolveErrors({});
+    setError("");
+    setShowResolveConfirm(true);
+  };
+
+  const executeResolveReport = async () => {
+    const reportId = getReportId(resolveTarget);
+
+    if (!reportId) {
+      setError("Review report information is unavailable. Please refresh and try again.");
       return;
     }
 
@@ -408,7 +422,49 @@ export default function AdminReviewReportsPage() {
               loading={resolving}
               onClose={closeResolveModal}
               onChange={updateResolveField}
-              onConfirm={handleResolveReport}
+              onConfirm={requestResolveReport}
+            />
+          )}
+
+          {showResolveConfirm && resolveTarget && (
+            <ReviewConfirmationModal
+              title={
+                resolveForm.decision === "ACCEPT"
+                  ? "Accept this review report?"
+                  : "Reject this review report?"
+              }
+              description={
+                resolveForm.decision === "ACCEPT"
+                  ? "The reported review will be hidden from the expert profile after confirmation."
+                  : "The report will be rejected and the review will remain visible."
+              }
+              rows={[
+                { label: "Project", value: resolveTarget.projectTitle },
+                { label: "Expert", value: resolveTarget.expertName },
+                { label: "Client", value: resolveTarget.clientName },
+                { label: "Rating", value: `${resolveTarget.rating || 0}/5` },
+                {
+                  label: "Decision",
+                  value:
+                    resolveForm.decision === "ACCEPT"
+                      ? "Accept report / Hide review"
+                      : "Reject report / Keep review visible",
+                },
+                { label: "Admin Note", value: resolveForm.adminDecision.trim() },
+              ]}
+              warning="This moderation result changes whether the review is visible on the expert profile."
+              confirmLabel={
+                resolveForm.decision === "ACCEPT"
+                  ? "Confirm Accept"
+                  : "Confirm Reject"
+              }
+              tone={resolveForm.decision === "ACCEPT" ? "green" : "red"}
+              loading={resolving}
+              onCancel={() => !resolving && setShowResolveConfirm(false)}
+              onConfirm={async () => {
+                setShowResolveConfirm(false);
+                await executeResolveReport();
+              }}
             />
           )}
         </div>
@@ -417,6 +473,113 @@ export default function AdminReviewReportsPage() {
   );
 }
 
+
+function ReviewConfirmationModal({
+  title,
+  description,
+  rows = [],
+  warning = "",
+  confirmLabel,
+  tone = "cyan",
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const toneMap = {
+    cyan: {
+      icon: "verified",
+      iconClass: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+      button:
+        "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black",
+    },
+    green: {
+      icon: "task_alt",
+      iconClass: "border-green-400/30 bg-green-400/10 text-green-300",
+      button:
+        "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black",
+    },
+    yellow: {
+      icon: "lock_clock",
+      iconClass: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+      button:
+        "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black",
+    },
+    red: {
+      icon: "warning",
+      iconClass: "border-red-400/30 bg-red-400/10 text-red-300",
+      button:
+        "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black",
+    },
+  };
+
+  const config = toneMap[tone] || toneMap.cyan;
+
+  return (
+    <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-confirmation-title"
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
+      >
+        <div
+          className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${config.iconClass}`}
+        >
+          <span className="material-symbols-outlined">{config.icon}</span>
+        </div>
+
+        <h2
+          id="review-confirmation-title"
+          className="text-xl font-black text-white"
+        >
+          {title}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">{description}</p>
+
+        <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          {rows.map((row, index) => (
+            <div
+              key={`${row.label}-${index}`}
+              className="grid grid-cols-[125px_minmax(0,1fr)] gap-3 text-sm"
+            >
+              <span className="font-bold text-gray-500">{row.label}</span>
+              <span className="break-words text-right font-semibold text-white">
+                {row.value || "N/A"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {warning && (
+          <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+            {warning}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ListSkeleton({ rows = 5 }) {
   return (

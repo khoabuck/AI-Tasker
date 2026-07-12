@@ -173,12 +173,26 @@ export default function ManageSkillsPage() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
+    const validation = validateForm();
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields.");
+      return;
+    }
+
+    setFieldErrors({});
+    setError("");
     setPendingAction({
       type: selectedSkill ? "UPDATE" : "CREATE",
       title: selectedSkill ? "Update this skill?" : "Create this skill?",
       message: selectedSkill
-        ? `Save changes to ${formData.skillName || "this skill"}?`
-        : `Create ${formData.skillName || "this skill"} for platform matching and job profiles?`,
+        ? `Save the updated skill "${formData.skillName.trim()}"? Category: ${
+            formData.category.trim() || "Uncategorized"
+          } · Status: ${formData.isActive ? "Active" : "Inactive"}.`
+        : `Create the skill "${formData.skillName.trim()}" for expert profiles, job posts, recommendations, and matching? Category: ${
+            formData.category.trim() || "Uncategorized"
+          }.`,
       confirmLabel: selectedSkill ? "Update Skill" : "Create Skill",
       tone: "cyan",
     });
@@ -239,7 +253,7 @@ export default function ManageSkillsPage() {
       type: "ACTIVATE",
       skill,
       title: "Activate this skill?",
-      message: `${skill.skillName || "This skill"} will become available to experts, jobs, and matching features.`,
+      message: `${skill.skillName || "This skill"} will become active and available to expert profiles, job posts, recommendations, and matching features.`,
       confirmLabel: "Activate Skill",
       tone: "green",
     });

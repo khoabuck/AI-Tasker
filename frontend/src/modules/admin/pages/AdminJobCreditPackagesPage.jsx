@@ -37,6 +37,7 @@ export default function AdminJobCreditPackagesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [reason, setReason] = useState("");
   const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
 
   useEffect(() => {
     if (!success) return;
@@ -241,7 +242,7 @@ export default function AdminJobCreditPackagesPage() {
     }
   };
 
-  const handleToggleActive = async () => {
+  const requestToggleActive = () => {
     if (!action.packageItem?.packageId) return;
 
     if (!reason.trim()) {
@@ -255,6 +256,14 @@ export default function AdminJobCreditPackagesPage() {
       setModalError("Please fix the highlighted fields.");
       return;
     }
+
+    setReasonError("");
+    setModalError("");
+    setShowStatusConfirm(true);
+  };
+
+  const executeToggleActive = async () => {
+    if (!action.packageItem?.packageId) return;
 
     try {
       setSaving(true);
@@ -480,9 +489,24 @@ export default function AdminJobCreditPackagesPage() {
               setModalError("");
             }}
             onClose={closeModal}
-            onConfirm={handleToggleActive}
+            onConfirm={requestToggleActive}
           />
         )}
+
+        {showStatusConfirm &&
+          (action.type === "ACTIVATE" || action.type === "DEACTIVATE") && (
+            <StatusChangeConfirmModal
+              packageName={action.packageItem?.packageName}
+              actionType={action.type}
+              reason={reason.trim()}
+              loading={saving}
+              onCancel={() => !saving && setShowStatusConfirm(false)}
+              onConfirm={async () => {
+                setShowStatusConfirm(false);
+                await executeToggleActive();
+              }}
+            />
+          )}
       </div>
     </AdminLayout>
   );
@@ -586,6 +610,103 @@ function SavePackageConfirmModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function StatusChangeConfirmModal({
+  packageName,
+  actionType,
+  reason,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const isActivate = actionType === "ACTIVATE";
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="status-change-confirm-title"
+        className={`w-full max-w-md rounded-2xl border bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.72)] ${
+          isActivate ? "border-green-400/25" : "border-red-400/25"
+        }`}
+      >
+        <div
+          className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${
+            isActivate
+              ? "border-green-400/30 bg-green-400/10 text-green-300"
+              : "border-red-400/30 bg-red-400/10 text-red-300"
+          }`}
+        >
+          <span className="material-symbols-outlined">
+            {isActivate ? "published_with_changes" : "block"}
+          </span>
+        </div>
+
+        <h2
+          id="status-change-confirm-title"
+          className="text-xl font-black text-white"
+        >
+          {isActivate ? "Activate this package?" : "Deactivate this package?"}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          {isActivate
+            ? "The package will become available for purchase."
+            : "The package will be hidden from new purchases. Existing purchase records are not removed."}
+        </p>
+
+        <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <ReviewItem label="Package" value={packageName || "Unnamed package"} />
+          <ReviewItem
+            label="New Status"
+            value={isActivate ? "Active" : "Inactive"}
+          />
+          <ReviewItem label="Admin Reason" value={reason || "N/A"} />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              isActivate
+                ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+                : "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+            }`}
+          >
+            {loading
+              ? "Processing..."
+              : isActivate
+                ? "Confirm Activate"
+                : "Confirm Deactivate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewItem({ label, value }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] gap-3 text-sm">
+      <span className="font-bold text-gray-500">{label}</span>
+      <span className="break-words text-right font-semibold text-white">
+        {value}
+      </span>
     </div>
   );
 }

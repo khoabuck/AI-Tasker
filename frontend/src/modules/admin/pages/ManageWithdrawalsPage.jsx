@@ -43,6 +43,7 @@ export default function ManageWithdrawalsPage() {
   const [action, setAction] = useState(EMPTY_ACTION);
   const [form, setForm] = useState(EMPTY_FORM);
   const [syncTarget, setSyncTarget] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
 
   useEffect(() => {
     if (!success) return;
@@ -228,7 +229,7 @@ export default function ManageWithdrawalsPage() {
     setFieldErrors({});
   };
 
-  const handleApprovePayos = async () => {
+  const executeApprovePayos = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
     const validation = validateActionForm(form, "Approval Reason");
@@ -331,7 +332,7 @@ export default function ManageWithdrawalsPage() {
     }
   };
 
-  const handleReject = async () => {
+  const executeReject = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
     const validation = validateActionForm(form, "Rejection Reason");
@@ -362,6 +363,155 @@ export default function ManageWithdrawalsPage() {
       setError(getFriendlyError(err, "Cannot reject withdrawal request."));
     } finally {
       setActionLoading(false);
+    }
+  };
+
+const requestApprovePayos = () => {
+    if (!action.withdrawal?.withdrawalRequestId) return;
+
+    const validation = validateActionForm(form, "Approval Reason");
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    const balanceValue = Number(
+      payosBalance?.availableBalance ?? payosBalance?.currentBalance ?? 0
+    );
+    const amount = Number(action.withdrawal.amount || 0);
+
+    if (!balanceChecked) {
+      setFieldErrors({});
+      setModalError("Please check PayOS balance before approving this withdrawal.");
+      return;
+    }
+
+    if (amount > balanceValue) {
+      setFieldErrors({});
+      setModalError(
+        `PayOS balance is insufficient. Current balance: ${formatMoney(
+          balanceValue,
+          payosBalance?.currency || action.withdrawal.currency || "VND"
+        )}. Withdrawal amount: ${formatMoney(
+          amount,
+          action.withdrawal.currency || "VND"
+        )}.`
+      );
+      return;
+    }
+
+    setFieldErrors({});
+    setModalError("");
+    setConfirmAction({
+      type: "APPROVE_PAYOS",
+      title: "Approve and create this payout?",
+      description:
+        "PayOS will be asked to process this withdrawal using the verified bank information.",
+      confirmLabel: "Confirm Payout",
+      tone: "green",
+      rows: [
+        {
+          label: "Expert",
+          value:
+            action.withdrawal.expertName ||
+            action.withdrawal.expertEmail ||
+            "Expert",
+        },
+        {
+          label: "Amount",
+          value: formatMoney(
+            action.withdrawal.amount,
+            action.withdrawal.currency || "VND"
+          ),
+        },
+        {
+          label: "Bank",
+          value: action.withdrawal.bankName || "N/A",
+        },
+        {
+          label: "Account",
+          value: maskAccountNumber(action.withdrawal.bankAccountNumber),
+        },
+        {
+          label: "PayOS Balance",
+          value: formatMoney(
+            balanceValue,
+            payosBalance?.currency || action.withdrawal.currency || "VND"
+          ),
+        },
+        {
+          label: "Balance After",
+          value: formatMoney(
+            balanceValue - amount,
+            payosBalance?.currency || action.withdrawal.currency || "VND"
+          ),
+        },
+        { label: "Admin Reason", value: form.reason.trim() },
+      ],
+    });
+  };
+
+  const requestReject = () => {
+    if (!action.withdrawal?.withdrawalRequestId) return;
+
+    const validation = validateActionForm(form, "Rejection Reason");
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    setFieldErrors({});
+    setModalError("");
+    setConfirmAction({
+      type: "REJECT",
+      title: "Reject this withdrawal request?",
+      description:
+        "The request will not be paid and the expert will see the rejection result and reason.",
+      confirmLabel: "Confirm Rejection",
+      tone: "red",
+      rows: [
+        {
+          label: "Expert",
+          value:
+            action.withdrawal.expertName ||
+            action.withdrawal.expertEmail ||
+            "Expert",
+        },
+        {
+          label: "Amount",
+          value: formatMoney(
+            action.withdrawal.amount,
+            action.withdrawal.currency || "VND"
+          ),
+        },
+        {
+          label: "Bank",
+          value: action.withdrawal.bankName || "N/A",
+        },
+        {
+          label: "Account",
+          value: maskAccountNumber(action.withdrawal.bankAccountNumber),
+        },
+        { label: "Reason", value: form.reason.trim() },
+      ],
+    });
+  };
+
+  const executeConfirmedWithdrawalAction = async () => {
+    const type = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (type === "APPROVE_PAYOS") {
+      await executeApprovePayos();
+      return;
+    }
+
+    if (type === "REJECT") {
+      await executeReject();
     }
   };
 
@@ -543,7 +693,7 @@ export default function ManageWithdrawalsPage() {
             loading={actionLoading}
             error={modalError}
             onClose={closeActionModal}
-            onConfirm={handleApprovePayos}
+            onConfirm={requestApprovePayos}
           >
             <WithdrawalSummary withdrawal={action.withdrawal} />
 
@@ -583,7 +733,7 @@ export default function ManageWithdrawalsPage() {
             loading={actionLoading}
             error={modalError}
             onClose={closeActionModal}
-            onConfirm={handleReject}
+            onConfirm={requestReject}
           >
             <WithdrawalSummary withdrawal={action.withdrawal} />
 
@@ -604,8 +754,132 @@ export default function ManageWithdrawalsPage() {
             />
           </ActionModal>
         )}
+        {confirmAction && (
+          <ReviewConfirmationModal
+            title={confirmAction.title}
+            description={confirmAction.description}
+            rows={confirmAction.rows}
+            warning={
+              confirmAction.type === "APPROVE_PAYOS"
+                ? "This action may create a real bank payout. Verify the recipient, account, amount, and remaining PayOS balance."
+                : "The expert will not receive this payout. Make sure the rejection reason is accurate and actionable."
+            }
+            confirmLabel={confirmAction.confirmLabel}
+            tone={confirmAction.tone}
+            loading={actionLoading}
+            onCancel={() => !actionLoading && setConfirmAction(null)}
+            onConfirm={executeConfirmedWithdrawalAction}
+          />
+        )}
       </div>
     </AdminLayout>
+  );
+}
+
+function ReviewConfirmationModal({
+  title,
+  description,
+  rows = [],
+  warning = "",
+  confirmLabel,
+  tone = "cyan",
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const toneMap = {
+    cyan: {
+      icon: "verified",
+      iconClass: "border-cyan-400/30 bg-cyan-400/10 text-cyan-300",
+      button:
+        "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black",
+    },
+    green: {
+      icon: "task_alt",
+      iconClass: "border-green-400/30 bg-green-400/10 text-green-300",
+      button:
+        "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black",
+    },
+    yellow: {
+      icon: "lock_clock",
+      iconClass: "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+      button:
+        "border-yellow-400/50 bg-yellow-400/10 text-yellow-300 hover:bg-yellow-400 hover:text-black",
+    },
+    red: {
+      icon: "warning",
+      iconClass: "border-red-400/30 bg-red-400/10 text-red-300",
+      button:
+        "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black",
+    },
+  };
+
+  const config = toneMap[tone] || toneMap.cyan;
+
+  return (
+    <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-black/80 px-4 py-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-confirmation-title"
+        className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
+      >
+        <div
+          className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${config.iconClass}`}
+        >
+          <span className="material-symbols-outlined">{config.icon}</span>
+        </div>
+
+        <h2
+          id="review-confirmation-title"
+          className="text-xl font-black text-white"
+        >
+          {title}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">{description}</p>
+
+        <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          {rows.map((row, index) => (
+            <div
+              key={`${row.label}-${index}`}
+              className="grid grid-cols-[125px_minmax(0,1fr)] gap-3 text-sm"
+            >
+              <span className="font-bold text-gray-500">{row.label}</span>
+              <span className="break-words text-right font-semibold text-white">
+                {row.value || "N/A"}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {warning && (
+          <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+            {warning}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

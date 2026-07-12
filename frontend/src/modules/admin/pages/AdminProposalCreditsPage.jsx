@@ -214,14 +214,18 @@ export default function AdminProposalCreditsPage() {
         adjustmentMode === "REMOVE"
           ? "Remove proposal credits?"
           : "Add proposal credits?",
-      message:
-        adjustmentMode === "REMOVE"
-          ? `Remove ${amount} credit${amount === 1 ? "" : "s"} from ${
-              selectedExpert.fullName || "this expert"
-            }?`
-          : `Add ${amount} credit${amount === 1 ? "" : "s"} to ${
-              selectedExpert.fullName || "this expert"
-            }?`,
+      message: (() => {
+        const currentCredits = Number(
+          selectedExpert.proposalSubmitCredits || 0
+        );
+        const nextCredits = currentCredits + signedDelta;
+
+        return `${adjustmentMode === "REMOVE" ? "Remove" : "Add"} ${amount} credit${
+          amount === 1 ? "" : "s"
+        } ${adjustmentMode === "REMOVE" ? "from" : "to"} ${
+          selectedExpert.fullName || "this expert"
+        }. Current balance: ${currentCredits} · New balance: ${nextCredits} · Reason: ${adjustReason.trim()}.`;
+      })(),
       confirmLabel:
         adjustmentMode === "REMOVE" ? "Remove Credits" : "Add Credits",
       tone: adjustmentMode === "REMOVE" ? "red" : "cyan",

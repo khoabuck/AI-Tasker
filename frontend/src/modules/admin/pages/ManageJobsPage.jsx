@@ -34,6 +34,7 @@ export default function ManageJobsPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [proposalLoading, setProposalLoading] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -174,7 +175,7 @@ export default function ManageJobsPage() {
     setCancelErrors({});
   };
 
-  const handleCancelJob = async () => {
+  const requestCancelJob = () => {
     const jobId = getJobId(cancelTarget);
 
     if (!jobId) {
@@ -199,6 +200,21 @@ export default function ManageJobsPage() {
       return;
     }
 
+    setCancelErrors({});
+    setError("");
+    setShowCancelConfirm(true);
+  };
+
+  const executeCancelJob = async () => {
+    const jobId = getJobId(cancelTarget);
+
+    if (!jobId) {
+      setError("Job information is unavailable. Please refresh and try again.");
+      return;
+    }
+
+    const reason = cancelForm.reason.trim();
+
     try {
       setCancelling(true);
       setError("");
@@ -207,6 +223,7 @@ export default function ManageJobsPage() {
 
       await adminJobService.cancelJob(jobId, reason);
 
+      setShowCancelConfirm(false);
       closeCancelModal();
       setSelectedJob(null);
       setJobProposals([]);
@@ -349,11 +366,8 @@ export default function ManageJobsPage() {
           </section>
 
           {loading ? (
-            <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400">
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading jobs...
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22]/95">
+              <ListSkeleton rows={5} />
             </div>
           ) : filteredJobs.length === 0 ? (
             <EmptyState />
@@ -397,7 +411,7 @@ export default function ManageJobsPage() {
               errors={cancelErrors}
               loading={cancelling}
               onClose={closeCancelModal}
-              onConfirm={handleCancelJob}
+              onConfirm={requestCancelJob}
               onChange={(name, value) => {
                 setCancelForm((prev) => ({
                   ...prev,
@@ -413,9 +427,108 @@ export default function ManageJobsPage() {
               }}
             />
           )}
+
+          {showCancelConfirm && cancelTarget && (
+            <CancelJobReviewModal
+              job={cancelTarget}
+              reason={cancelForm.reason.trim()}
+              loading={cancelling}
+              onCancel={() => {
+                if (!cancelling) {
+                  setShowCancelConfirm(false);
+                }
+              }}
+              onConfirm={executeCancelJob}
+            />
+          )}
         </div>
       </div>
     </AdminLayout>
+  );
+}
+
+function CancelJobReviewModal({
+  job,
+  reason,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  return (
+    <div className="fixed inset-0 z-[1400] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-8 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="cancel-job-review-title"
+        className="w-full max-w-lg rounded-2xl border border-red-400/25 bg-[#151a22] p-5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
+      >
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/30 bg-red-400/10 text-red-300">
+          <span className="material-symbols-outlined">warning</span>
+        </div>
+
+        <h2
+          id="cancel-job-review-title"
+          className="text-xl font-black text-white"
+        >
+          Confirm job cancellation
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          Review the moderation details below. After confirmation, this job will
+          stop accepting new proposals and will leave the normal marketplace
+          workflow.
+        </p>
+
+        <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <ReviewRow label="Job" value={job?.title || "Untitled Job"} />
+          <ReviewRow label="Client" value={job?.clientName || "Client"} />
+          <ReviewRow
+            label="Current Status"
+            value={formatLabel(job?.status || "OPEN")}
+          />
+          <ReviewRow label="Budget" value={formatBudget(job)} />
+          <ReviewRow label="Proposals" value={String(job?.proposalCount || 0)} />
+          <ReviewRow label="Admin Reason" value={reason || "N/A"} />
+        </div>
+
+        <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+          Use this action only for invalid content, policy violations, or
+          required moderation. Existing proposal records may remain available
+          for audit and history.
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Review Again
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Cancelling..." : "Confirm Cancellation"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewRow({ label, value }) {
+  return (
+    <div className="grid grid-cols-[125px_minmax(0,1fr)] gap-3 text-sm">
+      <span className="font-bold text-gray-500">{label}</span>
+      <span className="break-words text-right font-semibold text-white">
+        {value || "N/A"}
+      </span>
+    </div>
   );
 }
 
