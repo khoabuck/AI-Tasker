@@ -2,7 +2,6 @@ using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
-using AITasker.Infrastructure.Common;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -74,7 +73,7 @@ namespace AITasker.Infrastructure.Reviews
                 ExpertUserId = currentExpertUserId,
                 Reason = request.Reason.Trim(),
                 Status = ReportStatusOpen,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.ReviewReports.Add(report);
@@ -164,7 +163,7 @@ namespace AITasker.Infrastructure.Reviews
                 throw new InvalidOperationException("Review not found.");
             }
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
             var decision = request.Decision.Trim().ToUpperInvariant();
             var adminDecision = request.AdminDecision.Trim();
 

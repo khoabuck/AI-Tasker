@@ -11,6 +11,8 @@ namespace AITasker.Domain.Entities
 
         public int? MilestoneId { get; set; }
 
+        public int? DeliverableId { get; set; }
+
         public int OpenedByUserId { get; set; }
 
         public int RespondentUserId { get; set; }
@@ -32,6 +34,8 @@ namespace AITasker.Domain.Entities
         public Project? Project { get; set; }
 
         public Milestone? Milestone { get; set; }
+
+        public Deliverable? Deliverable { get; set; }
 
         public User OpenedByUser { get; set; } = null!;
 

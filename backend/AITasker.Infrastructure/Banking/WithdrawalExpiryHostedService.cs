@@ -1,6 +1,5 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
-using AITasker.Infrastructure.Common;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,7 +60,7 @@ public class WithdrawalExpiryHostedService : BackgroundService
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
         var policy = await workflowPolicyService.GetActivePolicyAsync();
-        var now = VietnamDateTime.Now;
+        var now = DateTime.UtcNow;
         var cutoff = now.AddHours(-policy.WithdrawalApprovalWindowHours);
 
         var withdrawals = await context.WithdrawalRequests

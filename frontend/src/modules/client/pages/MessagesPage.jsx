@@ -28,23 +28,18 @@ function timeAgo(dateStr) {
 function formatMessageTime(value) {
   if (!value) return "";
 
-  // Tin nhắn vừa gửi, chưa lấy lại từ API
-  if (value instanceof Date) {
-    return value.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
+  const date = value instanceof Date ? value : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
   }
 
-  // createdAt của BE đã là giờ Việt Nam, lấy trực tiếp HH:mm
-  const match = String(value).match(/T(\d{2}):(\d{2})/);
-
-  if (match) {
-    return `${match[1]}:${match[2]}`;
-  }
-
-  return "";
+  return date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 }
 
 // ── Proposal Review Modal — Client xem proposal, Accept hoặc Yêu cầu sửa ──

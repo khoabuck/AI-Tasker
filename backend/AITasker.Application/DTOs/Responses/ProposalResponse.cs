@@ -40,6 +40,8 @@ namespace AITasker.Application.DTOs.Responses
 
         public string Status { get; set; } = string.Empty;
 
+        public string? StatusReason { get; set; }
+
 
         public int? ContractId { get; set; }
 
@@ -53,7 +55,7 @@ namespace AITasker.Application.DTOs.Responses
 
         public int ResubmitWindowHours { get; set; }
 
-        public int RemainingResubmitsInWindow { get; set; }
+        public int? RemainingResubmitsInWindow { get; set; }
 
         public ProposalVersionResponse? LatestVersion { get; set; }
 

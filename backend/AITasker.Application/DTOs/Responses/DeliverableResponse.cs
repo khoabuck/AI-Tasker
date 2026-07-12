@@ -26,13 +26,23 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? FileUrl { get; set; }
 
+        public List<DeliverableArtifactResponse> Artifacts { get; set; } = new();
+
         public string? DemoUrl { get; set; }
+
+        public string? DemoInstructions { get; set; }
+
+        public string? DemoValidationStatus { get; set; }
 
         public string Description { get; set; } = string.Empty;
 
         public string? HandoverNotes { get; set; }
 
         public string? TestResultUrl { get; set; }
+
+        public string? TestSummary { get; set; }
+
+        public string? TestValidationStatus { get; set; }
 
         public string? ClientFeedback { get; set; }
 
@@ -47,7 +57,7 @@ namespace AITasker.Application.DTOs.Responses
         public int RevisionUsed { get; set; }
 
         public DateTime SubmittedAt { get; set; }
-        
+
         public DateTime? ReviewDeadlineAt { get; set; }
 
         public DateTime? ReviewedAt { get; set; }

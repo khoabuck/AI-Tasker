@@ -3,7 +3,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Net.Http.Json;
@@ -120,112 +119,14 @@ namespace AITasker.Infrastructure.Banking
                 .OrderByDescending(t => t.CreatedAt)
                 .ToListAsync();
 
-            var projectIds = transactions
-                .Where(x => x.ProjectId.HasValue)
-                .Select(x => x.ProjectId!.Value)
-                .Distinct()
-                .ToList();
-
-            var milestoneIds = transactions
-                .Where(x => x.MilestoneId.HasValue)
-                .Select(x => x.MilestoneId!.Value)
-                .Distinct()
-                .ToList();
-
-            var projects = projectIds.Count == 0
-                ? new Dictionary<int, Project>()
-                : await _context.Projects
-                    .AsNoTracking()
-                    .Where(x => projectIds.Contains(x.ProjectId))
-                    .ToDictionaryAsync(x => x.ProjectId);
-
-            var milestones = milestoneIds.Count == 0
-                ? new Dictionary<int, Milestone>()
-                : await _context.Milestones
-                    .AsNoTracking()
-                    .Where(x => milestoneIds.Contains(x.MilestoneId))
-                    .ToDictionaryAsync(x => x.MilestoneId);
-
-            var contractIds = projects.Values
-                .Select(x => x.ContractId)
-                .Distinct()
-                .ToList();
-
-            var contracts = contractIds.Count == 0
-                ? new Dictionary<int, ProjectContract>()
-                : await _context.ProjectContracts
-                    .AsNoTracking()
-                    .Where(x => contractIds.Contains(x.ContractId))
-                    .ToDictionaryAsync(x => x.ContractId);
-
-            var proposalIds = contracts.Values
-                .Select(x => x.ProposalId)
-                .Distinct()
-                .ToList();
-
-            var proposals = proposalIds.Count == 0
-                ? new Dictionary<int, Proposal>()
-                : await _context.Proposals
-                    .AsNoTracking()
-                    .Where(x => proposalIds.Contains(x.ProposalId))
-                    .ToDictionaryAsync(x => x.ProposalId);
-
-            var jobIds = proposals.Values
-                .Select(x => x.JobId)
-                .Distinct()
-                .ToList();
-
-            var jobs = jobIds.Count == 0
-                ? new Dictionary<int, JobPosting>()
-                : await _context.JobPostings
-                    .AsNoTracking()
-                    .Where(x => jobIds.Contains(x.JobPostingId))
-                    .ToDictionaryAsync(x => x.JobPostingId);
+            var contexts = await TransactionDisplayResolver
+                .LoadTransactionContextsAsync(_context, transactions);
 
             var responses = transactions
                 .Select(transaction =>
                 {
-                    Project? project = null;
-                    Milestone? milestone = null;
-                    ProjectContract? contract = null;
-                    Proposal? proposal = null;
-                    JobPosting? job = null;
-
-                    if (transaction.ProjectId.HasValue)
-                    {
-                        projects.TryGetValue(transaction.ProjectId.Value, out project);
-                    }
-
-                    if (transaction.MilestoneId.HasValue)
-                    {
-                        milestones.TryGetValue(transaction.MilestoneId.Value, out milestone);
-                    }
-
-                    if (project != null)
-                    {
-                        contracts.TryGetValue(project.ContractId, out contract);
-                    }
-
-                    if (contract != null)
-                    {
-                        proposals.TryGetValue(contract.ProposalId, out proposal);
-                    }
-
-                    if (proposal != null)
-                    {
-                        jobs.TryGetValue(proposal.JobId, out job);
-                    }
-
-                    return MapTransaction(new TransactionContextRow(
-                        transaction,
-                        project?.Title,
-                        milestone?.Title,
-                        contract?.ContractId,
-                        project?.Title ?? job?.Title,
-                        proposal?.ProposalId,
-                        job?.Title,
-                        job?.JobPostingId,
-                        job?.Title));
+                    contexts.TryGetValue(transaction.TransactionId, out var displayContext);
+                    return MapTransaction(transaction, displayContext);
                 })
                 .ToList();
 
@@ -334,7 +235,7 @@ namespace AITasker.Infrastructure.Banking
                 throw new InvalidOperationException("User not found.");
             }
 
-            var now = VietnamDateTime.Now;
+            var now = DateTime.UtcNow;
             var orderCode = await GenerateDepositOrderCodeAsync(userId);
             var payOsOrderCode = await GeneratePayOsOrderCodeAsync();
 
@@ -434,7 +335,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Only PENDING deposit orders can be confirmed.");
                 }
 
-                if (order.ExpiresAt <= VietnamDateTime.Now)
+                if (order.ExpiresAt <= DateTime.UtcNow)
                 {
                     order.Status = DepositOrderExpired;
                     await _context.SaveChangesAsync();
@@ -455,7 +356,7 @@ namespace AITasker.Infrastructure.Banking
                 if (!existingDepositTransaction)
                 {
                     wallet.AvailableBalance += order.Amount;
-                    wallet.UpdatedAt = VietnamDateTime.Now;
+                    wallet.UpdatedAt = DateTime.UtcNow;
 
                     _context.Transactions.Add(new Transaction
                     {
@@ -468,12 +369,12 @@ namespace AITasker.Infrastructure.Banking
                         Status = TransactionStatusSuccess,
                         Description = $"[Deposit] payOS payment confirmed for order {order.OrderCode}",
                         ReferenceId = order.OrderCode,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
                 order.Status = DepositOrderPaid;
-                order.PaidAt = VietnamDateTime.Now;
+                order.PaidAt = DateTime.UtcNow;
                 order.ProviderReference = string.IsNullOrWhiteSpace(reference)
                     ? paymentLinkId
                     : reference;
@@ -553,7 +454,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetOrCreateWalletAsync(userId);
 
                 wallet.AvailableBalance += amount;
-                wallet.UpdatedAt = VietnamDateTime.Now;
+                wallet.UpdatedAt = DateTime.UtcNow;
 
                 _context.Transactions.Add(new Transaction
                 {
@@ -566,7 +467,7 @@ namespace AITasker.Infrastructure.Banking
                     Status = TransactionStatusSuccess,
                     Description = description,
                     ReferenceId = referenceId,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
 
                 await _context.SaveChangesAsync();
@@ -588,9 +489,13 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<EscrowOperationResponse> LockProjectEscrowAsync(
             int currentUserId,
-            int projectId)
+            int projectId,
+            bool sendNotifications = true)
         {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var ownsTransaction = _context.Database.CurrentTransaction == null;
+            var dbTransaction = ownsTransaction
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
             var dbTransactionCompleted = false;
 
             try
@@ -620,7 +525,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Both Client and Expert must sign the contract before escrow can be locked.");
                 }
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
 
                 if (project.EscrowLockedAt != null)
@@ -694,6 +599,12 @@ namespace AITasker.Infrastructure.Banking
 
                     if (allLocked)
                     {
+                        if (dbTransaction != null)
+                        {
+                            await dbTransaction.CommitAsync();
+                            dbTransactionCompleted = true;
+                        }
+
                         return await BuildProjectEscrowResponseAsync(
                             project,
                             null,
@@ -785,26 +696,33 @@ namespace AITasker.Infrastructure.Banking
                 }
 
                 await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                dbTransactionCompleted = true;
 
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow locked",
-                    $"Escrow has been locked for project: {project.Title}.",
-                    "ESCROW_LOCKED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
+                }
 
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project started",
-                    $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
-                    "PROJECT_STARTED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
+                if (sendNotifications)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        clientProfile.UserId,
+                        "Escrow locked",
+                        $"Escrow has been locked for project: {project.Title}.",
+                        "ESCROW_LOCKED",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId);
+
+                    await _notificationService.CreateNotificationAsync(
+                        expertProfile.UserId,
+                        "Project started",
+                        $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
+                        "PROJECT_STARTED",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId);
+                }
 
                 return await BuildProjectEscrowResponseAsync(
                     project,
@@ -813,12 +731,19 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                if (!dbTransactionCompleted)
+                if (dbTransaction != null && !dbTransactionCompleted)
                 {
                     await dbTransaction.RollbackAsync();
                 }
 
                 throw;
+            }
+            finally
+            {
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.DisposeAsync();
+                }
             }
         }
 
@@ -893,7 +818,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Client locked balance is not enough to release escrow.");
                 }
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
                 var expertServiceFeeAmount = CalculateExpertServiceFee(escrow.Amount, contract.ExpertFeeRate);
                 var expertNetAmount = escrow.Amount - expertServiceFeeAmount;
 
@@ -1019,27 +944,6 @@ namespace AITasker.Infrastructure.Banking
             return Math.Round(amount * expertFeeRate / 100m, 0, MidpointRounding.AwayFromZero);
         }
 
-        public async Task<bool> ReleaseEscrowAsync(int milestoneId)
-        {
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
-
-                await ReleaseEscrowAsync(
-                    clientProfile.UserId,
-                    milestoneId);
-
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
         private async Task<Wallet> GetOrCreateWalletAsync(int userId)
         {
             var wallet = await _context.Wallets
@@ -1065,7 +969,7 @@ namespace AITasker.Infrastructure.Banking
                 LockedBalance = 0m,
                 PendingEarningsBalance = 0m,
                 TotalEarning = 0m,
-                UpdatedAt = VietnamDateTime.Now
+                UpdatedAt = DateTime.UtcNow
             };
 
             _context.Wallets.Add(wallet);
@@ -1282,124 +1186,46 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static TransactionResponse MapTransaction(TransactionContextRow row)
+        private static TransactionResponse MapTransaction(
+            Transaction transaction,
+            TransactionDisplayContext? context = null)
         {
-            var transaction = row.Transaction;
-            var category = ResolveTransactionCategory(transaction.Type);
-            var statusGroup = ResolveTransactionStatusGroup(transaction.Status, transaction.Type);
-            var displayTitle = ResolveTransactionDisplayTitle(transaction, row);
-            var displaySubtitle = ResolveTransactionDisplaySubtitle(transaction, row);
+            var display = TransactionDisplayResolver.Resolve(
+                transaction.Type,
+                transaction.Status,
+                transaction.Description,
+                transaction.ReferenceId,
+                context);
 
             return new TransactionResponse
             {
                 TransactionId = transaction.TransactionId,
                 EscrowId = transaction.EscrowId,
                 ProjectId = transaction.ProjectId,
-                ProjectTitle = row.ProjectTitle,
+                ProjectTitle = context?.ProjectTitle,
                 MilestoneId = transaction.MilestoneId,
-                MilestoneTitle = row.MilestoneTitle,
-                ContractId = row.ContractId,
-                ContractTitle = row.ContractTitle,
-                ProposalId = row.ProposalId,
-                ProposalTitle = row.ProposalTitle,
-                JobId = row.JobId,
-                JobTitle = row.JobTitle,
+                MilestoneTitle = context?.MilestoneTitle,
+                ContractId = context?.ContractId,
+                ContractTitle = context?.ContractTitle,
+                ProposalId = context?.ProposalId,
+                ProposalTitle = context?.ProposalTitle,
+                JobId = context?.JobId,
+                JobTitle = context?.JobTitle,
                 UserId = transaction.UserId,
                 Type = transaction.Type,
-                Category = category,
-                StatusGroup = statusGroup,
+                Category = display.Category,
+                StatusGroup = display.StatusGroup,
                 Amount = transaction.Amount,
                 Status = transaction.Status,
                 Description = transaction.Description,
-                DisplayTitle = displayTitle,
-                DisplaySubtitle = displaySubtitle,
+                DisplayTitle = display.DisplayTitle,
+                DisplaySubtitle = display.DisplaySubtitle,
+                DisplayDescription = display.DisplayDescription,
+                ReferenceType = display.ReferenceType,
+                ReferenceDisplayName = display.ReferenceDisplayName,
                 ReferenceId = transaction.ReferenceId,
                 CreatedAt = transaction.CreatedAt
             };
-        }
-
-        private static TransactionResponse MapTransaction(Transaction transaction)
-        {
-            return MapTransaction(new TransactionContextRow(transaction, null, null, null, null, null, null, null, null));
-        }
-
-        private sealed record TransactionContextRow(
-            Transaction Transaction,
-            string? ProjectTitle,
-            string? MilestoneTitle,
-            int? ContractId,
-            string? ContractTitle,
-            int? ProposalId,
-            string? ProposalTitle,
-            int? JobId,
-            string? JobTitle);
-
-        private static string ResolveTransactionCategory(string type)
-        {
-            var normalized = type.Trim().ToUpperInvariant();
-
-            if (normalized.Contains("WITHDRAWAL")) return "WITHDRAWAL";
-            if (normalized.Contains("DEPOSIT")) return "DEPOSIT";
-            if (normalized.Contains("ESCROW")) return "ESCROW";
-            if (normalized.Contains("PLATFORM_FEE")) return "PLATFORM_FEE";
-            if (normalized.Contains("REFUND")) return "REFUND";
-            if (normalized.Contains("PENDING_EARNING")) return "PENDING_EARNING";
-
-            return "WALLET";
-        }
-
-        private static string ResolveTransactionStatusGroup(string status, string type)
-        {
-            var normalizedStatus = status.Trim().ToUpperInvariant();
-            var normalizedType = type.Trim().ToUpperInvariant();
-
-            if (normalizedType.Contains("EXPIRED")) return "EXPIRED";
-            if (normalizedType.Contains("PROCESSING")) return "PROCESSING";
-            if (normalizedType.Contains("REJECTED") || normalizedType.Contains("CANCELLED") || normalizedType.Contains("CANCELED")) return "CANCELLED";
-            if (normalizedType.Contains("REFUND")) return "REFUNDED";
-            if (normalizedStatus is "SUCCESS" or "PAID") return "COMPLETED";
-            if (normalizedStatus is "FAILED") return "FAILED";
-            if (normalizedStatus is "PENDING") return "PENDING";
-
-            return normalizedStatus;
-        }
-
-        private static string ResolveTransactionDisplayTitle(Transaction transaction, TransactionContextRow row)
-        {
-            if (!string.IsNullOrWhiteSpace(row.MilestoneTitle))
-            {
-                return row.MilestoneTitle!;
-            }
-
-            if (!string.IsNullOrWhiteSpace(row.ProjectTitle))
-            {
-                return row.ProjectTitle!;
-            }
-
-            var normalizedType = transaction.Type.Trim().ToUpperInvariant();
-
-            if (normalizedType.Contains("WITHDRAWAL")) return "Withdrawal request";
-            if (normalizedType.Contains("DEPOSIT")) return "Wallet deposit";
-            if (normalizedType.Contains("PLATFORM_FEE")) return "Platform fee";
-
-            return string.IsNullOrWhiteSpace(transaction.Description)
-                ? transaction.Type
-                : transaction.Description;
-        }
-
-        private static string ResolveTransactionDisplaySubtitle(Transaction transaction, TransactionContextRow row)
-        {
-            var parts = new List<string>();
-
-            if (!string.IsNullOrWhiteSpace(row.ProjectTitle) &&
-                !string.Equals(row.ProjectTitle, row.MilestoneTitle, StringComparison.OrdinalIgnoreCase))
-            {
-                parts.Add(row.ProjectTitle!);
-            }
-
-            parts.Add(transaction.Type);
-
-            return string.Join(" • ", parts);
         }
 
         private async Task<EscrowResponse> MapEscrowAsync(Escrow escrow)
@@ -1464,7 +1290,7 @@ namespace AITasker.Infrastructure.Banking
         {
             for (var attempt = 0; attempt < 5; attempt++)
             {
-                var orderCode = $"DEP{userId}{VietnamDateTime.Now:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
+                var orderCode = $"DEP{userId}{DateTime.UtcNow:yyyyMMddHHmmssfff}{Random.Shared.Next(100, 999)}";
 
                 var exists = await _context.DepositOrders
                     .AnyAsync(x => x.OrderCode == orderCode);

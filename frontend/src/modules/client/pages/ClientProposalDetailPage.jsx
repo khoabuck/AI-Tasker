@@ -463,7 +463,7 @@ export default function ClientProposalDetailPage() {
                   ? "Loading..."
                   : Number(walletBalance ?? 0).toLocaleString()}
                 {" — "}
-                Platform fee applies.
+                money in wallet
               </div>
             )}
 
@@ -752,10 +752,6 @@ export default function ClientProposalDetailPage() {
 
               <div className="mb-3 text-white">
                 Timeline: {proposal.proposedTimelineDays || proposal.estimatedDays} days
-              </div>
-
-              <div className="font-semibold text-yellow-400">
-                Platform fee applies.
               </div>
 
               <div className="mt-3 text-sm text-slate-400">

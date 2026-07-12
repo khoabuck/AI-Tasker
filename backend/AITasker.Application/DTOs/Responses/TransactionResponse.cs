@@ -44,6 +44,12 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? DisplaySubtitle { get; set; }
 
+        public string? DisplayDescription { get; set; }
+
+        public string? ReferenceType { get; set; }
+
+        public string? ReferenceDisplayName { get; set; }
+
         public string? ReferenceId { get; set; }
 
         public DateTime CreatedAt { get; set; }
