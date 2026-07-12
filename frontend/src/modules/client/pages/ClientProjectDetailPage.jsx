@@ -49,6 +49,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
@@ -528,12 +529,26 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                       <img
                         src={url}
                         alt={`Evidence ${index + 1}`}
+                        onClick={() => {
+                          setPreviewImageUrl(url);
+                          setPreviewOpen(true);
+                        }}
                         style={{
                           width: 120,
                           height: 120,
                           objectFit: "cover",
                           borderRadius: 10,
                           border: "1px solid rgba(255,255,255,0.12)",
+                          cursor: "zoom-in",
+                          transition: "transform 0.2s ease, border-color 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "scale(1.04)";
+                          e.currentTarget.style.borderColor = "rgba(0,240,255,0.55)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "scale(1)";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
                         }}
                       />
 
@@ -576,19 +591,149 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>
           )}
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
+                    <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex: 1,
+                padding: "12px",
+                background: "transparent",
+                color: "#c2c6d6",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
               Cancel
             </button>
-            <button onClick={handleSubmit} disabled={submitting || uploading}
-              style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting || uploading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {submitting
-                ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
-                : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Submit a complaint</>}
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || uploading}
+              style={{
+                flex: 2,
+                padding: "12px",
+                background:
+                  submitting || uploading ? "#1d2026" : "#f97316",
+                color:
+                  submitting || uploading ? "#8c90a0" : "#1a0a00",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor:
+                  submitting || uploading ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {submitting ? (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 16,
+                      animation: "spin 1s linear infinite",
+                    }}
+                  >
+                    autorenew
+                  </span>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16 }}
+                  >
+                    gavel
+                  </span>
+                  Submit a complaint
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Popup xem ảnh bằng chứng kích thước lớn */}
+      {previewOpen && previewImageUrl && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewOpen(false);
+            setPreviewImageUrl("");
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            background: "rgba(0,0,0,0.9)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            boxSizing: "border-box",
+            cursor: "zoom-out",
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewOpen(false);
+              setPreviewImageUrl("");
+            }}
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 24,
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.25)",
+              background: "rgba(0,0,0,0.7)",
+              color: "#ffffff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2001,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 24 }}
+            >
+              close
+            </span>
+          </button>
+
+          <img
+            src={previewImageUrl}
+            alt="Evidence preview"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: "block",
+              maxWidth: "95vw",
+              maxHeight: "90vh",
+              width: "auto",
+              height: "auto",
+              objectFit: "contain",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              boxShadow: "0 20px 70px rgba(0,0,0,0.8)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -61,6 +61,55 @@ export default function ClientDisputeDetailPage() {
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
   const [evidenceSent, setEvidenceSent] = useState(false);
+const [previewImageUrl, setPreviewImageUrl] = useState("");
+
+const normalizedDisputeStatus = String(
+  dispute?.status ?? ""
+).toUpperCase();
+
+const isClosed = [
+  "RESOLVED",
+  "REJECTED",
+  "CLOSED",
+].includes(normalizedDisputeStatus);
+
+const normalizedEvidenceText = evidenceText.trim();
+const normalizedEvidenceFileUrl = evidenceFileUrl.trim();
+
+const hasEvidenceText = normalizedEvidenceText.length > 0;
+
+const hasEvidenceAttachment =
+  normalizedEvidenceFileUrl.length > 0 ||
+  evidenceImageUrls.length > 0;
+
+const isValidEvidenceFileUrl = (() => {
+  if (!normalizedEvidenceFileUrl) {
+    return true;
+  }
+
+  try {
+    const url = new URL(normalizedEvidenceFileUrl);
+
+    return (
+      url.protocol === "http:" ||
+      url.protocol === "https:"
+    );
+  } catch {
+    return false;
+  }
+})();
+
+const canSubmitEvidence =
+  !isClosed &&
+  Boolean(dispute?.disputeId) &&
+  hasEvidenceText &&
+  hasEvidenceAttachment &&
+  isValidEvidenceFileUrl &&
+  !uploadingImage &&
+  !submittingEvidence &&
+  !evidenceSent;
+
+  
 
   // Tìm dispute đúng theo projectId truyền qua query param — vì hiện tại điều hướng
   // tới trang này chỉ biết projectId (không biết sẵn disputeId), nên phải lấy list
@@ -217,14 +266,21 @@ export default function ClientDisputeDetailPage() {
 };
 
   const handleAddEvidence = async () => {
-    if (
-    !evidenceText.trim() ||
-    (
-      !evidenceFileUrl.trim() &&
-      evidenceImageUrls.length === 0
-    ) ||
-    !dispute?.disputeId
-  ) {
+  if (!canSubmitEvidence) {
+    if (!hasEvidenceText) {
+      setEvidenceError(
+        "Evidence description is required."
+      );
+    } else if (!hasEvidenceAttachment) {
+      setEvidenceError(
+        "Provide a proof link or upload at least one image."
+      );
+    } else if (!isValidEvidenceFileUrl) {
+      setEvidenceError(
+        "Evidence link must be a valid HTTP or HTTPS URL."
+      );
+    }
+
     return;
   }
 
@@ -232,29 +288,41 @@ export default function ClientDisputeDetailPage() {
   setEvidenceError("");
 
   try {
-    const res = await axiosInstance.post(
+    await axiosInstance.post(
       `/disputes/${dispute.disputeId}/evidences`,
       {
-        evidenceText: evidenceText.trim(),
-        fileUrl: evidenceFileUrl.trim() || null,
+        evidenceText: normalizedEvidenceText,
+        fileUrl: normalizedEvidenceFileUrl || null,
+
+        // Không truyền URL thường vào imageUrl.
+        // Ảnh đã upload được gửi trong imageUrls.
         imageUrl: null,
         imageUrls: evidenceImageUrls,
       }
     );
 
-    const updatedDispute = res.data?.data ?? res.data;
-    setDispute(updatedDispute);
+    // API detail trả toàn bộ dispute và evidences.
+    await fetchDispute(undefined, true);
+
+    evidencePreviewUrls.forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
 
     setEvidenceSent(true);
     setEvidenceText("");
     setEvidenceFileUrl("");
     setEvidenceImageUrls([]);
     setEvidencePreviewUrls([]);
+    setUploadImageError("");
 
-    setTimeout(() => setEvidenceSent(false), 3000);
+    setTimeout(() => {
+      setEvidenceSent(false);
+    }, 3000);
   } catch (err) {
     setEvidenceError(
-      err?.response?.data?.message || "Submit proof of failure."
+      err?.response?.data?.message ||
+      err?.response?.data?.title ||
+      "Submit evidence failed."
     );
   } finally {
     setSubmittingEvidence(false);
@@ -306,11 +374,141 @@ export default function ClientDisputeDetailPage() {
   );
 }
 
-  const dStatus = DISPUTE_STATUS[dispute.status] || DISPUTE_STATUS.OPEN;
-  const isClosed = ["RESOLVED", "REJECTED", "CLOSED"].includes(dispute.status);
+  const dStatus =
+  DISPUTE_STATUS[normalizedDisputeStatus] ||
+  DISPUTE_STATUS.OPEN;
   const createdAt = dispute.createdAt ? new Date(dispute.createdAt).toLocaleString("vi-VN") : "—";
   const resolvedAt = dispute.resolvedAt ? new Date(dispute.resolvedAt).toLocaleString("vi-VN") : null;
-  const evidences = Array.isArray(dispute.evidences) ? dispute.evidences : [];
+  const evidences = Array.isArray(dispute.evidences)
+    ? dispute.evidences
+    : [];
+
+  const getImageUrl = (image) => {
+    if (!image) return "";
+
+    if (typeof image === "string") {
+      return image;
+    }
+
+    return (
+      image.url ||
+      image.imageUrl ||
+      image.fileUrl ||
+      image.path ||
+      ""
+    );
+  };
+
+  const getEvidenceImages = (evidence) => {
+    return Array.from(
+      new Set(
+        [
+          evidence?.imageUrl,
+          ...(Array.isArray(evidence?.imageUrls)
+            ? evidence.imageUrls
+            : []),
+          ...(Array.isArray(evidence?.images)
+            ? evidence.images
+            : []),
+        ]
+          .map(getImageUrl)
+          .filter(Boolean)
+      )
+    );
+  };
+
+  const groupedEvidences = Object.values(
+  evidences.reduce((groups, evidence, index) => {
+    const evidenceCreatedAt = evidence?.createdAt
+      ? new Date(evidence.createdAt)
+      : null;
+
+    const createdAtKey =
+      evidenceCreatedAt &&
+      !Number.isNaN(evidenceCreatedAt.getTime())
+        ? evidenceCreatedAt.toISOString().slice(0, 19)
+        : `unknown-${index}`;
+
+    /*
+     * Ưu tiên submissionId khi Backend bổ sung.
+     *
+     * Backend hiện tại tách mỗi ảnh thành một evidence record
+     * và chưa trả submissionId. Fallback dựa trên dữ liệu thật:
+     * cùng người gửi + cùng nội dung + cùng giây
+     * được xem là cùng một lần submit.
+     */
+    const groupKey =
+      evidence?.evidenceSubmissionId ||
+      evidence?.submissionId ||
+      evidence?.batchId ||
+      [
+        evidence?.uploadedByUserId ?? "",
+        evidence?.evidenceText?.trim() || "",
+        createdAtKey,
+      ].join("|");
+
+    if (!groups[groupKey]) {
+      groups[groupKey] = {
+        key: String(groupKey),
+        evidenceIds: [],
+        evidenceText: evidence?.evidenceText || "",
+        uploadedByUserId:
+          evidence?.uploadedByUserId ?? null,
+        uploadedByName:
+          evidence?.uploadedByName || "",
+        fileUrls: [],
+        imageUrls: [],
+        createdAt: evidence?.createdAt || null,
+      };
+    }
+
+    if (evidence?.evidenceId != null) {
+      groups[groupKey].evidenceIds.push(
+        evidence.evidenceId
+      );
+    }
+
+    if (evidence?.fileUrl) {
+      groups[groupKey].fileUrls.push(
+        evidence.fileUrl
+      );
+    }
+
+    if (Array.isArray(evidence?.fileUrls)) {
+      groups[groupKey].fileUrls.push(
+        ...evidence.fileUrls
+      );
+    }
+
+    groups[groupKey].imageUrls.push(
+      ...getEvidenceImages(evidence)
+    );
+
+    groups[groupKey].fileUrls = Array.from(
+      new Set(
+        groups[groupKey].fileUrls.filter(Boolean)
+      )
+    );
+
+    groups[groupKey].imageUrls = Array.from(
+      new Set(
+        groups[groupKey].imageUrls.filter(Boolean)
+      )
+    );
+
+    return groups;
+  }, {})
+).sort((a, b) => {
+  const timeA = a.createdAt
+    ? new Date(a.createdAt).getTime()
+    : 0;
+
+  const timeB = b.createdAt
+    ? new Date(b.createdAt).getTime()
+    : 0;
+
+  return timeA - timeB;
+});
 
   return (
     <ClientLayout>
@@ -402,6 +600,9 @@ export default function ClientDisputeDetailPage() {
               <img
                 src={dispute.evidenceImageUrl}
                 alt="Evidence"
+                onClick={() =>
+                  setPreviewImageUrl(dispute.evidenceImageUrl)
+                }
                 style={{
                   width: 160,
                   height: 160,
@@ -410,6 +611,7 @@ export default function ClientDisputeDetailPage() {
                   border: "1px solid rgba(255,255,255,0.12)",
                   display: "block",
                   marginTop: 12,
+                  cursor: "zoom-in",
                 }}
               />
             )}
@@ -444,78 +646,195 @@ export default function ClientDisputeDetailPage() {
           </div>
         )}
 
-        {/* Additional evidences timeline */}
-        {evidences.length > 0 && (
+        {/* Mỗi lần submit evidence hiển thị thành một field riêng */}
+        {groupedEvidences.length > 0 && (
           <div style={{ ...cardStyle, marginBottom: 20 }}>
-            <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+            <h3
+              style={{
+                fontFamily: "Hanken Grotesk, sans-serif",
+                fontSize: 15,
+                fontWeight: 700,
+                color: "#e1e2eb",
+                marginBottom: 16,
+                paddingBottom: 12,
+                borderBottom: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
               Additional Evidence
             </h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {evidences.map((ev, i) => (
-                <div key={ev.evidenceId ?? i} style={{ padding: "12px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10 }}>
-                  <p style={{ fontSize: 13, color: "#c2c6d6", lineHeight: 1.7, margin: "0 0 6px", whiteSpace: "pre-line" }}>{ev.evidenceText}</p>
-                  {ev.fileUrl && (
-                    <div
+
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 14,
+              }}
+            >
+              {groupedEvidences.map((group, groupIndex) => (
+                <div
+                  key={group.key}
+                  style={{
+                    padding: "16px",
+                    background: "rgba(255,255,255,0.02)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    borderRadius: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      marginBottom: 12,
+                    }}
+                  >
+                    <span
                       style={{
-                        marginTop: 8,
-                        padding: "8px 10px",
-                        background: "rgba(0,240,255,0.06)",
-                        border: "1px solid rgba(0,240,255,0.15)",
-                        borderRadius: 8,
+                        fontFamily: "JetBrains Mono, monospace",
+                        fontSize: 10,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.1em",
+                        color: "#8c90a0",
                       }}
                     >
-                      <a
-                        href={ev.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      {groupIndex === 0
+                        ? "Initial Evidence"
+                        : `Evidence Submission ${groupIndex}`}
+                    </span>
+
+                    {group.createdAt && (
+                      <span
                         style={{
-                          color: "#00F0FF",
-                          fontSize: 12,
-                          textDecoration: "none",
+                          fontSize: 11,
+                          color: "#5b6470",
                         }}
                       >
-                        🔗 {ev.fileUrl}
-                      </a>
+                        {new Date(group.createdAt).toLocaleString(
+                          "vi-VN"
+                        )}
+                      </span>
+                    )}
+                  </div>
+
+                  {group.evidenceText && (
+                    <p
+                      style={{
+                        fontSize: 13,
+                        color: "#c2c6d6",
+                        lineHeight: 1.7,
+                        margin: 0,
+                        whiteSpace: "pre-line",
+                      }}
+                    >
+                      {group.evidenceText}
+                    </p>
+                  )}
+
+                  {group.fileUrls.length > 0 && (
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 8,
+                        marginTop: group.evidenceText ? 12 : 0,
+                      }}
+                    >
+                      {group.fileUrls.map((url, index) => (
+                        <a
+                          key={`${url}-${index}`}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "block",
+                            padding: "9px 11px",
+                            background: "rgba(0,240,255,0.06)",
+                            border:
+                              "1px solid rgba(0,240,255,0.15)",
+                            borderRadius: 8,
+                            color: "#00F0FF",
+                            fontSize: 12,
+                            textDecoration: "none",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          🔗 {url}
+                        </a>
+                      ))}
                     </div>
                   )}
 
-                  {(() => {
-                    const imageUrls = [
-                      ev.imageUrl,
-                      ...(Array.isArray(ev.imageUrls) ? ev.imageUrls : []),
-                    ].filter(Boolean);
+                  {group.imageUrls.length > 0 && (
+                    <div
+                      style={{
+                        marginTop:
+                          group.evidenceText ||
+                          group.fileUrls.length > 0
+                            ? 12
+                            : 0,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "block",
+                          fontFamily:
+                            "JetBrains Mono, monospace",
+                          fontSize: 10,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.1em",
+                          color: "#8c90a0",
+                          marginBottom: 8,
+                        }}
+                      >
+                        Images ({group.imageUrls.length})
+                      </span>
 
-                    if (imageUrls.length === 0) return null;
-
-                    return (
                       <div
                         style={{
                           display: "flex",
                           flexWrap: "wrap",
                           gap: 12,
-                          marginTop: 8,
                         }}
                       >
-                        {imageUrls.map((url, index) => (
+                        {group.imageUrls.map((url, index) => (
                           <img
                             key={`${url}-${index}`}
                             src={url}
                             alt={`Evidence ${index + 1}`}
+                            onClick={() =>
+                              setPreviewImageUrl(url)
+                            }
                             style={{
-                              width: 160,
-                              height: 160,
+                              width: 140,
+                              height: 140,
                               objectFit: "cover",
                               borderRadius: 10,
-                              border: "1px solid rgba(255,255,255,0.12)",
+                              border:
+                                "1px solid rgba(255,255,255,0.12)",
+                              cursor: "zoom-in",
+                              transition:
+                                "transform 0.2s ease, border-color 0.2s ease",
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform =
+                                "scale(1.04)";
+                              e.currentTarget.style.borderColor =
+                                "rgba(0,240,255,0.55)";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform =
+                                "scale(1)";
+                              e.currentTarget.style.borderColor =
+                                "rgba(255,255,255,0.12)";
                             }}
                           />
                         ))}
                       </div>
-                    );
-                  })()}
-                  <p style={{ fontSize: 11, color: "#5b6470", margin: "6px 0 0" }}>
-                    {ev.createdAt ? new Date(ev.createdAt).toLocaleString("vi-VN") : ""}
-                  </p>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -667,26 +986,42 @@ export default function ClientDisputeDetailPage() {
                       <img
                         src={url}
                         alt={`Evidence preview ${index + 1}`}
+                        onClick={() => setPreviewImageUrl(url)}
                         style={{
                           width: 120,
                           height: 120,
                           objectFit: "cover",
                           borderRadius: 10,
                           border: "1px solid rgba(255,255,255,0.12)",
+                          cursor: "zoom-in",
+                          transition:
+                            "transform 0.2s ease, border-color 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "scale(1.04)";
+                          e.currentTarget.style.borderColor =
+                            "rgba(0,240,255,0.55)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "scale(1)";
+                          e.currentTarget.style.borderColor =
+                            "rgba(255,255,255,0.12)";
                         }}
                       />
 
                       <button
                         type="button"
-                        onClick={() => {
-                          setEvidencePreviewUrls((prev) =>
-                            prev.filter((_, i) => i !== index)
-                          );
+                        onClick={(e) => {
+                        e.stopPropagation();
 
-                          setEvidenceImageUrls((prev) =>
-                            prev.filter((_, i) => i !== index)
-                          );
-                        }}
+                        setEvidencePreviewUrls((prev) =>
+                          prev.filter((_, i) => i !== index)
+                        );
+
+                        setEvidenceImageUrls((prev) =>
+                          prev.filter((_, i) => i !== index)
+                        );
+                      }}
                         style={{
                           position: "absolute",
                           top: 4,
@@ -714,55 +1049,35 @@ export default function ClientDisputeDetailPage() {
 
             <button
               onClick={handleAddEvidence}
-              disabled={
-                submittingEvidence ||
-                uploadingImage ||
-                !evidenceText.trim() ||
-                (
-                  !evidenceFileUrl.trim() &&
-                  evidenceImageUrls.length === 0
-                ) ||
-                evidenceSent
-              }
+              disabled={!canSubmitEvidence}
               style={{
-                padding: "11px 22px",
-                background: evidenceSent
-                ? "#22c55e"
-                : (
-                    !evidenceText.trim() ||
-                    (
-                      !evidenceFileUrl.trim() &&
-                      evidenceImageUrls.length === 0
-                    )
-                  )
-                  ? "rgba(0,240,255,0.08)"
-                  : "#00F0FF",
-                color: evidenceSent
-                  ? "#002022"
-                  : (
-                      !evidenceText.trim() &&
-                      !evidenceFileUrl.trim() &&
-                      evidenceImageUrls.length === 0
-                    )
-                    ? "#8c90a0"
-                    : "#002022",
-                border: "none",
-                borderRadius: 8,
-                fontSize: 14,
-                fontWeight: 700,
-                cursor: (
-                  !evidenceText.trim() ||
-                  (
-                    !evidenceFileUrl.trim() &&
-                    evidenceImageUrls.length === 0
-                  )
-                )
-                  ? "not-allowed"
-                  : "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
+                      padding: "11px 22px",
+
+                      background: evidenceSent
+                        ? "#22c55e"
+                        : canSubmitEvidence
+                          ? "#00F0FF"
+                          : "rgba(0,240,255,0.08)",
+
+                      color: evidenceSent
+                        ? "#002022"
+                        : canSubmitEvidence
+                          ? "#002022"
+                          : "#8c90a0",
+
+                      border: "none",
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontWeight: 700,
+
+                      cursor: canSubmitEvidence
+                        ? "pointer"
+                        : "not-allowed",
+
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                    }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                 {evidenceSent ? "check_circle" : submittingEvidence ? "hourglass_empty" : "upload_file"}
@@ -772,7 +1087,79 @@ export default function ClientDisputeDetailPage() {
           </div>
         )}
 
-      </div>
+            </div>
+
+      {/* Popup xem ảnh lớn, dùng chung cho ảnh đã nộp và chưa nộp */}
+      {previewImageUrl && (
+        <div
+          onClick={() => setPreviewImageUrl("")}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 3000,
+            background: "rgba(0,0,0,0.92)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            boxSizing: "border-box",
+            cursor: "zoom-out",
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewImageUrl("");
+            }}
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 24,
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              border:
+                "1px solid rgba(255,255,255,0.25)",
+              background: "rgba(0,0,0,0.7)",
+              color: "#ffffff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 3001,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 24 }}
+            >
+              close
+            </span>
+          </button>
+
+          <img
+            src={previewImageUrl}
+            alt="Evidence preview"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: "block",
+              maxWidth: "95vw",
+              maxHeight: "90vh",
+              width: "auto",
+              height: "auto",
+              objectFit: "contain",
+              borderRadius: 12,
+              border:
+                "1px solid rgba(255,255,255,0.15)",
+              boxShadow:
+                "0 20px 70px rgba(0,0,0,0.8)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
     </ClientLayout>
   );
 }
