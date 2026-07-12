@@ -24,6 +24,8 @@ export default function MyProposalsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [actionLoadingId, setActionLoadingId] = useState(null);
 
+  const [cancelModal, setCancelModal] = useState(null);
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
@@ -162,7 +164,7 @@ export default function MyProposalsPage() {
     setError("Cannot open contract because proposal id is missing.");
   };
 
-  const handleCancelProposal = async (proposal) => {
+  const handleOpenCancelProposal = async (proposal) => {
     const proposalId = getProposalId(proposal);
 
     if (!proposalId) {
@@ -170,17 +172,55 @@ export default function MyProposalsPage() {
       return;
     }
 
-    const ok = window.confirm("Are you sure you want to cancel this proposal?");
-
-    if (!ok) return;
-
     try {
       setActionLoadingId(proposalId);
       setError("");
       setMessage("");
 
-      await proposalService.withdrawProposal(proposalId);
+      let warning = null;
 
+      if (typeof proposalService.getWithdrawWarning === "function") {
+        warning = await proposalService.getWithdrawWarning(proposalId);
+      }
+
+      setCancelModal({
+        proposal,
+        proposalId,
+        warning: normalizeCancelWarning(warning),
+        reason: "",
+      });
+    } catch (err) {
+      console.error("LOAD CANCEL WARNING ERROR:", err?.response?.data || err);
+      setCancelModal({
+        proposal,
+        proposalId,
+        warning: normalizeCancelWarning(null),
+        reason: "",
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleConfirmCancelProposal = async () => {
+    if (!cancelModal?.proposalId) return;
+
+    const warning = cancelModal.warning || {};
+    const reason = String(cancelModal.reason || "").trim();
+
+    if (warning.requiresReason && !reason) {
+      setError("Please enter a reason before cancelling this proposal.");
+      return;
+    }
+
+    try {
+      setActionLoadingId(cancelModal.proposalId);
+      setError("");
+      setMessage("");
+
+      await proposalService.withdrawProposal(cancelModal.proposalId, reason);
+
+      setCancelModal(null);
       setMessage("Proposal cancelled successfully.");
       await loadPage({ silent: true });
     } catch (err) {
@@ -312,7 +352,7 @@ export default function MyProposalsPage() {
               <div className="mt-5 flex flex-wrap justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate("/expert/proposals/drafts")}
+                  onClick={() => navigate("/expert/proposal/drafts")}
                   className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
                   View Drafts
@@ -341,13 +381,28 @@ export default function MyProposalsPage() {
                   onResubmit={() => goToProposalResubmit(proposal)}
                   onJob={() => goToJob(proposal)}
                   onContract={() => goToContract(proposal)}
-                  onCancel={() => handleCancelProposal(proposal)}
+                  onCancel={() => handleOpenCancelProposal(proposal)}
                 />
               ))}
             </div>
           )}
         </div>
       </div>
+
+      {cancelModal && (
+        <CancelProposalModal
+          modal={cancelModal}
+          actionLoadingId={actionLoadingId}
+          onReasonChange={(reason) =>
+            setCancelModal((prev) => ({
+              ...prev,
+              reason,
+            }))
+          }
+          onClose={() => setCancelModal(null)}
+          onConfirm={handleConfirmCancelProposal}
+        />
+      )}
     </ExpertLayout>
   );
 }
@@ -479,8 +534,8 @@ function ProposalRow({
             <ActionButton
               label={
                 String(actionLoadingId) === String(proposalId)
-                  ? "Cancelling..."
-                  : "Cancel"
+                  ? "Loading..."
+                  : "Cancel Proposal"
               }
               tone="red"
               disabled={String(actionLoadingId) === String(proposalId)}
@@ -490,6 +545,149 @@ function ProposalRow({
         </div>
       </div>
     </article>
+  );
+}
+
+function CancelProposalModal({
+  modal,
+  actionLoadingId,
+  onReasonChange,
+  onClose,
+  onConfirm,
+}) {
+  const proposal = modal.proposal;
+  const warning = modal.warning || {};
+  const proposalId = modal.proposalId;
+  const isLoading = String(actionLoadingId) === String(proposalId);
+
+  const title = formatDisplayValue(
+    proposal?.jobTitle ||
+      proposal?.JobTitle ||
+      proposal?.projectTitle ||
+      proposal?.ProjectTitle ||
+      "this proposal"
+  );
+
+  const consequences = Array.isArray(warning.consequences)
+    ? warning.consequences.filter(Boolean)
+    : [];
+
+  return (
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-3xl border border-red-400/30 bg-[#151a22] shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+        <div className="border-b border-white/10 p-5">
+          <div className="flex gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
+              <span className="material-symbols-outlined text-3xl text-red-300">
+                cancel
+              </span>
+            </div>
+
+            <div>
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-red-300">
+                Cancel Proposal
+              </p>
+
+              <h2 className="mt-2 text-xl font-extrabold text-white">
+                Are you sure?
+              </h2>
+
+              <p className="mt-2 text-sm leading-6 text-gray-400">
+                You are about to cancel your proposal for{" "}
+                <span className="font-bold text-white">{title}</span>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4">
+            <p className="text-sm leading-6 text-red-100">
+              {warning.message ||
+                "After cancelling, this proposal will no longer be considered for this job."}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-gray-500">
+              What will happen
+            </p>
+
+            <ul className="space-y-2 text-sm leading-6 text-gray-300">
+              {consequences.length > 0 ? (
+                consequences.map((item, index) => (
+                  <li key={index} className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>{formatDisplayValue(item)}</span>
+                  </li>
+                ))
+              ) : (
+                <>
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>
+                      Your proposal will no longer be active for this job.
+                    </span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>The client will not be able to accept it.</span>
+                  </li>
+
+                  <li className="flex gap-2">
+                    <span className="material-symbols-outlined mt-0.5 text-[17px] text-yellow-300">
+                      warning
+                    </span>
+                    <span>This action cannot be undone.</span>
+                  </li>
+                </>
+              )}
+            </ul>
+          </div>
+
+          <div>
+            <label className="mb-2 block text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
+              Reason {warning.requiresReason ? "(required)" : "(optional)"}
+            </label>
+
+            <textarea
+              value={modal.reason || ""}
+              onChange={(event) => onReasonChange(event.target.value)}
+              rows={3}
+              placeholder="Example: I am no longer available for this project."
+              className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3 border-t border-white/10 p-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onClose}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Keep Proposal
+          </button>
+
+          <button
+            type="button"
+            disabled={isLoading}
+            onClick={onConfirm}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? "Cancelling..." : "Cancel Proposal"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -580,6 +778,49 @@ function Alert({ type, title, message }) {
       <p className="mt-1">{formatDisplayValue(message)}</p>
     </div>
   );
+}
+
+function normalizeCancelWarning(warning) {
+  const raw = warning?.raw || warning?.Raw || warning || {};
+
+  const consequences =
+    raw.consequences ||
+    raw.Consequences ||
+    raw.notes ||
+    raw.Notes ||
+    raw.items ||
+    raw.Items ||
+    [];
+
+  return {
+    canWithdraw:
+      raw.canWithdraw === undefined && raw.CanWithdraw === undefined
+        ? true
+        : Boolean(raw.canWithdraw ?? raw.CanWithdraw),
+    title: raw.title || raw.Title || "Cancel Proposal",
+    message:
+      raw.message ||
+      raw.Message ||
+      raw.warningMessage ||
+      raw.WarningMessage ||
+      raw.detail ||
+      raw.Detail ||
+      "After cancelling, this proposal will no longer be considered for this job.",
+    consequences: Array.isArray(consequences)
+      ? consequences
+      : String(consequences || "")
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean),
+    requiresReason: Boolean(
+      raw.requiresReason ??
+        raw.RequiresReason ??
+        raw.reasonRequired ??
+        raw.ReasonRequired ??
+        false
+    ),
+    raw,
+  };
 }
 
 function getProposalId(proposal) {

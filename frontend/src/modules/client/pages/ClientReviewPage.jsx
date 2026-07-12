@@ -124,7 +124,7 @@ export default function ClientReviewPage() {
           Review Submitted!
         </h1>
         <p style={{ color: "#8c90a0", fontSize: 15, marginBottom: 32, lineHeight: 1.7 }}>
-          Cảm ơn bạn đã đánh giá. Phản hồi của bạn giúp cải thiện chất lượng dịch vụ.
+          Thank you for your review. Your feedback helps us improve service quality.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
           <button onClick={() => navigate("/client/projects")}

@@ -25,6 +25,7 @@ export default function ManageSkillsPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
     loadSkills();
@@ -117,6 +118,7 @@ export default function ManageSkillsPage() {
 
     setMessage("");
     setError("");
+    setFieldErrors({});
   };
 
   const handleCreateNew = () => {
@@ -124,10 +126,17 @@ export default function ManageSkillsPage() {
     setFormData(EMPTY_FORM);
     setMessage("");
     setError("");
+    setFieldErrors({});
   };
 
   const handleChange = (event) => {
     const { name, value, type, checked } = event.target;
+
+    setError("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
 
     setFormData((prev) => ({
       ...prev,
@@ -136,15 +145,19 @@ export default function ManageSkillsPage() {
   };
 
   const validateForm = () => {
-    if (!String(formData.skillName || "").trim()) {
-      return "Skill name is required.";
+    const errors = {};
+    const skillName = String(formData.skillName || "").trim();
+
+    if (!skillName) {
+      errors.skillName = "Skill name is required.";
+    } else if (skillName.length < 2) {
+      errors.skillName = "Skill name must be at least 2 characters.";
     }
 
-    if (String(formData.skillName || "").trim().length < 2) {
-      return "Skill name must be at least 2 characters.";
-    }
-
-    return "";
+    return {
+      valid: Object.keys(errors).length === 0,
+      errors,
+    };
   };
 
   const handleSubmit = async (event) => {
@@ -153,10 +166,11 @@ export default function ManageSkillsPage() {
     setMessage("");
     setError("");
 
-    const validateError = validateForm();
+    const validation = validateForm();
 
-    if (validateError) {
-      setError(validateError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields.");
       return;
     }
 
@@ -184,6 +198,7 @@ export default function ManageSkillsPage() {
 
       setSelectedSkill(null);
       setFormData(EMPTY_FORM);
+      setFieldErrors({});
 
       await loadSkills({ keepMessage: true });
     } catch (err) {
@@ -550,8 +565,18 @@ export default function ManageSkillsPage() {
                         value={formData.skillName}
                         onChange={handleChange}
                         placeholder="Example: React, ASP.NET Core, OpenAI API"
-                        className={inputStyle}
+                        className={
+                          fieldErrors.skillName
+                            ? "w-full rounded-xl border border-red-400/70 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-400 focus:bg-white/[0.07]"
+                            : inputStyle
+                        }
                       />
+
+                      {fieldErrors.skillName && (
+                        <p className="mt-2 text-xs font-semibold text-red-300">
+                          {fieldErrors.skillName}
+                        </p>
+                      )}
                     </div>
 
                     <div>

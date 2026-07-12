@@ -24,6 +24,14 @@ const expertWalletApi = {
   getDepositOrderById(depositOrderId) {
     return axiosInstance.get(`/wallets/deposit-orders/${depositOrderId}`);
   },
+
+  createWithdrawal(data) {
+    return axiosInstance.post("/withdrawals", data);
+  },
+
+  getMyWithdrawals() {
+    return axiosInstance.get("/withdrawals/me");
+  },
 };
 
 export default expertWalletApi;

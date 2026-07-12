@@ -1,7 +1,19 @@
 import axios from "axios";
 
+const cleanUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
+
+const getApiBaseUrl = () => {
+  const apiBaseUrl = cleanUrl(import.meta.env.VITE_API_BASE_URL);
+
+  if (!apiBaseUrl) {
+    throw new Error("Missing VITE_API_BASE_URL");
+  }
+
+  return apiBaseUrl;
+};
+
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "http://localhost:5070/api",
+  baseURL: getApiBaseUrl(),
   headers: {
     "Content-Type": "application/json",
   },
@@ -20,7 +32,7 @@ axiosInstance.interceptors.request.use(
     }
 
     if (import.meta.env.DEV) {
-      console.log("REQUEST URL:", config.baseURL + config.url);
+      console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
       console.log("SEND TOKEN:", Boolean(token));
     }
 

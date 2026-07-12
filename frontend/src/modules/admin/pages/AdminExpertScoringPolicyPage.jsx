@@ -24,38 +24,43 @@ const EMPTY_FORM = {
 const SCORE_FIELDS = [
   {
     name: "profileCompletenessMaxScore",
-    label: "Profile Completeness Max Score",
-    helper: "Maximum score for profile completeness.",
+    label: "Profile Completeness",
+    helper: "Score for having a complete and well-filled profile.",
   },
   {
     name: "aiSkillMaxScore",
-    label: "AI Skill Max Score",
-    helper: "Maximum score from AI skill evaluation.",
+    label: "AI Skill Evaluation",
+    helper: "Score from AI skill matching and profile analysis.",
   },
   {
     name: "experienceMaxScore",
-    label: "Experience Max Score",
-    helper: "Maximum score for expert experience.",
+    label: "Experience",
+    helper: "Score for years of experience and relevant background.",
   },
   {
     name: "portfolioMaxScore",
-    label: "Portfolio Max Score",
-    helper: "Maximum score for portfolio quality.",
+    label: "Portfolio",
+    helper: "Score for portfolio quality and proof of work.",
   },
   {
     name: "gitHubMaxScore",
-    label: "GitHub Max Score",
-    helper: "Maximum score for GitHub profile.",
+    label: "GitHub Profile",
+    helper: "Score for GitHub activity, projects, and technical proof.",
   },
   {
     name: "linkedInMaxScore",
-    label: "LinkedIn Max Score",
-    helper: "Maximum score for LinkedIn profile.",
+    label: "LinkedIn Profile",
+    helper: "Score for professional profile and work history.",
   },
   {
     name: "certificateMaxScore",
-    label: "Certificate Max Score",
-    helper: "Maximum score for certificates.",
+    label: "Certificates",
+    helper: "Score for uploaded certificates and credentials.",
+  },
+  {
+    name: "riskMaxPenalty",
+    label: "Trust Score",
+    helper: "Score for profile trustworthiness, authenticity, and credibility.",
   },
 ];
 
@@ -63,42 +68,40 @@ const RULE_FIELDS = [
   {
     name: "passThreshold",
     label: "Pass Threshold",
-    helper: "Minimum score required to pass expert profile review.",
+    helper: "Minimum total score required for an expert profile to pass review.",
   },
   {
     name: "maxReviewSubmissions",
-    label: "Max Review Submissions",
-    helper: "Maximum number of review submissions allowed.",
+    label: "Max Review Attempts",
+    helper: "Maximum number of times an expert can resubmit for review.",
   },
   {
     name: "reviewLockDurationHours",
-    label: "Review Lock Duration Hours",
-    helper: "Lock duration after exceeding review submission limits.",
-  },
-  {
-    name: "riskMaxPenalty",
-    label: "Risk Max Penalty",
-    helper: "Maximum penalty deducted for risky profile signals.",
+    label: "Review Lock Duration",
+    helper: "How long the expert is locked after exceeding review attempts.",
+    suffix: "hours",
   },
   {
     name: "certificateUnverifiedMaxProfileScore",
-    label: "Certificate Unverified Max Profile Score",
-    helper: "Maximum profile score if certificates are not verified.",
+    label: "Unverified Certificate Limit",
+    helper: "Maximum profile score allowed when certificates are not verified.",
   },
   {
     name: "bioMinimumLength",
-    label: "Bio Minimum Length",
-    helper: "Minimum bio length required for profile completeness.",
+    label: "Minimum Bio Length",
+    helper: "Minimum number of characters required in the expert bio.",
+    suffix: "chars",
   },
   {
     name: "skillsMinimumLength",
-    label: "Skills Minimum Length",
-    helper: "Minimum number of skills required.",
+    label: "Minimum Skills",
+    helper: "Minimum number of skills required in the expert profile.",
+    suffix: "skills",
   },
   {
     name: "maxCertificates",
     label: "Max Certificates",
-    helper: "Maximum number of certificates allowed.",
+    helper: "Maximum number of certificates the expert can submit.",
   },
 ];
 
@@ -111,6 +114,7 @@ export default function AdminExpertScoringPolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const totalMaxScore = useMemo(() => {
     return SCORE_FIELDS.reduce((sum, field) => {
@@ -139,6 +143,7 @@ export default function AdminExpertScoringPolicyPage() {
       setLoading(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const data = await adminPolicyService.getExpertProfileScoringPolicy();
 
@@ -156,6 +161,13 @@ export default function AdminExpertScoringPolicyPage() {
   };
 
   const handleChange = (name, value) => {
+    setError("");
+    setSuccess("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -166,15 +178,17 @@ export default function AdminExpertScoringPolicyPage() {
     setForm(toFormState(policy));
     setError("");
     setSuccess("");
+    setFieldErrors({});
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm(form);
+    const validation = validateForm(form);
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
       return;
     }
 
@@ -182,6 +196,7 @@ export default function AdminExpertScoringPolicyPage() {
       setSaving(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const updated = await adminPolicyService.updateExpertProfileScoringPolicy(
         buildPayload(form)
@@ -215,8 +230,8 @@ export default function AdminExpertScoringPolicyPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure profile scoring rules used to review expert profiles.
-              Each update requires an admin reason.
+              Configure how expert profiles are reviewed, scored, and approved.
+              This policy affects expert onboarding and resubmission rules.
             </p>
           </div>
 
@@ -233,7 +248,7 @@ export default function AdminExpertScoringPolicyPage() {
         {error && (
           <Alert
             type="danger"
-            title="Action failed"
+            title="Please check your input"
             message={error}
             onClose={() => setError("")}
           />
@@ -242,7 +257,7 @@ export default function AdminExpertScoringPolicyPage() {
         {success && (
           <Alert
             type="success"
-            title="Success"
+            title="Policy updated"
             message={success}
             onClose={() => setSuccess("")}
           />
@@ -256,198 +271,269 @@ export default function AdminExpertScoringPolicyPage() {
             Loading expert scoring policy...
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
-            <form
-              onSubmit={handleSubmit}
-              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
-            >
-              <div className="mb-6">
-                <h2 className="text-xl font-bold text-white">
-                  Update scoring rules
-                </h2>
-
-                <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Keep all numeric values greater than or equal to 0. The reason
-                  field is required when saving.
-                </p>
-              </div>
-
-              <section className="mb-8">
-                <div className="mb-4 flex items-center justify-between gap-4 border-b border-white/10 pb-3">
-                  <div>
-                    <h3 className="font-bold text-white">Review Rules</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Threshold, retry limits, lock duration, and validation
-                      requirements.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  {RULE_FIELDS.map((field) => (
-                    <NumberInput
-                      key={field.name}
-                      label={field.label}
-                      value={form[field.name]}
-                      onChange={(value) => handleChange(field.name, value)}
-                      helper={field.helper}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <section className="mb-8">
-                <div className="mb-4 flex items-center justify-between gap-4 border-b border-white/10 pb-3">
-                  <div>
-                    <h3 className="font-bold text-white">Score Weights</h3>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Maximum score allocated to each profile evaluation area.
-                    </p>
-                  </div>
-
-                  <div className="rounded-xl border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-right">
-                    <p className="text-[11px] uppercase tracking-wider text-cyan-300">
-                      Total Max Score
-                    </p>
-                    <p className="text-lg font-black text-white">
-                      {formatNumber(totalMaxScore)}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  {SCORE_FIELDS.map((field) => (
-                    <NumberInput
-                      key={field.name}
-                      label={field.label}
-                      value={form[field.name]}
-                      onChange={(value) => handleChange(field.name, value)}
-                      helper={field.helper}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <TextArea
-                label="Update Reason"
-                value={form.reason}
-                onChange={(value) => handleChange("reason", value)}
-                placeholder="Example: Adjust scoring rules for the new expert verification process."
+          <>
+            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <TopMetricCard
+                icon="workspace_premium"
+                label="Pass Threshold"
+                value={formatNumber(form.passThreshold)}
+                helper="Required score to pass"
+                tone="cyan"
               />
 
-              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
-                <button
-                  type="button"
-                  onClick={handleReset}
-                  disabled={saving}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  Reset
-                </button>
+              <TopMetricCard
+                icon="score"
+                label="Total Max Score"
+                value={formatNumber(totalMaxScore)}
+                helper="Sum of all score weights"
+                tone="purple"
+              />
 
-                <button
-                  type="submit"
-                  disabled={saving || !hasChanged}
-                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving ? "Saving..." : "Save Policy"}
-                </button>
-              </div>
-            </form>
+              <TopMetricCard
+                icon="replay"
+                label="Review Attempts"
+                value={formatNumber(form.maxReviewSubmissions)}
+                helper="Maximum resubmissions"
+                tone="green"
+              />
 
-            <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Current summary
-                </h2>
+              <TopMetricCard
+                icon="lock_clock"
+                label="Lock Duration"
+                value={`${formatNumber(form.reviewLockDurationHours)}h`}
+                helper="After reaching limit"
+                tone="yellow"
+              />
+            </section>
 
-                <div className="space-y-4">
-                  <SummaryCard
-                    icon="workspace_premium"
-                    label="Pass Threshold"
-                    value={policy?.passThreshold}
-                    description="Minimum score required"
-                    tone="cyan"
-                  />
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+              <form
+                onSubmit={handleSubmit}
+                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+              >
+                <div className="mb-6 border-b border-white/10 pb-5">
+                  <div>
+                    <h2 className="text-xl font-bold text-white">
+                      Scoring configuration
+                    </h2>
 
-                  <SummaryCard
-                    icon="score"
-                    label="Total Max Score"
-                    value={totalMaxScore}
-                    description="Sum of score weights"
-                    tone="purple"
-                  />
+                    <p className="mt-2 text-sm leading-6 text-gray-400">
+                      Update score weights and review rules. All numeric fields
+                      must be valid numbers greater than or equal to 0.
+                    </p>
+                  </div>
 
-                  <SummaryCard
-                    icon="lock_clock"
-                    label="Review Lock Hours"
-                    value={policy?.reviewLockDurationHours}
-                    description="Lock duration after review limit"
-                    tone="yellow"
-                  />
 
-                  <SummaryCard
-                    icon="replay"
-                    label="Max Submissions"
-                    value={policy?.maxReviewSubmissions}
-                    description="Allowed review attempts"
-                    tone="green"
-                  />
                 </div>
-              </section>
 
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Metadata
-                </h2>
+                <section className="mb-8">
+                  <SectionHeader
+                    icon="tune"
+                    title="Review Rules"
+                    description="Controls how many times an expert can submit and what minimum requirements are checked."
+                  />
 
-                <div className="space-y-4">
-                  <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
-                  <InfoBox
-                    label="Created At"
-                    value={formatDateTime(policy?.createdAt)}
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    {RULE_FIELDS.map((field) => (
+                      <NumberInput
+                        key={field.name}
+                        label={field.label}
+                        value={form[field.name]}
+                        onChange={(value) => handleChange(field.name, value)}
+                        helper={field.helper}
+                        suffix={field.suffix}
+                        required
+                        error={fieldErrors[field.name]}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <section className="mb-8">
+                  <SectionHeader
+                    icon="analytics"
+                    title="Score Weights"
+                    description="Each item contributes to the expert's final review score. Trust Score is counted as a positive credibility score."
+                    rightContent={
+                      <div className="flex min-w-[160px] flex-col items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-6 py-4">
+                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
+                          Total Score
+                        </p>
+
+                        <p className="mt-2 text-3xl font-black tracking-tight text-white">
+                          {formatNumber(totalMaxScore)}
+                        </p>
+                      </div>
+                    }
                   />
-                  <InfoBox
-                    label="Updated At"
-                    value={formatDateTime(policy?.updatedAt)}
-                  />
-                  <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
+
+                  <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                    {SCORE_FIELDS.map((field) => (
+                      <NumberInput
+                        key={field.name}
+                        label={field.label}
+                        value={form[field.name]}
+                        onChange={(value) => handleChange(field.name, value)}
+                        helper={field.helper}
+                        required
+                        error={fieldErrors[field.name]}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <TextArea
+                  label="Update Reason"
+                  required
+                  value={form.reason}
+                  error={fieldErrors.reason}
+                  onChange={(value) => handleChange("reason", value)}
+                  placeholder="Example: Adjust scoring weights to improve expert verification quality."
+                />
+
+                <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={handleReset}
+                    disabled={saving}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Reset Changes
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={saving || !hasChanged}
+                    className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {saving ? "Saving..." : "Save Policy"}
+                  </button>
                 </div>
-              </section>
-            </aside>
-          </div>
+              </form>
+
+              <aside className="space-y-6">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <h2 className="mb-5 text-xl font-bold text-white">
+                    Score Breakdown
+                  </h2>
+
+                  <div className="space-y-3">
+                    {SCORE_FIELDS.map((field) => (
+                      <ScoreBreakdownItem
+                        key={field.name}
+                        label={field.label}
+                        value={Number(form[field.name] || 0)}
+                        total={totalMaxScore}
+                      />
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <h2 className="mb-5 text-xl font-bold text-white">
+                    Policy Metadata
+                  </h2>
+
+                  <div className="space-y-4">
+                    <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
+                    <InfoBox
+                      label="Created At"
+                      value={formatDateTime(policy?.createdAt)}
+                    />
+                    <InfoBox
+                      label="Updated At"
+                      value={formatDateTime(policy?.updatedAt)}
+                    />
+                    <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </>
         )}
       </div>
     </AdminLayout>
   );
 }
 
-function NumberInput({ label, value, onChange, helper }) {
+function SectionHeader({ icon, title, description, rightContent }) {
   return (
-    <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-        {label}
-      </label>
+    <div className="mb-5 flex flex-col gap-3 border-b border-white/10 pb-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined">{icon}</span>
+        </div>
 
-      <input
-        type="number"
-        min="0"
-        step="1"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
-      />
+        <div>
+          <h3 className="font-bold text-white">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-gray-500">{description}</p>
+        </div>
+      </div>
 
-      {helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>}
+      {rightContent}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  helper,
+  suffix,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
+      </label>
+
+      <div
+        className={`flex h-12 overflow-hidden rounded-xl border bg-white/[0.04] ${error
+          ? "border-red-400/70 focus-within:border-red-400"
+          : "border-white/10 focus-within:border-cyan-400/50"
+          }`}
+      >
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="h-full min-w-0 flex-1 bg-transparent px-4 text-sm text-white outline-none placeholder:text-gray-600"
+        />
+
+        {suffix && (
+          <span className="flex items-center border-l border-white/10 px-3 text-xs font-bold uppercase text-gray-500">
+            {suffix}
+          </span>
+        )}
+      </div>
+
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>
+      )}
+    </div>
+  );
+}
+
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
+  return (
+    <div>
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -455,13 +541,18 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${error
+          ? "border-red-400/70 focus:border-red-400"
+          : "border-white/10 focus:border-cyan-400/50"
+          }`}
       />
+
+      {error && <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>}
     </div>
   );
 }
 
-function SummaryCard({ icon, label, value, description, tone = "cyan" }) {
+function TopMetricCard({ icon, label, value, helper, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
     purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
@@ -470,23 +561,47 @@ function SummaryCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
-            toneClass[tone] || toneClass.cyan
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass[tone] || toneClass.cyan
           }`}
-        >
-          <span className="material-symbols-outlined text-[20px]">{icon}</span>
-        </div>
-
-        <div>
-          <p className="text-sm font-bold text-white">{label}</p>
-          <p className="text-xs text-gray-500">{description}</p>
-        </div>
+      >
+        <span className="material-symbols-outlined">{icon}</span>
       </div>
 
-      <p className="text-3xl font-black text-white">{formatNumber(value)}</p>
+      <p className="min-h-[38px] text-sm font-bold uppercase tracking-wide text-gray-300 leading-5">
+        {label}
+      </p>
+
+      <p className="mt-3 text-4xl font-black tracking-tight text-white">
+        {value}
+      </p>
+
+      <p className="mt-3 text-xs text-gray-500">
+        {helper}
+      </p>
+    </div>
+  );
+}
+
+function ScoreBreakdownItem({ label, value, total }) {
+  const percent = total > 0 ? Math.min(100, Math.round((value / total) * 100)) : 0;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="mb-2 flex items-center justify-between gap-4">
+        <p className="text-sm font-bold text-white">{label}</p>
+        <p className="text-sm font-black text-cyan-300">{formatNumber(value)}</p>
+      </div>
+
+      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-cyan-400"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      <p className="mt-2 text-xs text-gray-500">{percent}% of total max score</p>
     </div>
   );
 }
@@ -579,25 +694,41 @@ function buildPayload(form) {
 }
 
 function validateForm(form) {
-  const fields = Object.keys(EMPTY_FORM).filter((field) => field !== "reason");
+  const errors = {};
+  const numberFields = Object.keys(EMPTY_FORM).filter(
+    (field) => field !== "reason"
+  );
 
-  for (const field of fields) {
-    const value = Number(form[field]);
+  numberFields.forEach((field) => {
+    const rawValue = String(form[field] ?? "").trim();
 
-    if (Number.isNaN(value) || value < 0) {
-      return `${formatLabel(field)} must be a valid number greater than or equal to 0.`;
+    if (!rawValue) {
+      errors[field] = `${formatLabel(field)} is required.`;
+      return;
     }
+
+    if (!/^\d+(\.\d+)?$/.test(rawValue)) {
+      errors[field] = `${formatLabel(field)} must be a valid number.`;
+      return;
+    }
+
+    if (Number(rawValue) < 0) {
+      errors[field] = `${formatLabel(field)} must be greater than or equal to 0.`;
+    }
+  });
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Update Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Update Reason must be at least 10 characters.";
   }
 
-  if (!String(form.reason || "").trim()) {
-    return "Please enter update reason.";
-  }
-
-  if (String(form.reason || "").trim().length < 10) {
-    return "Update reason must be at least 10 characters.";
-  }
-
-  return "";
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function formatNumber(value) {

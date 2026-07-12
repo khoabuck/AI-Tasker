@@ -69,12 +69,15 @@ const ROW_OPTIONS = [5, 10, 20, 50];
       setError("");
 
       try {
-        const data = await transactionService.getMyTransactions();
-        console.log("Transactions API data:", data);
-        console.log("First transaction:", data?.[0]);
-        setTransactions(data);
+        const list = await transactionService.getMyTransactions();
+
+        setTransactions(list);
       } catch (err) {
-        setError(err?.response?.data?.message || "Unable to load transaction history.");
+        console.error(err);
+        setError(
+          err?.response?.data?.message ||
+          "Unable to load transaction history."
+        );
       } finally {
         setLoading(false);
       }
@@ -245,7 +248,7 @@ useEffect(() => {
           <span className="material-symbols-outlined text-[18px]">
             arrow_back
           </span>
-          Back 
+          Back
         </button>
 
         {/* Header */}
@@ -254,16 +257,13 @@ useEffect(() => {
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Transactions</h2>
             <p style={{ color: "#8c90a0", fontSize: 15 }}>Detailed history of your ecosystem's fiscal flow</p>
           </div>
-          {/* TODO (BE): onClick gọi API export */}
-          <button onClick={handleExport}
-            style={{ padding: "10px 20px", background: "#1772eb", color: "#fff", fontFamily: "JetBrains Mono, monospace", fontSize: 11, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>download</span>
-            Export
-          </button>
+
         </div>
 
+
         {/* Filters */}
-        <div className="relative z-[100] mb-6 flex flex-wrap items-center gap-3 overflow-visible rounded-2xl border border-white/[0.08] bg-gradient-to-b from-[#1d2026]/60 to-[#15171c]/60 p-4 shadow-[0_8px_24px_rgba(0,0,0,0.25)] backdrop-blur-xl">
+        <div className="relative z-[100] mb-6 flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-[#0d1017]/70 p-3 backdrop-blur-2xl">
+
           {/* Date */}
           <div className="relative">
             <button
@@ -274,23 +274,25 @@ useEffect(() => {
                 setStatusOpen(false);
                 setRowsOpen(false);
               }}
-              className={`flex min-w-[190px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
-                dateOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              className={`group flex min-w-[180px] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-sm transition-all duration-200 ${
+                dateOpen
+                  ? "bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-inset ring-cyan-400/50"
+                  : "bg-white/[0.03] text-slate-300 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.05] hover:ring-white/[0.12]"
               }`}
             >
               <span className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-cyan-400">
+                <span className={`material-symbols-outlined text-[16px] ${dateOpen ? "text-cyan-300" : "text-slate-500 group-hover:text-slate-400"}`}>
                   calendar_month
                 </span>
-                {DATE_OPTIONS.find((item) => item.value === dateRange)?.label}
+                <span className="font-medium">{DATE_OPTIONS.find((item) => item.value === dateRange)?.label}</span>
               </span>
-              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${dateOpen ? "rotate-180" : ""}`}>
+              <span className={`material-symbols-outlined text-[16px] text-slate-500 transition-transform duration-200 ${dateOpen ? "rotate-180 text-cyan-300" : ""}`}>
                 expand_more
               </span>
             </button>
 
             {dateOpen && (
-              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {DATE_OPTIONS.map((item) => (
                   <button
                     key={item.value}
@@ -300,12 +302,13 @@ useEffect(() => {
                       setPage(1);
                       setDateOpen(false);
                     }}
-                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
                       dateRange === item.value
-                        ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
-                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                        ? "bg-cyan-400/10 text-cyan-300"
+                        : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
                     }`}
                   >
+                    {dateRange === item.value && <span className="h-1 w-1 rounded-full bg-cyan-300" />}
                     {item.label}
                   </button>
                 ))}
@@ -323,21 +326,23 @@ useEffect(() => {
                 setStatusOpen(false);
                 setRowsOpen(false);
               }}
-              className={`flex min-w-[210px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
-                typeOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              className={`flex min-w-[200px] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-sm transition-all duration-200 ${
+                typeOpen
+                  ? "bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-inset ring-cyan-400/50"
+                  : "bg-white/[0.03] text-slate-300 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.05] hover:ring-white/[0.12]"
               }`}
             >
-              <span>
-                <span className="mr-2 text-[#8c90a0]">Type:</span>
-                {filterType}
+              <span className="flex items-center gap-1.5">
+                <span className="text-slate-500">Type</span>
+                <span className="font-medium">{filterType}</span>
               </span>
-              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${typeOpen ? "rotate-180" : ""}`}>
+              <span className={`material-symbols-outlined text-[16px] text-slate-500 transition-transform duration-200 ${typeOpen ? "rotate-180 text-cyan-300" : ""}`}>
                 expand_more
               </span>
             </button>
 
             {typeOpen && (
-              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {TYPE_OPTIONS.map((item) => (
                   <button
                     key={item}
@@ -347,12 +352,13 @@ useEffect(() => {
                       setPage(1);
                       setTypeOpen(false);
                     }}
-                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
-                    filterType === item
-                      ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
-                      : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
-                  }`}
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
+                      filterType === item
+                        ? "bg-cyan-400/10 text-cyan-300"
+                        : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
+                    }`}
                   >
+                    {filterType === item && <span className="h-1 w-1 rounded-full bg-cyan-300" />}
                     {item}
                   </button>
                 ))}
@@ -370,21 +376,23 @@ useEffect(() => {
                 setTypeOpen(false);
                 setRowsOpen(false);
               }}
-              className={`flex min-w-[170px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
-                statusOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              className={`flex min-w-[160px] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-sm transition-all duration-200 ${
+                statusOpen
+                  ? "bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-inset ring-cyan-400/50"
+                  : "bg-white/[0.03] text-slate-300 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.05] hover:ring-white/[0.12]"
               }`}
             >
-              <span>
-                <span className="mr-2 text-[#8c90a0]">Status:</span>
-                {filterStatus}
+              <span className="flex items-center gap-1.5">
+                <span className="text-slate-500">Status</span>
+                <span className="font-medium">{filterStatus}</span>
               </span>
-              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${statusOpen ? "rotate-180" : ""}`}>
+              <span className={`material-symbols-outlined text-[16px] text-slate-500 transition-transform duration-200 ${statusOpen ? "rotate-180 text-cyan-300" : ""}`}>
                 expand_more
               </span>
             </button>
 
             {statusOpen && (
-              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {STATUS_OPTIONS.map((item) => (
                   <button
                     key={item}
@@ -394,12 +402,13 @@ useEffect(() => {
                       setPage(1);
                       setStatusOpen(false);
                     }}
-                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
                       filterStatus === item
-                        ? "bg-cyan-400/[0.06] text-cyan-300 border-l-2 border-cyan-400"
-                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                        ? "bg-cyan-400/10 text-cyan-300"
+                        : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
                     }`}
                   >
+                    {filterStatus === item && <span className="h-1 w-1 rounded-full bg-cyan-300" />}
                     {item}
                   </button>
                 ))}
@@ -417,21 +426,23 @@ useEffect(() => {
                 setTypeOpen(false);
                 setStatusOpen(false);
               }}
-              className={`flex min-w-[120px] items-center justify-between rounded-xl border bg-gradient-to-b from-[#161b24] to-[#0f1318] px-4 py-3 text-sm text-[#e1e2eb] shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_2px_8px_rgba(0,0,0,0.3)] transition-all duration-200 hover:border-cyan-400/50 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_2px_12px_rgba(0,240,255,0.12)] ${
-                rowsOpen ? "border-cyan-400/45 shadow-[0_0_14px_rgba(0,240,255,0.12)]" : "border-cyan-400/20"
+              className={`flex min-w-[110px] items-center justify-between gap-3 rounded-xl px-4 py-2.5 text-sm transition-all duration-200 ${
+                rowsOpen
+                  ? "bg-cyan-400/[0.08] text-cyan-300 ring-1 ring-inset ring-cyan-400/50"
+                  : "bg-white/[0.03] text-slate-300 ring-1 ring-inset ring-white/[0.06] hover:bg-white/[0.05] hover:ring-white/[0.12]"
               }`}
             >
-              <span>
-                <span className="mr-2 text-[#8c90a0]">Rows:</span>
-                {pageSize}
+              <span className="flex items-center gap-1.5">
+                <span className="text-slate-500">Rows</span>
+                <span className="font-medium">{pageSize}</span>
               </span>
-              <span className={`material-symbols-outlined text-[18px] text-cyan-300 transition-transform duration-200 ${rowsOpen ? "rotate-180" : ""}`}>
+              <span className={`material-symbols-outlined text-[16px] text-slate-500 transition-transform duration-200 ${rowsOpen ? "rotate-180 text-cyan-300" : ""}`}>
                 expand_more
               </span>
             </button>
 
             {rowsOpen && (
-              <div className="absolute left-0 top-full z-[9999] mt-2 w-full overflow-hidden rounded-xl border border-cyan-400/30 bg-[#0a0e16] shadow-[0_12px_28px_rgba(0,0,0,0.45),0_0_0_1px_rgba(0,240,255,0.08)]">
+              <div className="scrollbar-none absolute left-0 top-[calc(100%+8px)] z-[9999] max-h-[132px] w-full overflow-y-auto rounded-xl bg-[#0a0d13] p-1 shadow-[0_16px_40px_rgba(0,0,0,0.6)] ring-1 ring-inset ring-cyan-400/20">
                 {ROW_OPTIONS.map((item) => (
                   <button
                     key={item}
@@ -441,12 +452,13 @@ useEffect(() => {
                       setPage(1);
                       setRowsOpen(false);
                     }}
-                    className={`w-full px-4 py-3 text-left text-sm transition-all duration-200 ${
+                    className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
                       pageSize === item
-                        ? "bg-cyan-400/15 text-cyan-300"
-                        : "text-slate-300 hover:bg-white/[0.04] hover:text-cyan-300"
+                        ? "bg-cyan-400/10 text-cyan-300"
+                        : "text-slate-300 hover:bg-white/[0.05] hover:text-white"
                     }`}
                   >
+                    {pageSize === item && <span className="h-1 w-1 rounded-full bg-cyan-300" />}
                     {item}
                   </button>
                 ))}
@@ -454,16 +466,16 @@ useEffect(() => {
             )}
           </div>
 
+          <div className="mx-1 h-6 w-px bg-white/[0.08]" />
+
           <button onClick={() => {
             setFilterType("All");
             setFilterStatus("All");
             setDateRange("30_DAYS");
             setPage(1);
           }}
-            style={{ fontSize: 11, fontFamily: "JetBrains Mono, monospace", color: "#8c90a0", background: "none", border: "none", cursor: "pointer", textTransform: "uppercase", letterSpacing: "0.1em" }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = "#00F0FF")}
-            onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
-            Clear Filters
+            className="rounded-lg px-3 py-2 text-xs font-medium uppercase tracking-wider text-slate-500 transition-colors duration-200 hover:text-cyan-300">
+            Clear
           </button>
         </div>
 
@@ -617,6 +629,11 @@ useEffect(() => {
         </div>
 
       </div>
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+        .scrollbar-none::-webkit-scrollbar { display: none; }
+      `}</style>
     </ClientLayout>
   );
 }

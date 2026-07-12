@@ -5,15 +5,15 @@ import adminAiManagementService from "../../../services/adminAiManagement.servic
 const EMPTY_SETTINGS_FORM = {
   model: "",
   isEnabled: true,
-  jobAssistantMaxTokens: 3000,
-  expertSkillMaxTokens: 1500,
-  profileReviewMaxTokens: 2000,
-  skillValidatorMaxTokens: 1200,
-  temperature: 0.1,
+  jobAssistantMaxTokens: "3000",
+  expertSkillMaxTokens: "1500",
+  profileReviewMaxTokens: "2000",
+  skillValidatorMaxTokens: "1200",
+  temperature: "0.1",
   jsonObjectResponse: true,
-  monthlyTokenLimit: 1000000,
-  monthlyRequestLimit: 50000,
-  dailyRequestLimitPerUser: 50,
+  monthlyTokenLimit: "1000000",
+  monthlyRequestLimit: "50000",
+  dailyRequestLimitPerUser: "50",
   reason: "",
 };
 
@@ -22,7 +22,7 @@ const EMPTY_MODEL_FORM = {
   displayName: "",
   isEnabled: true,
   supportsJsonObjectResponse: true,
-  maxOutputTokens: 4096,
+  maxOutputTokens: "4096",
   notes: "",
   reason: "",
 };
@@ -31,8 +31,8 @@ const EMPTY_TEST_FORM = {
   model: "",
   message: "",
   jsonObjectResponse: true,
-  maxTokens: 1000,
-  temperature: 0.1,
+  maxTokens: "1000",
+  temperature: "0.1",
 };
 
 const TABS = [
@@ -42,21 +42,35 @@ const TABS = [
   { key: "USAGE", label: "Usage Monitor", icon: "monitoring" },
 ];
 
+const SETTINGS_NUMBER_FIELDS = [
+  "jobAssistantMaxTokens",
+  "expertSkillMaxTokens",
+  "profileReviewMaxTokens",
+  "skillValidatorMaxTokens",
+  "monthlyTokenLimit",
+  "monthlyRequestLimit",
+  "dailyRequestLimitPerUser",
+];
+
 export default function AdminAiManagementPage() {
   const [activeTab, setActiveTab] = useState("SETTINGS");
 
   const [settings, setSettings] = useState(null);
   const [settingsForm, setSettingsForm] = useState(EMPTY_SETTINGS_FORM);
+  const [settingsErrors, setSettingsErrors] = useState({});
 
   const [models, setModels] = useState([]);
   const [modelForm, setModelForm] = useState(EMPTY_MODEL_FORM);
+  const [modelErrors, setModelErrors] = useState({});
+  const [modelModalError, setModelModalError] = useState("");
   const [editingModel, setEditingModel] = useState(null);
   const [showModelModal, setShowModelModal] = useState(false);
 
   const [testForm, setTestForm] = useState(EMPTY_TEST_FORM);
+  const [testErrors, setTestErrors] = useState({});
   const [testResult, setTestResult] = useState(null);
 
-  const [usageDays, setUsageDays] = useState(30);
+  const [usageDays, setUsageDays] = useState("30");
   const [usageSummary, setUsageSummary] = useState(null);
   const [usageByFeature, setUsageByFeature] = useState([]);
   const [usageLogs, setUsageLogs] = useState([]);
@@ -76,6 +90,7 @@ export default function AdminAiManagementPage() {
 
   useEffect(() => {
     loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadInitialData = async () => {
@@ -83,15 +98,27 @@ export default function AdminAiManagementPage() {
       setLoading(true);
       setError("");
       setSuccess("");
+      setSettingsErrors({});
+      setTestErrors({});
 
-      const [settingsResult, modelsResult, summaryResult, featureResult, logsResult] =
-        await Promise.allSettled([
-          adminAiManagementService.getSettings(),
-          adminAiManagementService.getModels(),
-          adminAiManagementService.getUsageSummary(usageDays),
-          adminAiManagementService.getUsageByFeature(usageDays),
-          adminAiManagementService.getUsageLogs(100, usageDays),
-        ]);
+      const days = normalizePositiveInteger(usageDays, 30);
+
+      const [
+        settingsResult,
+        modelsResult,
+        summaryResult,
+        featureResult,
+        logsResult,
+      ] = await Promise.allSettled([
+        adminAiManagementService.getSettings(),
+        adminAiManagementService.getModels(),
+        adminAiManagementService.getUsageSummary(days),
+        adminAiManagementService.getUsageByFeature(days),
+        adminAiManagementService.getUsageLogs(100, days),
+      ]);
+
+      const loadedSettings =
+        settingsResult.status === "fulfilled" ? settingsResult.value : null;
 
       if (settingsResult.status === "fulfilled") {
         applySettings(settingsResult.value);
@@ -100,7 +127,7 @@ export default function AdminAiManagementPage() {
       if (modelsResult.status === "fulfilled") {
         const list = Array.isArray(modelsResult.value) ? modelsResult.value : [];
         setModels(list);
-        syncTestModel(list, settingsResult.value);
+        syncTestModel(list, loadedSettings);
       }
 
       if (summaryResult.status === "fulfilled") {
@@ -108,7 +135,9 @@ export default function AdminAiManagementPage() {
       }
 
       if (featureResult.status === "fulfilled") {
-        setUsageByFeature(Array.isArray(featureResult.value) ? featureResult.value : []);
+        setUsageByFeature(
+          Array.isArray(featureResult.value) ? featureResult.value : []
+        );
       }
 
       if (logsResult.status === "fulfilled") {
@@ -124,7 +153,11 @@ export default function AdminAiManagementPage() {
       ].filter(Boolean);
 
       if (failed.length > 0) {
-        setError(`Some AI management sections could not be loaded: ${failed.join(", ")}.`);
+        setError(
+          `Some AI management sections could not be loaded: ${failed.join(
+            ", "
+          )}.`
+        );
       }
     } catch (err) {
       console.error("LOAD AI MANAGEMENT ERROR:", err?.response?.data || err);
@@ -140,22 +173,25 @@ export default function AdminAiManagementPage() {
     setSettingsForm({
       model: data?.model || "",
       isEnabled: data?.isEnabled ?? true,
-      jobAssistantMaxTokens: data?.jobAssistantMaxTokens ?? 3000,
-      expertSkillMaxTokens: data?.expertSkillMaxTokens ?? 1500,
-      profileReviewMaxTokens: data?.profileReviewMaxTokens ?? 2000,
-      skillValidatorMaxTokens: data?.skillValidatorMaxTokens ?? 1200,
-      temperature: data?.temperature ?? 0.1,
+      jobAssistantMaxTokens: String(data?.jobAssistantMaxTokens ?? 3000),
+      expertSkillMaxTokens: String(data?.expertSkillMaxTokens ?? 1500),
+      profileReviewMaxTokens: String(data?.profileReviewMaxTokens ?? 2000),
+      skillValidatorMaxTokens: String(data?.skillValidatorMaxTokens ?? 1200),
+      temperature: String(data?.temperature ?? 0.1),
       jsonObjectResponse: data?.jsonObjectResponse ?? true,
-      monthlyTokenLimit: data?.monthlyTokenLimit ?? 1000000,
-      monthlyRequestLimit: data?.monthlyRequestLimit ?? 50000,
-      dailyRequestLimitPerUser: data?.dailyRequestLimitPerUser ?? 50,
+      monthlyTokenLimit: String(data?.monthlyTokenLimit ?? 1000000),
+      monthlyRequestLimit: String(data?.monthlyRequestLimit ?? 50000),
+      dailyRequestLimitPerUser: String(data?.dailyRequestLimitPerUser ?? 50),
       reason: "",
     });
   };
 
   const syncTestModel = (modelList, currentSettings) => {
     const currentModel = currentSettings?.model;
-    const firstModel = modelList.find((item) => item.isEnabled)?.model || modelList[0]?.model || "";
+    const firstModel =
+      modelList.find((item) => item.isEnabled)?.model ||
+      modelList[0]?.model ||
+      "";
 
     setTestForm((prev) => ({
       ...prev,
@@ -165,14 +201,28 @@ export default function AdminAiManagementPage() {
 
   const loadUsage = async () => {
     try {
+      const daysText = String(usageDays ?? "").trim();
+
+      if (!daysText) {
+        setError("Days is required.");
+        return;
+      }
+
+      if (!/^\d+$/.test(daysText) || Number(daysText) <= 0) {
+        setError("Days must be a whole number greater than 0.");
+        return;
+      }
+
       setUsageLoading(true);
       setError("");
       setSuccess("");
 
+      const days = Number(daysText);
+
       const [summary, byFeature, logs] = await Promise.all([
-        adminAiManagementService.getUsageSummary(usageDays),
-        adminAiManagementService.getUsageByFeature(usageDays),
-        adminAiManagementService.getUsageLogs(100, usageDays),
+        adminAiManagementService.getUsageSummary(days),
+        adminAiManagementService.getUsageByFeature(days),
+        adminAiManagementService.getUsageLogs(100, days),
       ]);
 
       setUsageSummary(summary);
@@ -187,6 +237,13 @@ export default function AdminAiManagementPage() {
   };
 
   const updateSettingsField = (name, value) => {
+    setError("");
+    setSuccess("");
+    setSettingsErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setSettingsForm((prev) => ({
       ...prev,
       [name]: value,
@@ -194,6 +251,12 @@ export default function AdminAiManagementPage() {
   };
 
   const updateModelField = (name, value) => {
+    setModelModalError("");
+    setModelErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setModelForm((prev) => ({
       ...prev,
       [name]: value,
@@ -201,6 +264,13 @@ export default function AdminAiManagementPage() {
   };
 
   const updateTestField = (name, value) => {
+    setError("");
+    setSuccess("");
+    setTestErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setTestForm((prev) => ({
       ...prev,
       [name]: value,
@@ -208,10 +278,11 @@ export default function AdminAiManagementPage() {
   };
 
   const handleSaveSettings = async () => {
-    const validationError = validateSettings(settingsForm);
+    const validation = validateSettings(settingsForm);
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setSettingsErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
       return;
     }
 
@@ -219,14 +290,18 @@ export default function AdminAiManagementPage() {
       setSavingSettings(true);
       setError("");
       setSuccess("");
+      setSettingsErrors({});
 
-      const updated = await adminAiManagementService.updateSettings(settingsForm);
+      const payload = buildSettingsPayload(settingsForm);
+      const updated = await adminAiManagementService.updateSettings(payload);
 
-      applySettings(updated || {
-        ...settings,
-        ...settingsForm,
-        reason: "",
-      });
+      applySettings(
+        updated || {
+          ...settings,
+          ...payload,
+          reason: "",
+        }
+      );
 
       setSuccess("AI settings have been updated successfully.");
       await loadInitialData();
@@ -241,6 +316,8 @@ export default function AdminAiManagementPage() {
   const openCreateModelModal = () => {
     setEditingModel(null);
     setModelForm(EMPTY_MODEL_FORM);
+    setModelErrors({});
+    setModelModalError("");
     setShowModelModal(true);
     setError("");
     setSuccess("");
@@ -253,10 +330,12 @@ export default function AdminAiManagementPage() {
       displayName: model?.displayName || "",
       isEnabled: model?.isEnabled ?? true,
       supportsJsonObjectResponse: model?.supportsJsonObjectResponse ?? true,
-      maxOutputTokens: model?.maxOutputTokens ?? 4096,
+      maxOutputTokens: String(model?.maxOutputTokens ?? 4096),
       notes: model?.notes || "",
       reason: "",
     });
+    setModelErrors({});
+    setModelModalError("");
     setShowModelModal(true);
     setError("");
     setSuccess("");
@@ -268,29 +347,36 @@ export default function AdminAiManagementPage() {
     setShowModelModal(false);
     setEditingModel(null);
     setModelForm(EMPTY_MODEL_FORM);
+    setModelErrors({});
+    setModelModalError("");
   };
 
   const handleSaveModel = async () => {
-    const validationError = validateModel(modelForm, Boolean(editingModel));
+    const validation = validateModel(modelForm, Boolean(editingModel));
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setModelErrors(validation.errors);
+      setModelModalError("Please fix the highlighted fields.");
       return;
     }
 
     try {
       setSavingModel(true);
+      setModelModalError("");
+      setModelErrors({});
       setError("");
       setSuccess("");
+
+      const payload = buildModelPayload(modelForm);
 
       if (editingModel) {
         await adminAiManagementService.updateModel(
           editingModel.aiAllowedModelId,
-          modelForm
+          payload
         );
         setSuccess("AI model has been updated successfully.");
       } else {
-        await adminAiManagementService.createModel(modelForm);
+        await adminAiManagementService.createModel(payload);
         setSuccess("AI model has been created successfully.");
       }
 
@@ -300,17 +386,18 @@ export default function AdminAiManagementPage() {
       setModels(Array.isArray(updatedModels) ? updatedModels : []);
     } catch (err) {
       console.error("SAVE AI MODEL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot save AI model."));
+      setModelModalError(getFriendlyError(err, "Cannot save AI model."));
     } finally {
       setSavingModel(false);
     }
   };
 
   const handleTestAi = async () => {
-    const validationError = validateTest(testForm);
+    const validation = validateTest(testForm);
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setTestErrors(validation.errors);
+      setError("Please fix the highlighted fields before running the test.");
       return;
     }
 
@@ -318,9 +405,10 @@ export default function AdminAiManagementPage() {
       setTesting(true);
       setError("");
       setSuccess("");
+      setTestErrors({});
       setTestResult(null);
 
-      const result = await adminAiManagementService.testAi(testForm);
+      const result = await adminAiManagementService.testAi(buildTestPayload(testForm));
 
       setTestResult(result);
       setSuccess("AI test completed.");
@@ -347,7 +435,8 @@ export default function AdminAiManagementPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Manage AI settings, allowed models, test model responses, and monitor token usage.
+              Manage global AI settings, allowed models, test model responses,
+              and monitor token usage across the platform.
             </p>
           </div>
 
@@ -364,7 +453,7 @@ export default function AdminAiManagementPage() {
         {error && (
           <Alert
             type="danger"
-            title="Action failed"
+            title="Please check your input"
             message={error}
             onClose={() => setError("")}
           />
@@ -393,7 +482,7 @@ export default function AdminAiManagementPage() {
                 icon="smart_toy"
                 label="AI Status"
                 value={settingsForm.isEnabled ? "Enabled" : "Disabled"}
-                description={settings?.provider || "Provider"}
+                description={settings?.provider || "Global AI availability"}
                 tone={settingsForm.isEnabled ? "green" : "red"}
               />
 
@@ -401,7 +490,7 @@ export default function AdminAiManagementPage() {
                 icon="memory"
                 label="Current Model"
                 value={settingsForm.model || "N/A"}
-                description="Main AI model"
+                description="Primary model for AI features"
                 tone="cyan"
               />
 
@@ -409,7 +498,9 @@ export default function AdminAiManagementPage() {
                 icon="token"
                 label="Monthly Tokens"
                 value={formatNumber(usageSummary?.totalTokens || 0)}
-                description={`${formatPercent(usageSummary?.tokenUsagePercent)} used`}
+                description={`${formatPercent(
+                  usageSummary?.tokenUsagePercent
+                )} used`}
                 tone="purple"
               />
 
@@ -417,7 +508,11 @@ export default function AdminAiManagementPage() {
                 icon="receipt_long"
                 label="Requests"
                 value={formatNumber(usageSummary?.totalRequests || 0)}
-                description={`${formatNumber(usageSummary?.successfulRequests || 0)} success · ${formatNumber(usageSummary?.failedRequests || 0)} failed`}
+                description={`${formatNumber(
+                  usageSummary?.successfulRequests || 0
+                )} success · ${formatNumber(
+                  usageSummary?.failedRequests || 0
+                )} failed`}
                 tone="yellow"
               />
             </section>
@@ -428,7 +523,11 @@ export default function AdminAiManagementPage() {
                   <button
                     key={tab.key}
                     type="button"
-                    onClick={() => setActiveTab(tab.key)}
+                    onClick={() => {
+                      setActiveTab(tab.key);
+                      setError("");
+                      setSuccess("");
+                    }}
                     className={`inline-flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-bold transition ${
                       activeTab === tab.key
                         ? "bg-cyan-400 text-black"
@@ -447,6 +546,7 @@ export default function AdminAiManagementPage() {
             {activeTab === "SETTINGS" && (
               <SettingsTab
                 form={settingsForm}
+                errors={settingsErrors}
                 models={enabledModels}
                 saving={savingSettings}
                 onChange={updateSettingsField}
@@ -465,6 +565,7 @@ export default function AdminAiManagementPage() {
             {activeTab === "TEST" && (
               <TestTab
                 form={testForm}
+                errors={testErrors}
                 models={models}
                 result={testResult}
                 testing={testing}
@@ -491,6 +592,8 @@ export default function AdminAiManagementPage() {
           <ModelModal
             title={editingModel ? "Edit AI Model" : "Create AI Model"}
             form={modelForm}
+            errors={modelErrors}
+            modalError={modelModalError}
             isEdit={Boolean(editingModel)}
             loading={savingModel}
             onChange={updateModelField}
@@ -503,14 +606,15 @@ export default function AdminAiManagementPage() {
   );
 }
 
-function SettingsTab({ form, models, saving, onChange, onSave }) {
+function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-      <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="mb-6 flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-xl font-bold text-white">AI Settings</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Configure global AI behavior and usage limits.
+          <p className="mt-1 text-sm leading-6 text-gray-400">
+            Configure the default model, response mode, token budgets, and
+            request limits used by AI features.
           </p>
         </div>
 
@@ -524,100 +628,141 @@ function SettingsTab({ form, models, saving, onChange, onSave }) {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        <SelectInput
-          label="Current Model"
-          value={form.model}
-          onChange={(value) => onChange("model", value)}
-          options={models.map((item) => ({
-            value: item.model,
-            label: `${item.displayName || item.model} (${item.model})`,
-          }))}
-        />
+      <FormSection
+        icon="memory"
+        title="Model Settings"
+        description="Choose the default model and response format."
+      >
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <SelectInput
+            label="Current Model"
+            required
+            value={form.model}
+            error={errors.model}
+            onChange={(value) => onChange("model", value)}
+            options={models.map((item) => ({
+              value: item.model,
+              label: `${item.displayName || item.model} (${item.model})`,
+            }))}
+          />
 
-        <SwitchInput
-          label="AI Enabled"
-          value={form.isEnabled}
-          onChange={(value) => onChange("isEnabled", value)}
-        />
+          <SwitchInput
+            label="AI Enabled"
+            value={form.isEnabled}
+            onChange={(value) => onChange("isEnabled", value)}
+          />
 
-        <SwitchInput
-          label="JSON Object Response"
-          value={form.jsonObjectResponse}
-          onChange={(value) => onChange("jsonObjectResponse", value)}
-        />
+          <SwitchInput
+            label="JSON Object Response"
+            value={form.jsonObjectResponse}
+            onChange={(value) => onChange("jsonObjectResponse", value)}
+          />
+        </div>
+      </FormSection>
 
-        <NumberInput
-          label="Job Assistant Max Tokens"
-          value={form.jobAssistantMaxTokens}
-          onChange={(value) => onChange("jobAssistantMaxTokens", value)}
-        />
+      <FormSection
+        icon="token"
+        title="Token Limits"
+        description="Set the maximum output token budget for each AI feature."
+      >
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <NumberInput
+            label="Job Assistant Max Tokens"
+            required
+            value={form.jobAssistantMaxTokens}
+            error={errors.jobAssistantMaxTokens}
+            onChange={(value) => onChange("jobAssistantMaxTokens", value)}
+          />
 
-        <NumberInput
-          label="Expert Skill Max Tokens"
-          value={form.expertSkillMaxTokens}
-          onChange={(value) => onChange("expertSkillMaxTokens", value)}
-        />
+          <NumberInput
+            label="Expert Skill Max Tokens"
+            required
+            value={form.expertSkillMaxTokens}
+            error={errors.expertSkillMaxTokens}
+            onChange={(value) => onChange("expertSkillMaxTokens", value)}
+          />
 
-        <NumberInput
-          label="Profile Review Max Tokens"
-          value={form.profileReviewMaxTokens}
-          onChange={(value) => onChange("profileReviewMaxTokens", value)}
-        />
+          <NumberInput
+            label="Profile Review Max Tokens"
+            required
+            value={form.profileReviewMaxTokens}
+            error={errors.profileReviewMaxTokens}
+            onChange={(value) => onChange("profileReviewMaxTokens", value)}
+          />
 
-        <NumberInput
-          label="Skill Validator Max Tokens"
-          value={form.skillValidatorMaxTokens}
-          onChange={(value) => onChange("skillValidatorMaxTokens", value)}
-        />
+          <NumberInput
+            label="Skill Validator Max Tokens"
+            required
+            value={form.skillValidatorMaxTokens}
+            error={errors.skillValidatorMaxTokens}
+            onChange={(value) => onChange("skillValidatorMaxTokens", value)}
+          />
 
-        <NumberInput
-          label="Temperature"
-          value={form.temperature}
-          step="0.01"
-          onChange={(value) => onChange("temperature", value)}
-        />
+          <NumberInput
+            label="Temperature"
+            required
+            value={form.temperature}
+            error={errors.temperature}
+            helper="Allowed range: 0 to 2."
+            onChange={(value) => onChange("temperature", value)}
+          />
+        </div>
+      </FormSection>
 
-        <NumberInput
-          label="Daily Request Limit / User"
-          value={form.dailyRequestLimitPerUser}
-          onChange={(value) => onChange("dailyRequestLimitPerUser", value)}
-        />
+      <FormSection
+        icon="speed"
+        title="Request Limits"
+        description="Control monthly and daily usage limits."
+      >
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <NumberInput
+            label="Daily Request Limit / User"
+            required
+            value={form.dailyRequestLimitPerUser}
+            error={errors.dailyRequestLimitPerUser}
+            onChange={(value) => onChange("dailyRequestLimitPerUser", value)}
+          />
 
-        <NumberInput
-          label="Monthly Token Limit"
-          value={form.monthlyTokenLimit}
-          onChange={(value) => onChange("monthlyTokenLimit", value)}
-        />
+          <NumberInput
+            label="Monthly Token Limit"
+            required
+            value={form.monthlyTokenLimit}
+            error={errors.monthlyTokenLimit}
+            onChange={(value) => onChange("monthlyTokenLimit", value)}
+          />
 
-        <NumberInput
-          label="Monthly Request Limit"
-          value={form.monthlyRequestLimit}
-          onChange={(value) => onChange("monthlyRequestLimit", value)}
-        />
-      </div>
+          <NumberInput
+            label="Monthly Request Limit"
+            required
+            value={form.monthlyRequestLimit}
+            error={errors.monthlyRequestLimit}
+            onChange={(value) => onChange("monthlyRequestLimit", value)}
+          />
+        </div>
+      </FormSection>
 
-      <div className="mt-5">
-        <TextArea
-          label="Reason"
-          value={form.reason}
-          rows={3}
-          onChange={(value) => onChange("reason", value)}
-          placeholder="Example: Update model and request limits for production."
-        />
-      </div>
+      <TextArea
+        label="Reason"
+        required
+        value={form.reason}
+        error={errors.reason}
+        rows={3}
+        onChange={(value) => onChange("reason", value)}
+        placeholder="Example: Update model and request limits for production."
+      />
     </section>
   );
 }
-
 function ModelsTab({ models, onCreate, onEdit }) {
+  const enabledCount = models.filter((item) => item.isEnabled).length;
+
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
       <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-bold text-white">Allowed Models</h2>
           <p className="mt-1 text-sm text-gray-500">
-            Showing {models.length} configured model(s).
+            {enabledCount} active of {models.length} configured model(s).
           </p>
         </div>
 
@@ -634,7 +779,7 @@ function ModelsTab({ models, onCreate, onEdit }) {
         <EmptyState
           icon="smart_toy"
           title="No models found"
-          description="Create at least one allowed AI model."
+          description="Create at least one allowed AI model before enabling AI features."
         />
       ) : (
         <div className="divide-y divide-white/10">
@@ -660,13 +805,17 @@ function ModelsTab({ models, onCreate, onEdit }) {
                   </p>
 
                   <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
-                    {item.notes || "No notes."}
+                    {item.notes || "No notes provided."}
                   </p>
                 </div>
 
                 <InfoBlock
                   label="JSON Response"
-                  value={item.supportsJsonObjectResponse ? "Supported" : "Not supported"}
+                  value={
+                    item.supportsJsonObjectResponse
+                      ? "Supported"
+                      : "Not supported"
+                  }
                 />
 
                 <InfoBlock
@@ -692,19 +841,21 @@ function ModelsTab({ models, onCreate, onEdit }) {
   );
 }
 
-function TestTab({ form, models, result, testing, onChange, onTest }) {
+function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
       <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
         <h2 className="text-xl font-bold text-white">Test AI Model</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Send a test message before using a model in production.
+          Send a controlled test prompt before using a model in production.
         </p>
 
         <div className="mt-5 space-y-5">
           <SelectInput
             label="Model"
+            required
             value={form.model}
+            error={errors.model}
             onChange={(value) => onChange("model", value)}
             options={models.map((item) => ({
               value: item.model,
@@ -714,10 +865,12 @@ function TestTab({ form, models, result, testing, onChange, onTest }) {
 
           <TextArea
             label="Message"
+            required
             value={form.message}
+            error={errors.message}
             rows={6}
             onChange={(value) => onChange("message", value)}
-            placeholder="Ask the model to generate a JSON response..."
+            placeholder="Example: Generate a short JSON response with title and summary."
           />
 
           <SwitchInput
@@ -728,14 +881,18 @@ function TestTab({ form, models, result, testing, onChange, onTest }) {
 
           <NumberInput
             label="Max Tokens"
+            required
             value={form.maxTokens}
+            error={errors.maxTokens}
             onChange={(value) => onChange("maxTokens", value)}
           />
 
           <NumberInput
             label="Temperature"
+            required
             value={form.temperature}
-            step="0.01"
+            error={errors.temperature}
+            helper="Allowed range: 0 to 2."
             onChange={(value) => onChange("temperature", value)}
           />
 
@@ -751,7 +908,12 @@ function TestTab({ form, models, result, testing, onChange, onTest }) {
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-        <h2 className="text-xl font-bold text-white">Test Result</h2>
+        <div className="mb-5">
+          <h2 className="text-xl font-bold text-white">Test Result</h2>
+          <p className="mt-1 text-sm text-gray-400">
+            Response and metadata returned by the AI test endpoint.
+          </p>
+        </div>
 
         {!result ? (
           <EmptyState
@@ -760,12 +922,184 @@ function TestTab({ form, models, result, testing, onChange, onTest }) {
             description="Run a test to see the AI response here."
           />
         ) : (
-          <pre className="mt-5 max-h-[620px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-sm leading-6 text-gray-200 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {JSON.stringify(result, null, 2)}
-          </pre>
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <MiniMetric
+                label="Model"
+                value={result.model || result.Model || form.model || "N/A"}
+              />
+              <MiniMetric
+                label="Status"
+                value={result.status || result.Status || "Completed"}
+              />
+              <MiniMetric
+                label="Tokens"
+                value={formatNumber(
+                  result.totalTokens ||
+                    result.TotalTokens ||
+                    result.tokenCount ||
+                    result.TokenCount ||
+                    0
+                )}
+              />
+            </div>
+
+            <TestResultPanel result={result} form={form} />
+          </div>
         )}
       </div>
     </section>
+  );
+}
+
+function TestResultPanel({ result, form }) {
+  const provider = result.provider || "N/A";
+  const model = result.model || form.model;
+  const status = result.status || "SUCCESS";
+
+  const latency = result.latencyMs || 0;
+  const totalTokens = result.totalTokens || 0;
+
+  const content = extractAiContent(result);
+
+  return (
+    <div className="space-y-6">
+      <section className="rounded-2xl border border-white/10 bg-[#171d27] overflow-hidden">
+
+        <div className="flex items-center justify-between border-b border-white/10 px-6 py-5">
+          <div>
+            <h3 className="text-xl font-bold text-white">
+              AI Test Result
+            </h3>
+
+            <p className="mt-1 text-sm text-gray-400">
+              Preview the response returned by the selected AI model.
+            </p>
+          </div>
+
+          <span
+            className={`rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider ${getResultStatusClass(
+              status
+            )}`}
+          >
+            {status}
+          </span>
+        </div>
+
+        <div className="p-6">
+
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/5 p-5">
+
+            <div className="flex items-center gap-3 mb-4">
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-cyan-400/10 border border-cyan-400/20">
+                <span className="material-symbols-outlined text-cyan-300">
+                  smart_toy
+                </span>
+              </div>
+
+              <div>
+                <h4 className="font-bold text-white">
+                  AI Response
+                </h4>
+
+                <p className="text-sm text-gray-500">
+                  Generated content
+                </p>
+              </div>
+
+            </div>
+
+            <div className="rounded-xl bg-[#0f141c] border border-white/10 p-5">
+
+              <p className="whitespace-pre-wrap leading-8 text-gray-200 text-[15px]">
+                {content || "No response returned."}
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+
+              <p className="text-xs uppercase tracking-wider text-gray-500">
+                Provider
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-white">
+                {provider}
+              </p>
+
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+
+              <p className="text-xs uppercase tracking-wider text-gray-500">
+                AI Model
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-white">
+                {model}
+              </p>
+
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+
+              <p className="text-xs uppercase tracking-wider text-gray-500">
+                Response Time
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-white">
+                {latency} ms
+              </p>
+
+            </div>
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5">
+
+              <p className="text-xs uppercase tracking-wider text-gray-500">
+                Total Tokens Used
+              </p>
+
+              <p className="mt-2 text-lg font-bold text-white">
+                {formatNumber(totalTokens)}
+              </p>
+
+            </div>
+
+          </div>
+
+          <div className="mt-6 rounded-xl border border-green-500/20 bg-green-500/10 p-4">
+
+            <div className="flex items-center gap-3">
+
+              <span className="material-symbols-outlined text-green-400">
+                verified
+              </span>
+
+              <div>
+
+                <p className="font-semibold text-green-300">
+                  AI Test Completed Successfully
+                </p>
+
+                <p className="text-sm text-green-200/80">
+                  The selected AI model is responding normally.
+                </p>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+      </section>
+    </div>
   );
 }
 
@@ -785,22 +1119,23 @@ function UsageTab({
           <div>
             <h2 className="text-xl font-bold text-white">Usage Monitor</h2>
             <p className="mt-1 text-sm text-gray-400">
-              Monitor AI requests, token usage, and failed calls.
+              Monitor AI requests, token usage, failed calls, and estimated cost.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-end gap-3">
             <NumberInput
               label="Days"
+              required
               value={days}
-              onChange={(value) => onDaysChange(Number(value || 30))}
+              onChange={(value) => onDaysChange(value)}
             />
 
             <button
               type="button"
               onClick={onReload}
               disabled={loading}
-              className="self-end rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Loading..." : "Reload Usage"}
             </button>
@@ -808,19 +1143,46 @@ function UsageTab({
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MiniMetric label="Total Requests" value={formatNumber(summary?.totalRequests)} />
-          <MiniMetric label="Successful" value={formatNumber(summary?.successfulRequests)} />
-          <MiniMetric label="Failed" value={formatNumber(summary?.failedRequests)} />
-          <MiniMetric label="Total Tokens" value={formatNumber(summary?.totalTokens)} />
-          <MiniMetric label="Prompt Tokens" value={formatNumber(summary?.totalPromptTokens)} />
-          <MiniMetric label="Completion Tokens" value={formatNumber(summary?.totalCompletionTokens)} />
-          <MiniMetric label="Token Usage" value={formatPercent(summary?.tokenUsagePercent)} />
-          <MiniMetric label="Request Usage" value={formatPercent(summary?.requestUsagePercent)} />
+          <MiniMetric
+            label="Total Requests"
+            value={formatNumber(summary?.totalRequests)}
+          />
+          <MiniMetric
+            label="Successful"
+            value={formatNumber(summary?.successfulRequests)}
+          />
+          <MiniMetric
+            label="Failed"
+            value={formatNumber(summary?.failedRequests)}
+          />
+          <MiniMetric
+            label="Total Tokens"
+            value={formatNumber(summary?.totalTokens)}
+          />
+          <MiniMetric
+            label="Prompt Tokens"
+            value={formatNumber(summary?.totalPromptTokens)}
+          />
+          <MiniMetric
+            label="Completion Tokens"
+            value={formatNumber(summary?.totalCompletionTokens)}
+          />
+          <MiniMetric
+            label="Token Usage"
+            value={formatPercent(summary?.tokenUsagePercent)}
+          />
+          <MiniMetric
+            label="Request Usage"
+            value={formatPercent(summary?.requestUsagePercent)}
+          />
         </div>
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
         <h2 className="text-xl font-bold text-white">Usage By Feature</h2>
+        <p className="mt-1 text-sm text-gray-400">
+          Breakdown of AI usage by system feature.
+        </p>
 
         <div className="mt-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <table className="min-w-full divide-y divide-white/10">
@@ -859,6 +1221,9 @@ function UsageTab({
 
       <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
         <h2 className="text-xl font-bold text-white">Recent AI Logs</h2>
+        <p className="mt-1 text-sm text-gray-400">
+          Latest AI calls and error details.
+        </p>
 
         <div className="mt-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <table className="min-w-[1100px] divide-y divide-white/10">
@@ -909,6 +1274,8 @@ function UsageTab({
 function ModelModal({
   title,
   form,
+  errors,
+  modalError,
   isEdit,
   loading,
   onChange,
@@ -926,10 +1293,18 @@ function ModelModal({
         </div>
 
         <div className="max-h-[68vh] space-y-4 overflow-y-auto px-5 py-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {modalError && (
+            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+              {modalError}
+            </div>
+          )}
+
           {!isEdit && (
             <TextInput
               label="Model"
+              required
               value={form.model}
+              error={errors.model}
               onChange={(value) => onChange("model", value)}
               placeholder="openai/gpt-oss-120b"
             />
@@ -937,7 +1312,9 @@ function ModelModal({
 
           <TextInput
             label="Display Name"
+            required
             value={form.displayName}
+            error={errors.displayName}
             onChange={(value) => onChange("displayName", value)}
             placeholder="GPT OSS 120B"
           />
@@ -952,12 +1329,16 @@ function ModelModal({
             <SwitchInput
               label="Supports JSON Object Response"
               value={form.supportsJsonObjectResponse}
-              onChange={(value) => onChange("supportsJsonObjectResponse", value)}
+              onChange={(value) =>
+                onChange("supportsJsonObjectResponse", value)
+              }
             />
 
             <NumberInput
               label="Max Output Tokens"
+              required
               value={form.maxOutputTokens}
+              error={errors.maxOutputTokens}
               onChange={(value) => onChange("maxOutputTokens", value)}
             />
           </div>
@@ -972,7 +1353,9 @@ function ModelModal({
 
           <TextArea
             label="Reason"
+            required
             value={form.reason}
+            error={errors.reason}
             rows={3}
             onChange={(value) => onChange("reason", value)}
             placeholder="Example: Add new model for production testing."
@@ -1002,6 +1385,26 @@ function ModelModal({
     </div>
   );
 }
+function FormSection({ icon, title, description, children }) {
+  return (
+    <section className="mb-8">
+      <div className="mb-5 flex gap-3 border-b border-white/10 pb-4">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined">{icon}</span>
+        </div>
+
+        <div>
+          <h3 className="font-bold text-white">{title}</h3>
+          <p className="mt-1 text-sm leading-6 text-gray-500">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      {children}
+    </section>
+  );
+}
 
 function StatCard({ icon, label, value, description, tone = "cyan" }) {
   const toneClass = {
@@ -1013,7 +1416,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1022,9 +1425,15 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
         <span className="material-symbols-outlined">{icon}</span>
       </div>
 
-      <p className="text-xs uppercase tracking-wider text-gray-500">{label}</p>
-      <p className="mt-2 break-words text-2xl font-bold text-white">{value}</p>
-      <p className="mt-2 text-sm text-gray-400">{description}</p>
+      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-2 break-words text-2xl font-black tracking-tight text-white">
+        {value}
+      </p>
+
+      <p className="mt-auto pt-3 text-sm text-gray-400">{description}</p>
     </div>
   );
 }
@@ -1046,52 +1455,94 @@ function InfoBlock({ label, value }) {
       <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
       </p>
-      <p className="text-sm font-bold text-white">{value}</p>
+      <p className="break-words text-sm font-bold text-white">{value}</p>
     </div>
   );
 }
 
-function TextInput({ label, value, onChange, placeholder }) {
+function TextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`h-11 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
 
-function NumberInput({ label, value, onChange, step = "1" }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  required = false,
+  error = "",
+  helper = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="number"
-        min="0"
-        step={step}
+        type="text"
+        inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none focus:border-cyan-400/50"
+        className={`h-11 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none focus:border-cyan-400/50 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>
+      )}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  rows = 4,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -1099,23 +1550,43 @@ function TextArea({ label, value, onChange, placeholder, rows = 4 }) {
         onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
 
-function SelectInput({ label, value, options, onChange }) {
+function SelectInput({
+  label,
+  value,
+  options,
+  onChange,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-11 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+        className={`h-11 w-full rounded-xl border bg-[#0d1117] px-4 text-sm font-bold text-white outline-none ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       >
         <option value="">Select model</option>
         {options.map((item) => (
@@ -1124,6 +1595,10 @@ function SelectInput({ label, value, options, onChange }) {
           </option>
         ))}
       </select>
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
@@ -1241,31 +1716,171 @@ function Td({ children }) {
 }
 
 function validateSettings(form) {
-  if (!String(form.model || "").trim()) return "Model is required.";
-  if (!String(form.reason || "").trim()) return "Reason is required.";
+  const errors = {};
 
-  if (Number(form.temperature) < 0 || Number(form.temperature) > 2) {
-    return "Temperature must be between 0 and 2.";
+  if (!String(form.model || "").trim()) {
+    errors.model = "Current Model is required.";
   }
 
-  return "";
+  SETTINGS_NUMBER_FIELDS.forEach((field) => {
+    const value = String(form[field] ?? "").trim();
+
+    if (!value) {
+      errors[field] = `${formatLabel(field)} is required.`;
+      return;
+    }
+
+    if (!/^\d+$/.test(value)) {
+      errors[field] = `${formatLabel(field)} must be a whole number.`;
+      return;
+    }
+
+    if (Number(value) <= 0) {
+      errors[field] = `${formatLabel(field)} must be greater than 0.`;
+    }
+  });
+
+  const temperature = String(form.temperature ?? "").trim();
+
+  if (!temperature) {
+    errors.temperature = "Temperature is required.";
+  } else if (!/^\d+(\.\d+)?$/.test(temperature)) {
+    errors.temperature = "Temperature must be a valid number.";
+  } else if (Number(temperature) < 0 || Number(temperature) > 2) {
+    errors.temperature = "Temperature must be between 0 and 2.";
+  }
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Reason must be at least 10 characters.";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function validateModel(form, isEdit) {
-  if (!isEdit && !String(form.model || "").trim()) return "Model is required.";
-  if (!String(form.displayName || "").trim()) return "Display name is required.";
-  if (Number(form.maxOutputTokens) <= 0) return "Max output tokens must be greater than 0.";
-  if (!String(form.reason || "").trim()) return "Reason is required.";
+  const errors = {};
 
-  return "";
+  if (!isEdit && !String(form.model || "").trim()) {
+    errors.model = "Model is required.";
+  }
+
+  if (!String(form.displayName || "").trim()) {
+    errors.displayName = "Display Name is required.";
+  }
+
+  const maxOutputTokens = String(form.maxOutputTokens ?? "").trim();
+
+  if (!maxOutputTokens) {
+    errors.maxOutputTokens = "Max Output Tokens is required.";
+  } else if (!/^\d+$/.test(maxOutputTokens)) {
+    errors.maxOutputTokens = "Max Output Tokens must be a whole number.";
+  } else if (Number(maxOutputTokens) <= 0) {
+    errors.maxOutputTokens = "Max Output Tokens must be greater than 0.";
+  }
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Reason must be at least 10 characters.";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function validateTest(form) {
-  if (!String(form.model || "").trim()) return "Model is required.";
-  if (!String(form.message || "").trim()) return "Message is required.";
-  if (Number(form.maxTokens) <= 0) return "Max tokens must be greater than 0.";
+  const errors = {};
 
-  return "";
+  if (!String(form.model || "").trim()) {
+    errors.model = "Model is required.";
+  }
+
+  if (!String(form.message || "").trim()) {
+    errors.message = "Message is required.";
+  }
+
+  const maxTokens = String(form.maxTokens ?? "").trim();
+
+  if (!maxTokens) {
+    errors.maxTokens = "Max Tokens is required.";
+  } else if (!/^\d+$/.test(maxTokens)) {
+    errors.maxTokens = "Max Tokens must be a whole number.";
+  } else if (Number(maxTokens) <= 0) {
+    errors.maxTokens = "Max Tokens must be greater than 0.";
+  }
+
+  const temperature = String(form.temperature ?? "").trim();
+
+  if (!temperature) {
+    errors.temperature = "Temperature is required.";
+  } else if (!/^\d+(\.\d+)?$/.test(temperature)) {
+    errors.temperature = "Temperature must be a valid number.";
+  } else if (Number(temperature) < 0 || Number(temperature) > 2) {
+    errors.temperature = "Temperature must be between 0 and 2.";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
+function buildSettingsPayload(form) {
+  return {
+    model: String(form.model || "").trim(),
+    isEnabled: Boolean(form.isEnabled),
+    jobAssistantMaxTokens: Number(form.jobAssistantMaxTokens),
+    expertSkillMaxTokens: Number(form.expertSkillMaxTokens),
+    profileReviewMaxTokens: Number(form.profileReviewMaxTokens),
+    skillValidatorMaxTokens: Number(form.skillValidatorMaxTokens),
+    temperature: Number(form.temperature),
+    jsonObjectResponse: Boolean(form.jsonObjectResponse),
+    monthlyTokenLimit: Number(form.monthlyTokenLimit),
+    monthlyRequestLimit: Number(form.monthlyRequestLimit),
+    dailyRequestLimitPerUser: Number(form.dailyRequestLimitPerUser),
+    reason: String(form.reason || "").trim(),
+  };
+}
+
+function buildModelPayload(form) {
+  return {
+    model: String(form.model || "").trim(),
+    displayName: String(form.displayName || "").trim(),
+    isEnabled: Boolean(form.isEnabled),
+    supportsJsonObjectResponse: Boolean(form.supportsJsonObjectResponse),
+    maxOutputTokens: Number(form.maxOutputTokens),
+    notes: String(form.notes || "").trim(),
+    reason: String(form.reason || "").trim(),
+  };
+}
+
+function buildTestPayload(form) {
+  return {
+    model: String(form.model || "").trim(),
+    message: String(form.message || "").trim(),
+    jsonObjectResponse: Boolean(form.jsonObjectResponse),
+    maxTokens: Number(form.maxTokens),
+    temperature: Number(form.temperature),
+  };
+}
+
+function normalizePositiveInteger(value, fallback) {
+  const number = Number(value);
+
+  if (!Number.isInteger(number) || number <= 0) return fallback;
+
+  return number;
 }
 
 function formatNumber(value) {
@@ -1304,12 +1919,24 @@ function formatDate(value) {
   return date.toLocaleString("vi-VN");
 }
 
+function formatLabel(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replace(/([A-Z])/g, " $1")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;
 
   if (status === 401) return "Your session has expired. Please login again.";
   if (status === 403) return "You do not have permission to manage AI settings.";
-  if (status === 404) return "AI management API was not found. Please check backend route.";
+  if (status === 404)
+    return "AI management API was not found. Please check backend route.";
 
   const data = err?.response?.data;
 
@@ -1324,4 +1951,44 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   return err?.message || fallback;
+}
+
+function extractAiContent(result) {
+  const rawContent =
+    result?.content ||
+    result?.Content ||
+    result?.response ||
+    result?.Response ||
+    result?.data ||
+    result?.Data ||
+    "";
+
+  if (!rawContent) return "";
+
+  if (typeof rawContent !== "string") {
+    return JSON.stringify(rawContent, null, 2);
+  }
+
+  const trimmed = rawContent.trim();
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return trimmed;
+  }
+}
+
+function getResultStatusClass(status) {
+  const value = String(status || "").toUpperCase();
+
+  if (value === "SUCCESS" || value === "COMPLETED") {
+    return "border-green-400/30 bg-green-400/10 text-green-300";
+  }
+
+  if (value === "FAILED" || value === "ERROR") {
+    return "border-red-400/30 bg-red-400/10 text-red-300";
+  }
+
+  return "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
 }

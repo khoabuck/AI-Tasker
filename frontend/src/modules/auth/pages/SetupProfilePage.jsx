@@ -10,17 +10,19 @@
 // 2. BE verify qua VietQR tax code lookup
 //    - VERIFIED → hiện companyName + companyAddress (readonly) do AI trả về
 //    - NEEDS_CORRECTION → hiện lỗi + tăng verificationSubmissionCount
-// 3. Khi BE xác định quá số lần sai → BE trả verificationLockedUntil
+// 3. Đạt MAX_ATTEMPTS (5) lần sai → BE trả verificationLockedUntil → BAN 15s
 //    - Trong lúc ban: ẨN nút Submit, hiện alert "Account is banned", hiện nút quay về dashboard
 //    - Hết 15s: tự động unlock, cho submit lại
 
 import { useEffect, useState, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axiosInstance from "../../../api/axiosInstance";
+import { useAuth } from "../../../context/AuthContext";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
+const MAX_ATTEMPTS = 5;
 
 function FieldError({ name, errors }) {
   if (!errors[name]) return null;
@@ -72,6 +74,7 @@ function parseApiError(err) {
 
 export default function SetupProfilePage() {
   const navigate = useNavigate();
+  const { handleLoginSuccess } = useAuth();
 
   const [clientType, setClientType] = useState("individual");
   const [loading, setLoading] = useState(false);
@@ -107,6 +110,25 @@ export default function SetupProfilePage() {
       try {
         const res = await axiosInstance.get("/client-profiles/me");
         const data = res.data;
+
+        if (data?.userStatus === "ACTIVE") {
+        const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+        const updatedUser = {
+          ...currentUser,
+          role: "CLIENT",
+          status: "ACTIVE",
+        };
+
+        handleLoginSuccess({
+          accessToken: localStorage.getItem("accessToken"),
+          user: updatedUser,
+        });
+
+        navigate("/client/dashboard", { replace: true });
+        return;
+      }
+
         const bp = data?.businessProfile || null;
         const isBusiness = data?.clientType === "BUSINESS" || Boolean(bp);
 
@@ -137,7 +159,7 @@ export default function SetupProfilePage() {
       }
     };
     loadProfile();
-  }, []);
+  }, [navigate, handleLoginSuccess]);
 
   // ── Ban countdown — tự update mỗi giây, tự unlock khi hết ─────────
   useEffect(() => {
@@ -177,9 +199,10 @@ export default function SetupProfilePage() {
 
   const locked = clientType === "business" && lockSecondsLeft > 0;
   const attempts = business.verificationSubmissionCount || 0;
+  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - attempts);
 
   const inputClass = (name) =>
-    `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 ${
+    `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 [color-scheme:dark] autofill:shadow-[inset_0_0_0px_1000px_#232A35] autofill:[-webkit-text-fill-color:#e1e2eb] ${
       fieldErrors[name] ? "border-red-500 focus:border-red-500" : "border-white/10 focus:border-cyan-400"
     }`;
 
@@ -210,11 +233,14 @@ export default function SetupProfilePage() {
     const f = clientType === "individual" ? individual : business;
 
     const phoneClean = f.phoneNumber.replace(/[\s-.]/g, "");
-
     if (!f.phoneNumber.trim()) {
-      errors.phoneNumber = "Personal phone number is required.";
-    } else if (!/^(0|84|\+84)(3|5|7|8|9)\d{8}$/.test(phoneClean)) {
-      errors.phoneNumber = "Invalid VN mobile number. Example: 0912345678.";
+      errors.phoneNumber = "Phone number is required.";
+    } else if (
+      !/^(0[3-9]\d{8})$/.test(phoneClean) &&
+      !/^(\+84[3-9]\d{8})$/.test(phoneClean) &&
+      !/^(84[3-9]\d{8})$/.test(phoneClean)
+    ) {
+      errors.phoneNumber = "Invalid VN phone number. Example: 0912345678.";
     }
 
     if (!f.address.trim()) errors.address = "Address is required.";
@@ -236,12 +262,14 @@ export default function SetupProfilePage() {
       }
 
       const bizPhoneClean = business.businessPhone.replace(/[\s-.]/g, "");
-
       if (!business.businessPhone.trim()) {
-        errors.businessPhone = "Company phone number is required.";
-      } else if (!/^(0\d{9,10}|84\d{9,10}|\+84\d{9,10})$/.test(bizPhoneClean)) {
-        errors.businessPhone =
-          "Invalid company phone number. Example: 02812345678 or 0912345678.";
+        errors.businessPhone = "Business phone is required.";
+      } else if (
+        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
+        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
+        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
+      ) {
+        errors.businessPhone = "Invalid business phone.";
       }
     }
 
@@ -271,9 +299,8 @@ export default function SetupProfilePage() {
     }
 
     const count = bp.verificationSubmissionCount || 0;
-    const msg =
-      bp.verificationNote ||
-      "Business verification failed. Please check your tax code.";
+    const remaining = Math.max(0, MAX_ATTEMPTS - count);
+    const msg = bp.verificationNote || "Business verification failed. Please check your tax code.";
 
     if (bp.verificationLockedUntil) {
       const secondsLeft = Math.max(
@@ -289,9 +316,7 @@ export default function SetupProfilePage() {
         alert("Account is banned. Too many failed verification attempts. Please wait 15 seconds.");
       }
     } else {
-      setGlobalError(
-        `Tax code verification failed. Attempt ${count}. Please check your tax code and try again.`
-      );
+      setGlobalError(`${msg} Attempts left: ${remaining}/${MAX_ATTEMPTS}.`);
     }
 
     setFieldErrors({ taxCode: msg });
@@ -325,11 +350,24 @@ export default function SetupProfilePage() {
       let res;
 
       if (clientType === "individual") {
-        const payload = { phoneNumber: individual.phoneNumber.trim(), address: individual.address.trim() };
+        const payload = {
+          phoneNumber: individual.phoneNumber.trim(),
+          address: individual.address.trim(),
+        };
+
         res = isEdit
           ? await axiosInstance.put("/client-profiles/individual/me", payload)
           : await axiosInstance.post("/client-profiles/individual", payload);
-        navigate("/client/dashboard");
+
+        const meRes = await axiosInstance.get("/auth/me");
+        const freshUser = meRes?.data?.data || meRes?.data;
+
+        handleLoginSuccess({
+          accessToken: localStorage.getItem("accessToken"),
+          user: freshUser,
+        });
+
+        navigate("/client/dashboard", { replace: true });
         return;
       }
 
@@ -368,6 +406,7 @@ export default function SetupProfilePage() {
         const lockedUntilUtc = lockMatch[1].replace(" ", "T") + "Z";
         setBusiness((prev) => ({
           ...prev,
+          verificationSubmissionCount: MAX_ATTEMPTS,
           verificationLockedUntil: lockedUntilUtc,
         }));
         setGlobalError(message);
@@ -383,33 +422,23 @@ export default function SetupProfilePage() {
 
       if (Object.keys(beErrors).length > 0) {
         setFieldErrors(beErrors);
-      }  else {
-      const mappedErrors = {};
+      } else {
+        const mappedErrors = {};
 
-      if (message === "Phone number already exists.") {
-        mappedErrors.phoneNumber = "This phone number is already in use.";
-      }
-
-      if (message === "Business email already exists.") {
-        mappedErrors.businessEmail = "This business email is already in use.";
-      }
-
-      if (Object.keys(mappedErrors).length > 0) {
-        setFieldErrors(mappedErrors);
-      } else if (clientType === "business") {
-
-        if (message?.toLowerCase().includes("business phone")) {
-          setFieldErrors({ businessPhone: message });
-        } else if (message?.toLowerCase().includes("business email")) {
-          setFieldErrors({ businessEmail: message });
-        } else if (message?.toLowerCase().includes("tax")) {
-          setFieldErrors({ taxCode: message });
-        } else {
-          setFieldErrors({ taxCode: message });
+        if (message === "Phone number already exists.") {
+          mappedErrors.phoneNumber = "This phone number is already in use.";
         }
 
+        if (message === "Business email already exists.") {
+          mappedErrors.businessEmail = "This business email is already in use.";
+        }
+
+        if (Object.keys(mappedErrors).length > 0) {
+          setFieldErrors(mappedErrors);
+        } else if (clientType === "business") {
+          setFieldErrors({ taxCode: message });
+        }
       }
-    }
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setLoading(false);
@@ -486,10 +515,10 @@ export default function SetupProfilePage() {
                   <span className="font-semibold">Failed verification attempts</span>
                 </div>
                 <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-sm font-bold text-yellow-200">
-                  {attempts}
+                  {attempts}/{MAX_ATTEMPTS}
                 </span>
               </div>
-              <p className="mt-2 text-sm text-yellow-100/80"> Failed attempts are counted by the server.</p>
+              <p className="mt-2 text-sm text-yellow-100/80">Attempts left: {remainingAttempts}/{MAX_ATTEMPTS}</p>
             </div>
           )}
 
@@ -529,14 +558,14 @@ export default function SetupProfilePage() {
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Phone Number</label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Phone Number</label>
                   <input name="phoneNumber" value={form.phoneNumber} onChange={handleChange} placeholder="0912345678"
                     disabled={Boolean(verifiedBusiness) || locked} className={inputClass("phoneNumber")} />
                   <FieldError name="phoneNumber" errors={fieldErrors} />
                 </div>
                 <div>
                   <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Address</label>
-                  <input name="address" value={form.address} onChange={handleChange} placeholder="Da Nang"
+                  <input name="address" value={form.address} onChange={handleChange} placeholder="Đà Nẵng"
                     disabled={Boolean(verifiedBusiness) || locked} className={inputClass("address")} />
                   <FieldError name="address" errors={fieldErrors} />
                 </div>
@@ -572,7 +601,7 @@ export default function SetupProfilePage() {
                         <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Company Phone Number</label>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Business Phone</label>
                         <input name="businessPhone" value={business.businessPhone} onChange={handleBusinessChange} placeholder="0243768900"
                           disabled={locked || Boolean(verifiedBusiness)} className={inputClass("businessPhone")} />
                         <FieldError name="businessPhone" errors={fieldErrors} />

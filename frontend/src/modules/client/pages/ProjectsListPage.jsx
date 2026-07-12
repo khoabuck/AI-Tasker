@@ -94,15 +94,6 @@ function ProjectCard({ project }) {
                 View Detail
               </button>
 
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/client/disputes/create?projectId=${project.projectId}`);
-                }}
-                className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20"
-              >
-                Dispute
-              </button>
             </>
           )}
 

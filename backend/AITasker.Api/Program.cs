@@ -1,5 +1,6 @@
 using AITasker.Api.Options;
 using System.Text;
+using System.Security.Claims;
 using System.Net;
 using System.Net.Sockets;
 using AITasker.Api.Hubs;
@@ -236,6 +237,14 @@ builder.Services
         {
             OnMessageReceived = context =>
             {
+                var cookieToken = context.Request.Cookies["access_token"];
+
+                if (!string.IsNullOrWhiteSpace(cookieToken))
+                {
+                    context.Token = cookieToken;
+                    return Task.CompletedTask;
+                }
+
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
 
@@ -245,6 +254,61 @@ builder.Services
                 }
 
                 return Task.CompletedTask;
+            },
+
+            OnTokenValidated = async context =>
+            {
+                var userIdValue =
+                    context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+                    ?? context.Principal?.FindFirstValue("userId");
+
+                if (!int.TryParse(userIdValue, out var userId))
+                {
+                    context.Fail("Invalid user token.");
+                    return;
+                }
+
+                var dbContext = context.HttpContext.RequestServices
+                    .GetRequiredService<AITaskerDbContext>();
+
+                var user = await dbContext.Users
+                    .FirstOrDefaultAsync(x => x.UserId == userId);
+
+                if (user == null)
+                {
+                    context.Fail("User account no longer exists.");
+                    return;
+                }
+
+                var nowUtc = DateTime.UtcNow;
+
+                if (user.Status == "SUSPENDED"
+                    && user.LockoutEnd.HasValue
+                    && user.LockoutEnd.Value <= nowUtc)
+                {
+                    user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
+                        ? "ACTIVE"
+                        : user.StatusBeforeSuspension;
+
+                    user.StatusBeforeSuspension = null;
+                    user.LockoutEnd = null;
+                    user.LockReason = null;
+                    user.UpdatedAt = nowUtc;
+
+                    await dbContext.SaveChangesAsync();
+                }
+
+                if (user.Status == "BANNED")
+                {
+                    context.Fail("Your account is banned.");
+                    return;
+                }
+
+                if (user.Status == "SUSPENDED")
+                {
+                    context.Fail("Your account is temporarily locked.");
+                    return;
+                }
             }
         };
     })
@@ -298,7 +362,7 @@ builder.Services.AddScoped<IExpertProfileRepository, ExpertProfileRepository>();
 // =========================
 builder.Services.AddScoped<IPasswordHasher, BcryptPasswordHasher>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
-builder.Services.AddScoped<IEmailSender, MailtrapEmailSender>();
+builder.Services.AddHttpClient<IEmailSender, BrevoEmailSender>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 // =========================
@@ -354,6 +418,7 @@ builder.Services.AddScoped<IExpertDirectoryService, ExpertDirectoryService>();
 // BE2 - Jobs API
 // =========================
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IAdminJobService, AdminJobService>();
 
 builder.Services.AddScoped<IJobCreditPackageService, JobCreditPackageService>();
 

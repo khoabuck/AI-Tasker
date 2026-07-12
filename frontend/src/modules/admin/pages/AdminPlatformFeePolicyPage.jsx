@@ -18,6 +18,7 @@ export default function AdminPlatformFeePolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const hasChanged = useMemo(() => {
     if (!policy) return true;
@@ -41,6 +42,7 @@ export default function AdminPlatformFeePolicyPage() {
       setLoading(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const data = await adminPolicyService.getPlatformFeePolicy();
 
@@ -61,6 +63,13 @@ export default function AdminPlatformFeePolicyPage() {
   };
 
   const handleChange = (name, value) => {
+    setError("");
+    setSuccess("");
+    setFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
     setForm((prev) => ({
       ...prev,
       [name]: value,
@@ -82,15 +91,17 @@ export default function AdminPlatformFeePolicyPage() {
 
     setError("");
     setSuccess("");
+    setFieldErrors({});
   };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
 
-    const validationError = validateForm(form);
+    const validation = validateForm(form);
 
-    if (validationError) {
-      setError(validationError);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
       return;
     }
 
@@ -98,6 +109,7 @@ export default function AdminPlatformFeePolicyPage() {
       setSaving(true);
       setError("");
       setSuccess("");
+      setFieldErrors({});
 
       const updated = await adminPolicyService.updatePlatformFeePolicy({
         individualClientFeeRate: Number(form.individualClientFeeRate),
@@ -199,6 +211,8 @@ export default function AdminPlatformFeePolicyPage() {
                 <NumberInput
                   label="Individual Client Fee Rate"
                   value={form.individualClientFeeRate}
+                  required
+                  error={fieldErrors.individualClientFeeRate}
                   onChange={(value) =>
                     handleChange("individualClientFeeRate", value)
                   }
@@ -208,6 +222,8 @@ export default function AdminPlatformFeePolicyPage() {
                 <NumberInput
                   label="Business Client Fee Rate"
                   value={form.businessClientFeeRate}
+                  required
+                  error={fieldErrors.businessClientFeeRate}
                   onChange={(value) =>
                     handleChange("businessClientFeeRate", value)
                   }
@@ -217,6 +233,8 @@ export default function AdminPlatformFeePolicyPage() {
                 <NumberInput
                   label="Expert Fee Rate"
                   value={form.expertFeeRate}
+                  required
+                  error={fieldErrors.expertFeeRate}
                   onChange={(value) => handleChange("expertFeeRate", value)}
                   helper="Fee rate deducted from expert payout."
                 />
@@ -224,6 +242,8 @@ export default function AdminPlatformFeePolicyPage() {
                 <TextArea
                   label="Update Reason"
                   value={form.reason}
+                  required
+                  error={fieldErrors.reason}
                   onChange={(value) => handleChange("reason", value)}
                   placeholder="Example: Adjust fee policy based on platform operating cost."
                 />
@@ -305,32 +325,55 @@ export default function AdminPlatformFeePolicyPage() {
   );
 }
 
-function NumberInput({ label, value, onChange, helper }) {
+function NumberInput({
+  label,
+  value,
+  onChange,
+  helper,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="number"
-        min="0"
-        step="0.0001"
+        type="text"
+        inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
 
-      {helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>}
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>
+      )}
     </div>
   );
 }
 
-function TextArea({ label, value, onChange, placeholder }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <textarea
@@ -338,8 +381,16 @@ function TextArea({ label, value, onChange, placeholder }) {
         onChange={(event) => onChange(event.target.value)}
         rows={4}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:border-cyan-400/50"
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
@@ -413,31 +464,40 @@ function Alert({ type, title, message, onClose }) {
 }
 
 function validateForm(form) {
-  const individualClientFeeRate = Number(form.individualClientFeeRate);
-  const businessClientFeeRate = Number(form.businessClientFeeRate);
-  const expertFeeRate = Number(form.expertFeeRate);
+  const errors = {};
 
-  if (Number.isNaN(individualClientFeeRate) || individualClientFeeRate < 0) {
-    return "Individual client fee rate must be a valid number greater than or equal to 0.";
+  ["individualClientFeeRate", "businessClientFeeRate", "expertFeeRate"].forEach(
+    (field) => {
+      const value = String(form[field] ?? "").trim();
+
+      if (!value) {
+        errors[field] = `${formatLabel(field)} is required.`;
+        return;
+      }
+
+      if (!/^\d+(\.\d+)?$/.test(value)) {
+        errors[field] = `${formatLabel(field)} must be a valid number.`;
+        return;
+      }
+
+      if (Number(value) < 0) {
+        errors[field] = `${formatLabel(field)} must be greater than or equal to 0.`;
+      }
+    }
+  );
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Update Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Update Reason must be at least 10 characters.";
   }
 
-  if (Number.isNaN(businessClientFeeRate) || businessClientFeeRate < 0) {
-    return "Business client fee rate must be a valid number greater than or equal to 0.";
-  }
-
-  if (Number.isNaN(expertFeeRate) || expertFeeRate < 0) {
-    return "Expert fee rate must be a valid number greater than or equal to 0.";
-  }
-
-  if (!String(form.reason || "").trim()) {
-    return "Please enter update reason.";
-  }
-
-  if (String(form.reason || "").trim().length < 10) {
-    return "Update reason must be at least 10 characters.";
-  }
-
-  return "";
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
 }
 
 function formatRate(value) {
@@ -466,6 +526,17 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function formatLabel(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replace(/([A-Z])/g, " $1")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getFriendlyError(err, fallback = "Something went wrong.") {

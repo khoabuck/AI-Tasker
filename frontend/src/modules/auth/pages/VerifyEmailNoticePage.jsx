@@ -1,18 +1,22 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { resendVerificationEmailApi } from "../../../api/auth.api";
 import { getErrorMessage } from "../../../utils/auth.utils";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
+const AUTO_REDIRECT_SECONDS = 8;
+
 export default function VerifyEmailNoticePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const email = location.state?.email || "";
 
   const [status, setStatus] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_REDIRECT_SECONDS);
 
   const handleResend = async () => {
     if (!email) {
@@ -37,6 +41,30 @@ export default function VerifyEmailNoticePage() {
       setLoading(false);
     }
   };
+
+  // Đăng ký xong → vào trang này → tự động chuyển sang /login sau vài giây,
+  // để user tự đăng nhập bất cứ lúc nào sau khi họ bấm link xác thực trong email
+  // (không bắt họ kẹt lại ở màn "Check your inbox").
+  useEffect(() => {
+    const countdownInterval = setInterval(() => {
+      setSecondsLeft((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const redirectTimer = setTimeout(() => {
+      navigate("/login");
+    }, AUTO_REDIRECT_SECONDS * 1000);
+
+    return () => {
+      clearInterval(countdownInterval);
+      clearTimeout(redirectTimer);
+    };
+  }, [navigate]);
 
   return (
     <div className="min-h-screen bg-[#12151B] text-[#e1e2eb] font-sans">
@@ -85,9 +113,13 @@ export default function VerifyEmailNoticePage() {
             </p>
           )}
 
-          <p className="mb-8 text-sm leading-7 text-[#8c90a0]">
+          <p className="mb-3 text-sm leading-7 text-[#8c90a0]">
             Click the link in the email to activate your account, then come back
             to log in.
+          </p>
+
+          <p className="mb-8 text-xs text-[#5b6470]">
+            Redirecting to login in {secondsLeft}s...
           </p>
 
           {status === "success" && (

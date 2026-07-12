@@ -6,9 +6,26 @@
 // GET  /api/wallets/deposit-orders/me                      → lịch sử các deposit order
 // GET  /api/wallets/deposit-orders/{id}                    → poll trạng thái 1 order
 // POST /api/wallets/deposit-orders/{id}/simulate-paid      → giả lập thanh toán (dev/test only)
+// POST /api/withdrawals                        {amount, bankName, bankAccountNumber,
+//                                                bankAccountHolder} → tạo yêu cầu rút tiền
+// GET  /api/withdrawals/me                                → lịch sử yêu cầu rút tiền
 //
-// Withdraw vẫn dùng /withdrawals (giữ nguyên flow cũ, không có trong API list mới nhưng
-// chưa thấy yêu cầu đổi — nếu BE đã đổi endpoint này, báo lại để sửa)
+// FIX (so với bản cũ):
+// 1) fetchAll() trước đây gọi walletService.getEscrows(selectedProjectId) với biến
+//    `selectedProjectId` chưa từng được khai báo (không có useState) → ReferenceError,
+//    làm Promise.all reject toàn bộ và trang không load được balance/transactions/deposit
+//    dù các API đó hoạt động bình thường. Đã bỏ lời gọi này và dùng thẳng field
+//    `lockedBalance` có sẵn trong response GET /api/wallets/me để tính Escrow.
+// 2) isExpenseTx() trước đây liệt "ESCROW_RELEASE" vào nhóm chi tiêu (trừ tiền), nhưng
+//    theo dữ liệu thật từ BE, ESCROW_RELEASE là tiền VÀO ví (amount dương, ví dụ +200₫
+//    khi freelancer được release tiền milestone) → đã bỏ ESCROW_RELEASE ra khỏi danh sách.
+// 3) metrics[] trước đây thiếu field icon/iconBg/iconColor khiến ô icon luôn trống →
+//    đã bổ sung đầy đủ cho cả 3 ô Balance / Escrow / Withdrawable.
+// 4) POST /api/withdrawals đã được xác nhận hoạt động thật qua Swagger (trả 200 kèm
+//    feeAmount/netAmount) → bỏ nhánh xử lý lỗi 404 giả "tính năng đang nâng cấp"
+//    (comment cũ nói API "chưa có trong list mới" là sai).
+// 5) Thêm GET /api/withdrawals/me để hiển thị lịch sử rút tiền (trước đây hoàn toàn
+//    chưa được gọi ở đâu trong trang).
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -16,7 +33,7 @@ import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
 
 // ── Deposit Modal (PayOS flow — production: poll status thật, không tự nạp tiền) ──
-function DepositModal({ onClose, onSuccess, existingOrder }) {
+function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [step, setStep] = useState(existingOrder ? "qr" : "input"); // input | qr | expired
   const [amount, setAmount] = useState("");
   const [order, setOrder] = useState(existingOrder || null);
@@ -91,8 +108,22 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
     try {
       const res = await walletService.createDepositOrder(amount);
       const orderData = res.data?.data || res.data;
-      setOrder(orderData);
-      setStep("qr");
+
+      const clientCreatedAt = Date.now();
+
+    localStorage.setItem(
+      `deposit_created_at_${orderData.depositOrderId}`,
+      String(clientCreatedAt)
+    );
+
+    const createdOrder = {
+      ...orderData,
+      clientCreatedAt,
+    };
+
+    setOrder(createdOrder);
+    onOrderCreated?.(createdOrder);
+    setStep("qr");
     } catch (err) {
       setError(err?.response?.data?.message || "Failed to create deposit order. Please try again.");
     } finally { setLoading(false); }
@@ -117,7 +148,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 440, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
-            {step === "input" ? "Nạp tiền" : step === "qr" ? "Quét QR để thanh toán" : "Đơn nạp tiền đã hết hạn"}
+            {step === "input" ? "Deposit" : step === "qr" ? "Scan QR to pay" : "Deposit request expired"}
           </h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
@@ -127,7 +158,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
         {step === "input" && (
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div>
-              <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Số tiền (VND)</label>
+              <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Amount (VND)</label>
               <div style={{ position: "relative" }}>
                 <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>₫</span>
                 <input type="number" value={amount} onChange={(e) => { setAmount(e.target.value); setError(""); }} placeholder="20000"
@@ -148,11 +179,11 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
             {error && <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>}
 
             <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-              <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Hủy</button>
+              <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
               <button onClick={handleCreateOrder} disabled={loading}
                 style={{ flex: 2, padding: "12px", background: loading ? "#1d2026" : "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
                 {loading && <span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>}
-                {loading ? "Đang tạo..." : "Tạo đơn nạp tiền"}
+                {loading ? "Creating..." : "Create Deposit Request"}
               </button>
             </div>
           </div>
@@ -163,7 +194,7 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
             <div style={{ background: "#fff", borderRadius: 12, padding: 16 }}>
               <img
                 src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(order.qrContent || "")}`}
-                alt="QR thanh toán"
+                alt="QR payment"
                 style={{ width: 220, height: 220, display: "block" }}
               />
             </div>
@@ -179,31 +210,25 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
               <span style={{ fontSize: 12, color: "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.orderCode}</span>
               <button onClick={handleCopyContent} style={{ background: "none", border: "none", color: "#00F0FF", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 12, flexShrink: 0 }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{copied ? "check" : "content_copy"}</span>
-                {copied ? "Đã copy" : "Copy"}
+                {copied ? "Copied" : "Copy"}
               </button>
             </div>
 
-            {order.checkoutUrl && (
-              <a href={order.checkoutUrl} target="_blank" rel="noopener noreferrer"
-                style={{ width: "100%", textAlign: "center", padding: "11px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, textDecoration: "none", boxSizing: "border-box" }}>
-                Mở trang thanh toán PayOS
-              </a>
-            )}
 
             {/* Trạng thái chờ — tự poll, KHÔNG có nút tự xác nhận */}
             <div style={{ width: "100%", background: "rgba(250,204,21,0.06)", border: "1px solid rgba(250,204,21,0.2)", borderRadius: 8, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, boxSizing: "border-box" }}>
               <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#facc15", animation: "spin 1.5s linear infinite" }}>autorenew</span>
               <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Đang chờ thanh toán...</p>
+                <p style={{ fontSize: 13, color: "#facc15", fontWeight: 600, margin: "0 0 2px" }}>Waiting for payment...</p>
                 <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
-                  Hệ thống sẽ tự xác nhận khi nhận được thanh toán.
-                  {secondsLeft > 0 && ` Đơn hết hạn sau ${formatTime(secondsLeft)}`}
+                  System will automatically confirm when payment is received.
+                  {secondsLeft > 0 && ` The application expires after ${formatTime(secondsLeft)}`}
                 </p>
               </div>
             </div>
 
             <button onClick={onClose} style={{ width: "100%", padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer", boxSizing: "border-box" }}>
-              Đóng (tiếp tục chờ trong nền)
+              Close (continue waiting in background)
             </button>
           </div>
         )}
@@ -212,11 +237,11 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 16, alignItems: "center", textAlign: "center" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171" }}>schedule</span>
             <p style={{ color: "#c2c6d6", fontSize: 14, margin: 0 }}>
-              Đơn nạp tiền đã hết hạn hoặc bị hủy. Vui lòng tạo đơn mới để tiếp tục.
+              Your deposit order has expired or been cancelled. Please create a new order to continue.
             </p>
             <button onClick={handleRetry}
               style={{ width: "100%", padding: "12px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-              Tạo đơn mới
+              Create a new order
             </button>
           </div>
         )}
@@ -225,9 +250,41 @@ function DepositModal({ onClose, onSuccess, existingOrder }) {
   );
 }
 
+const VIETNAM_BANKS = [
+  "Vietcombank",
+  "Techcombank",
+  "BIDV",
+  "Agribank",
+  "VietinBank",
+  "MB Bank",
+  "ACB",
+  "Sacombank",
+  "VPBank",
+  "TPBank",
+  "VIB",
+  "HDBank",
+  "OCB",
+  "SHB",
+  "SeABank",
+  "MSB",
+  "Eximbank",
+  "Nam A Bank",
+  "PVcomBank",
+  "Other",
+];
+
 // ── Withdraw Modal ────────────────────────────────────────────────────
 function WithdrawModal({ onClose, onSuccess }) {
-  const [form, setForm] = useState({ amount: "", bankName: "", bankAccountNumber: "", bankAccountHolder: "" });
+  const [form, setForm] = useState({
+    amount: "",
+    bankName: "",
+    bankAccountNumber: "",
+    bankAccountHolder: ""
+  });
+
+  const [isOtherBank, setIsOtherBank] = useState(false);
+  const [showBanks, setShowBanks] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
@@ -253,10 +310,17 @@ function WithdrawModal({ onClose, onSuccess }) {
     if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
     setLoading(true); setError("");
     try {
-      await walletService.createWithdrawal(form);
-      onSuccess();
+      const res = await walletService.createWithdrawal(form);
+      // Response thật: { success, message, data: { withdrawalRequestId, amount,
+      // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
+      // status: "PENDING", createdAt, ... } }
+      const created = res.data?.data ?? res.data;
+      onSuccess(created);
       onClose();
     } catch (err) {
+      // API /withdrawals đã được xác nhận hoạt động thật qua Swagger (trả 200
+      // kèm feeAmount/netAmount) — không còn che giấu lỗi bằng thông báo giả
+      // "tính năng đang nâng cấp" nữa, chỉ hiển thị message thật từ BE.
       setError(err?.response?.data?.message || "Failed to withdraw funds. Please try again.");
     } finally { setLoading(false); }
   };
@@ -273,7 +337,7 @@ function WithdrawModal({ onClose, onSuccess }) {
       onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Rút tiền</h3>
+          <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 20, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Withdraw</h3>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer" }}>
             <span className="material-symbols-outlined" style={{ fontSize: 22 }}>close</span>
           </button>
@@ -281,31 +345,148 @@ function WithdrawModal({ onClose, onSuccess }) {
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.amount ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Số tiền</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.amount ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Amount</label>
             <div style={{ position: "relative" }}>
               <span style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "#00F0FF", fontWeight: 700 }}>₫</span>
               <input type="number" name="amount" value={form.amount} onChange={handleChange} placeholder="100000"
                 style={{ ...inputStyle("amount"), paddingLeft: 28 }} />
             </div>
             {fieldErrors.amount && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.amount}</p>}
+            <p style={{ fontSize: 11, color: "#5b6470", marginTop: 6, marginBottom: 0 }}>
+              A processing fee will be deducted by the platform. The exact fee and net amount will be shown after you submit the request.
+            </p>
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Tên ngân hàng</label>
-            <input type="text" name="bankName" value={form.bankName} onChange={handleChange} placeholder="Vietcombank, Techcombank..."
-              style={inputStyle("bankName")} />
-            {fieldErrors.bankName && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankName}</p>}
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankName ? "#f87171" : "#8c90a0", marginBottom: 6 }}>
+              Bank Name
+            </label>
+
+            <div style={{ position: "relative" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBanks((prev) => !prev)}
+                  style={{
+                    ...inputStyle("bankName"),
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ color: form.bankName ? "#e1e2eb" : "#5b6470" }}>
+                    {isOtherBank ? "Other" : form.bankName || "Select bank"}
+                  </span>
+
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 20,
+                      color: "#8c90a0",
+                      transform: showBanks ? "rotate(180deg)" : "rotate(0deg)",
+                      transition: "transform 0.2s",
+                    }}
+                  >
+                    expand_more
+                  </span>
+                </button>
+
+                {showBanks && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 6px)",
+                      left: 0,
+                      right: 0,
+                      zIndex: 50,
+                      background: "#101319",
+                      border: "1px solid rgba(0,240,255,0.25)",
+                      borderRadius: 10,
+                      boxShadow: "0 16px 40px rgba(0,0,0,0.55)",
+                      maxHeight: 220,
+                      overflowY: "auto",
+                      scrollbarWidth: "none",
+                      msOverflowStyle: "none",
+                    }}
+                  >
+                    {VIETNAM_BANKS.map((bank) => (
+                      <button
+                        key={bank}
+                        type="button"
+                        onClick={() => {
+                          setShowBanks(false);
+
+                          if (bank === "Other") {
+                            setIsOtherBank(true);
+                            setForm((prev) => ({ ...prev, bankName: "" }));
+                          } else {
+                            setIsOtherBank(false);
+                            setForm((prev) => ({ ...prev, bankName: bank }));
+                          }
+
+                          if (fieldErrors.bankName) {
+                            setFieldErrors((prev) => ({ ...prev, bankName: null }));
+                          }
+
+                          setError("");
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "11px 14px",
+                          background: "transparent",
+                          border: "none",
+                          borderBottom: "1px solid rgba(255,255,255,0.06)",
+                          color: bank === "Other" ? "#00F0FF" : "#e1e2eb",
+                          fontSize: 14,
+                          textAlign: "left",
+                          cursor: "pointer",
+                          fontFamily: "Inter, sans-serif",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(0,240,255,0.08)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "transparent";
+                        }}
+                      >
+                        {bank}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            {isOtherBank && (
+              <input
+                type="text"
+                name="bankName"
+                value={form.bankName}
+                onChange={handleChange}
+                placeholder="Enter bank name"
+                style={{
+                  ...inputStyle("bankName"),
+                  marginTop: 10,
+                }}
+              />
+            )}
+
+            {fieldErrors.bankName && (
+              <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>
+                {fieldErrors.bankName}
+              </p>
+            )}
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountNumber ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Số tài khoản</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountNumber ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Account Number</label>
             <input type="text" name="bankAccountNumber" value={form.bankAccountNumber} onChange={handleChange} placeholder="0123456789"
               style={inputStyle("bankAccountNumber")} />
             {fieldErrors.bankAccountNumber && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankAccountNumber}</p>}
           </div>
 
           <div>
-            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountHolder ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Tên chủ tài khoản</label>
+            <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: fieldErrors.bankAccountHolder ? "#f87171" : "#8c90a0", marginBottom: 6 }}>Account Holder Name</label>
             <input type="text" name="bankAccountHolder" value={form.bankAccountHolder} onChange={handleChange} placeholder="NGUYEN VAN A"
               style={inputStyle("bankAccountHolder")} />
             {fieldErrors.bankAccountHolder && <p style={{ fontSize: 12, color: "#f87171", marginTop: 4 }}>{fieldErrors.bankAccountHolder}</p>}
@@ -316,11 +497,11 @@ function WithdrawModal({ onClose, onSuccess }) {
           )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Hủy</button>
+            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>Cancel</button>
             <button onClick={handleSubmit} disabled={loading}
               style={{ flex: 2, padding: "12px", background: loading ? "#1d2026" : "#00F0FF", color: loading ? "#8c90a0" : "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: loading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
               {loading && <span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>}
-              {loading ? "Đang xử lý..." : "Xác nhận rút tiền"}
+              {loading ? "Processing..." : "Confirm Withdrawal"}
             </button>
           </div>
         </div>
@@ -332,6 +513,11 @@ function WithdrawModal({ onClose, onSuccess }) {
 const getTxType = (tx) =>
   (tx.type ?? tx.transactionType ?? "").toUpperCase();
 
+// Trang này là ví CLIENT — với Client, ESCROW_RELEASE là lúc tiền trong escrow
+// được giải ngân trả cho Expert, tức tiền RỜI khỏi phía Client → phải tính là
+// chi tiêu (dấu trừ), không phải tiền vào. (Trước đây từng bỏ field này ra vì
+// nhầm dữ liệu quan sát từ phía Expert — với Expert thì đúng là tiền vào, nhưng
+// đây là trang Client nên phải tính ngược lại.)
 const isExpenseTx = (tx) => {
   return [
     "ESCROW_LOCK",
@@ -356,11 +542,11 @@ function StatusBadge({ status }) {
     COMPLETED: { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     SUCCESS:   { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     PAID:      { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
+    APPROVED:  { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     PENDING:   { bg: "rgba(250,204,21,0.1)", color: "#facc15" },
     FAILED:    { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
     EXPIRED:   { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
     CANCELLED: { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
-    APPROVED:  { bg: "rgba(74,222,128,0.1)", color: "#4ade80" },
     REJECTED:  { bg: "rgba(248,113,113,0.1)", color: "#f87171" },
   };
   const cfg = map[status?.toUpperCase()] || { bg: "rgba(140,144,160,0.1)", color: "#8c90a0" };
@@ -371,27 +557,83 @@ function StatusBadge({ status }) {
   );
 }
 
+const DEPOSIT_PENDING_CLICK_LIMIT_MS = 2 * 60 * 1000; // 2 phút
+
+const isDepositClickBlocked = (order, now) => {
+  if (order?.status !== "PENDING") return false;
+
+  const savedCreatedAt = order.depositOrderId
+    ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
+    : null;
+
+  const createdTime = savedCreatedAt
+    ? Number(savedCreatedAt)
+    : order.clientCreatedAt
+      ? Number(order.clientCreatedAt)
+      : order.createdAt
+        ? new Date(order.createdAt).getTime()
+        : null;
+
+  if (!createdTime || Number.isNaN(createdTime)) return false;
+
+  const elapsed = now - createdTime;
+  return elapsed > DEPOSIT_PENDING_CLICK_LIMIT_MS;
+};
+
+// Đổi số giây còn lại thành text "X minute(s)" — làm tròn lên để không hiện
+// "0 minute(s)" khi còn vài giây cuối cùng.
+const formatRemainingMinutes = (seconds) => {
+  return Math.max(1, Math.ceil(seconds / 60));
+};
+
 export default function WalletPage() {
   const navigate = useNavigate();
   const [balance, setBalance] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [depositOrders, setDepositOrders] = useState([]);
+  const [withdrawals, setWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeposit, setShowDeposit] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const hasPending = depositOrders.some((o) => o.status === "PENDING");
+    if (!hasPending) return;
+
+    const timer = setInterval(() => setNow(Date.now()), 10000);
+    return () => clearInterval(timer);
+  }, [depositOrders]);
 
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const data = await walletService.getWalletPageData();
+      const [wallet, tx, deposit, withdrawalList] = await Promise.all([
+        walletService.getWallet(),
+        walletService.getTransactions(),
+        walletService.getDepositOrders(),
+        walletService.getWithdrawals(),
+      ]);
 
-      setBalance(data.balance);
-      setTransactions(data.transactions);
-      setDepositOrders(data.depositOrders);
+      setBalance(wallet);
+      setTransactions(tx);
+      setDepositOrders(
+      deposit.map((order) => {
+        const savedCreatedAt = order.depositOrderId
+          ? localStorage.getItem(`deposit_created_at_${order.depositOrderId}`)
+          : null;
+
+        return {
+          ...order,
+          clientCreatedAt: savedCreatedAt ? Number(savedCreatedAt) : undefined,
+        };
+      })
+    );
+      setWithdrawals(withdrawalList);
     } catch (err) {
-      console.error("Wallet fetch error:", err);
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -405,15 +647,31 @@ export default function WalletPage() {
     setTimeout(() => setSuccessMsg(""), 4000);
   };
 
-  const metrics = balance !== null ? [
-    {
-      label: "Available Balance",
-      value: `${Number(balance ?? 0).toLocaleString()}₫`,
-      icon: "account_balance_wallet",
-      iconColor: "#00F0FF",
-      iconBg: "rgba(0,240,255,0.1)",
-    },
-  ] : [];
+  const metrics = balance
+    ? [
+        {
+          label: "Balance",
+          value: `${balance.availableBalance.toLocaleString()}₫`,
+          icon: "account_balance_wallet",
+          iconBg: "rgba(0,240,255,0.1)",
+          iconColor: "#00F0FF",
+        },
+        {
+          label: "Escrow",
+          value: `${balance.lockedBalance.toLocaleString()}₫`,
+          icon: "lock",
+          iconBg: "rgba(250,204,21,0.1)",
+          iconColor: "#facc15",
+        },
+        {
+          label: "Withdrawable",
+          value: `${(balance.availableBalance - balance.lockedBalance).toLocaleString()}₫`,
+          icon: "outbox",
+          iconBg: "rgba(74,222,128,0.1)",
+          iconColor: "#4ade80",
+        },
+      ]
+    : [];
 
   return (
     <ClientLayout>
@@ -439,7 +697,7 @@ export default function WalletPage() {
           </span>
           Back
         </button>
-        
+
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 32, flexWrap: "wrap", gap: 16 }}>
           <div>
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Wallet</h2>
@@ -473,7 +731,14 @@ export default function WalletPage() {
         {!loading && (
           <>
             {/* Balance Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(1, minmax(0, 1fr))", gap: 24, marginBottom: 32 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 24,
+                marginBottom: 32,
+              }}
+            >
               {metrics.map((m) => (
                 <div key={m.label} style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, padding: 24 }}>
                   <div style={{ padding: 12, background: m.iconBg, borderRadius: 12, color: m.iconColor, display: "inline-flex", marginBottom: 16 }}>
@@ -486,7 +751,7 @@ export default function WalletPage() {
             </div>
 
             {/* Lower section */}
-            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, marginBottom: 24 }}>
 
               {/* Transactions */}
               <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
@@ -550,24 +815,80 @@ export default function WalletPage() {
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column" }}>
                     {depositOrders
-                      .filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED")
-                      .slice(0, 8)
-                      .map((order, i) => {
+                    .filter((o) => o.status !== "EXPIRED" && o.status !== "CANCELLED")
+                    .slice(0, 8)
+                    .map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
                       const isPending = order.status === "PENDING";
+                      const isBlocked = isDepositClickBlocked(order, now);
+                      const isClickable = isPending && !isBlocked;
+
+                      const createdTime = order.clientCreatedAt
+                        ? Number(order.clientCreatedAt)
+                        : order.createdAt
+                          ? new Date(order.createdAt).getTime()
+                          : null;
+
+                      const remainingMs = createdTime
+                        ? Math.max(0, DEPOSIT_PENDING_CLICK_LIMIT_MS - (now - createdTime))
+                        : 0;
+
+                      const remainingSeconds = Math.ceil(remainingMs / 1000);
+
                       return (
-                        <div key={order.depositOrderId ?? i}
-                          onClick={() => isPending && setSelectedOrder(order)}
-                          style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s", cursor: isPending ? "pointer" : "default" }}
-                          onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+                        <div
+                          key={order.depositOrderId ?? i}
+                          onClick={() => isClickable && setSelectedOrder(order)}
+                          style={{
+                            padding: "14px 20px",
+                            borderBottom: "1px solid rgba(255,255,255,0.06)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            transition: "background 0.2s",
+                            cursor: isClickable ? "pointer" : "default",
+                            opacity: isBlocked ? 0.55 : 1,
+                          }}
+                          onMouseEnter={(e) =>
+                            isClickable && (e.currentTarget.style.background = "rgba(255,255,255,0.03)")
+                          }
+                          onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                        >
                           <div>
-                            <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>{(order.amount ?? 0).toLocaleString()}₫</p>
-                            <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>{order.provider ?? "PAYOS"} • {date}</p>
+                            <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>
+                              {(order.amount ?? 0).toLocaleString()}₫
+                            </p>
+                            <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
+                              {order.provider ?? "PAYOS"} • {date}
+                            </p>
+
+                            {isPending && !isBlocked && remainingSeconds > 0 && (
+                              <p style={{ fontSize: 11, color: "#facc15", margin: "2px 0 0" }}>
+                                QR available for {formatRemainingMinutes(remainingSeconds)} minute(s)
+                              </p>
+                            )}
+
+                            {isBlocked && (
+                              <p style={{ fontSize: 11, color: "#f87171", margin: "2px 0 0" }}>
+                                Expired — please create a new deposit request
+                              </p>
+                            )}
                           </div>
+
                           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <StatusBadge status={order.status} />
-                            {isPending && <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#8c90a0" }}>qr_code_2</span>}
+
+                            {isPending && !isBlocked && (
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#8c90a0" }}>
+                                qr_code_2
+                              </span>
+                            )}
+
+                            {isBlocked && (
+                              <span className="material-symbols-outlined" style={{ fontSize: 16, color: "#f87171" }}>
+                                block
+                              </span>
+                            )}
                           </div>
                         </div>
                       );
@@ -577,19 +898,99 @@ export default function WalletPage() {
               </div>
 
             </div>
+
+            {/* Withdrawal History — full width, tách riêng để không phải sửa layout grid 2 cột phía trên */}
+            <div style={{ background: "rgba(29,32,38,0.8)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 16, overflow: "hidden" }}>
+              <div style={{ padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                <h4 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 18, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>Withdrawal History</h4>
+              </div>
+              {withdrawals.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "48px 24px", color: "#8c90a0" }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 12, color: "#272a30" }}>outbox</span>
+                  No withdrawal requests yet.
+                </div>
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
+                      {["Amount", "Fee", "Net Amount", "Bank", "Date", "Status"].map((h) => (
+                        <th key={h} style={{ padding: "12px 20px", textAlign: "left", fontSize: 10, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", fontWeight: 500 }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withdrawals.slice(0, 10).map((w, i) => {
+                      const date = w.createdAt ? new Date(w.createdAt).toLocaleDateString("vi-VN") : "—";
+                      return (
+                        <tr key={w.withdrawalRequestId ?? i}
+                          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#e1e2eb" }}>
+                            {Number(w.amount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8c90a0" }}>
+                            {Number(w.feeAmount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#00F0FF" }}>
+                            {Number(w.netAmount ?? 0).toLocaleString()}₫
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>
+                            {w.bankName ?? "—"} • {w.bankAccountNumber ?? "—"}
+                          </td>
+                          <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
+                          <td style={{ padding: "14px 20px" }}>
+                            <StatusBadge status={w.status} />
+                            {w.status === "REJECTED" && w.failureReason && (
+                              <p style={{ fontSize: 11, color: "#f87171", margin: "4px 0 0" }}>{w.failureReason}</p>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </>
         )}
       </div>
 
-      {showDeposit && <DepositModal onClose={() => setShowDeposit(false)} onSuccess={() => showSuccess("Nạp tiền thành công!")} />}
+      {showDeposit && (
+        <DepositModal
+          onClose={() => {
+            setShowDeposit(false);
+            setNow(Date.now());
+          }}
+          onSuccess={() => showSuccess("Deposit successful!")}
+          onOrderCreated={(createdOrder) => {
+            setDepositOrders((prev) => [
+              createdOrder,
+              ...prev.filter(
+                (o) => o.depositOrderId !== createdOrder.depositOrderId
+              ),
+            ]);
+            setNow(Date.now());
+          }}
+        />
+      )}
       {selectedOrder && (
         <DepositModal
           existingOrder={selectedOrder}
           onClose={() => setSelectedOrder(null)}
-          onSuccess={() => showSuccess("Nạp tiền thành công!")}
+          onSuccess={() => showSuccess("Deposit successful!")}
         />
       )}
-      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} onSuccess={() => showSuccess("Yêu cầu rút tiền đã được gửi!")} />}
+      {showWithdraw && (
+        <WithdrawModal
+          onClose={() => setShowWithdraw(false)}
+          onSuccess={(created) =>
+            showSuccess(
+              created
+                ? `Withdrawal request submitted! You will receive ${Number(created.netAmount ?? 0).toLocaleString()}₫ after a ${Number(created.feeAmount ?? 0).toLocaleString()}₫ fee.`
+                : "Withdrawal request submitted!"
+            )
+          }
+        />
+      )}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>

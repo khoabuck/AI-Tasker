@@ -1,11 +1,12 @@
+using System.Net;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
+using AITasker.Application.Common;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
-using AITasker.Application.Common;
 using Microsoft.Extensions.Configuration;
 
 namespace AITasker.Application.Services;
@@ -68,6 +69,7 @@ public class AuthService : IAuthService
 
         await _userRepository.AddAsync(user);
         await _userRepository.SaveChangesAsync();
+
         try
         {
             await CreateAndSendVerificationEmailAsync(user);
@@ -80,11 +82,12 @@ public class AuthService : IAuthService
                 Message = "Registration successful, but the verification email could not be sent. Please use resend verification email."
             };
         }
+
         return new MessageResponse
         {
             Success = true,
             Message = "Registration successful. Please check your email to verify your account."
-};
+        };
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request)
@@ -121,6 +124,8 @@ public class AuthService : IAuthService
         {
             throw new InvalidOperationException("Invalid email or password.");
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -212,6 +217,8 @@ public class AuthService : IAuthService
 
             await _userRepository.SaveChangesAsync();
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -316,6 +323,11 @@ public class AuthService : IAuthService
 
         var user = await _userRepository.GetByEmailAsync(email);
 
+        if (user != null)
+        {
+            await RestoreExpiredSuspensionAsync(user);
+        }
+
         if (user != null
             && user.AuthProvider == "LOCAL"
             && !string.IsNullOrWhiteSpace(user.PasswordHash)
@@ -352,6 +364,8 @@ public class AuthService : IAuthService
 
         var user = resetToken.User;
 
+        await RestoreExpiredSuspensionAsync(user);
+
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
             throw new InvalidOperationException(
@@ -380,6 +394,78 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task<MessageResponse> ChangePasswordAsync(
+        int userId,
+        ChangePasswordRequest request)
+    {
+        var user = await _userRepository.GetByIdAsync(userId);
+
+        if (user == null)
+        {
+            throw new InvalidOperationException("User not found.");
+        }
+
+        await RestoreExpiredSuspensionAsync(user);
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException(
+                "Your account is not allowed to change password."
+            );
+        }
+
+        if (user.AuthProvider != "LOCAL"
+            || string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            throw new InvalidOperationException(
+                "This account does not use password login."
+            );
+        }
+
+        var currentPassword = request.CurrentPassword?.Trim() ?? string.Empty;
+        var newPassword = request.NewPassword?.Trim() ?? string.Empty;
+        var confirmNewPassword = request.ConfirmNewPassword?.Trim() ?? string.Empty;
+
+        ValidateChangePassword(
+            currentPassword,
+            newPassword,
+            confirmNewPassword
+        );
+
+        var currentPasswordValid = _passwordHasher.VerifyPassword(
+            currentPassword,
+            user.PasswordHash
+        );
+
+        if (!currentPasswordValid)
+        {
+            throw new InvalidOperationException("Current password is incorrect.");
+        }
+
+        var sameAsCurrentPassword = _passwordHasher.VerifyPassword(
+            newPassword,
+            user.PasswordHash
+        );
+
+        if (sameAsCurrentPassword)
+        {
+            throw new InvalidOperationException(
+                "New password must be different from current password."
+            );
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return new MessageResponse
+        {
+            Success = true,
+            Message = "Password changed successfully."
+        };
+    }
+
     public async Task<AuthResponse> SelectRoleAsync(int userId, SelectRoleRequest request)
     {
         var user = await _userRepository.GetByIdAsync(userId);
@@ -388,6 +474,8 @@ public class AuthService : IAuthService
         {
             throw new InvalidOperationException("User not found.");
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -439,6 +527,11 @@ public class AuthService : IAuthService
     {
         var user = await _userRepository.GetByIdAsync(userId);
 
+        if (user != null)
+        {
+            await RestoreExpiredSuspensionAsync(user);
+        }
+
         return user == null ? null : MapToUserResponse(user);
     }
 
@@ -452,6 +545,8 @@ public class AuthService : IAuthService
         {
             throw new InvalidOperationException("User not found.");
         }
+
+        await RestoreExpiredSuspensionAsync(user);
 
         if (user.Status == "SUSPENDED" || user.Status == "BANNED")
         {
@@ -510,13 +605,11 @@ public class AuthService : IAuthService
         var verifyUrl =
             $"{backendBaseUrl}/api/auth/verify-email?token={Uri.EscapeDataString(rawToken)}";
 
-        var htmlBody = $@"
-            <h2>Welcome to AITasker</h2>
-            <p>Hello {user.FullName},</p>
-            <p>Please verify your email by clicking the link below:</p>
-            <p><a href=""{verifyUrl}"">Verify your email</a></p>
-            <p>This link will expire in 24 hours.</p>
-        ";
+        var userName = string.IsNullOrWhiteSpace(user.FullName)
+            ? "there"
+            : user.FullName;
+
+        var htmlBody = BuildVerifyEmailHtml(userName, verifyUrl);
 
         await _emailSender.SendEmailAsync(
             user.Email,
@@ -546,21 +639,213 @@ public class AuthService : IAuthService
         var resetUrl =
             $"{frontendBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
 
-        var htmlBody = $@"
-            <h2>Reset your AITasker password</h2>
-            <p>Hello {user.FullName},</p>
-            <p>We received a request to reset your password.</p>
-            <p>Click the link below to reset your password:</p>
-            <p><a href=""{resetUrl}"">Reset your password</a></p>
-            <p>This link will expire in 30 minutes.</p>
-            <p>If you did not request this, you can ignore this email.</p>
-        ";
+        var userName = string.IsNullOrWhiteSpace(user.FullName)
+            ? "there"
+            : user.FullName;
+
+        var htmlBody = BuildResetPasswordEmailHtml(userName, resetUrl);
 
         await _emailSender.SendEmailAsync(
             user.Email,
             "Reset your AITasker password",
             htmlBody
         );
+    }
+
+    private static string BuildVerifyEmailHtml(string userName, string verifyUrl)
+    {
+        var safeUserName = WebUtility.HtmlEncode(userName);
+        var safeVerifyUrl = WebUtility.HtmlEncode(verifyUrl);
+        var currentYear = DateTime.UtcNow.Year;
+
+        return $@"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+  <meta charset=""UTF-8"" />
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+  <title>Verify your AITasker account</title>
+</head>
+<body style=""margin:0; padding:0; background-color:#f4f7fb; font-family:Arial, Helvetica, sans-serif; color:#1f2937;"">
+  <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" style=""background-color:#f4f7fb; margin:0; padding:24px 0;"">
+    <tr>
+      <td align=""center"">
+        <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" style=""max-width:640px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.08);"">
+
+          <tr>
+            <td style=""background:linear-gradient(135deg,#0f172a,#1e3a8a); padding:30px 32px; text-align:center;"">
+              <div style=""font-size:32px; font-weight:800; color:#ffffff; letter-spacing:0.4px;"">
+                AI<span style=""color:#22d3ee;"">Tasker</span>
+              </div>
+              <div style=""margin-top:8px; font-size:14px; color:#cbd5e1;"">
+                Smart freelance marketplace
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style=""padding:40px 32px 24px 32px;"">
+              <h1 style=""margin:0 0 16px 0; font-size:28px; line-height:1.3; color:#111827;"">
+                Verify your account
+              </h1>
+
+              <p style=""margin:0 0 16px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                Hello <strong>{safeUserName}</strong>,
+              </p>
+
+              <p style=""margin:0 0 16px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                Welcome to <strong>AITasker</strong>. Please confirm your email address to activate your account and continue setting up your profile.
+              </p>
+
+              <p style=""margin:0 0 28px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                Click the button below to verify your email:
+              </p>
+
+              <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" style=""margin:0 0 28px 0;"">
+                <tr>
+                  <td align=""center"" bgcolor=""#2563eb"" style=""border-radius:10px;"">
+                    <a href=""{safeVerifyUrl}""
+                       style=""display:inline-block; padding:14px 28px; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:10px;"">
+                      Verify my email
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style=""background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:24px;"">
+                <p style=""margin:0 0 8px 0; font-size:14px; color:#374151; line-height:1.6;"">
+                  If the button does not work, copy and paste this link into your browser:
+                </p>
+                <p style=""margin:0; font-size:14px; line-height:1.6; word-break:break-all;"">
+                  <a href=""{safeVerifyUrl}"" style=""color:#2563eb; text-decoration:none;"">{safeVerifyUrl}</a>
+                </p>
+              </div>
+
+              <p style=""margin:0 0 12px 0; font-size:14px; line-height:1.7; color:#6b7280;"">
+                This verification link will expire in <strong>24 hours</strong>.
+              </p>
+
+              <p style=""margin:0; font-size:14px; line-height:1.7; color:#6b7280;"">
+                If you did not create an AITasker account, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style=""padding:24px 32px; background-color:#f8fafc; border-top:1px solid #e5e7eb;"">
+              <p style=""margin:0 0 8px 0; font-size:13px; line-height:1.6; color:#6b7280;"">
+                Need help? Contact the AITasker support team anytime.
+              </p>
+              <p style=""margin:0; font-size:13px; color:#9ca3af;"">
+                © {currentYear} AITasker. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>";
+    }
+
+    private static string BuildResetPasswordEmailHtml(string userName, string resetUrl)
+    {
+        var safeUserName = WebUtility.HtmlEncode(userName);
+        var safeResetUrl = WebUtility.HtmlEncode(resetUrl);
+        var currentYear = DateTime.UtcNow.Year;
+
+        return $@"
+<!DOCTYPE html>
+<html lang=""en"">
+<head>
+  <meta charset=""UTF-8"" />
+  <meta name=""viewport"" content=""width=device-width, initial-scale=1.0"" />
+  <title>Reset your AITasker password</title>
+</head>
+<body style=""margin:0; padding:0; background-color:#f4f7fb; font-family:Arial, Helvetica, sans-serif; color:#1f2937;"">
+  <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" style=""background-color:#f4f7fb; margin:0; padding:24px 0;"">
+    <tr>
+      <td align=""center"">
+        <table role=""presentation"" width=""100%"" cellspacing=""0"" cellpadding=""0"" style=""max-width:640px; background-color:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(15,23,42,0.08);"">
+
+          <tr>
+            <td style=""background:linear-gradient(135deg,#0f172a,#1e3a8a); padding:30px 32px; text-align:center;"">
+              <div style=""font-size:32px; font-weight:800; color:#ffffff; letter-spacing:0.4px;"">
+                AI<span style=""color:#22d3ee;"">Tasker</span>
+              </div>
+              <div style=""margin-top:8px; font-size:14px; color:#cbd5e1;"">
+                Secure account recovery
+              </div>
+            </td>
+          </tr>
+
+          <tr>
+            <td style=""padding:40px 32px 24px 32px;"">
+              <h1 style=""margin:0 0 16px 0; font-size:28px; line-height:1.3; color:#111827;"">
+                Reset your password
+              </h1>
+
+              <p style=""margin:0 0 16px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                Hello <strong>{safeUserName}</strong>,
+              </p>
+
+              <p style=""margin:0 0 16px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                We received a request to reset your <strong>AITasker</strong> password.
+              </p>
+
+              <p style=""margin:0 0 28px 0; font-size:16px; line-height:1.7; color:#374151;"">
+                Click the button below to choose a new password:
+              </p>
+
+              <table role=""presentation"" cellspacing=""0"" cellpadding=""0"" style=""margin:0 0 28px 0;"">
+                <tr>
+                  <td align=""center"" bgcolor=""#2563eb"" style=""border-radius:10px;"">
+                    <a href=""{safeResetUrl}""
+                       style=""display:inline-block; padding:14px 28px; font-size:16px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:10px;"">
+                      Reset password
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <div style=""background-color:#f8fafc; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-bottom:24px;"">
+                <p style=""margin:0 0 8px 0; font-size:14px; color:#374151; line-height:1.6;"">
+                  If the button does not work, copy and paste this link into your browser:
+                </p>
+                <p style=""margin:0; font-size:14px; line-height:1.6; word-break:break-all;"">
+                  <a href=""{safeResetUrl}"" style=""color:#2563eb; text-decoration:none;"">{safeResetUrl}</a>
+                </p>
+              </div>
+
+              <p style=""margin:0 0 12px 0; font-size:14px; line-height:1.7; color:#6b7280;"">
+                This reset link will expire in <strong>30 minutes</strong>.
+              </p>
+
+              <p style=""margin:0; font-size:14px; line-height:1.7; color:#6b7280;"">
+                If you did not request a password reset, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style=""padding:24px 32px; background-color:#f8fafc; border-top:1px solid #e5e7eb;"">
+              <p style=""margin:0 0 8px 0; font-size:13px; line-height:1.6; color:#6b7280;"">
+                For your security, please do not share this email or link with anyone.
+              </p>
+              <p style=""margin:0; font-size:13px; color:#9ca3af;"">
+                © {currentYear} AITasker. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>";
     }
 
     private string GetBackendBaseUrl()
@@ -585,6 +870,37 @@ public class AuthService : IAuthService
             .Replace("+", "-")
             .Replace("/", "_")
             .Replace("=", "");
+    }
+
+    private async Task<bool> RestoreExpiredSuspensionAsync(User user)
+    {
+        if (user.Status != "SUSPENDED")
+        {
+            return false;
+        }
+
+        if (!user.LockoutEnd.HasValue)
+        {
+            return false;
+        }
+
+        if (user.LockoutEnd.Value > DateTime.UtcNow)
+        {
+            return false;
+        }
+
+        user.Status = string.IsNullOrWhiteSpace(user.StatusBeforeSuspension)
+            ? "ACTIVE"
+            : user.StatusBeforeSuspension;
+
+        user.StatusBeforeSuspension = null;
+        user.LockoutEnd = null;
+        user.LockReason = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
+
+        return true;
     }
 
     private static string HashToken(string token)
@@ -665,6 +981,50 @@ public class AuthService : IAuthService
         if (string.IsNullOrWhiteSpace(password))
         {
             throw new InvalidOperationException("Password is required.");
+        }
+    }
+
+    private static void ValidateChangePassword(
+        string currentPassword,
+        string newPassword,
+        string confirmNewPassword)
+    {
+        if (string.IsNullOrWhiteSpace(currentPassword))
+        {
+            throw new InvalidOperationException("Current password is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(newPassword))
+        {
+            throw new InvalidOperationException("New password is required.");
+        }
+
+        if (newPassword.Length < 6)
+        {
+            throw new InvalidOperationException(
+                "New password must be at least 6 characters."
+            );
+        }
+
+        if (newPassword.Length > 100)
+        {
+            throw new InvalidOperationException(
+                "New password must not exceed 100 characters."
+            );
+        }
+
+        if (string.IsNullOrWhiteSpace(confirmNewPassword))
+        {
+            throw new InvalidOperationException(
+                "Confirm new password is required."
+            );
+        }
+
+        if (newPassword != confirmNewPassword)
+        {
+            throw new InvalidOperationException(
+                "Confirm new password does not match."
+            );
         }
     }
 
