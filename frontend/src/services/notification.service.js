@@ -378,11 +378,23 @@ export function getNotificationTarget(notification) {
 
   const isDispute = type.includes("DISPUTE") || entityType === "DISPUTE";
 
+  const walletKeywords = [
+    "WALLET",
+    "PAYMENT",
+    "ESCROW",
+    "WITHDRAW",
+    "WITHDRAWAL",
+    "DEPOSIT",
+    "TOP_UP",
+    "TOPUP",
+    "PAYOUT",
+    "BALANCE",
+    "EARNING",
+  ];
+
   const isWallet =
-    type.includes("WALLET") ||
-    type.includes("PAYMENT") ||
-    type.includes("ESCROW") ||
-    type.includes("WITHDRAW");
+    walletKeywords.some((keyword) => type.includes(keyword)) ||
+    walletKeywords.includes(entityType);
 
   const isReview = type.includes("REVIEW") || entityType === "REVIEW";
 
@@ -449,6 +461,14 @@ export function getNotificationTarget(notification) {
         kind: "MILESTONE",
       };
     }
+  }
+
+  if (isWallet) {
+    return {
+      path: "/expert/wallet",
+      label: "View wallet",
+      kind: "WALLET",
+    };
   }
 
   if (isProject) {
@@ -553,14 +573,6 @@ export function getNotificationTarget(notification) {
     };
   }
 
-  if (isWallet) {
-    return {
-      path: "/expert/wallet",
-      label: "View wallet",
-      kind: "WALLET",
-    };
-  }
-
   if (isReview) {
     return {
       path: "/expert/reviews",
@@ -629,7 +641,7 @@ export function formatNotificationTime(value, options = {}) {
     });
   }
 
-  if (diffMinutes < 1) return `Just now`;
+  if (diffMinutes < 1) return "Just now";
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
 
@@ -703,6 +715,7 @@ const notificationService = {
 
     if (typeof data === "number") return data;
     if (typeof data?.unreadCount === "number") return data.unreadCount;
+
     if (typeof response?.data?.unreadCount === "number") {
       return response.data.unreadCount;
     }

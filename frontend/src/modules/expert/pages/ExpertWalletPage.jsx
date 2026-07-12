@@ -5,7 +5,7 @@ import expertWalletService from "../../../services/expertWallet.service";
 
 const quickAmounts = [50000, 100000, 200000, 500000];
 const PAYMENT_CHECK_INTERVAL_MS = 5000;
-const DEFAULT_DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
+const DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
 
 const popularBanks = [
   "Vietcombank",
@@ -354,15 +354,10 @@ export default function ExpertWalletPage() {
       const order = await expertWalletService.createDepositOrder({ amount });
 
       if (order) {
-        const normalizedOrder = {
-          ...order,
-          createdAt: order.createdAt || new Date().toISOString(),
-        };
-
-        setActiveDepositOrder(normalizedOrder);
-        setDepositCountdown(getDepositRemainingSeconds(normalizedOrder));
+        setActiveDepositOrder(order);
+        setDepositCountdown(getDepositRemainingSeconds(order));
         setDepositMinimized(false);
-        updateDepositOrderInList(normalizedOrder);
+        updateDepositOrderInList(order);
       }
 
       setMessage("Payment QR created. Please transfer the exact amount.");
@@ -1231,6 +1226,9 @@ function DepositModal({
           qr_code_2
         </span>
         <p className="text-sm font-bold">QR is not available</p>
+        <p className="mt-1 text-[11px] leading-4">
+          Use the payment page below or refresh the payment status.
+        </p>
       </div>
     )}
   </div>
@@ -1258,17 +1256,6 @@ function DepositModal({
               </div>
 
               <PaymentInformation order={order} onCopy={onCopy} />
-
-              {order.paymentUrl && !isExpired && (
-                <a
-                  href={order.paymentUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 flex w-full items-center justify-center rounded-2xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                >
-                  Open Payment Page
-                </a>
-              )}
 
               {!isPaid && !isFailed && !isExpired && (
                 <button
@@ -1362,12 +1349,21 @@ function FloatingDepositButton({ order, remainingSeconds, onOpen }) {
 }
 
 function PaymentInformation({ order, onCopy }) {
+  const bankName = order?.bankName || "";
   const accountName = order?.accountName || "";
   const accountNumber = order?.accountNumber || "";
   const transferContent = order?.transferContent || "";
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      {bankName && (
+        <PaymentInfoRow
+          label="Bank"
+          value={bankName}
+          copyable={false}
+          onCopy={onCopy}
+        />
+      )}
       {accountName && (
         <PaymentInfoRow
           label="Account holder"
@@ -1684,10 +1680,8 @@ function getTransactionPresentation(transaction) {
     return {
       group: "INCOME",
       typeLabel: "Earnings Available",
-      description: cleanDescription(
-        transaction.description,
-        "Project completed. Pending earnings were moved to your available balance."
-      ),
+      description:
+        "Your earnings have been moved to your available balance.",
       balanceMovement: "Pending Earnings → Available Balance",
       icon: "paid",
       iconClass:
@@ -1701,10 +1695,8 @@ function getTransactionPresentation(transaction) {
     return {
       group: "REFUND",
       typeLabel: "Pending Earning Refunded",
-      description: cleanDescription(
-        transaction.description,
-        "Held earnings were returned to the client."
-      ),
+      description:
+        "The milestone payment was refunded after dispute resolution.",
       balanceMovement: "Pending Earnings → Client Refund",
       icon: "undo",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
@@ -1717,10 +1709,7 @@ function getTransactionPresentation(transaction) {
     return {
       group: "FEE",
       typeLabel: "Expert Service Fee",
-      description: cleanDescription(
-        transaction.description,
-        "Expert service fee deducted from the milestone payment."
-      ),
+      description: "Platform service fee deducted.",
       balanceMovement: "Milestone Payment → Service Fee",
       icon: "percent",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
@@ -1736,10 +1725,8 @@ function getTransactionPresentation(transaction) {
     return {
       group: "PENDING",
       typeLabel: "Pending Earning",
-      description: cleanDescription(
-        transaction.description,
-        "Milestone approved. Net earnings are held until project completion."
-      ),
+      description:
+        "Your milestone payment is being held until the project is completed.",
       balanceMovement: "Milestone Payment → Pending Earnings",
       icon: "hourglass_top",
       iconClass:
@@ -1853,10 +1840,7 @@ function getTransactionPresentation(transaction) {
     return {
       group: "ESCROW",
       typeLabel: "Escrow Frozen",
-      description: cleanDescription(
-        transaction.description,
-        "The milestone escrow has been frozen."
-      ),
+      description: "This milestone is currently under dispute.",
       balanceMovement: "Escrow locked during dispute",
       icon: "lock",
       iconClass:
@@ -2071,28 +2055,52 @@ function cleanDescription(description, fallback) {
   return String(description)
     .replace(/\[.*?\]\s*/g, "")
     .replace(/_/g, " ")
+    .replace(/\bMilestone\s+ID\s+\d+\b/gi, "this milestone")
+    .replace(/\bDispute\s+ID\s+\d+\b/gi, "this dispute")
+    .replace(/\bProject\s+ID\s+\d+\b/gi, "this project")
+    .replace(/\bContract\s+ID\s+\d+\b/gi, "this contract")
+    .replace(/\bEscrow\s+ID\s+\d+\b/gi, "escrow")
+    .replace(/\bTransaction\s+ID\s+\d+\b/gi, "transaction")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function getQrSource(order) {
   if (!order) return "";
 
-  const image = order.qrImageUrl || "";
+  const imageUrl =
+    order.qrImageUrl ||
+    order.qrCodeUrl ||
+    order.qrUrl ||
+    "";
 
-  if (image) return image;
+  if (imageUrl) return imageUrl;
 
-  const qrCode = order.qrCode || "";
+  const qrContent =
+    order.qrContent ||
+    order.qrCode ||
+    "";
 
-  if (!qrCode) return "";
+  if (!qrContent) return "";
 
-  if (qrCode.startsWith("data:image")) return qrCode;
-
-  if (qrCode.startsWith("http://") || qrCode.startsWith("https://")) {
-    return qrCode;
+  if (qrContent.startsWith("data:image")) {
+    return qrContent;
   }
 
-  return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
-    qrCode
+  if (
+    qrContent.startsWith("http://") ||
+    qrContent.startsWith("https://")
+  ) {
+    return qrContent;
+  }
+
+  /*
+   * Backend/PayOS trả chuỗi QR EMV qua qrContent.
+   * Trình duyệt không thể hiển thị trực tiếp chuỗi này như một ảnh,
+   * nên chuyển nội dung thành ảnh QR để người dùng quét.
+   */
+  return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
+    qrContent
   )}`;
 }
 

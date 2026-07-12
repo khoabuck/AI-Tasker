@@ -609,6 +609,59 @@ export const normalizeDepositOrder = (order) => {
     ""
   );
 
+  const checkoutUrl = getValue(
+    order.checkoutUrl,
+    order.CheckoutUrl,
+    order.paymentUrl,
+    order.PaymentUrl,
+    order.paymentLink,
+    order.PaymentLink,
+    raw.checkoutUrl,
+    raw.CheckoutUrl,
+    raw.paymentUrl,
+    raw.PaymentUrl,
+    raw.paymentLink,
+    raw.PaymentLink,
+    ""
+  );
+
+  /*
+   * Backend hiện trả nội dung QR qua QrContent/qrContent.
+   * Một số response cũ có thể trả qrCode, qrUrl hoặc qrCodeUrl.
+   * Chuẩn hóa tất cả về cùng một giá trị để page luôn đọc được.
+   */
+  const qrContent = getValue(
+    order.qrContent,
+    order.QrContent,
+    order.qrCode,
+    order.QrCode,
+    order.qrCodeUrl,
+    order.QrCodeUrl,
+    order.qrUrl,
+    order.QrUrl,
+    raw.qrContent,
+    raw.QrContent,
+    raw.qrCode,
+    raw.QrCode,
+    raw.qrCodeUrl,
+    raw.QrCodeUrl,
+    raw.qrUrl,
+    raw.QrUrl,
+    ""
+  );
+
+  const qrImageUrl = getValue(
+    order.qrImageUrl,
+    order.QrImageUrl,
+    order.qrImage,
+    order.QrImage,
+    raw.qrImageUrl,
+    raw.QrImageUrl,
+    raw.qrImage,
+    raw.QrImage,
+    ""
+  );
+
   return {
     depositOrderId,
     id: depositOrderId,
@@ -622,14 +675,16 @@ export const normalizeDepositOrder = (order) => {
     ),
 
     amount: toNumber(
-      getValue(
-        order.amount,
-        order.Amount,
-        raw.amount,
-        raw.Amount,
-        0
-      ),
+      getValue(order.amount, order.Amount, raw.amount, raw.Amount, 0),
       0
+    ),
+
+    currency: getValue(
+      order.currency,
+      order.Currency,
+      raw.currency,
+      raw.Currency,
+      "VND"
     ),
 
     status: String(
@@ -640,35 +695,20 @@ export const normalizeDepositOrder = (order) => {
         raw.Status,
         "PENDING"
       )
-    ).toUpperCase(),
+    )
+      .trim()
+      .toUpperCase(),
 
-    checkoutUrl: getValue(
-      order.checkoutUrl,
-      order.CheckoutUrl,
-      order.paymentUrl,
-      order.PaymentUrl,
-      raw.checkoutUrl,
-      raw.CheckoutUrl,
-      raw.paymentUrl,
-      raw.PaymentUrl,
-      ""
-    ),
+    /*
+     * Giữ cả alias cũ và mới để ExpertWalletPage hoặc code khác
+     * đều có thể dùng mà không bị lệch tên field.
+     */
+    checkoutUrl,
+    paymentUrl: checkoutUrl,
 
-    qrCode: getValue(
-      order.qrCode,
-      order.QrCode,
-      order.qrCodeUrl,
-      order.QrCodeUrl,
-      order.qrUrl,
-      order.QrUrl,
-      raw.qrCode,
-      raw.QrCode,
-      raw.qrCodeUrl,
-      raw.QrCodeUrl,
-      raw.qrUrl,
-      raw.QrUrl,
-      ""
-    ),
+    qrContent,
+    qrCode: qrContent,
+    qrImageUrl,
 
     bankName: getValue(
       order.bankName,
@@ -746,11 +786,6 @@ export const normalizeDepositOrder = (order) => {
       ""
     ),
 
-    /*
-     * Ưu tiên thời gian hết hạn Backend trả về.
-     * ExpertWalletPage chỉ dùng 120 giây làm fallback
-     * nếu Backend không có expiresAt.
-     */
     expiresAt: getValue(
       order.expiresAt,
       order.ExpiresAt,
@@ -1188,9 +1223,13 @@ const expertWalletService = {
         amount,
       });
 
-    return normalizeDepositOrder(
-      unwrapData(response)
-    );
+    const order = normalizeDepositOrder(unwrapData(response));
+
+    if (!order) {
+      throw new Error("The payment order was created but no payment data was returned.");
+    }
+
+    return order;
   },
 
   async getDepositOrderById(depositOrderId) {
