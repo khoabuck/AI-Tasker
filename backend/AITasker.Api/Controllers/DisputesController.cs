@@ -2,9 +2,11 @@ using System.Security.Claims;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
+using AITasker.Api.Options;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 
 namespace AITasker.Api.Controllers
 {
@@ -13,24 +15,23 @@ namespace AITasker.Api.Controllers
     [Authorize]
     public class DisputesController : ControllerBase
     {
-        private const int MaxImagesPerRequest = 10;
-        private const long MaxTotalRequestSize = 60 * 1024 * 1024;
-
         private readonly IDisputeService _disputeService;
         private readonly IImageUploadService _imageUploadService;
+        private readonly DisputeUploadOptions _uploadOptions;
 
         public DisputesController(
             IDisputeService disputeService,
-            IImageUploadService imageUploadService)
+            IImageUploadService imageUploadService,
+            IOptions<DisputeUploadOptions> uploadOptions)
         {
             _disputeService = disputeService;
             _imageUploadService = imageUploadService;
+            _uploadOptions = uploadOptions.Value;
         }
 
         [HttpPost]
         [Authorize(Roles = "CLIENT,EXPERT")]
         [Consumes("multipart/form-data")]
-        [RequestSizeLimit(MaxTotalRequestSize)]
         public async Task<IActionResult> OpenDispute([FromForm] OpenDisputeFormRequest request)
         {
             try
@@ -189,7 +190,6 @@ namespace AITasker.Api.Controllers
         [HttpPost("{disputeId:int}/evidences/images")]
         [HttpPost("{disputeId:int}/evidences/image")]
         [Consumes("multipart/form-data")]
-        [RequestSizeLimit(MaxTotalRequestSize)]
         public async Task<IActionResult> AddImageEvidence(
             int disputeId,
             [FromForm] AddDisputeEvidenceImagesFormRequest request)
@@ -260,9 +260,20 @@ namespace AITasker.Api.Controllers
                 return result;
             }
 
-            if (images.Count > MaxImagesPerRequest)
+            if (images.Count > _uploadOptions.MaxImagesPerRequest)
             {
-                throw new InvalidOperationException($"You can upload at most {MaxImagesPerRequest} images per request.");
+                throw new InvalidOperationException(
+                    $"You can upload at most {_uploadOptions.MaxImagesPerRequest} images per request.");
+            }
+
+            var totalSize = images
+                .Where(image => image != null)
+                .Sum(image => image.Length);
+
+            if (totalSize > _uploadOptions.MaxTotalImageSizeBytes)
+            {
+                throw new InvalidOperationException(
+                    $"Total evidence image size cannot exceed {_uploadOptions.MaxTotalImageSizeBytes} bytes per request.");
             }
 
             foreach (var image in images)

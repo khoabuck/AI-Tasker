@@ -41,7 +41,8 @@ public class ProjectCompletionService : IProjectCompletionService
 
     public async Task<bool> TryCompleteProjectAsync(
         int projectId,
-        bool throwIfNotReady = false)
+        bool throwIfNotReady = false,
+        bool sendNotifications = true)
     {
         var project = await _context.Projects
             .FirstOrDefaultAsync(x => x.ProjectId == projectId);
@@ -165,7 +166,7 @@ public class ProjectCompletionService : IProjectCompletionService
 
         await _context.SaveChangesAsync();
 
-        if (!wasCompleted)
+        if (!wasCompleted && sendNotifications)
         {
             await _notificationService.CreateNotificationAsync(
                 clientProfile.UserId,

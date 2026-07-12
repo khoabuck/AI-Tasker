@@ -5,6 +5,7 @@ using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AITasker.Infrastructure.Notifications
 {
@@ -13,15 +14,18 @@ namespace AITasker.Infrastructure.Notifications
         private readonly AITaskerDbContext _context;
         private readonly INotificationRealtimeService _realtimeService;
         private readonly ILogger<NotificationService> _logger;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         public NotificationService(
             AITaskerDbContext context,
             INotificationRealtimeService realtimeService,
-            ILogger<NotificationService> logger)
+            ILogger<NotificationService> logger,
+            IServiceScopeFactory scopeFactory)
         {
             _context = context;
             _realtimeService = realtimeService;
             _logger = logger;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<NotificationListResponse> GetNotificationsByUserIdAsync(
@@ -79,34 +83,42 @@ namespace AITasker.Infrastructure.Notifications
                 content,
                 type);
 
-            await EnsureUserExistsAsync(userId);
+            Notification notification;
 
-            var notification = new Notification
+            await using (var scope = _scopeFactory.CreateAsyncScope())
             {
-                UserId = userId,
-                Title = title.Trim(),
-                Content = content.Trim(),
-                Type = type.Trim().ToUpperInvariant(),
+                var notificationContext = scope.ServiceProvider
+                    .GetRequiredService<AITaskerDbContext>();
 
-                RelatedEntityType = string.IsNullOrWhiteSpace(relatedEntityType)
-                    ? null
-                    : relatedEntityType.Trim().ToUpperInvariant(),
-                RelatedEntityId = relatedEntityId,
-                RelatedJobId = relatedJobId,
-                RelatedProposalId = relatedProposalId,
-                RelatedContractId = relatedContractId,
-                RelatedProjectId = relatedProjectId,
-                RelatedMilestoneId = relatedMilestoneId,
-                RelatedDeliverableId = relatedDeliverableId,
-                RelatedDisputeId = relatedDisputeId,
-                RelatedConversationId = relatedConversationId,
+                await EnsureUserExistsAsync(notificationContext, userId);
 
-                IsRead = false,
-                CreatedAt = DateTime.UtcNow
-            };
+                notification = new Notification
+                {
+                    UserId = userId,
+                    Title = title.Trim(),
+                    Content = content.Trim(),
+                    Type = type.Trim().ToUpperInvariant(),
 
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
+                    RelatedEntityType = string.IsNullOrWhiteSpace(relatedEntityType)
+                        ? null
+                        : relatedEntityType.Trim().ToUpperInvariant(),
+                    RelatedEntityId = relatedEntityId,
+                    RelatedJobId = relatedJobId,
+                    RelatedProposalId = relatedProposalId,
+                    RelatedContractId = relatedContractId,
+                    RelatedProjectId = relatedProjectId,
+                    RelatedMilestoneId = relatedMilestoneId,
+                    RelatedDeliverableId = relatedDeliverableId,
+                    RelatedDisputeId = relatedDisputeId,
+                    RelatedConversationId = relatedConversationId,
+
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                notificationContext.Notifications.Add(notification);
+                await notificationContext.SaveChangesAsync();
+            }
 
             var response = MapToResponse(notification);
 
@@ -263,9 +275,16 @@ namespace AITasker.Infrastructure.Notifications
             }
         }
 
-        private async Task EnsureUserExistsAsync(int userId)
+        private Task EnsureUserExistsAsync(int userId)
         {
-            var exists = await _context.Users
+            return EnsureUserExistsAsync(_context, userId);
+        }
+
+        private static async Task EnsureUserExistsAsync(
+            AITaskerDbContext context,
+            int userId)
+        {
+            var exists = await context.Users
                 .AsNoTracking()
                 .AnyAsync(u => u.UserId == userId);
 

@@ -489,9 +489,13 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<EscrowOperationResponse> LockProjectEscrowAsync(
             int currentUserId,
-            int projectId)
+            int projectId,
+            bool sendNotifications = true)
         {
-            await using var dbTransaction = await _context.Database.BeginTransactionAsync();
+            var ownsTransaction = _context.Database.CurrentTransaction == null;
+            var dbTransaction = ownsTransaction
+                ? await _context.Database.BeginTransactionAsync()
+                : null;
             var dbTransactionCompleted = false;
 
             try
@@ -595,6 +599,12 @@ namespace AITasker.Infrastructure.Banking
 
                     if (allLocked)
                     {
+                        if (dbTransaction != null)
+                        {
+                            await dbTransaction.CommitAsync();
+                            dbTransactionCompleted = true;
+                        }
+
                         return await BuildProjectEscrowResponseAsync(
                             project,
                             null,
@@ -686,26 +696,33 @@ namespace AITasker.Infrastructure.Banking
                 }
 
                 await _context.SaveChangesAsync();
-                await dbTransaction.CommitAsync();
-                dbTransactionCompleted = true;
 
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow locked",
-                    $"Escrow has been locked for project: {project.Title}.",
-                    "ESCROW_LOCKED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.CommitAsync();
+                    dbTransactionCompleted = true;
+                }
 
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project started",
-                    $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
-                    "PROJECT_STARTED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId);
+                if (sendNotifications)
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        clientProfile.UserId,
+                        "Escrow locked",
+                        $"Escrow has been locked for project: {project.Title}.",
+                        "ESCROW_LOCKED",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId);
+
+                    await _notificationService.CreateNotificationAsync(
+                        expertProfile.UserId,
+                        "Project started",
+                        $"Client locked escrow for project: {project.Title}. You can start working on milestones.",
+                        "PROJECT_STARTED",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId);
+                }
 
                 return await BuildProjectEscrowResponseAsync(
                     project,
@@ -714,12 +731,19 @@ namespace AITasker.Infrastructure.Banking
             }
             catch
             {
-                if (!dbTransactionCompleted)
+                if (dbTransaction != null && !dbTransactionCompleted)
                 {
                     await dbTransaction.RollbackAsync();
                 }
 
                 throw;
+            }
+            finally
+            {
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.DisposeAsync();
+                }
             }
         }
 
@@ -918,27 +942,6 @@ namespace AITasker.Infrastructure.Banking
             }
 
             return Math.Round(amount * expertFeeRate / 100m, 0, MidpointRounding.AwayFromZero);
-        }
-
-        public async Task<bool> ReleaseEscrowAsync(int milestoneId)
-        {
-            try
-            {
-                var milestone = await GetMilestoneAsync(milestoneId);
-                var project = await GetProjectAsync(milestone.ProjectId);
-                var contract = await GetContractAsync(project.ContractId);
-                var clientProfile = await GetClientProfileAsync(contract.ClientId);
-
-                await ReleaseEscrowAsync(
-                    clientProfile.UserId,
-                    milestoneId);
-
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         private async Task<Wallet> GetOrCreateWalletAsync(int userId)

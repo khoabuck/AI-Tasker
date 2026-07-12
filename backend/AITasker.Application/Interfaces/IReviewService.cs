@@ -14,7 +14,7 @@ namespace AITasker.Application.Interfaces
             int currentUserId,
             int projectId);
 
-        Task<IReadOnlyList<ReviewResponse>> GetExpertReviewsAsync(
+        Task<IReadOnlyList<ExpertPublicReviewResponse>> GetExpertReviewsAsync(
             int expertProfileId);
 
         Task<IReadOnlyList<ReviewResponse>> GetMyReviewsAsync(

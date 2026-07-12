@@ -111,7 +111,7 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
             {
                 ProposalCreditPackageId = null,
                 PackageName = "Free",
-                Description = "5 free proposal submissions granted to new experts.",
+                Description = $"{policy.FreeProposalSubmitCount} free proposal submissions granted to new experts.",
                 ProposalSubmitCredits = policy.FreeProposalSubmitCount,
                 Price = 0,
                 Currency = "VND",
@@ -161,7 +161,7 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
             Packages = packages,
             RecentPurchases = recentPurchases.Select(MapPurchase).ToList(),
             RecentTransactions = recentTransactions.Select(MapTransaction).ToList(),
-            Warnings = BuildCreditWarnings(expert.ProposalSubmitCredits, currentTier)
+            Warnings = BuildCreditWarnings(expert.ProposalSubmitCredits, policy.ProposalCreditLowWarningThreshold)
         };
     }
 
@@ -446,7 +446,7 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
                 FreeProposalSubmitRemaining = freeRemaining,
                 ProposalSubmitCredits = expert.ProposalSubmitCredits,
                 CanSubmitProposal = freeRemaining > 0 || expert.ProposalSubmitCredits > 0,
-                Warnings = BuildCreditWarnings(expert.ProposalSubmitCredits, package.PackageName)
+                Warnings = BuildCreditWarnings(expert.ProposalSubmitCredits, policy.ProposalCreditLowWarningThreshold)
             };
         }
         catch
@@ -572,9 +572,10 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
                 relatedEntityType: "PROPOSAL_CREDIT_PACKAGE",
                 relatedEntityId: package.ProposalCreditPackageId);
 
+            var policy = await _workflowPolicyService.GetActivePolicyAsync();
             var warnings = BuildCreditWarnings(
                 expert.ProposalSubmitCredits,
-                package.PackageName);
+                policy.ProposalCreditLowWarningThreshold);
 
             foreach (var warning in warnings)
             {
@@ -594,11 +595,9 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
 
     private static List<ProposalCreditWarningResponse> BuildCreditWarnings(
         int proposalSubmitCredits,
-        string? currentTier)
+        int warningThreshold)
     {
-        var threshold = ResolveProposalCreditWarningThreshold(currentTier);
-
-        if (proposalSubmitCredits > threshold)
+        if (proposalSubmitCredits > warningThreshold)
         {
             return new List<ProposalCreditWarningResponse>();
         }
@@ -612,24 +611,11 @@ public class ProposalCreditPackageService : IProposalCreditPackageService
                     : "PROPOSAL_CREDIT_LOW",
                 Severity = proposalSubmitCredits <= 0 ? "ERROR" : "WARNING",
                 Remaining = proposalSubmitCredits,
-                Threshold = threshold,
+                Threshold = warningThreshold,
                 Message = proposalSubmitCredits <= 0
                     ? "You have used up all your proposal submissions. Please purchase additional proposal credit to continue submitting proposals."
                     : $"You only have {proposalSubmitCredits} proposal submissions left. Please consider purchasing additional proposal credit."
             }
-        };
-    }
-
-    private static int ResolveProposalCreditWarningThreshold(string? tier)
-    {
-        var normalizedTier = tier?.Trim().ToUpperInvariant() ?? string.Empty;
-
-        return normalizedTier switch
-        {
-            "BASIC" => 1,
-            "PRO" => 3,
-            "BUSINESS" => 5,
-            _ => 0
         };
     }
 

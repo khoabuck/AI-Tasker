@@ -14,10 +14,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
     private const int DefaultProposalMilestoneLimit = 10;
     private const int DefaultFreeProposalSubmitCount = 5;
     private const int DefaultResubmitNoteMaxLength = 1000;
+    private const int DefaultProposalResubmitLimit = 0;
+    private const int DefaultProposalResubmitWindowHours = 0;
+    private const int DefaultProposalCreditLowWarningThreshold = 3;
     private const int DefaultContractSignWindowHours = 24;
     private const int DefaultExpertMaxActiveProjects = 3;
     private const int DefaultDeliverableReviewWindowHours = 24;
     private const int DefaultDeliverableAutoApproveGraceHours = 6;
+    private const int DefaultDeliverableArtifactLimit = 10;
     private const decimal DefaultMinimumWithdrawalAmount = 1000m;
     private const decimal DefaultWithdrawalFeeRate = 0m;
     private const decimal DefaultMinimumDepositAmount = 1000m;
@@ -60,10 +64,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.ProposalMilestoneLimit = request.ProposalMilestoneLimit;
         policy.FreeProposalSubmitCount = request.FreeProposalSubmitCount;
         policy.ResubmitNoteMaxLength = request.ResubmitNoteMaxLength;
+        policy.ProposalResubmitLimit = request.ProposalResubmitLimit ?? policy.ProposalResubmitLimit;
+        policy.ProposalResubmitWindowHours = request.ProposalResubmitWindowHours ?? policy.ProposalResubmitWindowHours;
+        policy.ProposalCreditLowWarningThreshold = request.ProposalCreditLowWarningThreshold ?? policy.ProposalCreditLowWarningThreshold;
         policy.ContractSignWindowHours = request.ContractSignWindowHours;
         policy.ExpertMaxActiveProjects = request.ExpertMaxActiveProjects;
         policy.DeliverableReviewWindowHours = request.DeliverableReviewWindowHours;
         policy.DeliverableAutoApproveGraceHours = request.DeliverableAutoApproveGraceHours;
+        policy.DeliverableArtifactLimit = request.DeliverableArtifactLimit ?? policy.DeliverableArtifactLimit;
         policy.MinimumWithdrawalAmount = request.MinimumWithdrawalAmount;
         // Withdrawal fee is disabled by business rule. Keep the legacy field at 0.
         policy.WithdrawalFeeRate = 0m;
@@ -73,6 +81,9 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.WithdrawalApprovalWindowHours = request.WithdrawalApprovalWindowHours ?? policy.WithdrawalApprovalWindowHours;
         policy.WithdrawalPayoutSyncWarningHours = request.WithdrawalPayoutSyncWarningHours ?? policy.WithdrawalPayoutSyncWarningHours;
         policy.DisputeLostWarningThreshold = request.DisputeLostWarningThreshold;
+
+        ValidateResolvedPolicy(policy);
+
         policy.UpdatedByAdminId = adminId;
         policy.UpdateReason = request.Reason?.Trim();
         policy.UpdatedAt = DateTime.UtcNow;
@@ -97,7 +108,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
     private async Task<MarketplaceWorkflowPolicy> GetOrCreateActivePolicyAsync()
     {
         var policy = await _context.MarketplaceWorkflowPolicies
-            .FirstOrDefaultAsync(x => x.IsActive);
+            .SingleOrDefaultAsync(x => x.IsActive);
 
         if (policy != null)
         {
@@ -128,10 +139,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
 
         if (policy.ProposalMilestoneLimit <= 0) { policy.ProposalMilestoneLimit = DefaultProposalMilestoneLimit; changed = true; }
         if (policy.ResubmitNoteMaxLength <= 0) { policy.ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength; changed = true; }
+        if (policy.ProposalResubmitLimit < 0) { policy.ProposalResubmitLimit = DefaultProposalResubmitLimit; changed = true; }
+        if (policy.ProposalResubmitWindowHours < 0) { policy.ProposalResubmitWindowHours = DefaultProposalResubmitWindowHours; changed = true; }
+        if (policy.ProposalCreditLowWarningThreshold < 0) { policy.ProposalCreditLowWarningThreshold = DefaultProposalCreditLowWarningThreshold; changed = true; }
         if (policy.ContractSignWindowHours <= 0) { policy.ContractSignWindowHours = DefaultContractSignWindowHours; changed = true; }
         if (policy.ExpertMaxActiveProjects <= 0) { policy.ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects; changed = true; }
         if (policy.DeliverableReviewWindowHours <= 0) { policy.DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours; changed = true; }
         if (policy.DeliverableAutoApproveGraceHours <= 0) { policy.DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours; changed = true; }
+        if (policy.DeliverableArtifactLimit <= 0) { policy.DeliverableArtifactLimit = DefaultDeliverableArtifactLimit; changed = true; }
         if (policy.MinimumDepositAmount <= 0) { policy.MinimumDepositAmount = DefaultMinimumDepositAmount; changed = true; }
         if (policy.MaximumDepositAmount <= policy.MinimumDepositAmount) { policy.MaximumDepositAmount = DefaultMaximumDepositAmount; changed = true; }
         if (policy.WithdrawalFeeRate != 0m) { policy.WithdrawalFeeRate = DefaultWithdrawalFeeRate; changed = true; }
@@ -154,10 +169,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalMilestoneLimit = DefaultProposalMilestoneLimit,
             FreeProposalSubmitCount = DefaultFreeProposalSubmitCount,
             ResubmitNoteMaxLength = DefaultResubmitNoteMaxLength,
+            ProposalResubmitLimit = DefaultProposalResubmitLimit,
+            ProposalResubmitWindowHours = DefaultProposalResubmitWindowHours,
+            ProposalCreditLowWarningThreshold = DefaultProposalCreditLowWarningThreshold,
             ContractSignWindowHours = DefaultContractSignWindowHours,
             ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
             DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours,
+            DeliverableArtifactLimit = DefaultDeliverableArtifactLimit,
             MinimumWithdrawalAmount = DefaultMinimumWithdrawalAmount,
             WithdrawalFeeRate = DefaultWithdrawalFeeRate,
             MinimumDepositAmount = DefaultMinimumDepositAmount,
@@ -195,6 +214,24 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Resubmit note max length must be between 100 and 5000.");
         }
 
+        if (request.ProposalResubmitLimit.HasValue &&
+            (request.ProposalResubmitLimit.Value < 0 || request.ProposalResubmitLimit.Value > 100))
+        {
+            throw new InvalidOperationException("Proposal resubmit limit must be between 0 and 100. Use 0 for unlimited.");
+        }
+
+        if (request.ProposalResubmitWindowHours.HasValue &&
+            (request.ProposalResubmitWindowHours.Value < 0 || request.ProposalResubmitWindowHours.Value > 8760))
+        {
+            throw new InvalidOperationException("Proposal resubmit window hours must be between 0 and 8760. Use 0 for lifetime counting.");
+        }
+
+        if (request.ProposalCreditLowWarningThreshold.HasValue &&
+            (request.ProposalCreditLowWarningThreshold.Value < 0 || request.ProposalCreditLowWarningThreshold.Value > 1000))
+        {
+            throw new InvalidOperationException("Proposal credit low warning threshold must be between 0 and 1000.");
+        }
+
         if (request.ContractSignWindowHours <= 0 || request.ContractSignWindowHours > 720)
         {
             throw new InvalidOperationException("Contract sign window hours must be between 1 and 720.");
@@ -214,6 +251,12 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         if (request.DeliverableAutoApproveGraceHours <= 0 || request.DeliverableAutoApproveGraceHours > 168)
         {
             throw new InvalidOperationException("Deliverable auto approve grace hours must be between 1 and 168.");
+        }
+
+        if (request.DeliverableArtifactLimit.HasValue &&
+            (request.DeliverableArtifactLimit.Value <= 0 || request.DeliverableArtifactLimit.Value > 100))
+        {
+            throw new InvalidOperationException("Deliverable artifact limit must be between 1 and 100.");
         }
 
         if (request.MinimumWithdrawalAmount < 0)
@@ -257,6 +300,29 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         }
     }
 
+    private static void ValidateResolvedPolicy(MarketplaceWorkflowPolicy policy)
+    {
+        if (policy.ProposalResubmitLimit < 0)
+        {
+            throw new InvalidOperationException("Proposal resubmit limit cannot be negative.");
+        }
+
+        if (policy.ProposalResubmitWindowHours < 0)
+        {
+            throw new InvalidOperationException("Proposal resubmit window hours cannot be negative.");
+        }
+
+        if (policy.ProposalCreditLowWarningThreshold < 0)
+        {
+            throw new InvalidOperationException("Proposal credit low warning threshold cannot be negative.");
+        }
+
+        if (policy.DeliverableArtifactLimit <= 0)
+        {
+            throw new InvalidOperationException("Deliverable artifact limit must be greater than 0.");
+        }
+    }
+
     private static MarketplaceWorkflowPolicyResponse MapToResponse(
         MarketplaceWorkflowPolicy policy)
     {
@@ -267,10 +333,14 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalMilestoneLimit = policy.ProposalMilestoneLimit,
             FreeProposalSubmitCount = policy.FreeProposalSubmitCount,
             ResubmitNoteMaxLength = policy.ResubmitNoteMaxLength,
+            ProposalResubmitLimit = policy.ProposalResubmitLimit,
+            ProposalResubmitWindowHours = policy.ProposalResubmitWindowHours,
+            ProposalCreditLowWarningThreshold = policy.ProposalCreditLowWarningThreshold,
             ContractSignWindowHours = policy.ContractSignWindowHours,
             ExpertMaxActiveProjects = policy.ExpertMaxActiveProjects,
             DeliverableReviewWindowHours = policy.DeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = policy.DeliverableAutoApproveGraceHours,
+            DeliverableArtifactLimit = policy.DeliverableArtifactLimit,
             MinimumWithdrawalAmount = policy.MinimumWithdrawalAmount,
             WithdrawalFeeRate = policy.WithdrawalFeeRate,
             MinimumDepositAmount = policy.MinimumDepositAmount,

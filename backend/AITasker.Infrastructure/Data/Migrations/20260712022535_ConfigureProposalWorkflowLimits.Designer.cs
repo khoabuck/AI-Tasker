@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712022535_ConfigureProposalWorkflowLimits")]
+    partial class ConfigureProposalWorkflowLimits
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -467,6 +470,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ContractMilestoneDraftId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -478,6 +485,14 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<int>("DeadlineOffsetDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");
@@ -1921,9 +1936,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("MarketplaceWorkflowPolicyId");
 
-                    b.HasIndex("IsActive")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("UpdatedByAdminId");
 
@@ -1938,6 +1951,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MilestoneId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -1947,8 +1964,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("Deadline")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("DurationDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");
@@ -2161,9 +2186,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("PlatformFeePolicyId");
 
-                    b.HasIndex("IsActive")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("UpdatedByAdminId");
 
@@ -2505,10 +2528,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("StatusReason")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("WorkingApproach")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -2527,15 +2546,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Status] <> 'WITHDRAWN'");
 
-                    b.HasIndex("JobId", "Status", "StatusReason");
-
                     b.ToTable("Proposals", null, t =>
                         {
                             t.HasCheckConstraint("CK_Proposals_Price_Timeline", "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
                             t.HasCheckConstraint("CK_Proposals_Status", "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
-
-                            t.HasCheckConstraint("CK_Proposals_StatusReason", "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED')");
                         });
                 });
 
@@ -2681,6 +2696,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalMilestoneDraftId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -2689,6 +2708,14 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<int>("DeadlineOffsetDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");

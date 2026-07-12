@@ -1,3 +1,4 @@
+using System.Data;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
@@ -29,6 +30,7 @@ namespace AITasker.Infrastructure.Proposals
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
+        private MarketplaceWorkflowPolicyResponse? _cachedWorkflowPolicy;
 
         public ProposalService(
             AITaskerDbContext context,
@@ -44,7 +46,7 @@ namespace AITasker.Infrastructure.Proposals
             int userId,
             SubmitProposalRequest request)
         {
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             ValidateSubmitProposalRequest(request);
 
@@ -191,7 +193,7 @@ namespace AITasker.Infrastructure.Proposals
                 throw new InvalidOperationException("Expert profile not found.");
             }
 
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             return BuildProposalCreditResponse(expert, policy);
         }
@@ -229,7 +231,7 @@ namespace AITasker.Infrastructure.Proposals
             int userId,
             SubmitProposalRequest request)
         {
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             ValidateSubmitProposalRequest(request);
 
@@ -318,7 +320,7 @@ namespace AITasker.Infrastructure.Proposals
             int proposalId,
             SubmitProposalRequest request)
         {
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             ValidateSubmitProposalRequest(request);
 
@@ -430,7 +432,7 @@ namespace AITasker.Infrastructure.Proposals
                 .OrderBy(x => x.OrderIndex)
                 .ToListAsync();
 
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             ValidateSavedProposalDraftForSubmit(
                 proposal,
@@ -438,6 +440,7 @@ namespace AITasker.Infrastructure.Proposals
                 policy.ProposalMilestoneLimit);
 
             proposal.Status = StatusSubmitted;
+            proposal.StatusReason = null;
 
             var proposalCreditUsageType = ChargeProposalSubmitCredit(
                 expert,
@@ -574,6 +577,7 @@ namespace AITasker.Infrastructure.Proposals
             if (normalizedDecision == "REJECT")
             {
                 proposal.Status = StatusRejected;
+                proposal.StatusReason = ProposalStatusReasons.ClientRejected;
                 await _context.SaveChangesAsync();
 
                 var rejectedExpert = await GetExpertProfileByIdAsync(proposal.ExpertId);
@@ -595,6 +599,7 @@ namespace AITasker.Infrastructure.Proposals
             var sourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
 
             proposal.Status = StatusAccepted;
+            proposal.StatusReason = ProposalStatusReasons.ClientAccepted;
             job.UpdatedAt = DateTime.UtcNow;
 
 
@@ -608,23 +613,33 @@ namespace AITasker.Infrastructure.Proposals
                     ))
                 .ToListAsync();
 
+            var competingProposalNotifications = new List<(int UserId, int ProposalId)>();
+
             foreach (var competingProposal in competingProposals)
             {
                 competingProposal.Status = StatusRejected;
-                var competingExpert = await GetExpertProfileByIdAsync(competingProposal.ExpertId);
+                competingProposal.StatusReason = ProposalStatusReasons.AutoNotSelected;
 
-                await _notificationService.CreateNotificationAsync(
+                var competingExpert = await GetExpertProfileByIdAsync(competingProposal.ExpertId);
+                competingProposalNotifications.Add((
                     competingExpert.UserId,
-                    "Proposal rejected",
-                    $"Your proposal for job '{job.Title}' was rejected because another proposal was accepted. Proposal submission credits are not refunded after submission.",
-                    NotificationTypes.ProposalRejected,
-                    relatedEntityType: "PROPOSAL",
-                    relatedEntityId: competingProposal.ProposalId,
-                    relatedJobId: job.JobPostingId,
-                    relatedProposalId: competingProposal.ProposalId);
+                    competingProposal.ProposalId));
             }
 
             await _context.SaveChangesAsync();
+
+            foreach (var notificationTarget in competingProposalNotifications)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    notificationTarget.UserId,
+                    "Proposal not selected",
+                    $"Your proposal for job '{job.Title}' was not selected because another proposal was accepted. It may be reopened if the resulting contract is cancelled before project start.",
+                    NotificationTypes.ProposalRejected,
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: notificationTarget.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: notificationTarget.ProposalId);
+            }
 
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
             var expert = await GetExpertProfileByIdAsync(proposal.ExpertId);
@@ -721,6 +736,7 @@ namespace AITasker.Infrastructure.Proposals
             var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
 
             proposal.Status = StatusWithdrawn;
+            proposal.StatusReason = ProposalStatusReasons.ExpertWithdrawn;
 
             await _context.SaveChangesAsync();
 
@@ -858,18 +874,6 @@ namespace AITasker.Infrastructure.Proposals
             };
         }
 
-        private static decimal ResolvePlatformFeeRate(ClientProfile clientProfile)
-        {
-            if (clientProfile.PlatformFeeRate > 0)
-            {
-                return clientProfile.PlatformFeeRate;
-            }
-
-            return string.Equals(clientProfile.ClientType, "BUSINESS", StringComparison.OrdinalIgnoreCase)
-                ? 10m
-                : 5m;
-        }
-
         private async Task<Proposal> GetProposalByIdAsync(int proposalId)
         {
             var proposal = await _context.Proposals
@@ -984,6 +988,8 @@ namespace AITasker.Infrastructure.Proposals
 
         private async Task<ProposalResponse> MapToProposalResponseAsync(Proposal proposal)
         {
+            var policy = await GetWorkflowPolicyAsync();
+
             var job = await _context.JobPostings
                 .AsNoTracking()
                 .FirstOrDefaultAsync(x => x.JobPostingId == proposal.JobId);
@@ -1059,6 +1065,11 @@ namespace AITasker.Infrastructure.Proposals
                 .Select(x => (DateTime?)x.CreatedAt)
                 .FirstOrDefault();
 
+            var resubmitsInWindow = CountResubmitsInPolicyWindow(versions, policy, DateTime.UtcNow);
+            int? remainingResubmits = policy.ProposalResubmitLimit <= 0
+                ? null
+                : Math.Max(policy.ProposalResubmitLimit - resubmitsInWindow, 0);
+
             var milestoneDrafts = await _context.ProposalMilestoneDrafts
                 .AsNoTracking()
                 .Where(x => x.ProposalId == proposal.ProposalId)
@@ -1090,14 +1101,15 @@ namespace AITasker.Infrastructure.Proposals
                 Milestones = MapProposalMilestoneDraftResponses(milestoneDrafts),
 
                 Status = proposal.Status,
+                StatusReason = proposal.StatusReason,
                 ContractId = contractId,
 
                 LatestVersionNumber = latestVersionNumber,
                 TotalVersions = totalVersions,
                 LastResubmittedAt = lastResubmittedAt,
-                ResubmitLimit = 0,
-                ResubmitWindowHours = 0,
-                RemainingResubmitsInWindow = int.MaxValue,
+                ResubmitLimit = policy.ProposalResubmitLimit,
+                ResubmitWindowHours = policy.ProposalResubmitWindowHours,
+                RemainingResubmitsInWindow = remainingResubmits,
                 LatestVersion = latestVersion,
 
                 CreatedAt = proposal.CreatedAt,
@@ -1141,7 +1153,7 @@ namespace AITasker.Infrastructure.Proposals
             int proposalId,
             ResubmitProposalRequest request)
         {
-            var policy = await _workflowPolicyService.GetActivePolicyAsync();
+            var policy = await GetWorkflowPolicyAsync();
 
             ValidateResubmitProposalRequestLocal(
                 request,
@@ -1184,62 +1196,88 @@ namespace AITasker.Infrastructure.Proposals
             {
                 throw new InvalidOperationException("Cannot resubmit proposal because the job is no longer open.");
             }
+
             await EnsureJobStillAcceptsProposalsAsync(
                 job.JobPostingId,
                 proposal.ProposalId);
 
             ValidateProposalPriceWithinJobBudget(request.ProposedPrice, job);
 
-            await EnsureProposalBaseVersionExistsAsync(proposal);
+            ProposalVersion newVersion;
 
-            var latestVersionNumber = await _context.ProposalVersions
-                .Where(x => x.ProposalId == proposal.ProposalId)
-                .MaxAsync(x => x.VersionNumber);
-
-            proposal.CoverLetter = request.CoverLetter.Trim();
-            proposal.ProposedPrice = request.ProposedPrice;
-            proposal.ProposedTimelineDays = request.ProposedTimelineDays;
-            proposal.ExpectedOutputs = request.ExpectedOutputs.Trim();
-            proposal.WorkingApproach = request.WorkingApproach.Trim();
-            proposal.PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
-                ? null
-                : request.PreliminaryMilestonePlan.Trim();
-
-            proposal.Status = StatusSubmitted;
-
-            var newVersion = new ProposalVersion
+            await using (var dbTransaction = await _context.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable))
             {
-                ProposalId = proposal.ProposalId,
-                VersionNumber = latestVersionNumber + 1,
-                CoverLetter = proposal.CoverLetter,
-                ProposedPrice = proposal.ProposedPrice,
-                ProposedTimelineDays = proposal.ProposedTimelineDays,
-                ExpectedOutputs = proposal.ExpectedOutputs,
-                WorkingApproach = proposal.WorkingApproach,
-                PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
-                MilestonePlanJson = SerializeProposalMilestoneDraftRequests(request.Milestones),
-                ResubmitNote = string.IsNullOrWhiteSpace(request.ResubmitNote)
-                    ? "Proposal resubmitted after negotiation."
-                    : request.ResubmitNote.Trim(),
-                CreatedByUserId = userId,
-                CreatedAt = DateTime.UtcNow
-            };
+                try
+                {
+                    await _context.Entry(proposal).ReloadAsync();
 
-            _context.ProposalVersions.Add(newVersion);
+                    if (proposal.Status == StatusAccepted ||
+                        proposal.Status == StatusRejected ||
+                        proposal.Status == StatusWithdrawn)
+                    {
+                        throw new InvalidOperationException("Proposal state changed and it can no longer be resubmitted.");
+                    }
 
-            var oldMilestoneDrafts = await _context.ProposalMilestoneDrafts
-                .Where(x => x.ProposalId == proposal.ProposalId)
-                .ToListAsync();
+                    await EnsureProposalBaseVersionExistsAsync(proposal);
+                    await EnsureResubmitAllowedAsync(proposal.ProposalId, policy);
 
-            _context.ProposalMilestoneDrafts.RemoveRange(oldMilestoneDrafts);
+                    var latestVersionNumber = await _context.ProposalVersions
+                        .Where(x => x.ProposalId == proposal.ProposalId)
+                        .MaxAsync(x => x.VersionNumber);
 
-            var newMilestoneDrafts = BuildProposalMilestoneDrafts(
-                proposal,
-                request.Milestones);
+                    proposal.CoverLetter = request.CoverLetter.Trim();
+                    proposal.ProposedPrice = request.ProposedPrice;
+                    proposal.ProposedTimelineDays = request.ProposedTimelineDays;
+                    proposal.ExpectedOutputs = request.ExpectedOutputs.Trim();
+                    proposal.WorkingApproach = request.WorkingApproach.Trim();
+                    proposal.PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
+                        ? null
+                        : request.PreliminaryMilestonePlan.Trim();
+                    proposal.Status = StatusSubmitted;
+                    proposal.StatusReason = null;
 
-            _context.ProposalMilestoneDrafts.AddRange(newMilestoneDrafts);
+                    newVersion = new ProposalVersion
+                    {
+                        ProposalId = proposal.ProposalId,
+                        VersionNumber = latestVersionNumber + 1,
+                        CoverLetter = proposal.CoverLetter,
+                        ProposedPrice = proposal.ProposedPrice,
+                        ProposedTimelineDays = proposal.ProposedTimelineDays,
+                        ExpectedOutputs = proposal.ExpectedOutputs,
+                        WorkingApproach = proposal.WorkingApproach,
+                        PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                        MilestonePlanJson = SerializeProposalMilestoneDraftRequests(request.Milestones),
+                        ResubmitNote = string.IsNullOrWhiteSpace(request.ResubmitNote)
+                            ? "Proposal resubmitted after negotiation."
+                            : request.ResubmitNote.Trim(),
+                        CreatedByUserId = userId,
+                        CreatedAt = DateTime.UtcNow
+                    };
 
-            await _context.SaveChangesAsync();
+                    _context.ProposalVersions.Add(newVersion);
+
+                    var oldMilestoneDrafts = await _context.ProposalMilestoneDrafts
+                        .Where(x => x.ProposalId == proposal.ProposalId)
+                        .ToListAsync();
+
+                    _context.ProposalMilestoneDrafts.RemoveRange(oldMilestoneDrafts);
+
+                    var newMilestoneDrafts = BuildProposalMilestoneDrafts(
+                        proposal,
+                        request.Milestones);
+
+                    _context.ProposalMilestoneDrafts.AddRange(newMilestoneDrafts);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
+            }
 
             var clientProfile = await _context.ClientProfiles
                 .FirstOrDefaultAsync(x => x.ClientProfileId == job.ClientProfileId);
@@ -1337,50 +1375,83 @@ namespace AITasker.Infrastructure.Proposals
 
         private async Task EnsureProposalBaseVersionExistsAsync(Proposal proposal)
         {
-            var exists = await _context.ProposalVersions
-                .AnyAsync(x => x.ProposalId == proposal.ProposalId);
+            var ownsTransaction = _context.Database.CurrentTransaction == null;
+            var dbTransaction = ownsTransaction
+                ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                : null;
 
-            if (exists)
+            try
             {
-                return;
+                var exists = await _context.ProposalVersions
+                    .AnyAsync(x => x.ProposalId == proposal.ProposalId);
+
+                if (exists)
+                {
+                    if (dbTransaction != null)
+                    {
+                        await dbTransaction.CommitAsync();
+                    }
+
+                    return;
+                }
+
+                var expertProfile = await _context.ExpertProfiles
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
+
+                if (expertProfile == null)
+                {
+                    throw new InvalidOperationException("Expert profile not found.");
+                }
+
+                var currentMilestoneDrafts = await _context.ProposalMilestoneDrafts
+                    .AsNoTracking()
+                    .Where(x => x.ProposalId == proposal.ProposalId)
+                    .OrderBy(x => x.OrderIndex)
+                    .ToListAsync();
+
+                var baseVersion = new ProposalVersion
+                {
+                    ProposalId = proposal.ProposalId,
+                    VersionNumber = 1,
+                    CoverLetter = proposal.CoverLetter,
+                    ProposedPrice = proposal.ProposedPrice,
+                    ProposedTimelineDays = proposal.ProposedTimelineDays,
+                    ExpectedOutputs = proposal.ExpectedOutputs,
+                    WorkingApproach = proposal.WorkingApproach,
+                    PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
+                    MilestonePlanJson = SerializeProposalMilestoneDraftEntities(currentMilestoneDrafts),
+                    ResubmitNote = "Initial proposal version generated from existing proposal.",
+                    CreatedByUserId = expertProfile.UserId,
+                    CreatedAt = proposal.CreatedAt == default
+                        ? DateTime.UtcNow
+                        : proposal.CreatedAt
+                };
+
+                _context.ProposalVersions.Add(baseVersion);
+                await _context.SaveChangesAsync();
+
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.CommitAsync();
+                }
             }
-
-            var expertProfile = await _context.ExpertProfiles
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x => x.ExpertProfileId == proposal.ExpertId);
-
-            if (expertProfile == null)
+            catch
             {
-                throw new InvalidOperationException("Expert profile not found.");
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.RollbackAsync();
+                }
+
+                throw;
             }
-
-            var currentMilestoneDrafts = await _context.ProposalMilestoneDrafts
-                .AsNoTracking()
-                .Where(x => x.ProposalId == proposal.ProposalId)
-                .OrderBy(x => x.OrderIndex)
-                .ToListAsync();
-
-            var baseVersion = new ProposalVersion
+            finally
             {
-                ProposalId = proposal.ProposalId,
-                VersionNumber = 1,
-                CoverLetter = proposal.CoverLetter,
-                ProposedPrice = proposal.ProposedPrice,
-                ProposedTimelineDays = proposal.ProposedTimelineDays,
-                ExpectedOutputs = proposal.ExpectedOutputs,
-                WorkingApproach = proposal.WorkingApproach,
-                PreliminaryMilestonePlan = proposal.PreliminaryMilestonePlan,
-                MilestonePlanJson = SerializeProposalMilestoneDraftEntities(currentMilestoneDrafts),
-                ResubmitNote = "Initial proposal version generated from existing proposal.",
-                CreatedByUserId = expertProfile.UserId,
-                CreatedAt = proposal.CreatedAt == default
-                    ? DateTime.UtcNow
-                    : proposal.CreatedAt
-            };
-
-            _context.ProposalVersions.Add(baseVersion);
-
-            await _context.SaveChangesAsync();
+                if (dbTransaction != null)
+                {
+                    await dbTransaction.DisposeAsync();
+                }
+            }
         }
 
         private static void ValidateResubmitProposalRequestLocal(
@@ -1590,10 +1661,10 @@ namespace AITasker.Infrastructure.Proposals
                     relatedJobId: job.JobPostingId,
                     relatedProposalId: proposal.ProposalId);
 
-                var currentTier = await GetCurrentProposalCreditTierAsync(expert.ExpertProfileId);
+                var policy = await GetWorkflowPolicyAsync();
                 var warningMessage = BuildProposalCreditWarningMessage(
                     expert.ProposalSubmitCredits,
-                    currentTier);
+                    policy.ProposalCreditLowWarningThreshold);
 
                 if (!string.IsNullOrWhiteSpace(warningMessage))
                 {
@@ -1612,24 +1683,65 @@ namespace AITasker.Infrastructure.Proposals
             }
         }
 
-        private async Task<string?> GetCurrentProposalCreditTierAsync(int expertProfileId)
+        private async Task<MarketplaceWorkflowPolicyResponse> GetWorkflowPolicyAsync()
         {
-            var latestPurchase = await _context.ProposalCreditPackagePurchases
-                .AsNoTracking()
-                .Where(x => x.ExpertProfileId == expertProfileId)
-                .OrderByDescending(x => x.PurchasedAt)
-                .FirstOrDefaultAsync();
+            _cachedWorkflowPolicy ??= await _workflowPolicyService.GetActivePolicyAsync();
+            return _cachedWorkflowPolicy;
+        }
 
-            return latestPurchase?.PackageNameSnapshot;
+        private async Task EnsureResubmitAllowedAsync(
+            int proposalId,
+            MarketplaceWorkflowPolicyResponse policy)
+        {
+            if (policy.ProposalResubmitLimit <= 0)
+            {
+                return;
+            }
+
+            var query = _context.ProposalVersions
+                .AsNoTracking()
+                .Where(x => x.ProposalId == proposalId && x.VersionNumber > 1);
+
+            if (policy.ProposalResubmitWindowHours > 0)
+            {
+                var windowStartUtc = DateTime.UtcNow.AddHours(-policy.ProposalResubmitWindowHours);
+                query = query.Where(x => x.CreatedAt >= windowStartUtc);
+            }
+
+            var usedResubmits = await query.CountAsync();
+
+            if (usedResubmits >= policy.ProposalResubmitLimit)
+            {
+                var scope = policy.ProposalResubmitWindowHours > 0
+                    ? $"within {policy.ProposalResubmitWindowHours} hours"
+                    : "for this proposal";
+
+                throw new InvalidOperationException(
+                    $"Proposal resubmit limit reached. Maximum allowed is {policy.ProposalResubmitLimit} {scope}.");
+            }
+        }
+
+        private static int CountResubmitsInPolicyWindow(
+            IReadOnlyCollection<ProposalVersion> versions,
+            MarketplaceWorkflowPolicyResponse policy,
+            DateTime nowUtc)
+        {
+            var resubmits = versions.Where(x => x.VersionNumber > 1);
+
+            if (policy.ProposalResubmitWindowHours > 0)
+            {
+                var windowStartUtc = nowUtc.AddHours(-policy.ProposalResubmitWindowHours);
+                resubmits = resubmits.Where(x => x.CreatedAt >= windowStartUtc);
+            }
+
+            return resubmits.Count();
         }
 
         private static string? BuildProposalCreditWarningMessage(
             int proposalSubmitCredits,
-            string? currentTier)
+            int warningThreshold)
         {
-            var threshold = ResolveProposalCreditWarningThreshold(currentTier);
-
-            if (proposalSubmitCredits > threshold)
+            if (proposalSubmitCredits > warningThreshold)
             {
                 return null;
             }
@@ -1640,19 +1752,6 @@ namespace AITasker.Infrastructure.Proposals
             }
 
             return $"You only have {proposalSubmitCredits} proposal submissions left. Please consider purchasing additional proposal credit.";
-        }
-
-        private static int ResolveProposalCreditWarningThreshold(string? tier)
-        {
-            var normalizedTier = tier?.Trim().ToUpperInvariant() ?? string.Empty;
-
-            return normalizedTier switch
-            {
-                "BASIC" => 1,
-                "PRO" => 3,
-                "BUSINESS" => 5,
-                _ => 0
-            };
         }
 
         private static List<ProposalMilestoneDraft> BuildProposalMilestoneDrafts(
@@ -1671,9 +1770,6 @@ namespace AITasker.Infrastructure.Proposals
                 {
                     Proposal = proposal,
                     Title = milestone.Title.Trim(),
-                    Description = string.Empty,
-                    ExpectedDeliverable = string.Empty,
-                    AcceptanceCriteria = string.Empty,
                     Amount = milestone.Amount,
                     OrderIndex = orderIndex,
                     DeadlineOffsetDays = deadlineOffsetDays,
@@ -1746,9 +1842,6 @@ namespace AITasker.Infrastructure.Proposals
                 .Select(x => new
                 {
                     title = x.Title,
-                    description = x.Description,
-                    expectedDeliverable = x.ExpectedDeliverable,
-                    acceptanceCriteria = x.AcceptanceCriteria,
                     amount = x.Amount,
                     orderIndex = x.OrderIndex,
                     deadlineOffsetDays = x.DeadlineOffsetDays
@@ -1756,50 +1849,6 @@ namespace AITasker.Infrastructure.Proposals
                 .ToList();
 
             return JsonSerializer.Serialize(normalizedMilestones);
-        }
-
-        private async Task CopyLatestProposalMilestonesToContractDraftAsync(
-            int proposalId,
-            int contractId)
-        {
-            var proposalMilestones = await _context.ProposalMilestoneDrafts
-                .AsNoTracking()
-                .Where(x => x.ProposalId == proposalId)
-                .OrderBy(x => x.OrderIndex)
-                .ToListAsync();
-
-            if (proposalMilestones.Count == 0)
-            {
-                throw new InvalidOperationException("Proposal must have milestone drafts before creating contract.");
-            }
-
-            var existingContractMilestones = await _context.ContractMilestoneDrafts
-                .Where(x => x.ContractId == contractId)
-                .ToListAsync();
-
-            if (existingContractMilestones.Count > 0)
-            {
-                _context.ContractMilestoneDrafts.RemoveRange(existingContractMilestones);
-            }
-
-            var contractMilestones = proposalMilestones
-                .Select(x => new ContractMilestoneDraft
-                {
-                    ContractId = contractId,
-                    Title = x.Title,
-                    Description = x.Description,
-                    ExpectedDeliverable = x.ExpectedDeliverable,
-                    AcceptanceCriteria = x.AcceptanceCriteria,
-                    Amount = x.Amount,
-                    OrderIndex = x.OrderIndex,
-                    DeadlineOffsetDays = x.DeadlineOffsetDays,
-                    CreatedAt = DateTime.UtcNow
-                })
-                .ToList();
-
-            _context.ContractMilestoneDrafts.AddRange(contractMilestones);
-
-            await _context.SaveChangesAsync();
         }
 
         private static void ValidateProposalPriceWithinJobBudget(decimal proposedPrice, JobPosting job)

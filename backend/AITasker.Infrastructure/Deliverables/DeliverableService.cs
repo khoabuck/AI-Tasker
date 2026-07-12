@@ -1,3 +1,4 @@
+using System.Data;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
@@ -101,73 +102,99 @@ namespace AITasker.Infrastructure.Deliverables
                     "Deliverable can only be submitted for FUNDED, IN_PROGRESS, OVERDUE, or REVISION_REQUESTED milestones.");
             }
 
-            var hasPendingSubmittedDeliverable = await _context.Deliverables.AnyAsync(d =>
-                d.MilestoneId == milestone.MilestoneId &&
-                d.Status == DeliverableStatusSubmitted);
-
-            if (hasPendingSubmittedDeliverable)
-            {
-                throw new InvalidOperationException("This milestone already has a submitted deliverable waiting for Client review.");
-            }
-
-            var validatedDelivery = await ValidateAndNormalizeDeliveryAsync(request);
-
-            var latestVersion = await _context.Deliverables
-                .Where(d => d.MilestoneId == milestone.MilestoneId)
-                .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
-
-            var now = DateTime.UtcNow;
             var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
+            var validatedDelivery = await ValidateAndNormalizeDeliveryAsync(
+                request,
+                workflowPolicy.DeliverableArtifactLimit);
 
-            var deliverable = new Deliverable
-            {
-                MilestoneId = milestone.MilestoneId,
-                ExpertId = expertProfile.ExpertProfileId,
-                FileUrl = validatedDelivery.Artifacts.FirstOrDefault()?.Url,
-                DemoUrl = validatedDelivery.DemoUrl,
-                DemoInstructions = NormalizeOptionalText(request.DemoInstructions),
-                DemoValidationStatus = validatedDelivery.DemoUrl == null
-                    ? null
-                    : ArtifactValidationValid,
-                Description = request.Description.Trim(),
-                HandoverNotes = NormalizeOptionalText(request.HandoverNotes),
-                TestResultUrl = validatedDelivery.TestResultUrl,
-                TestSummary = NormalizeOptionalText(request.TestSummary),
-                TestValidationStatus = validatedDelivery.TestResultUrl == null
-                    ? null
-                    : ArtifactValidationValid,
-                ClientFeedback = null,
-                VersionNumber = latestVersion + 1,
-                Status = DeliverableStatusSubmitted,
-                SubmittedAt = now,
-                ReviewDeadlineAt = now.AddHours(workflowPolicy.DeliverableReviewWindowHours),
-                ReviewedAt = null,
-                OverdueNotifiedAt = null
-            };
+            Deliverable deliverable;
 
-            foreach (var artifact in validatedDelivery.Artifacts)
+            await using (var dbTransaction = await _context.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable))
             {
-                deliverable.Artifacts.Add(new DeliverableArtifact
+                try
                 {
-                    ArtifactType = artifact.ArtifactType,
-                    Label = artifact.Label,
-                    Url = artifact.Url,
-                    Provider = artifact.Provider,
-                    AccessLevel = artifact.AccessLevel,
-                    Version = artifact.Version,
-                    CommitHash = artifact.CommitHash,
-                    Checksum = artifact.Checksum,
-                    ValidationStatus = artifact.ValidationStatus,
-                    ValidatedAt = artifact.ValidatedAt,
-                    CreatedAt = now
-                });
+                    await _context.Entry(milestone).ReloadAsync();
+
+                    EnsureProjectEscrowLockedForDeliverableAction(project, milestone);
+
+                    if (!CanSubmitForMilestone(milestone))
+                    {
+                        throw new InvalidOperationException(
+                            "Milestone state changed and it no longer accepts a deliverable submission.");
+                    }
+
+                    var hasPendingSubmittedDeliverable = await _context.Deliverables.AnyAsync(d =>
+                        d.MilestoneId == milestone.MilestoneId &&
+                        d.Status == DeliverableStatusSubmitted);
+
+                    if (hasPendingSubmittedDeliverable)
+                    {
+                        throw new InvalidOperationException("This milestone already has a submitted deliverable waiting for Client review.");
+                    }
+
+                    var latestVersion = await _context.Deliverables
+                        .Where(d => d.MilestoneId == milestone.MilestoneId)
+                        .MaxAsync(d => (int?)d.VersionNumber) ?? 0;
+
+                    var now = DateTime.UtcNow;
+
+                    deliverable = new Deliverable
+                    {
+                        MilestoneId = milestone.MilestoneId,
+                        ExpertId = expertProfile.ExpertProfileId,
+                        FileUrl = validatedDelivery.Artifacts.FirstOrDefault()?.Url,
+                        DemoUrl = validatedDelivery.DemoUrl,
+                        DemoInstructions = NormalizeOptionalText(request.DemoInstructions),
+                        DemoValidationStatus = validatedDelivery.DemoUrl == null
+                            ? null
+                            : ArtifactValidationValid,
+                        Description = request.Description.Trim(),
+                        HandoverNotes = NormalizeOptionalText(request.HandoverNotes),
+                        TestResultUrl = validatedDelivery.TestResultUrl,
+                        TestSummary = NormalizeOptionalText(request.TestSummary),
+                        TestValidationStatus = validatedDelivery.TestResultUrl == null
+                            ? null
+                            : ArtifactValidationValid,
+                        ClientFeedback = null,
+                        VersionNumber = latestVersion + 1,
+                        Status = DeliverableStatusSubmitted,
+                        SubmittedAt = now,
+                        ReviewDeadlineAt = now.AddHours(workflowPolicy.DeliverableReviewWindowHours),
+                        ReviewedAt = null,
+                        OverdueNotifiedAt = null
+                    };
+
+                    foreach (var artifact in validatedDelivery.Artifacts)
+                    {
+                        deliverable.Artifacts.Add(new DeliverableArtifact
+                        {
+                            ArtifactType = artifact.ArtifactType,
+                            Label = artifact.Label,
+                            Url = artifact.Url,
+                            Provider = artifact.Provider,
+                            AccessLevel = artifact.AccessLevel,
+                            Version = artifact.Version,
+                            CommitHash = artifact.CommitHash,
+                            Checksum = artifact.Checksum,
+                            ValidationStatus = artifact.ValidationStatus,
+                            ValidatedAt = artifact.ValidatedAt,
+                            CreatedAt = now
+                        });
+                    }
+
+                    milestone.Status = MilestoneStatusSubmitted;
+                    _context.Deliverables.Add(deliverable);
+
+                    await _context.SaveChangesAsync();
+                    await dbTransaction.CommitAsync();
+                }
+                catch
+                {
+                    await dbTransaction.RollbackAsync();
+                    throw;
+                }
             }
-
-            milestone.Status = MilestoneStatusSubmitted;
-
-            _context.Deliverables.Add(deliverable);
-
-            await _context.SaveChangesAsync();
 
             await _notificationService.CreateNotificationAsync(
                 clientProfile.UserId,
@@ -435,7 +462,8 @@ namespace AITasker.Infrastructure.Deliverables
         /// Restricted artifacts are validated for safe URL structure but may require account-based access.
         /// </summary>
         private async Task<ValidatedDeliveryData> ValidateAndNormalizeDeliveryAsync(
-            SubmitDeliverableRequest request)
+            SubmitDeliverableRequest request,
+            int artifactLimit)
         {
             var artifactRequests = request.Artifacts?
                 .Where(x => x != null)
@@ -461,9 +489,10 @@ namespace AITasker.Infrastructure.Deliverables
                 throw new InvalidOperationException("At least one product artifact is required.");
             }
 
-            if (artifactRequests.Count > 10)
+            if (artifactRequests.Count > artifactLimit)
             {
-                throw new InvalidOperationException("A deliverable can contain at most 10 artifacts.");
+                throw new InvalidOperationException(
+                    $"A deliverable can contain at most {artifactLimit} artifacts.");
             }
 
             var normalizedArtifacts = new List<ValidatedArtifactData>();

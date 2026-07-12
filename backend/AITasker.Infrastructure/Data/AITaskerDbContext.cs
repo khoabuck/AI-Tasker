@@ -265,7 +265,9 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(x => x.UpdatedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.IsActive)
+                .IsUnique()
+                .HasFilter("[IsActive] = 1");
 
             entity.HasIndex(x => x.UpdatedByAdminId);
         });
@@ -279,7 +281,23 @@ public class AITaskerDbContext : DbContext
 
             entity.HasKey(x => x.MarketplaceWorkflowPolicyId);
 
+            entity.Property(x => x.ProposalResubmitLimit)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalResubmitWindowHours)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalCreditLowWarningThreshold)
+                .HasDefaultValue(3)
+                .IsRequired();
+
             entity.Property(x => x.ContractSignWindowHours)
+                .IsRequired();
+
+            entity.Property(x => x.DeliverableArtifactLimit)
+                .HasDefaultValue(10)
                 .IsRequired();
 
             entity.Property(x => x.MinimumWithdrawalAmount)
@@ -317,7 +335,9 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.UpdatedByAdminId);
 
-            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.IsActive)
+                .IsUnique()
+                .HasFilter("[IsActive] = 1");
         });
 
 
@@ -1418,6 +1438,10 @@ public class AITaskerDbContext : DbContext
                     "CK_Proposals_Price_Timeline",
                     "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
+                t.HasCheckConstraint(
+                    "CK_Proposals_StatusReason",
+                    "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED')");
+
             });
 
             entity.HasKey(e => e.ProposalId);
@@ -1435,6 +1459,9 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.StatusReason)
+                .HasMaxLength(50);
+
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
@@ -1447,6 +1474,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.ExpertId);
 
             entity.HasIndex(e => e.Status);
+
+            entity.HasIndex(e => new { e.JobId, e.Status, e.StatusReason });
 
             entity.HasIndex(e => new { e.JobId, e.ExpertId })
                 .IsUnique()
@@ -1497,15 +1526,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(e => e.Title)
                 .IsRequired()
                 .HasMaxLength(255);
-
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
-                .IsRequired();
 
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
@@ -2043,15 +2063,6 @@ public class AITaskerDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(255);
 
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
-                .IsRequired();
-
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
@@ -2169,15 +2180,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
                 .IsRequired();
 
             entity.Property(e => e.Amount)

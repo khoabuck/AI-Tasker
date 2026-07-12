@@ -103,6 +103,14 @@ namespace AITasker.Infrastructure.Disputes
                 NormalizeUrlList(request.EvidenceImageUrls),
                 nameof(request.EvidenceImageUrls));
 
+            var openedDisputeId = 0;
+            var notificationRespondentUserId = 0;
+            var notificationProjectId = 0;
+            int? notificationMilestoneId = null;
+            var notificationProjectTitle = string.Empty;
+            var notificationOpenerName = string.Empty;
+            var notificationRespondentName = string.Empty;
+
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -340,39 +348,43 @@ namespace AITasker.Infrastructure.Disputes
                     await _context.SaveChangesAsync();
                 }
 
-                var openerName = currentUserIsClient
+                openedDisputeId = dispute.DisputeId;
+                notificationRespondentUserId = respondentUserId;
+                notificationProjectId = dispute.ProjectId;
+                notificationMilestoneId = dispute.MilestoneId;
+                notificationProjectTitle = project.Title;
+                notificationOpenerName = currentUserIsClient
                     ? clientUser.FullName
                     : expertUser.FullName;
-
-                var respondentName = currentUserIsClient
+                notificationRespondentName = currentUserIsClient
                     ? expertUser.FullName
                     : clientUser.FullName;
 
-                await _notificationService.CreateNotificationAsync(
-                    respondentUserId,
-                    "Dispute opened",
-                    $"{openerName} opened a dispute in project '{project.Title}'.",
-                    "DISPUTE_OPENED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
-
-                await NotifyAdminsAsync(
-                    "New dispute opened",
-                    $"A dispute was opened in project '{project.Title}' by {openerName} against {respondentName}.",
-                    "DISPUTE_OPENED");
-
                 await transaction.CommitAsync();
-
-                return await MapToDisputeResponseAsync(dispute.DisputeId);
             }
             catch
             {
                 await transaction.RollbackAsync();
                 throw;
             }
+
+            await _notificationService.CreateNotificationAsync(
+                notificationRespondentUserId,
+                "Dispute opened",
+                $"{notificationOpenerName} opened a dispute in project '{notificationProjectTitle}'.",
+                "DISPUTE_OPENED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: openedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: openedDisputeId);
+
+            await NotifyAdminsAsync(
+                "New dispute opened",
+                $"A dispute was opened in project '{notificationProjectTitle}' by {notificationOpenerName} against {notificationRespondentName}.",
+                "DISPUTE_OPENED");
+
+            return await MapToDisputeResponseAsync(openedDisputeId);
         }
 
         public async Task<IReadOnlyList<DisputeResponse>> GetMyDisputesAsync(int currentUserId)
@@ -525,6 +537,18 @@ namespace AITasker.Infrastructure.Disputes
             ResolveDisputeRequest request)
         {
             ValidateResolveRequest(request);
+
+            var resolvedDisputeId = 0;
+            var notificationClientUserId = 0;
+            var notificationExpertUserId = 0;
+            var notificationProjectId = 0;
+            int? notificationMilestoneId = null;
+            var notificationClientAmount = 0m;
+            var notificationExpertAmount = 0m;
+            var completedProject = false;
+            var completedProjectTitle = string.Empty;
+            var completedContractId = 0;
+            var completedProposalId = 0;
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
@@ -778,40 +802,86 @@ namespace AITasker.Infrastructure.Disputes
 
                 await _context.SaveChangesAsync();
 
-                await _projectCompletionService.TryCompleteProjectAsync(project.ProjectId);
+                completedProject = await _projectCompletionService.TryCompleteProjectAsync(
+                    project.ProjectId,
+                    sendNotifications: false);
 
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Dispute resolved",
-                    $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Dispute resolved",
-                    $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
+                resolvedDisputeId = dispute.DisputeId;
+                notificationClientUserId = clientProfile.UserId;
+                notificationExpertUserId = expertProfile.UserId;
+                notificationProjectId = dispute.ProjectId;
+                notificationMilestoneId = dispute.MilestoneId;
+                notificationClientAmount = clientAmount;
+                notificationExpertAmount = expertAmount;
+                completedProjectTitle = project.Title;
+                completedContractId = contract.ContractId;
+                completedProposalId = contract.ProposalId;
 
                 await dbTransaction.CommitAsync();
-
-                return await MapToDisputeResponseAsync(dispute.DisputeId);
             }
             catch
             {
                 await dbTransaction.RollbackAsync();
                 throw;
             }
+
+            var resolutionMessage =
+                $"Dispute #{resolvedDisputeId} has been resolved. Client receives {notificationClientAmount}, Expert receives {notificationExpertAmount}.";
+
+            await _notificationService.CreateNotificationAsync(
+                notificationClientUserId,
+                "Dispute resolved",
+                resolutionMessage,
+                "DISPUTE_RESOLVED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: resolvedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: resolvedDisputeId);
+
+            await _notificationService.CreateNotificationAsync(
+                notificationExpertUserId,
+                "Dispute resolved",
+                resolutionMessage,
+                "DISPUTE_RESOLVED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: resolvedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: resolvedDisputeId);
+
+            if (completedProject)
+            {
+                var proposal = await _context.Proposals
+                    .AsNoTracking()
+                    .FirstAsync(x => x.ProposalId == completedProposalId);
+
+                await _notificationService.CreateNotificationAsync(
+                    notificationClientUserId,
+                    "Project completed",
+                    $"Project '{completedProjectTitle}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: notificationProjectId,
+                    relatedJobId: proposal.JobId,
+                    relatedProposalId: completedProposalId,
+                    relatedContractId: completedContractId,
+                    relatedProjectId: notificationProjectId);
+
+                await _notificationService.CreateNotificationAsync(
+                    notificationExpertUserId,
+                    "Project completed",
+                    $"Project '{completedProjectTitle}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: notificationProjectId,
+                    relatedJobId: proposal.JobId,
+                    relatedProposalId: completedProposalId,
+                    relatedContractId: completedContractId,
+                    relatedProjectId: notificationProjectId);
+            }
+
+            return await MapToDisputeResponseAsync(resolvedDisputeId);
         }
 
         /// <summary>

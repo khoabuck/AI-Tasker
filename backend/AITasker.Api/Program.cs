@@ -1,4 +1,5 @@
-﻿using System.Text;
+using AITasker.Api.Options;
+using System.Text;
 using System.Net;
 using System.Net.Sockets;
 using AITasker.Api.Hubs;
@@ -26,6 +27,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Http.Features;
 
 var builder = WebApplication.CreateBuilder(args);
 //BE 1 => Phan Tien Phat
@@ -40,6 +42,31 @@ builder.Services
         options.JsonSerializerOptions.Converters.Add(
             new UtcDateTimeJsonConverter());
     });
+
+var disputeUploadOptions = builder.Configuration
+    .GetSection(DisputeUploadOptions.SectionName)
+    .Get<DisputeUploadOptions>() ?? new DisputeUploadOptions();
+
+builder.Services
+    .AddOptions<DisputeUploadOptions>()
+    .Bind(builder.Configuration.GetSection(DisputeUploadOptions.SectionName))
+    .Validate(options => options.MaxImagesPerRequest > 0,
+        "DisputeUpload:MaxImagesPerRequest must be greater than 0.")
+    .Validate(options => options.MaxTotalImageSizeBytes > 0,
+        "DisputeUpload:MaxTotalImageSizeBytes must be greater than 0.")
+    .Validate(options => options.MaxRequestBodySizeBytes >= options.MaxTotalImageSizeBytes,
+        "DisputeUpload:MaxRequestBodySizeBytes must be greater than or equal to MaxTotalImageSizeBytes.")
+    .ValidateOnStart();
+
+builder.Services.Configure<FormOptions>(options =>
+{
+    options.MultipartBodyLengthLimit = disputeUploadOptions.MaxRequestBodySizeBytes;
+});
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = disputeUploadOptions.MaxRequestBodySizeBytes;
+});
 
 // =========================
 // SignalR
