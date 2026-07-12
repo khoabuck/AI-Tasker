@@ -45,13 +45,12 @@ namespace AITasker.Application.Interfaces
 
         Task<EscrowOperationResponse> LockProjectEscrowAsync(
             int currentUserId,
-            int projectId);
+            int projectId,
+            bool sendNotifications = true);
 
         Task<EscrowOperationResponse> ReleaseEscrowAsync(
             int currentUserId,
             int milestoneId);
 
-        Task<bool> ReleaseEscrowAsync(
-            int milestoneId);
     }
 }

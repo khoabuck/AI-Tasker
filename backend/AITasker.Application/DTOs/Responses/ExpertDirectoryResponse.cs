@@ -70,6 +70,15 @@ public class ExpertDirectoryItemResponse
     public List<ExpertDirectoryCertificateResponse> Certificates { get; set; } = new();
 }
 
+public class ExpertDirectoryDetailResponse : ExpertDirectoryItemResponse
+{
+    public decimal AverageRating { get; set; }
+
+    public int TotalReviews { get; set; }
+
+    public List<ExpertPublicReviewResponse> Reviews { get; set; } = new();
+}
+
 public class ExpertDirectorySkillResponse
 {
     public int SkillId { get; set; }

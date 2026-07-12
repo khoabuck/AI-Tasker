@@ -6,9 +6,6 @@ namespace AITasker.Api.Realtime
 {
     public class NotificationRealtimeService : INotificationRealtimeService
     {
-        private const string VietnamTimeZoneId = "SE Asia Standard Time";
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
-
         private readonly IHubContext<NotificationHub> _hubContext;
 
         public NotificationRealtimeService(
@@ -35,8 +32,11 @@ namespace AITasker.Api.Realtime
             int? relatedDisputeId = null,
             int? relatedConversationId = null)
         {
-            var createdAtUtc = SpecifyUtc(createdAt);
-            var createdAtVietnam = ConvertUtcToVietnamTime(createdAtUtc);
+            if (createdAt.Kind != DateTimeKind.Utc)
+            {
+                throw new InvalidOperationException(
+                    "Realtime notification timestamps must be UTC.");
+            }
 
             await _hubContext
                 .Clients
@@ -48,7 +48,6 @@ namespace AITasker.Api.Realtime
                     title,
                     content,
                     type,
-
                     relatedEntityType,
                     relatedEntityId,
                     relatedJobId,
@@ -59,40 +58,9 @@ namespace AITasker.Api.Realtime
                     relatedDeliverableId,
                     relatedDisputeId,
                     relatedConversationId,
-                    
                     isRead = false,
-                    createdAt = createdAtVietnam,
-                    createdAtUtc,
-
-                    timeZone = VietnamTimeZoneName
+                    createdAt
                 });
-        }
-
-        private static DateTime SpecifyUtc(DateTime value)
-        {
-            if (value.Kind == DateTimeKind.Utc)
-            {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        }
-
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
-        {
-            try
-            {
-                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return utcDateTime.AddHours(7);
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return utcDateTime.AddHours(7);
-            }
         }
     }
 }

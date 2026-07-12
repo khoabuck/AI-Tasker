@@ -1,5 +1,6 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
+using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -89,22 +90,26 @@ public class ContractFailureRollbackService : IContractFailureRollbackService
         job.Status = JobStatusOpen;
         job.UpdatedAt = now;
 
-        if (string.Equals(proposal.Status, ProposalStatusAccepted, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(proposal.Status, ProposalStatusRejected, StringComparison.OrdinalIgnoreCase))
-        {
-            proposal.Status = ProposalStatusSubmitted;
-        }
+        proposal.Status = ProposalStatusRejected;
+        proposal.StatusReason = string.Equals(
+            failureReason,
+            "SIGN_TIMEOUT",
+            StringComparison.OrdinalIgnoreCase)
+                ? ProposalStatusReasons.ContractExpired
+                : ProposalStatusReasons.ContractCancelled;
 
-        var rejectedProposals = await _context.Proposals
+        var autoRejectedProposals = await _context.Proposals
             .Where(x =>
                 x.JobId == job.JobPostingId &&
                 x.ProposalId != proposal.ProposalId &&
-                x.Status == ProposalStatusRejected)
+                x.Status == ProposalStatusRejected &&
+                x.StatusReason == ProposalStatusReasons.AutoNotSelected)
             .ToListAsync(cancellationToken);
 
-        foreach (var rejectedProposal in rejectedProposals)
+        foreach (var autoRejectedProposal in autoRejectedProposals)
         {
-            rejectedProposal.Status = ProposalStatusSubmitted;
+            autoRejectedProposal.Status = ProposalStatusSubmitted;
+            autoRejectedProposal.StatusReason = null;
         }
 
         await AddConversationSystemMessagesAsync(

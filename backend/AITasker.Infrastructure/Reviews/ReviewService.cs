@@ -116,28 +116,26 @@ namespace AITasker.Infrastructure.Reviews
             return await MapToReviewResponseAsync(review.ReviewId);
         }
 
-        public async Task<IReadOnlyList<ReviewResponse>> GetExpertReviewsAsync(
+        public async Task<IReadOnlyList<ExpertPublicReviewResponse>> GetExpertReviewsAsync(
             int expertProfileId)
         {
             var expertProfile = await GetExpertProfileByIdAsync(expertProfileId);
 
-            var reviewIds = await _context.Reviews
+            return await _context.Reviews
                 .AsNoTracking()
-                .Where(r =>
-                    r.ExpertId == expertProfile.UserId &&
-                    r.Status == ReviewStatusVisible)
-                .OrderByDescending(r => r.CreatedAt)
-                .Select(r => r.ReviewId)
+                .Where(review =>
+                    review.ExpertId == expertProfile.UserId &&
+                    review.Status == ReviewStatusVisible)
+                .OrderByDescending(review => review.CreatedAt)
+                .Select(review => new ExpertPublicReviewResponse
+                {
+                    ReviewId = review.ReviewId,
+                    Rating = review.Rating,
+                    Comment = review.Comment,
+                    IsVerifiedProjectReview = true,
+                    CreatedAt = review.CreatedAt
+                })
                 .ToListAsync();
-
-            var responses = new List<ReviewResponse>();
-
-            foreach (var reviewId in reviewIds)
-            {
-                responses.Add(await MapToReviewResponseAsync(reviewId));
-            }
-
-            return responses;
         }
 
         public async Task<IReadOnlyList<ReviewResponse>> GetMyReviewsAsync(

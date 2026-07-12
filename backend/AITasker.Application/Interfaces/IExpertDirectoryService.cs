@@ -13,5 +13,5 @@ public interface IExpertDirectoryService
         int pageSize
     );
 
-    Task<ExpertDirectoryItemResponse?> GetExpertByIdAsync(int expertProfileId);
+    Task<ExpertDirectoryDetailResponse?> GetExpertByIdAsync(int expertProfileId);
 }

@@ -244,7 +244,7 @@ export default function ClientContractSignPage() {
     const contractId = getContractId(contract);
     if (!contractId) return;
 
-    
+
     const createProject = async () => {
       try {
         await axiosInstance.post(`/projects/from-contract/${contractId}`);

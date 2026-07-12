@@ -248,7 +248,7 @@ useEffect(() => {
           <span className="material-symbols-outlined text-[18px]">
             arrow_back
           </span>
-          Back 
+          Back
         </button>
 
         {/* Header */}
@@ -257,10 +257,10 @@ useEffect(() => {
             <h2 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 32, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>Transactions</h2>
             <p style={{ color: "#8c90a0", fontSize: 15 }}>Detailed history of your ecosystem's fiscal flow</p>
           </div>
-          
+
         </div>
 
-        
+
         {/* Filters */}
         <div className="relative z-[100] mb-6 flex flex-wrap items-center gap-2.5 rounded-2xl border border-white/[0.06] bg-[#0d1017]/70 p-3 backdrop-blur-2xl">
 

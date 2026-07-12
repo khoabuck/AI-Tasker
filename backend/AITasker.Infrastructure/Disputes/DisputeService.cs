@@ -4,7 +4,6 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Disputes
@@ -104,6 +103,14 @@ namespace AITasker.Infrastructure.Disputes
                 NormalizeUrlList(request.EvidenceImageUrls),
                 nameof(request.EvidenceImageUrls));
 
+            var openedDisputeId = 0;
+            var notificationRespondentUserId = 0;
+            var notificationProjectId = 0;
+            int? notificationMilestoneId = null;
+            var notificationProjectTitle = string.Empty;
+            var notificationOpenerName = string.Empty;
+            var notificationRespondentName = string.Empty;
+
             await using var transaction = await _context.Database.BeginTransactionAsync();
 
             try
@@ -150,6 +157,7 @@ namespace AITasker.Infrastructure.Disputes
                 }
 
                 Milestone? milestone = null;
+                Deliverable? disputedDeliverable = null;
                 Escrow? escrow = null;
 
                 if (request.MilestoneId.HasValue)
@@ -160,6 +168,10 @@ namespace AITasker.Infrastructure.Disputes
                     {
                         throw new InvalidOperationException("Milestone does not belong to this project.");
                     }
+
+                    disputedDeliverable = await ResolveDisputedDeliverableAsync(
+                        request.DeliverableId,
+                        milestone.MilestoneId);
 
                     EnsureMilestoneReadyForDispute(
                         milestone);
@@ -194,7 +206,7 @@ namespace AITasker.Infrastructure.Disputes
                     }
 
                     escrow.Status = EscrowStatusFrozen;
-                    escrow.UpdatedAt = VietnamDateTime.Now;
+                    escrow.UpdatedAt = DateTime.UtcNow;
 
                     milestone.Status = MilestoneStatusDisputed;
                     milestone.PaymentStatus = PaymentStatusFrozen;
@@ -210,11 +222,17 @@ namespace AITasker.Infrastructure.Disputes
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Open] Escrow frozen for Milestone ID {milestone.MilestoneId}",
                         ReferenceId = $"MILESTONE_{milestone.MilestoneId}",
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
                 else
                 {
+                    if (request.DeliverableId.HasValue)
+                    {
+                        throw new InvalidOperationException(
+                            "DeliverableId can only be provided for a milestone-level dispute.");
+                    }
+
                     var lockedEscrows = await _context.Escrows
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
@@ -240,7 +258,7 @@ namespace AITasker.Infrastructure.Disputes
                     foreach (var projectEscrow in lockedEscrows)
                     {
                         projectEscrow.Status = EscrowStatusFrozen;
-                        projectEscrow.UpdatedAt = VietnamDateTime.Now;
+                        projectEscrow.UpdatedAt = DateTime.UtcNow;
 
                         if (projectEscrow.MilestoneId.HasValue)
                         {
@@ -260,7 +278,7 @@ namespace AITasker.Infrastructure.Disputes
                             Status = TransactionStatusSuccess,
                             Description = $"[Dispute Open] Escrow frozen for Project ID {project.ProjectId}",
                             ReferenceId = $"PROJECT_{project.ProjectId}",
-                            CreatedAt = VietnamDateTime.Now
+                            CreatedAt = DateTime.UtcNow
                         });
                     }
                 }
@@ -275,12 +293,13 @@ namespace AITasker.Infrastructure.Disputes
                 {
                     ProjectId = project.ProjectId,
                     MilestoneId = request.MilestoneId,
+                    DeliverableId = disputedDeliverable?.DeliverableId,
                     OpenedByUserId = currentUserId,
                     RespondentUserId = respondentUserId,
                     Reason = request.Reason.Trim(),
                     DisputedAmount = request.DisputedAmount,
                     Status = DisputeStatusOpen,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 };
 
                 _context.Disputes.Add(dispute);
@@ -303,7 +322,7 @@ namespace AITasker.Infrastructure.Disputes
                             : evidenceText,
                         FileUrl = evidenceFileUrl,
                         ImageUrl = evidenceImageUrl,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -317,7 +336,7 @@ namespace AITasker.Infrastructure.Disputes
                             ? "Image evidence submitted."
                             : evidenceText,
                         ImageUrl = uploadedImageUrl,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -329,39 +348,43 @@ namespace AITasker.Infrastructure.Disputes
                     await _context.SaveChangesAsync();
                 }
 
-                var openerName = currentUserIsClient
+                openedDisputeId = dispute.DisputeId;
+                notificationRespondentUserId = respondentUserId;
+                notificationProjectId = dispute.ProjectId;
+                notificationMilestoneId = dispute.MilestoneId;
+                notificationProjectTitle = project.Title;
+                notificationOpenerName = currentUserIsClient
                     ? clientUser.FullName
                     : expertUser.FullName;
-
-                var respondentName = currentUserIsClient
+                notificationRespondentName = currentUserIsClient
                     ? expertUser.FullName
                     : clientUser.FullName;
 
-                await _notificationService.CreateNotificationAsync(
-                    respondentUserId,
-                    "Dispute opened",
-                    $"{openerName} opened a dispute in project '{project.Title}'.",
-                    "DISPUTE_OPENED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
-
-                await NotifyAdminsAsync(
-                    "New dispute opened",
-                    $"A dispute was opened in project '{project.Title}' by {openerName} against {respondentName}.",
-                    "DISPUTE_OPENED");
-
                 await transaction.CommitAsync();
-
-                return await MapToDisputeResponseAsync(dispute.DisputeId);
             }
             catch
             {
                 await transaction.RollbackAsync();
                 throw;
             }
+
+            await _notificationService.CreateNotificationAsync(
+                notificationRespondentUserId,
+                "Dispute opened",
+                $"{notificationOpenerName} opened a dispute in project '{notificationProjectTitle}'.",
+                "DISPUTE_OPENED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: openedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: openedDisputeId);
+
+            await NotifyAdminsAsync(
+                "New dispute opened",
+                $"A dispute was opened in project '{notificationProjectTitle}' by {notificationOpenerName} against {notificationRespondentName}.",
+                "DISPUTE_OPENED");
+
+            return await MapToDisputeResponseAsync(openedDisputeId);
         }
 
         public async Task<IReadOnlyList<DisputeResponse>> GetMyDisputesAsync(int currentUserId)
@@ -439,7 +462,7 @@ namespace AITasker.Infrastructure.Disputes
                     EvidenceText = evidenceText,
                     FileUrl = fileUrl,
                     ImageUrl = imageUrl,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
             else if (!string.IsNullOrWhiteSpace(request.EvidenceText))
@@ -449,7 +472,7 @@ namespace AITasker.Infrastructure.Disputes
                     DisputeId = dispute.DisputeId,
                     UploadedByUserId = currentUserId,
                     EvidenceText = request.EvidenceText.Trim(),
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
 
@@ -461,7 +484,7 @@ namespace AITasker.Infrastructure.Disputes
                     UploadedByUserId = currentUserId,
                     EvidenceText = evidenceText,
                     ImageUrl = uploadedImageUrl,
-                    CreatedAt = VietnamDateTime.Now
+                    CreatedAt = DateTime.UtcNow
                 });
             }
 
@@ -514,6 +537,18 @@ namespace AITasker.Infrastructure.Disputes
             ResolveDisputeRequest request)
         {
             ValidateResolveRequest(request);
+
+            var resolvedDisputeId = 0;
+            var notificationClientUserId = 0;
+            var notificationExpertUserId = 0;
+            var notificationProjectId = 0;
+            int? notificationMilestoneId = null;
+            var notificationClientAmount = 0m;
+            var notificationExpertAmount = 0m;
+            var completedProject = false;
+            var completedProjectTitle = string.Empty;
+            var completedContractId = 0;
+            var completedProposalId = 0;
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
@@ -636,7 +671,7 @@ namespace AITasker.Infrastructure.Disputes
                 if (lockedDisputedAmount > 0)
                 {
                     clientWallet.LockedBalance -= lockedDisputedAmount;
-                    clientWallet.UpdatedAt = VietnamDateTime.Now;
+                    clientWallet.UpdatedAt = DateTime.UtcNow;
                 }
 
                 var referenceId = dispute.MilestoneId.HasValue
@@ -648,7 +683,7 @@ namespace AITasker.Infrastructure.Disputes
                     if (lockedDisputedAmount > 0)
                     {
                         clientWallet.AvailableBalance += lockedDisputedAmount;
-                        clientWallet.UpdatedAt = VietnamDateTime.Now;
+                        clientWallet.UpdatedAt = DateTime.UtcNow;
 
                         _context.Transactions.Add(new Transaction
                         {
@@ -661,7 +696,7 @@ namespace AITasker.Infrastructure.Disputes
                             Status = TransactionStatusSuccess,
                             Description = $"[Dispute Resolution] Client refund from locked escrow in Dispute ID {dispute.DisputeId}",
                             ReferenceId = referenceId,
-                            CreatedAt = VietnamDateTime.Now
+                            CreatedAt = DateTime.UtcNow
                         });
                     }
 
@@ -679,7 +714,7 @@ namespace AITasker.Infrastructure.Disputes
                 {
                     expertWallet.PendingEarningsBalance += lockedDisputedAmount;
                     expertWallet.TotalEarning += lockedDisputedAmount;
-                    expertWallet.UpdatedAt = VietnamDateTime.Now;
+                    expertWallet.UpdatedAt = DateTime.UtcNow;
 
                     _context.Transactions.Add(new Transaction
                     {
@@ -692,7 +727,7 @@ namespace AITasker.Infrastructure.Disputes
                         Status = TransactionStatusSuccess,
                         Description = $"[Dispute Resolution] Expert earning held from locked escrow in Dispute ID {dispute.DisputeId} until project completion",
                         ReferenceId = referenceId,
-                        CreatedAt = VietnamDateTime.Now
+                        CreatedAt = DateTime.UtcNow
                     });
                 }
 
@@ -710,7 +745,7 @@ namespace AITasker.Infrastructure.Disputes
                         ? EscrowStatusReleased
                         : EscrowStatusRefunded;
 
-                    escrow.UpdatedAt = VietnamDateTime.Now;
+                    escrow.UpdatedAt = DateTime.UtcNow;
                 }
 
                 foreach (var projectEscrow in projectEscrows)
@@ -719,7 +754,7 @@ namespace AITasker.Infrastructure.Disputes
                         ? EscrowStatusReleased
                         : EscrowStatusRefunded;
 
-                    projectEscrow.UpdatedAt = VietnamDateTime.Now;
+                    projectEscrow.UpdatedAt = DateTime.UtcNow;
 
                     if (projectEscrow.MilestoneId.HasValue)
                     {
@@ -730,7 +765,8 @@ namespace AITasker.Infrastructure.Disputes
                             ? PaymentStatusReleased
                             : PaymentStatusRefunded;
 
-                        await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                        await MarkDisputedDeliverableAfterResolutionAsync(
+                            dispute,
                             projectMilestone.MilestoneId,
                             normalizedResolutionType);
                     }
@@ -743,7 +779,8 @@ namespace AITasker.Infrastructure.Disputes
                         ? PaymentStatusReleased
                         : PaymentStatusRefunded;
 
-                    await MarkLatestDeliverableAfterDisputeResolutionAsync(
+                    await MarkDisputedDeliverableAfterResolutionAsync(
+                        dispute,
                         milestone.MilestoneId,
                         normalizedResolutionType);
                 }
@@ -753,7 +790,7 @@ namespace AITasker.Infrastructure.Disputes
                 dispute.AdminDecision = string.IsNullOrWhiteSpace(request.AdminDecision)
                     ? $"Admin resolved dispute with {normalizedResolutionType}."
                     : request.AdminDecision.Trim();
-                dispute.ResolvedAt = VietnamDateTime.Now;
+                dispute.ResolvedAt = DateTime.UtcNow;
 
                 await ApplyLostDisputePolicyAsync(
                     loserUserId,
@@ -765,69 +802,162 @@ namespace AITasker.Infrastructure.Disputes
 
                 await _context.SaveChangesAsync();
 
-                await _projectCompletionService.TryCompleteProjectAsync(project.ProjectId);
+                completedProject = await _projectCompletionService.TryCompleteProjectAsync(
+                    project.ProjectId,
+                    sendNotifications: false);
 
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Dispute resolved",
-                    $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Dispute resolved",
-                    $"Dispute #{dispute.DisputeId} has been resolved. Client receives {clientAmount}, Expert receives {expertAmount}.",
-                    "DISPUTE_RESOLVED",
-                    relatedEntityType: "DISPUTE",
-                    relatedEntityId: dispute.DisputeId,
-                    relatedProjectId: dispute.ProjectId,
-                    relatedMilestoneId: dispute.MilestoneId,
-                    relatedDisputeId: dispute.DisputeId);
+                resolvedDisputeId = dispute.DisputeId;
+                notificationClientUserId = clientProfile.UserId;
+                notificationExpertUserId = expertProfile.UserId;
+                notificationProjectId = dispute.ProjectId;
+                notificationMilestoneId = dispute.MilestoneId;
+                notificationClientAmount = clientAmount;
+                notificationExpertAmount = expertAmount;
+                completedProjectTitle = project.Title;
+                completedContractId = contract.ContractId;
+                completedProposalId = contract.ProposalId;
 
                 await dbTransaction.CommitAsync();
-
-                return await MapToDisputeResponseAsync(dispute.DisputeId);
             }
             catch
             {
                 await dbTransaction.RollbackAsync();
                 throw;
             }
+
+            var resolutionMessage =
+                $"Dispute #{resolvedDisputeId} has been resolved. Client receives {notificationClientAmount}, Expert receives {notificationExpertAmount}.";
+
+            await _notificationService.CreateNotificationAsync(
+                notificationClientUserId,
+                "Dispute resolved",
+                resolutionMessage,
+                "DISPUTE_RESOLVED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: resolvedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: resolvedDisputeId);
+
+            await _notificationService.CreateNotificationAsync(
+                notificationExpertUserId,
+                "Dispute resolved",
+                resolutionMessage,
+                "DISPUTE_RESOLVED",
+                relatedEntityType: "DISPUTE",
+                relatedEntityId: resolvedDisputeId,
+                relatedProjectId: notificationProjectId,
+                relatedMilestoneId: notificationMilestoneId,
+                relatedDisputeId: resolvedDisputeId);
+
+            if (completedProject)
+            {
+                var proposal = await _context.Proposals
+                    .AsNoTracking()
+                    .FirstAsync(x => x.ProposalId == completedProposalId);
+
+                await _notificationService.CreateNotificationAsync(
+                    notificationClientUserId,
+                    "Project completed",
+                    $"Project '{completedProjectTitle}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: notificationProjectId,
+                    relatedJobId: proposal.JobId,
+                    relatedProposalId: completedProposalId,
+                    relatedContractId: completedContractId,
+                    relatedProjectId: notificationProjectId);
+
+                await _notificationService.CreateNotificationAsync(
+                    notificationExpertUserId,
+                    "Project completed",
+                    $"Project '{completedProjectTitle}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: notificationProjectId,
+                    relatedJobId: proposal.JobId,
+                    relatedProposalId: completedProposalId,
+                    relatedContractId: completedContractId,
+                    relatedProjectId: notificationProjectId);
+            }
+
+            return await MapToDisputeResponseAsync(resolvedDisputeId);
         }
 
-        private async Task MarkLatestDeliverableAfterDisputeResolutionAsync(
+        /// <summary>
+        /// Updates the exact deliverable version captured when the dispute was opened.
+        /// Legacy disputes without a captured deliverable fall back to the latest submitted version.
+        /// </summary>
+        private async Task MarkDisputedDeliverableAfterResolutionAsync(
+            Dispute dispute,
             int milestoneId,
             string normalizedResolutionType)
         {
-            var latestDeliverable = await _context.Deliverables
+            Deliverable? deliverable = null;
+
+            if (dispute.DeliverableId.HasValue)
+            {
+                deliverable = await _context.Deliverables
+                    .FirstOrDefaultAsync(d =>
+                        d.DeliverableId == dispute.DeliverableId.Value &&
+                        d.MilestoneId == milestoneId);
+            }
+
+            deliverable ??= await _context.Deliverables
                 .Where(d =>
                     d.MilestoneId == milestoneId &&
                     d.Status == DeliverableStatusSubmitted)
                 .OrderByDescending(d => d.VersionNumber)
                 .FirstOrDefaultAsync();
 
-            if (latestDeliverable == null)
+            if (deliverable == null)
             {
                 return;
             }
 
-            latestDeliverable.ReviewedAt ??= VietnamDateTime.Now;
+            deliverable.ReviewedAt ??= DateTime.UtcNow;
 
             if (normalizedResolutionType == ResolutionReleaseToExpert)
             {
-                latestDeliverable.Status = DeliverableStatusApproved;
-                latestDeliverable.ClientFeedback = null;
+                deliverable.Status = DeliverableStatusApproved;
+                deliverable.ClientFeedback = null;
             }
             else if (normalizedResolutionType == ResolutionRefundToClient)
             {
-                latestDeliverable.ClientFeedback = "Dispute resolved with refund to Client.";
+                deliverable.ClientFeedback = "Dispute resolved with refund to Client.";
             }
+        }
+
+        /// <summary>
+        /// Resolves and snapshots the deliverable version connected to a milestone dispute.
+        /// </summary>
+        private async Task<Deliverable?> ResolveDisputedDeliverableAsync(
+            int? deliverableId,
+            int milestoneId)
+        {
+            if (deliverableId.HasValue)
+            {
+                var selectedDeliverable = await _context.Deliverables
+                    .FirstOrDefaultAsync(d => d.DeliverableId == deliverableId.Value);
+
+                if (selectedDeliverable == null)
+                {
+                    throw new InvalidOperationException("Deliverable not found.");
+                }
+
+                if (selectedDeliverable.MilestoneId != milestoneId)
+                {
+                    throw new InvalidOperationException(
+                        "Deliverable does not belong to the selected milestone.");
+                }
+
+                return selectedDeliverable;
+            }
+
+            return await _context.Deliverables
+                .Where(d => d.MilestoneId == milestoneId)
+                .OrderByDescending(d => d.VersionNumber)
+                .FirstOrDefaultAsync();
         }
 
         private static void ValidateOpenRequest(OpenDisputeRequest request)
@@ -840,6 +970,11 @@ namespace AITasker.Infrastructure.Disputes
             if (request.ProjectId <= 0)
             {
                 throw new InvalidOperationException("ProjectId is required.");
+            }
+
+            if (request.DeliverableId.HasValue && request.DeliverableId.Value <= 0)
+            {
+                throw new InvalidOperationException("DeliverableId must be greater than 0 when provided.");
             }
 
             if (request.DisputedAmount <= 0)
@@ -1092,7 +1227,7 @@ namespace AITasker.Infrastructure.Disputes
                 LockedBalance = 0,
                 PendingEarningsBalance = 0,
                 TotalEarning = 0,
-                UpdatedAt = VietnamDateTime.Now
+                UpdatedAt = DateTime.UtcNow
             };
 
             _context.Wallets.Add(wallet);
@@ -1256,6 +1391,12 @@ namespace AITasker.Infrastructure.Disputes
                     .FirstOrDefaultAsync(m => m.MilestoneId == dispute.MilestoneId.Value)
                 : null;
 
+            var disputedDeliverable = dispute.DeliverableId.HasValue
+                ? await _context.Deliverables
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(d => d.DeliverableId == dispute.DeliverableId.Value)
+                : null;
+
             var evidences = await _context.DisputeEvidences
                 .AsNoTracking()
                 .Where(e => e.DisputeId == dispute.DisputeId)
@@ -1290,6 +1431,9 @@ namespace AITasker.Infrastructure.Disputes
                 ProjectTitle = project.Title,
                 MilestoneId = dispute.MilestoneId,
                 MilestoneTitle = milestone?.Title,
+                DeliverableId = dispute.DeliverableId,
+                DeliverableVersionNumber = dispute.Deliverable?.VersionNumber,
+                DeliverableStatus = disputedDeliverable?.Status,
 
                 ClientProfileId = clientProfile.ClientProfileId,
                 ClientUserId = clientProfile.UserId,
@@ -1346,7 +1490,7 @@ namespace AITasker.Infrastructure.Disputes
             }
 
             job.Status = jobStatus;
-            job.UpdatedAt = VietnamDateTime.Now;
+            job.UpdatedAt = DateTime.UtcNow;
         }
 
         private async Task ApplyLostDisputePolicyAsync(
@@ -1402,7 +1546,7 @@ namespace AITasker.Infrastructure.Disputes
 
             if (lostCountAfterCurrent >= warningThreshold + 2)
             {
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
                 if (!string.Equals(loser.Status, UserStatusBanned, StringComparison.OrdinalIgnoreCase) &&
                     !string.Equals(loser.Status, UserStatusSuspended, StringComparison.OrdinalIgnoreCase))

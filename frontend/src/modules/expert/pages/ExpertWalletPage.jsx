@@ -1527,7 +1527,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
             </p>
           )}
 
-    
+
         </div>
 
         <StatusBadge status={displayStatus} />

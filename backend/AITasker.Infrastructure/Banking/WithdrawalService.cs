@@ -3,7 +3,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
@@ -81,7 +80,7 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Wallet not found.");
                 }
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
                 var bankResolveMessage = $"Bank name resolved to {resolvedBank.DisplayName} ({resolvedBank.Bin}) for PayOS payout. No external bank account verification is performed.";
 
                 if (wallet.AvailableBalance < request.Amount)
@@ -217,7 +216,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
                 var payoutReferenceCode = request.PayoutReferenceCode!.Trim();
 
                 await FinalizePaidWithdrawalAsync(
@@ -338,7 +337,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
                 withdrawalRequest.Status = WithdrawalStatusProcessing;
                 withdrawalRequest.PayoutProvider = PayoutProviderPayOs;
@@ -434,7 +433,7 @@ namespace AITasker.Infrastructure.Banking
 
                 var payout = await _payOsPayoutService.GetPayoutAsync(withdrawalRequest.PayOsPayoutId);
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
 
                 withdrawalRequest.PayOsApprovalState = payout.ApprovalState;
                 withdrawalRequest.PayOsRawResponse = payout.RawResponse;
@@ -564,7 +563,7 @@ namespace AITasker.Infrastructure.Banking
                 var wallet = await GetWalletForWithdrawalAsync(withdrawalRequest);
                 EnsureHeldBalance(wallet, withdrawalRequest);
 
-                var now = VietnamDateTime.Now;
+                var now = DateTime.UtcNow;
                 var referenceId = BuildWithdrawalReference(withdrawalRequest.WithdrawalRequestId);
 
                 wallet.LockedBalance -= withdrawalRequest.Amount;
@@ -805,7 +804,7 @@ namespace AITasker.Infrastructure.Banking
             var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
             var approvalDeadlineAt = withdrawalRequest.CreatedAt.AddHours(workflowPolicy.WithdrawalApprovalWindowHours);
 
-            if (approvalDeadlineAt <= VietnamDateTime.Now)
+            if (approvalDeadlineAt <= DateTime.UtcNow)
             {
                 throw new InvalidOperationException("Withdrawal request expired before admin processing. Wait for the expiry job to return the held amount, or run the expiry check first.");
             }
@@ -891,9 +890,9 @@ namespace AITasker.Infrastructure.Banking
                 FailureReason = w.FailureReason,
                 Status = w.Status,
                 ApprovalDeadlineAt = approvalDeadlineAt,
-                IsApprovalExpired = approvalDeadlineAt.HasValue && approvalDeadlineAt.Value <= VietnamDateTime.Now,
+                IsApprovalExpired = approvalDeadlineAt.HasValue && approvalDeadlineAt.Value <= DateTime.UtcNow,
                 PayoutSyncWarningAt = payoutSyncWarningAt,
-                IsPayoutSyncOverdue = payoutSyncWarningAt.HasValue && payoutSyncWarningAt.Value <= VietnamDateTime.Now,
+                IsPayoutSyncOverdue = payoutSyncWarningAt.HasValue && payoutSyncWarningAt.Value <= DateTime.UtcNow,
                 AdminNote = w.AdminNote,
                 CreatedAt = w.CreatedAt,
                 ProcessedAt = w.ProcessedAt,

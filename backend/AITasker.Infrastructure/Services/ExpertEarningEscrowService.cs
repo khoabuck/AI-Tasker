@@ -1,7 +1,6 @@
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Services;
@@ -75,7 +74,7 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
 
         expertWallet.PendingEarningsBalance -= releaseAmount;
         expertWallet.AvailableBalance += releaseAmount;
-        expertWallet.UpdatedAt = VietnamDateTime.Now;
+        expertWallet.UpdatedAt = DateTime.UtcNow;
 
         _context.Transactions.Add(new Transaction
         {
@@ -86,7 +85,7 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
             Status = TransactionStatusSuccess,
             Description = $"[Expert Pending Earning Release] Released held earnings for completed Project ID {project.ProjectId}",
             ReferenceId = $"PROJECT_{project.ProjectId}",
-            CreatedAt = VietnamDateTime.Now
+            CreatedAt = DateTime.UtcNow
         });
 
         return releaseAmount;
@@ -116,10 +115,10 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
         }
 
         expertWallet.PendingEarningsBalance -= refundAmount;
-        expertWallet.UpdatedAt = VietnamDateTime.Now;
+        expertWallet.UpdatedAt = DateTime.UtcNow;
 
         clientWallet.AvailableBalance += refundAmount;
-        clientWallet.UpdatedAt = VietnamDateTime.Now;
+        clientWallet.UpdatedAt = DateTime.UtcNow;
 
         var referenceId = disputeId.HasValue
             ? $"DISPUTE_{disputeId.Value}"
@@ -136,7 +135,7 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
                 ? $"[Expert Pending Earning Refund] Refunded held earnings to Client from Dispute ID {disputeId.Value}"
                 : $"[Expert Pending Earning Refund] Refunded held earnings to Client for Project ID {project.ProjectId}",
             ReferenceId = referenceId,
-            CreatedAt = VietnamDateTime.Now
+            CreatedAt = DateTime.UtcNow
         });
 
         _context.Transactions.Add(new Transaction
@@ -150,7 +149,7 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
                 ? $"[Expert Pending Earning Refund] Received held earnings refund from Dispute ID {disputeId.Value}"
                 : $"[Expert Pending Earning Refund] Received held earnings refund for Project ID {project.ProjectId}",
             ReferenceId = referenceId,
-            CreatedAt = VietnamDateTime.Now
+            CreatedAt = DateTime.UtcNow
         });
 
         return refundAmount;
@@ -180,7 +179,7 @@ public class ExpertEarningEscrowService : IExpertEarningEscrowService
             LockedBalance = 0m,
             PendingEarningsBalance = 0m,
             TotalEarning = 0m,
-            UpdatedAt = VietnamDateTime.Now
+            UpdatedAt = DateTime.UtcNow
         };
 
         _context.Wallets.Add(wallet);

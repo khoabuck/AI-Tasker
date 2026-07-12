@@ -284,7 +284,7 @@ export default function EditJobPage() {
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{fetchError}</p>
         <button onClick={() => navigate(-1)}
           style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-          Back 
+          Back
         </button>
       </div>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -306,7 +306,7 @@ export default function EditJobPage() {
             onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-            Back 
+            Back
           </button>
 
           <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>

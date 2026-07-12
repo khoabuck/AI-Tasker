@@ -12,6 +12,12 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? MilestoneTitle { get; set; }
 
+        public int? DeliverableId { get; set; }
+
+        public int? DeliverableVersionNumber { get; set; }
+
+        public string? DeliverableStatus { get; set; }
+
         public int ClientProfileId { get; set; }
 
         public int ClientUserId { get; set; }
