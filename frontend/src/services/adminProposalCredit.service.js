@@ -1,7 +1,10 @@
 import adminProposalCreditApi from "../api/adminProposalCredit.api";
+import { compareDateDesc } from "../utils/dateTime.utils";
 
 const getValue = (...values) =>
-  values.find((value) => value !== undefined && value !== null && value !== "");
+  values.find(
+    (value) => value !== undefined && value !== null && value !== ""
+  );
 
 const toNumber = (value, fallback = 0) => {
   const number = Number(value);
@@ -14,19 +17,36 @@ const toBoolean = (value, fallback = false) => {
   if (typeof value === "number") return value === 1;
 
   const normalized = String(value).trim().toLowerCase();
-  if (normalized === "true") return true;
-  if (normalized === "false") return false;
+
+  if (["true", "1", "yes"].includes(normalized)) return true;
+  if (["false", "0", "no"].includes(normalized)) return false;
 
   return fallback;
+};
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
 };
 
 const unwrapData = (response) => {
   const data = response?.data;
 
   if (!data) return null;
-  if (data?.data) return data.data;
-  if (data?.result) return data.result;
+
+  if (data?.data?.expert) return data.data.expert;
+  if (data?.data?.item) return data.data.item;
+  if (data?.data?.result) return data.data.result;
+  if (data?.data !== undefined) return data.data;
+
+  if (data?.expert) return data.expert;
   if (data?.item) return data.item;
+  if (data?.result) return data.result;
 
   return data;
 };
@@ -59,27 +79,45 @@ export const normalizeAdminProposalCredit = (item) => {
   return {
     expertProfileId,
     id: expertProfileId,
-    userId: getValue(item.userId, item.UserId),
+
+    userId: getValue(item.userId, item.UserId, null),
     email: getValue(item.email, item.Email, ""),
-    fullName: getValue(item.fullName, item.FullName, "Unknown Expert"),
+
+    fullName: getValue(
+      item.fullName,
+      item.FullName,
+      "Unknown Expert"
+    ),
+
     professionalTitle: getValue(
       item.professionalTitle,
       item.ProfessionalTitle,
       ""
     ),
-    profileReviewStatus: getValue(
-      item.profileReviewStatus,
-      item.ProfileReviewStatus,
-      ""
-    ),
+
+    profileReviewStatus: String(
+      getValue(
+        item.profileReviewStatus,
+        item.ProfileReviewStatus,
+        ""
+      )
+    )
+      .trim()
+      .toUpperCase(),
+
     availableForWork: toBoolean(
       getValue(item.availableForWork, item.AvailableForWork),
       false
     ),
+
     freeProposalSubmitUsed: toBoolean(
-      getValue(item.freeProposalSubmitUsed, item.FreeProposalSubmitUsed),
+      getValue(
+        item.freeProposalSubmitUsed,
+        item.FreeProposalSubmitUsed
+      ),
       false
     ),
+
     freeProposalSubmitRemaining: toNumber(
       getValue(
         item.freeProposalSubmitRemaining,
@@ -87,15 +125,26 @@ export const normalizeAdminProposalCredit = (item) => {
         0
       )
     ),
+
     proposalSubmitCredits: toNumber(
-      getValue(item.proposalSubmitCredits, item.ProposalSubmitCredits, 0)
+      getValue(
+        item.proposalSubmitCredits,
+        item.ProposalSubmitCredits,
+        0
+      )
     ),
+
     canSubmitProposal: toBoolean(
-      getValue(item.canSubmitProposal, item.CanSubmitProposal),
+      getValue(
+        item.canSubmitProposal,
+        item.CanSubmitProposal
+      ),
       false
     ),
+
     createdAt: getValue(item.createdAt, item.CreatedAt, ""),
     updatedAt: getValue(item.updatedAt, item.UpdatedAt, ""),
+
     raw: item,
   };
 };
@@ -118,31 +167,49 @@ const adminProposalCreditService = {
 
     return unwrapListData(response)
       .map(normalizeAdminProposalCredit)
-      .filter(Boolean);
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
+        )
+      );
   },
 
   async getExpertCreditById(expertProfileId) {
-    const response = await adminProposalCreditApi.getExpertCreditById(
-      expertProfileId
-    );
+    if (isInvalidId(expertProfileId)) {
+      throw new Error("Invalid expert profile id.");
+    }
+
+    const response =
+      await adminProposalCreditApi.getExpertCreditById(expertProfileId);
 
     return normalizeAdminProposalCredit(unwrapData(response));
   },
 
   async adjustCredits(expertProfileId, creditDelta, reason) {
-    const response = await adminProposalCreditApi.adjustCredits(expertProfileId, {
-      creditDelta: Number(creditDelta),
-      reason: String(reason || "").trim(),
-    });
+    if (isInvalidId(expertProfileId)) {
+      throw new Error("Invalid expert profile id.");
+    }
 
-    return normalizeAdminProposalCredit(unwrapData(response));
-  },
+    const delta = Number(creditDelta);
+    const normalizedReason = String(reason || "").trim();
 
-  async setFreeSubmit(expertProfileId, freeProposalSubmitUsed, reason) {
-    const response = await adminProposalCreditApi.setFreeSubmit(expertProfileId, {
-      freeProposalSubmitUsed: Boolean(freeProposalSubmitUsed),
-      reason: String(reason || "").trim(),
-    });
+    if (!Number.isInteger(delta) || delta === 0) {
+      throw new Error("Credit adjustment must be a non-zero whole number.");
+    }
+
+    if (!normalizedReason) {
+      throw new Error("Adjustment reason is required.");
+    }
+
+    const response = await adminProposalCreditApi.adjustCredits(
+      expertProfileId,
+      {
+        creditDelta: delta,
+        reason: normalizedReason,
+      }
+    );
 
     return normalizeAdminProposalCredit(unwrapData(response));
   },

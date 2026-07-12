@@ -6,7 +6,6 @@ const INITIAL_FILTERS = {
   search: "",
   creditStatus: "ALL",
   submitPermission: "ALL",
-  freeSubmitStatus: "ALL",
 };
 
 const EMPTY_CONFIRMATION = {
@@ -27,7 +26,6 @@ export default function AdminProposalCreditsPage() {
   const [adjustmentMode, setAdjustmentMode] = useState("ADD");
   const [creditAmount, setCreditAmount] = useState("");
   const [adjustReason, setAdjustReason] = useState("");
-  const [freeSubmitReason, setFreeSubmitReason] = useState("");
 
   const [confirmation, setConfirmation] = useState(EMPTY_CONFIRMATION);
 
@@ -38,7 +36,6 @@ export default function AdminProposalCreditsPage() {
   const [error, setError] = useState("");
   const [modalError, setModalError] = useState("");
   const [adjustErrors, setAdjustErrors] = useState({});
-  const [freeSubmitError, setFreeSubmitError] = useState("");
 
   useEffect(() => {
     loadExperts();
@@ -50,8 +47,8 @@ export default function AdminProposalCreditsPage() {
       expertsWithCredits: experts.filter(
         (item) => Number(item.proposalSubmitCredits || 0) > 0
       ).length,
-      freeSubmitAvailable: experts.filter(
-        (item) => Number(item.freeProposalSubmitRemaining || 0) > 0
+      canSubmitCount: experts.filter(
+        (item) => Boolean(item.canSubmitProposal)
       ).length,
       totalCredits: experts.reduce(
         (sum, item) => sum + Number(item.proposalSubmitCredits || 0),
@@ -65,8 +62,6 @@ export default function AdminProposalCreditsPage() {
 
     return experts.filter((expert) => {
       const credits = Number(expert.proposalSubmitCredits || 0);
-      const freeRemaining = Number(expert.freeProposalSubmitRemaining || 0);
-
       const matchesSearch =
         !keyword ||
         [expert.fullName, expert.email]
@@ -87,16 +82,10 @@ export default function AdminProposalCreditsPage() {
         (filters.submitPermission === "CANNOT_SUBMIT" &&
           !expert.canSubmitProposal);
 
-      const matchesFreeSubmit =
-        filters.freeSubmitStatus === "ALL" ||
-        (filters.freeSubmitStatus === "AVAILABLE" && freeRemaining > 0) ||
-        (filters.freeSubmitStatus === "USED" && freeRemaining <= 0);
-
       return (
         matchesSearch &&
         matchesCreditStatus &&
-        matchesSubmitPermission &&
-        matchesFreeSubmit
+        matchesSubmitPermission
       );
     });
   }, [experts, filters]);
@@ -145,7 +134,6 @@ export default function AdminProposalCreditsPage() {
       setMessage("");
       setModalError("");
       setAdjustErrors({});
-      setFreeSubmitError("");
 
       const data = await adminProposalCreditService.getExpertCreditById(
         expert.expertProfileId
@@ -155,7 +143,6 @@ export default function AdminProposalCreditsPage() {
       setAdjustmentMode("ADD");
       setCreditAmount("");
       setAdjustReason("");
-      setFreeSubmitReason("");
       setShowManageModal(true);
     } catch (err) {
       setError(
@@ -174,10 +161,8 @@ export default function AdminProposalCreditsPage() {
     setAdjustmentMode("ADD");
     setCreditAmount("");
     setAdjustReason("");
-    setFreeSubmitReason("");
     setModalError("");
     setAdjustErrors({});
-    setFreeSubmitError("");
     setConfirmation(EMPTY_CONFIRMATION);
   };
 
@@ -235,47 +220,6 @@ export default function AdminProposalCreditsPage() {
       },
     });
   };
-
-  const requestFreeSubmitUpdate = (markAsUsed) => {
-    if (!selectedExpert) return;
-
-    const reasonText = freeSubmitReason.trim();
-
-    if (!reasonText) {
-      setFreeSubmitError("Reason is required.");
-      setModalError("Please check the highlighted field.");
-      return;
-    }
-
-    if (reasonText.length < 5) {
-      setFreeSubmitError("Reason must be at least 5 characters.");
-      setModalError("Please check the highlighted field.");
-      return;
-    }
-
-    setFreeSubmitError("");
-    setModalError("");
-
-    setConfirmation({
-      type: "UPDATE_FREE_SUBMIT",
-      title: markAsUsed
-        ? "Disable free submission?"
-        : "Restore free submission?",
-      message: markAsUsed
-        ? `${
-            selectedExpert.fullName || "This expert"
-          } will no longer have a free proposal submission available.`
-        : `${
-            selectedExpert.fullName || "This expert"
-          } will receive one free proposal submission.`,
-      confirmLabel: markAsUsed ? "Disable Free Submit" : "Restore Free Submit",
-      tone: markAsUsed ? "red" : "green",
-      payload: {
-        freeProposalSubmitUsed: markAsUsed,
-      },
-    });
-  };
-
   const executeConfirmation = async () => {
     if (!selectedExpert || !confirmation.type) return;
 
@@ -297,19 +241,6 @@ export default function AdminProposalCreditsPage() {
         setAdjustReason("");
         setAdjustErrors({});
         setMessage("Proposal credits updated successfully.");
-      }
-
-      if (confirmation.type === "UPDATE_FREE_SUBMIT") {
-        const updated = await adminProposalCreditService.setFreeSubmit(
-          selectedExpert.expertProfileId,
-          confirmation.payload.freeProposalSubmitUsed,
-          freeSubmitReason.trim()
-        );
-
-        setSelectedExpert(updated);
-        setFreeSubmitReason("");
-        setFreeSubmitError("");
-        setMessage("Free submission status updated successfully.");
       }
 
       setConfirmation(EMPTY_CONFIRMATION);
@@ -336,8 +267,8 @@ export default function AdminProposalCreditsPage() {
           </h1>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
-            Manage proposal submission credits and free submission access for
-            Expert accounts.
+            Review proposal submission eligibility and adjust paid proposal
+            credits for Expert accounts.
           </p>
         </section>
 
@@ -373,9 +304,9 @@ export default function AdminProposalCreditsPage() {
           />
 
           <StatCard
-            label="Free Submit Available"
-            value={stats.freeSubmitAvailable}
-            icon="redeem"
+            label="Can Submit Proposal"
+            value={stats.canSubmitCount}
+            icon="task_alt"
             tone="green"
           />
 
@@ -388,7 +319,7 @@ export default function AdminProposalCreditsPage() {
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
-          <div className="grid gap-3 lg:grid-cols-[minmax(240px,1fr)_190px_200px_190px_auto]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(260px,1fr)_190px_200px_auto]">
             <div className="relative">
               <span className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-gray-500">
                 search
@@ -425,17 +356,6 @@ export default function AdminProposalCreditsPage() {
               ]}
             />
 
-            <FilterSelect
-              name="freeSubmitStatus"
-              value={filters.freeSubmitStatus}
-              onChange={handleFilterChange}
-              options={[
-                ["ALL", "All free submit states"],
-                ["AVAILABLE", "Free submit available"],
-                ["USED", "Free submit used"],
-              ]}
-            />
-
             <button
               type="button"
               onClick={handleReset}
@@ -449,7 +369,7 @@ export default function AdminProposalCreditsPage() {
         <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
             <div>
-              <h2 className="font-black text-white">Expert Credit Access</h2>
+              <h2 className="font-black text-white">Expert Proposal Credits</h2>
               <p className="mt-1 text-xs text-gray-500">
                 {filteredExperts.length} expert(s)
               </p>
@@ -489,7 +409,7 @@ export default function AdminProposalCreditsPage() {
                   <tr>
                     <TableHead>Expert</TableHead>
                     <TableHead>Proposal Credits</TableHead>
-                    <TableHead>Free Submit</TableHead>
+                    <TableHead>Free Remaining</TableHead>
                     <TableHead>Submission Access</TableHead>
                     <TableHead align="right">Action</TableHead>
                   </tr>
@@ -516,9 +436,7 @@ export default function AdminProposalCreditsPage() {
             adjustmentMode={adjustmentMode}
             creditAmount={creditAmount}
             adjustReason={adjustReason}
-            freeSubmitReason={freeSubmitReason}
             adjustErrors={adjustErrors}
-            freeSubmitError={freeSubmitError}
             modalError={modalError}
             loading={actionLoading}
             onClose={closeManageModal}
@@ -539,14 +457,7 @@ export default function AdminProposalCreditsPage() {
                 reason: "",
               }));
             }}
-            onFreeSubmitReasonChange={(value) => {
-              setFreeSubmitReason(value);
-              setModalError("");
-              setFreeSubmitError("");
-            }}
             onSubmitAdjustment={requestCreditAdjustment}
-            onRestoreFreeSubmit={() => requestFreeSubmitUpdate(false)}
-            onDisableFreeSubmit={() => requestFreeSubmitUpdate(true)}
           />
         )}
 
@@ -586,13 +497,15 @@ function ExpertCreditRow({ expert, disabled, onManage }) {
       <td className="px-4 py-3.5">
         <span className="text-lg font-black text-white">{credits}</span>
       </td>
-
       <td className="px-4 py-3.5">
-        <SimpleStatus
-          active={freeRemaining > 0}
-          activeLabel="Available"
-          inactiveLabel="Used"
-        />
+        <div>
+          <span className="text-lg font-black text-white">
+            {freeRemaining}
+          </span>
+          <p className="mt-1 text-xs text-gray-500">
+            System managed
+          </p>
+        </div>
       </td>
 
       <td className="px-4 py-3.5">
@@ -622,24 +535,16 @@ function ManageCreditsModal({
   adjustmentMode,
   creditAmount,
   adjustReason,
-  freeSubmitReason,
   adjustErrors,
-  freeSubmitError,
   modalError,
   loading,
   onClose,
   onAdjustmentModeChange,
   onCreditAmountChange,
   onAdjustReasonChange,
-  onFreeSubmitReasonChange,
   onSubmitAdjustment,
-  onRestoreFreeSubmit,
-  onDisableFreeSubmit,
 }) {
-  const [activeTab, setActiveTab] = useState("CREDITS");
-
   const freeRemaining = Number(expert.freeProposalSubmitRemaining || 0);
-  const hasFreeSubmit = freeRemaining > 0;
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-5 backdrop-blur-sm">
@@ -662,7 +567,7 @@ function ManageCreditsModal({
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">
-              Manage Proposal Access
+              Manage Proposal Credits
             </p>
             <h2 className="mt-1.5 truncate text-lg font-black text-white">
               {expert.fullName || "Expert"}
@@ -695,42 +600,14 @@ function ManageCreditsModal({
               value={expert.proposalSubmitCredits || 0}
             />
             <CompactMetric
-              label="Free Submit"
-              value={hasFreeSubmit ? "Available" : "Used"}
+              label="Free Remaining"
+              value={freeRemaining}
             />
             <CompactMetric
-              label="Access"
-              value={expert.canSubmitProposal ? "Allowed" : "Blocked"}
+              label="Can Submit"
+              value={expert.canSubmitProposal ? "Yes" : "No"}
             />
           </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl border border-white/10 bg-[#0b1017] p-1">
-            <button
-              type="button"
-              onClick={() => setActiveTab("CREDITS")}
-              className={`rounded-lg px-3 py-2.5 text-sm font-black transition ${
-                activeTab === "CREDITS"
-                  ? "bg-cyan-400 text-black"
-                  : "text-gray-500 hover:text-white"
-              }`}
-            >
-              Credits
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("FREE_SUBMIT")}
-              className={`rounded-lg px-3 py-2.5 text-sm font-black transition ${
-                activeTab === "FREE_SUBMIT"
-                  ? "bg-purple-400 text-black"
-                  : "text-gray-500 hover:text-white"
-              }`}
-            >
-              Free Submit
-            </button>
-          </div>
-
-          {activeTab === "CREDITS" && (
             <form
               onSubmit={onSubmitAdjustment}
               className="mt-4 rounded-xl border border-white/10 bg-white/[0.025] p-4"
@@ -812,61 +689,6 @@ function ManageCreditsModal({
                 Review Credit Change
               </button>
             </form>
-          )}
-
-          {activeTab === "FREE_SUBMIT" && (
-            <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.025] p-4">
-              <div>
-                <h3 className="text-sm font-black text-white">
-                  Free Proposal Submission
-                </h3>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
-                  Restore a free submission or disable it when necessary.
-                </p>
-              </div>
-
-              <div className="mt-4">
-                <FieldLabel required>Reason</FieldLabel>
-                <textarea
-                  rows={3}
-                  value={freeSubmitReason}
-                  onChange={(event) =>
-                    onFreeSubmitReasonChange(event.target.value)
-                  }
-                  placeholder="Explain why the free submission status is changing"
-                  className={`w-full resize-none rounded-xl border bg-[#0b1017] px-4 py-3 text-sm leading-5 text-white outline-none placeholder:text-gray-600 ${
-                    freeSubmitError
-                      ? "border-red-400/70"
-                      : "border-white/10 focus:border-purple-400/50"
-                  }`}
-                />
-
-                {freeSubmitError && (
-                  <FieldError>{freeSubmitError}</FieldError>
-                )}
-              </div>
-
-              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button
-                  type="button"
-                  onClick={onRestoreFreeSubmit}
-                  disabled={loading || hasFreeSubmit}
-                  className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2.5 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Restore Free Submit
-                </button>
-
-                <button
-                  type="button"
-                  onClick={onDisableFreeSubmit}
-                  disabled={loading || !hasFreeSubmit}
-                  className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Disable Free Submit
-                </button>
-              </div>
-            </section>
-          )}
         </div>
       </div>
     </div>
