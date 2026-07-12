@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
+import reviewService from "../../../services/review.service";
 import { changePasswordApi } from "../../../api/auth.api";
 
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
@@ -10,8 +11,11 @@ export default function ExpertProfilePage() {
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
+  const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [reviewsError, setReviewsError] = useState("");
 
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
@@ -36,8 +40,21 @@ export default function ExpertProfilePage() {
 
       const result = await expertProfileService.getMyExpertProfile();
       const data = unwrapProfileData(result);
+
       setProfile(data);
       updateLocalUserStatus(getUserStatus(data));
+
+      const expertProfileId =
+        data?.expertProfileId ||
+        data?.ExpertProfileId ||
+        data?.id ||
+        data?.Id;
+
+      if (expertProfileId) {
+        await loadExpertReviews(expertProfileId);
+      } else {
+        setReviews([]);
+      }
     } catch (err) {
       console.error("LOAD EXPERT PROFILE ERROR:", getRawPayload(err));
 
@@ -54,6 +71,25 @@ export default function ExpertProfilePage() {
     }
   };
 
+
+  const loadExpertReviews = async (expertProfileId) => {
+    try {
+      setReviewsLoading(true);
+      setReviewsError("");
+
+      const result = await reviewService.getExpertReviews(expertProfileId);
+
+      setReviews(Array.isArray(result) ? result : []);
+    } catch (err) {
+      console.error("LOAD EXPERT REVIEWS ERROR:", err?.response?.data || err);
+      setReviews([]);
+      setReviewsError(
+        getFriendlyError(err, "Cannot load expert reviews right now.")
+      );
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
 
   const openChangePasswordModal = () => {
     setPasswordForm({
@@ -243,6 +279,7 @@ export default function ExpertProfilePage() {
     userStatus === "ACTIVE" || reviewStatus === "APPROVED";
 
   const feedback = buildProfileFeedback(profile);
+  const reviewSummary = buildReviewSummary(reviews);
 
   return (
     <ExpertLayout>
@@ -398,6 +435,60 @@ export default function ExpertProfilePage() {
                     No certificates added. Certificates are optional, but they
                     can help strengthen your profile.
                   </p>
+                )}
+              </Card>
+
+              <Card title="Client Reviews">
+                {reviewsLoading ? (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5 text-center text-sm text-gray-400">
+                    Loading reviews...
+                  </div>
+                ) : reviewsError ? (
+                  <div className="rounded-xl border border-red-400/20 bg-red-400/10 p-4">
+                    <p className="text-sm font-bold text-red-300">
+                      Reviews are unavailable
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-red-100/80">
+                      {reviewsError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        loadExpertReviews(
+                          profile?.expertProfileId ||
+                            profile?.ExpertProfileId ||
+                            profile?.id ||
+                            profile?.Id
+                        )
+                      }
+                      className="mt-3 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-400 hover:text-black"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : reviews.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+                    <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
+                      reviews
+                    </span>
+                    <p className="font-bold text-white">No reviews yet</p>
+                    <p className="mt-1 text-sm leading-6 text-gray-500">
+                      Client reviews will appear after completed projects.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <ReviewRatingOverview summary={reviewSummary} />
+
+                    <div className="space-y-3">
+                      {reviews.map((review, index) => (
+                        <ReviewItem
+                          key={review.reviewId || review.id || index}
+                          review={review}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )}
               </Card>
             </main>
@@ -729,6 +820,255 @@ function CertificateItem({ certificate, index }) {
       )}
     </a>
   );
+}
+
+function ReviewRatingOverview({ summary }) {
+  return (
+    <div className="mb-5 overflow-hidden rounded-2xl border border-yellow-300/20 bg-gradient-to-br from-yellow-300/[0.10] via-white/[0.025] to-transparent p-5">
+      <div className="grid gap-5 md:grid-cols-[210px_1fr] md:items-center">
+        <div className="text-center md:border-r md:border-white/10 md:pr-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-yellow-200/70">
+            Average Rating
+          </p>
+
+          <div className="mt-2 flex items-end justify-center gap-1.5">
+            <span className="text-5xl font-black leading-none text-white">
+              {summary.averageText}
+            </span>
+            <span className="pb-1 text-sm font-bold text-gray-500">/ 5</span>
+          </div>
+
+          <div className="mt-3 flex justify-center">
+            <AverageStars rating={summary.average} />
+          </div>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Based on {summary.total} client review{summary.total === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {[5, 4, 3, 2, 1].map((star) => {
+            const count = summary.distribution[star] || 0;
+            const percentage = summary.total > 0
+              ? Math.round((count / summary.total) * 100)
+              : 0;
+
+            return (
+              <div key={star} className="grid grid-cols-[30px_1fr_34px] items-center gap-2">
+                <span className="text-xs font-bold text-gray-400">
+                  {star}★
+                </span>
+
+                <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-yellow-300 transition-all"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+
+                <span className="text-right text-xs font-semibold text-gray-500">
+                  {count}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+        <div className="rounded-xl bg-black/10 p-3 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+            Total Reviews
+          </p>
+          <p className="mt-1 text-lg font-black text-white">{summary.total}</p>
+        </div>
+
+        <div className="rounded-xl bg-black/10 p-3 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+            5-Star Reviews
+          </p>
+          <p className="mt-1 text-lg font-black text-white">
+            {summary.fiveStarCount}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AverageStars({ rating }) {
+  const safeRating = Math.max(0, Math.min(5, Number(rating || 0)));
+  const fillPercentage = `${(safeRating / 5) * 100}%`;
+
+  return (
+    <div className="relative inline-flex" aria-label={`${safeRating.toFixed(1)} out of 5 stars`}>
+      <div className="flex text-gray-700">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <span key={index} className="material-symbols-outlined text-[23px]">
+            star
+          </span>
+        ))}
+      </div>
+
+      <div
+        className="absolute inset-y-0 left-0 overflow-hidden text-yellow-300"
+        style={{ width: fillPercentage }}
+      >
+        <div className="flex w-max">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <span key={index} className="material-symbols-outlined text-[23px]">
+              star
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewItem({ review }) {
+  const rating = Math.max(0, Math.min(5, Number(review?.rating || 0)));
+
+  return (
+    <article className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <ReviewAvatar
+              name={review?.reviewerName}
+              avatarUrl={review?.reviewerAvatarUrl}
+            />
+
+            <div className="min-w-0">
+              <p className="truncate font-bold text-white">
+                {review?.reviewerName || "Client"}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-gray-500">
+                {review?.projectTitle || "Completed project"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="shrink-0 text-left sm:text-right">
+          <div className="flex items-center gap-1 sm:justify-end">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <span
+                key={index}
+                className={`material-symbols-outlined text-[18px] ${
+                  index < rating ? "text-yellow-300" : "text-gray-700"
+                }`}
+              >
+                star
+              </span>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-600">
+            {formatReviewDate(review?.createdAt)}
+          </p>
+        </div>
+      </div>
+
+      {review?.comment ? (
+        <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
+          {review.comment}
+        </p>
+      ) : (
+        <p className="mt-4 text-sm italic text-gray-600">
+          No written feedback was provided.
+        </p>
+      )}
+    </article>
+  );
+}
+
+function ReviewAvatar({ name, avatarUrl }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || "Client"}
+        className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-sm font-black text-cyan-300">
+      {getReviewInitials(name)}
+    </div>
+  );
+}
+
+function buildReviewSummary(reviews = []) {
+  const list = Array.isArray(reviews) ? reviews : [];
+
+  const validRatings = list
+    .map((review) => Number(review?.rating))
+    .filter((rating) => Number.isFinite(rating) && rating >= 1 && rating <= 5);
+
+  const total = validRatings.length;
+  const distribution = {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
+
+  validRatings.forEach((rating) => {
+    const normalizedStar = Math.max(1, Math.min(5, Math.round(rating)));
+    distribution[normalizedStar] += 1;
+  });
+
+  if (total === 0) {
+    return {
+      total: 0,
+      average: 0,
+      averageText: "0.0",
+      fiveStarCount: 0,
+      distribution,
+    };
+  }
+
+  const ratingTotal = validRatings.reduce((sum, rating) => sum + rating, 0);
+  const average = ratingTotal / total;
+
+  return {
+    total,
+    average,
+    averageText: average.toFixed(1),
+    fiveStarCount: distribution[5],
+    distribution,
+  };
+}
+
+function getReviewInitials(name) {
+  if (!name) return "CL";
+
+  return String(name)
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((item) => item[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function formatReviewDate(value) {
+  if (!value) return "No date";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "No date";
+
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
 }
 
 function buildProfileFeedback(profile) {

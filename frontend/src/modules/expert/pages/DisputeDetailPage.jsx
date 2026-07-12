@@ -27,6 +27,7 @@ export default function DisputeDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [evidenceModalError, setEvidenceModalError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
 
   useEffect(() => {
@@ -39,6 +40,11 @@ export default function DisputeDetailPage() {
   const evidences = useMemo(
     () => (Array.isArray(dispute?.evidences) ? dispute.evidences : []),
     [dispute]
+  );
+
+  const evidenceGroups = useMemo(
+    () => groupEvidenceSubmissions(evidences),
+    [evidences]
   );
 
   const loadDispute = async ({ preserveMessage = false } = {}) => {
@@ -64,6 +70,7 @@ export default function DisputeDetailPage() {
   const updateEvidenceField = (name, value) => {
     setError("");
     setMessage("");
+    setEvidenceModalError("");
     setFieldErrors((prev) => ({
       ...prev,
       [name]: "",
@@ -80,10 +87,20 @@ export default function DisputeDetailPage() {
 
     setError("");
     setMessage("");
-    setFieldErrors((prev) => ({
-      ...prev,
-      images: "",
-    }));
+    setEvidenceModalError("");
+
+    const invalidImage = selectedFiles.find(
+      (file) => !String(file.type || "").startsWith("image/")
+    );
+
+    if (invalidImage) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        images: `Only image files are allowed: ${invalidImage.name}`,
+      }));
+      event.target.value = "";
+      return;
+    }
 
     setEvidenceForm((prev) => {
       const existingKeys = new Set(
@@ -99,9 +116,37 @@ export default function DisputeDetailPage() {
           )
       );
 
+      const combined = [...prev.images, ...uniqueNewFiles];
+
+      if (combined.length > 10) {
+        setFieldErrors((current) => ({
+          ...current,
+          images: "You can upload up to 10 images per submission.",
+        }));
+        return prev;
+      }
+
+      const totalSize = combined.reduce(
+        (sum, file) => sum + Number(file.size || 0),
+        0
+      );
+
+      if (totalSize > 60 * 1024 * 1024) {
+        setFieldErrors((current) => ({
+          ...current,
+          images: "The total image size cannot exceed 60 MB.",
+        }));
+        return prev;
+      }
+
+      setFieldErrors((current) => ({
+        ...current,
+        images: "",
+      }));
+
       return {
         ...prev,
-        images: [...prev.images, ...uniqueNewFiles].slice(0, 10),
+        images: combined,
       };
     });
 
@@ -109,6 +154,8 @@ export default function DisputeDetailPage() {
   };
 
   const removeEvidenceImage = (indexToRemove) => {
+    setEvidenceModalError("");
+
     setEvidenceForm((prev) => ({
       ...prev,
       images: prev.images.filter((_, index) => index !== indexToRemove),
@@ -141,6 +188,11 @@ export default function DisputeDetailPage() {
         "Supporting file URL must start with http:// or https://.";
     }
 
+    if (hasFileUrl && hasImages) {
+      nextErrors.general =
+        "Submit uploaded images and a supporting file URL separately. The current backend accepts one evidence type per submission.";
+    }
+
     if (images.length > 10) {
       nextErrors.images = "You can upload up to 10 images.";
     }
@@ -170,6 +222,7 @@ export default function DisputeDetailPage() {
   const openEvidenceModal = () => {
     setError("");
     setMessage("");
+    setEvidenceModalError("");
     setFieldErrors({});
     setShowEvidenceModal(true);
   };
@@ -180,6 +233,7 @@ export default function DisputeDetailPage() {
     setShowEvidenceModal(false);
     setShowEvidenceConfirm(false);
     setEvidenceForm({ ...emptyEvidenceForm });
+    setEvidenceModalError("");
     setFieldErrors({});
   };
 
@@ -192,58 +246,102 @@ export default function DisputeDetailPage() {
     }
 
     if (!validateEvidence()) {
+      setEvidenceModalError("");
       return;
     }
 
     setError("");
+    setEvidenceModalError("");
     setShowEvidenceConfirm(true);
   };
 
   const confirmSubmitEvidence = async () => {
-    const hasUploadedImages = evidenceForm.images.length > 0;
-    const hasTextOrUrl =
-      Boolean(evidenceForm.evidenceText.trim()) ||
-      Boolean(evidenceForm.fileUrl.trim());
+    if (submittingEvidence) return;
+
+    const evidenceText = evidenceForm.evidenceText.trim();
+    const fileUrl = evidenceForm.fileUrl.trim();
+    const images = evidenceForm.images;
+    const hasImages = images.length > 0;
+
+    const previousEvidenceCount = Array.isArray(dispute?.evidences)
+      ? dispute.evidences.length
+      : 0;
 
     try {
       setSubmittingEvidence(true);
       setError("");
       setMessage("");
+      setEvidenceModalError("");
 
-      if (hasUploadedImages) {
-        await disputeService.addDisputeImageEvidence(disputeId, {
-          evidenceText: evidenceForm.evidenceText,
-          images: evidenceForm.images,
-        });
-      }
+      /*
+       * Backend exposes two separate endpoints:
+       * 1. multipart images: EvidenceText + Images[]
+       * 2. JSON evidence: EvidenceText + FileUrl/ImageUrl
+       *
+       * Send exactly one POST per user submission.
+       */
+      const updatedDispute = hasImages
+        ? await disputeService.addDisputeImageEvidence(disputeId, {
+            evidenceText,
+            images,
+          })
+        : await disputeService.addDisputeEvidence(disputeId, {
+            evidenceText,
+            fileUrl,
+            imageUrl: "",
+          });
 
-      if (hasTextOrUrl && !hasUploadedImages) {
-        await disputeService.addDisputeEvidence(disputeId, {
-          evidenceText: evidenceForm.evidenceText,
-          fileUrl: evidenceForm.fileUrl,
-          imageUrl: "",
-          imageUrls: [],
-        });
-      } else if (evidenceForm.fileUrl.trim()) {
-        await disputeService.addDisputeEvidence(disputeId, {
-          evidenceText: "",
-          fileUrl: evidenceForm.fileUrl,
-          imageUrl: "",
-          imageUrls: [],
-        });
+      /*
+       * Backend already returns the complete updated dispute.
+       * Use it directly instead of waiting for another GET request.
+       */
+      if (updatedDispute) {
+        setDispute(updatedDispute);
       }
 
       setShowEvidenceConfirm(false);
       setShowEvidenceModal(false);
       setEvidenceForm({ ...emptyEvidenceForm });
+      setEvidenceModalError("");
       setFieldErrors({});
-
-      await loadDispute({ preserveMessage: true });
       setMessage("Evidence submitted successfully.");
     } catch (err) {
       console.error("ADD EVIDENCE ERROR:", err?.response?.data || err);
       setShowEvidenceConfirm(false);
-      setError(getFriendlyError(err, "Cannot submit evidence."));
+
+      /*
+       * The backend saves evidence before creating notifications.
+       * If a later notification step fails, the API may return an error
+       * even though the evidence was already persisted. Verify once.
+       */
+      try {
+        const refreshed = await disputeService.getDisputeById(disputeId);
+        const refreshedEvidenceCount = Array.isArray(refreshed?.evidences)
+          ? refreshed.evidences.length
+          : 0;
+
+        if (refreshedEvidenceCount > previousEvidenceCount) {
+          setDispute(refreshed);
+          setShowEvidenceModal(false);
+          setEvidenceForm({ ...emptyEvidenceForm });
+          setEvidenceModalError("");
+          setFieldErrors({});
+          setMessage("Evidence submitted successfully.");
+          return;
+        }
+      } catch (refreshError) {
+        console.error(
+          "VERIFY EVIDENCE SUBMISSION ERROR:",
+          refreshError?.response?.data || refreshError
+        );
+      }
+
+      setEvidenceModalError(
+        getFriendlyError(
+          err,
+          "Evidence could not be submitted. Please try again."
+        )
+      );
     } finally {
       setSubmittingEvidence(false);
     }
@@ -379,7 +477,7 @@ export default function DisputeDetailPage() {
                 value={formatMoney(dispute.disputedAmount)}
               />
               <HeroInfo
-                label="Scope"
+                label="Milestone"
                 value={
                   dispute.milestoneId
                     ? dispute.milestoneTitle || "Milestone"
@@ -440,11 +538,11 @@ export default function DisputeDetailPage() {
                 icon="history"
                 action={
                   <span className="text-xs font-semibold text-gray-500">
-                    {evidences.length} item{evidences.length === 1 ? "" : "s"}
+                    {evidenceGroups.length} submission{evidenceGroups.length === 1 ? "" : "s"}
                   </span>
                 }
               >
-                {evidences.length === 0 ? (
+                {evidenceGroups.length === 0 ? (
                   <EmptyState
                     icon="folder_open"
                     title="No additional evidence"
@@ -452,10 +550,10 @@ export default function DisputeDetailPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    {evidences.map((item, index) => (
-                      <EvidenceItem
-                        key={item.evidenceId || `${item.createdAt}-${index}`}
-                        evidence={item}
+                    {evidenceGroups.map((group, index) => (
+                      <EvidenceSubmission
+                        key={group.groupKey}
+                        submission={group}
                         index={index}
                       />
                     ))}
@@ -485,7 +583,7 @@ export default function DisputeDetailPage() {
                   value={dispute.projectTitle || "Project"}
                 />
                 <Info
-                  label="Dispute Scope"
+                  label="Dispute at"
                   value={
                     dispute.milestoneId
                       ? dispute.milestoneTitle || "Milestone"
@@ -556,6 +654,7 @@ export default function DisputeDetailPage() {
         <EvidenceModal
           formData={evidenceForm}
           fieldErrors={fieldErrors}
+          modalError={evidenceModalError}
           submitting={submittingEvidence}
           onClose={closeEvidenceModal}
           onChange={updateEvidenceField}
@@ -584,6 +683,7 @@ export default function DisputeDetailPage() {
 function EvidenceModal({
   formData,
   fieldErrors,
+  modalError,
   submitting,
   onClose,
   onChange,
@@ -605,9 +705,6 @@ function EvidenceModal({
             <h2 className="mt-1 text-xl font-black text-white">
               Support your dispute
             </h2>
-            <p className="mt-2 text-sm leading-6 text-gray-400">
-              Add at least one description, supporting file URL, or image.
-            </p>
           </div>
 
           <button
@@ -620,6 +717,25 @@ function EvidenceModal({
           </button>
         </div>
 
+        {modalError && (
+          <div className="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3">
+            <div className="flex items-start gap-3">
+              <span className="material-symbols-outlined mt-0.5 text-[18px] text-red-300">
+                error
+              </span>
+
+              <div>
+                <p className="text-sm font-bold text-red-300">
+                  Evidence submission failed
+                </p>
+                <p className="mt-1 text-xs leading-5 text-red-100/80">
+                  {modalError}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {fieldErrors.general && (
           <div className="mb-4">
             <InlineError message={fieldErrors.general} />
@@ -627,7 +743,7 @@ function EvidenceModal({
         )}
 
         <div className="space-y-4">
-          <Field label="Evidence Description">
+          <Field label="Evidence Description (optional)">
             <textarea
               rows={4}
               value={formData.evidenceText}
@@ -640,11 +756,11 @@ function EvidenceModal({
             />
           </Field>
 
-          <Field label="Supporting File URL" error={fieldErrors.fileUrl}>
+          <Field label="Supporting File URL (optional)" error={fieldErrors.fileUrl}>
             <input
               type="url"
               value={formData.fileUrl}
-              disabled={submitting}
+              disabled={submitting || formData.images.length > 0}
               onChange={(event) => onChange("fileUrl", event.target.value)}
               placeholder="https://drive.google.com/..."
               className={`w-full rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60 ${
@@ -653,6 +769,12 @@ function EvidenceModal({
                   : "border-white/10"
               }`}
             />
+
+            {formData.images.length > 0 && (
+              <p className="mt-2 text-xs leading-5 text-yellow-200/80">
+                Remove the selected images to submit a supporting file URL.
+              </p>
+            )}
           </Field>
 
           <Field label="Images" error={fieldErrors.images}>
@@ -677,11 +799,17 @@ function EvidenceModal({
                 type="file"
                 accept="image/*"
                 multiple
-                disabled={submitting}
+                disabled={submitting || Boolean(formData.fileUrl.trim())}
                 onChange={onImageChange}
                 className="hidden"
               />
             </label>
+
+            {formData.fileUrl.trim() && (
+              <p className="mt-2 text-xs leading-5 text-yellow-200/80">
+                Clear the supporting file URL before selecting images.
+              </p>
+            )}
 
             {formData.images.length > 0 && (
               <div className="mt-3 space-y-2">
@@ -788,60 +916,176 @@ function ConfirmDialog({
   );
 }
 
-function EvidenceItem({ evidence, index }) {
+function EvidenceSubmission({ submission, index }) {
+  const images = Array.isArray(submission.images) ? submission.images : [];
+  const files = Array.isArray(submission.files) ? submission.files : [];
+
   return (
     <article className="min-w-0 rounded-xl border border-white/10 bg-white/[0.025] p-4">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
-            Evidence {index + 1}
-          </span>
-
-          {evidence.uploadedByName && (
-            <span className="text-xs text-gray-500">
-              by {evidence.uploadedByName}
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
+              Evidence Submission {index + 1}
             </span>
-          )}
+
+            {submission.uploadedByName && (
+              <span className="text-xs text-gray-500">
+                by {submission.uploadedByName}
+              </span>
+            )}
+          </div>
+
+          <p className="mt-2 text-[11px] text-gray-600">
+            {images.length} image{images.length === 1 ? "" : "s"}
+            {files.length > 0
+              ? ` · ${files.length} supporting file${files.length === 1 ? "" : "s"}`
+              : ""}
+          </p>
         </div>
 
-        <span className="text-xs text-gray-600">
-          {formatDate(evidence.createdAt)}
+        <span className="shrink-0 text-xs text-gray-600">
+          {formatDate(submission.createdAt)}
         </span>
       </div>
 
-      {evidence.evidenceText && (
-        <ReadableText>{evidence.evidenceText}</ReadableText>
+      {submission.evidenceText ? (
+        <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+          <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.12em] text-gray-500">
+            Description
+          </p>
+          <ReadableText>{submission.evidenceText}</ReadableText>
+        </div>
+      ) : (
+        <p className="rounded-xl border border-dashed border-white/10 bg-black/10 p-3 text-sm text-gray-500">
+          No description was provided for this evidence submission.
+        </p>
       )}
 
-      <div className="mt-3 flex flex-wrap gap-2">
-        {evidence.fileUrl && (
-          <ExternalLink
-            href={evidence.fileUrl}
-            label="Open File"
-            icon="open_in_new"
-          />
-        )}
+      {files.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {files.map((fileUrl, fileIndex) => (
+            <ExternalLink
+              key={`${fileUrl}-${fileIndex}`}
+              href={fileUrl}
+              label={`Open Supporting File${files.length > 1 ? ` ${fileIndex + 1}` : ""}`}
+              icon="open_in_new"
+            />
+          ))}
+        </div>
+      )}
 
-        {evidence.imageUrl && (
-          <ExternalLink
-            href={evidence.imageUrl}
-            label="Open Image"
-            icon="image"
-          />
-        )}
-      </div>
+      {images.length > 0 && (
+        <div
+          className={`mt-3 grid gap-3 ${
+            images.length === 1
+              ? "grid-cols-1"
+              : "grid-cols-1 sm:grid-cols-2"
+          }`}
+        >
+          {images.map((imageUrl, imageIndex) => (
+            <a
+              key={`${imageUrl}-${imageIndex}`}
+              href={imageUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="group overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2 transition hover:border-cyan-400/40"
+            >
+              <img
+                src={imageUrl}
+                alt={`Evidence submission ${index + 1}, image ${imageIndex + 1}`}
+                className="h-48 w-full rounded-lg object-contain"
+              />
 
-      {evidence.imageUrl && (
-        <div className="mt-3 overflow-hidden rounded-xl border border-white/10 bg-black/20 p-2">
-          <img
-            src={evidence.imageUrl}
-            alt={`Evidence ${index + 1}`}
-            className="max-h-[260px] w-full rounded-lg object-contain"
-          />
+              <div className="mt-2 flex items-center justify-between gap-2 px-1 pb-1">
+                <span className="text-xs font-semibold text-gray-400">
+                  Image {imageIndex + 1}
+                </span>
+                <span className="material-symbols-outlined text-[15px] text-cyan-300 opacity-0 transition group-hover:opacity-100">
+                  open_in_new
+                </span>
+              </div>
+            </a>
+          ))}
         </div>
       )}
     </article>
   );
+}
+
+function groupEvidenceSubmissions(evidences = []) {
+  const sorted = [...evidences].sort((a, b) => {
+    const timeA = new Date(a?.createdAt || 0).getTime();
+    const timeB = new Date(b?.createdAt || 0).getTime();
+    return timeA - timeB;
+  });
+
+  const groups = [];
+  const MAX_GROUP_GAP_MS = 2 * 60 * 1000;
+
+  sorted.forEach((evidence, index) => {
+    const evidenceText = String(evidence?.evidenceText || "").trim();
+    const uploadedByUserId = String(evidence?.uploadedByUserId || "");
+    const uploadedByName = String(evidence?.uploadedByName || "User").trim();
+    const createdTime = new Date(evidence?.createdAt || 0).getTime();
+
+    const lastGroup = groups[groups.length - 1];
+    const lastTime = lastGroup
+      ? new Date(lastGroup.lastCreatedAt || 0).getTime()
+      : Number.NaN;
+
+    const sameDescription =
+      lastGroup &&
+      String(lastGroup.evidenceText || "").trim() === evidenceText;
+
+    const sameUploader =
+      lastGroup &&
+      String(lastGroup.uploadedByUserId || "") === uploadedByUserId &&
+      String(lastGroup.uploadedByName || "").trim() === uploadedByName;
+
+    const closeInTime =
+      lastGroup &&
+      Number.isFinite(createdTime) &&
+      Number.isFinite(lastTime) &&
+      Math.abs(createdTime - lastTime) <= MAX_GROUP_GAP_MS;
+
+    /*
+     * Backend currently creates one evidence row per uploaded image.
+     * Rows created in the same submission share description, uploader,
+     * and nearly identical timestamps, so combine them into one UI group.
+     */
+    if (sameDescription && sameUploader && closeInTime) {
+      if (evidence?.imageUrl && !lastGroup.images.includes(evidence.imageUrl)) {
+        lastGroup.images.push(evidence.imageUrl);
+      }
+
+      if (evidence?.fileUrl && !lastGroup.files.includes(evidence.fileUrl)) {
+        lastGroup.files.push(evidence.fileUrl);
+      }
+
+      lastGroup.lastCreatedAt = evidence?.createdAt || lastGroup.lastCreatedAt;
+      lastGroup.evidenceIds.push(evidence?.evidenceId || evidence?.id || index);
+      return;
+    }
+
+    groups.push({
+      groupKey: [
+        evidence?.evidenceId || evidence?.id || index,
+        uploadedByUserId || uploadedByName,
+        createdTime || index,
+      ].join("-"),
+      evidenceText,
+      uploadedByUserId,
+      uploadedByName,
+      createdAt: evidence?.createdAt || "",
+      lastCreatedAt: evidence?.createdAt || "",
+      images: evidence?.imageUrl ? [evidence.imageUrl] : [],
+      files: evidence?.fileUrl ? [evidence.fileUrl] : [],
+      evidenceIds: [evidence?.evidenceId || evidence?.id || index],
+    });
+  });
+
+  return groups.reverse();
 }
 
 function Card({ title, icon, action, children }) {
@@ -1037,12 +1281,26 @@ function formatStatusLabel(status) {
 function getFriendlyError(err, fallback) {
   const data = err?.response?.data;
 
-  if (typeof data === "string") return data;
+  if (typeof data === "string" && data.trim()) {
+    return data;
+  }
+
+  if (data?.errors && typeof data.errors === "object") {
+    const validationMessages = Object.values(data.errors)
+      .flat()
+      .filter(Boolean)
+      .map((item) => String(item).trim())
+      .filter(Boolean);
+
+    if (validationMessages.length > 0) {
+      return validationMessages.join(" ");
+    }
+  }
 
   return (
     data?.message ||
-    data?.title ||
     data?.detail ||
+    data?.title ||
     err?.message ||
     fallback
   );

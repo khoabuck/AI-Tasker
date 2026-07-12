@@ -9,7 +9,7 @@ const EMPTY_ACTION = {
 };
 
 const EMPTY_LOCK_FORM = {
-  durationMinutes: "60",
+  durationMinutes: "",
   reason: "",
 };
 
@@ -42,6 +42,8 @@ export default function AdminUserDetailPage() {
   const [banForm, setBanForm] = useState(EMPTY_BAN_FORM);
 
   const userStatus = useMemo(() => getUserStatus(user), [user]);
+  const userRole = String(user?.role || "").trim().toUpperCase();
+  const isExpert = userRole === "EXPERT";
   const isLocked = userStatus === "LOCKED";
   const isBanned = userStatus === "BANNED";
 
@@ -146,11 +148,11 @@ export default function AdminUserDetailPage() {
     const durationText = String(lockForm.durationMinutes ?? "").trim();
 
     if (!durationText) {
-      errors.durationMinutes = "Duration Minutes is required.";
+      errors.durationMinutes = "Lock duration is required.";
     } else if (!/^\d+$/.test(durationText)) {
-      errors.durationMinutes = "Duration Minutes must be a number.";
+      errors.durationMinutes = "Lock duration must be a whole number.";
     } else if (Number(durationText) <= 0) {
-      errors.durationMinutes = "Duration Minutes must be greater than 0.";
+      errors.durationMinutes = "Lock duration must be greater than 0.";
     }
 
     if (!lockForm.reason.trim()) {
@@ -285,8 +287,8 @@ export default function AdminUserDetailPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review account status, role, wallet balance, profile links,
-              security status, and administrative restrictions.
+              Review account status, wallet balances, security information,
+              and administrative restrictions.
             </p>
           </div>
 
@@ -397,7 +399,7 @@ export default function AdminUserDetailPage() {
               </div>
             </section>
 
-            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
               <InfoCard
                 icon="badge"
                 label="Role"
@@ -410,13 +412,6 @@ export default function AdminUserDetailPage() {
                 label="Status"
                 value={formatLabel(userStatus)}
                 tone={userStatus === "ACTIVE" ? "green" : "yellow"}
-              />
-
-              <InfoCard
-                icon="login"
-                label="Last Login"
-                value={formatDateTime(user.lastLoginAt)}
-                tone="purple"
               />
 
               <InfoCard
@@ -435,17 +430,16 @@ export default function AdminUserDetailPage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Current wallet balances from admin dashboard user-wallets
-                    API.
+                    Current wallet balances recorded for this account.
                   </p>
                 </div>
 
                 <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                  {wallet ? "Wallet Found" : "No Wallet"}
+                  {wallet ? "Wallet Available" : "No Wallet Data"}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <InfoCard
                   icon="account_balance_wallet"
                   label="Available Balance"
@@ -458,15 +452,6 @@ export default function AdminUserDetailPage() {
                   label="Locked Balance"
                   value={formatMoney(getWalletValue(wallet, "lockedBalance"))}
                   tone="yellow"
-                />
-
-                <InfoCard
-                  icon="payments"
-                  label="Withdrawable"
-                  value={formatMoney(
-                    getWalletValue(wallet, "withdrawableBalance")
-                  )}
-                  tone="cyan"
                 />
 
                 <InfoCard
@@ -502,10 +487,21 @@ export default function AdminUserDetailPage() {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <DetailItem label="Full Name" value={user.fullName} />
                   <DetailItem label="Email" value={user.email} />
-                  <DetailItem label="Phone Number" value={user.phoneNumber} />
+
+                  {!isExpert && (
+                    <DetailItem
+                      label="Phone Number"
+                      value={user.phoneNumber}
+                    />
+                  )}
+
                   <DetailItem
-                    label="Auth Provider"
-                    value={user.authProvider || "Local"}
+                    label="Sign-in Method"
+                    value={
+                      user.authProvider
+                        ? formatLabel(user.authProvider)
+                        : "Not available"
+                    }
                   />
                   <DetailItem
                     label="Email Verification"
@@ -579,7 +575,7 @@ export default function AdminUserDetailPage() {
           >
             <div className="space-y-4">
               <NumberInput
-                label="Duration Minutes"
+                label="Lock Duration (minutes)"
                 required
                 value={lockForm.durationMinutes}
                 error={fieldErrors.durationMinutes}
@@ -594,7 +590,7 @@ export default function AdminUserDetailPage() {
                     durationMinutes: value,
                   }));
                 }}
-                placeholder="60"
+                placeholder="Enter duration in minutes"
               />
 
               <TextArea
@@ -763,7 +759,7 @@ function ReasonBox({ title, value, tone = "yellow" }) {
 }
 
 function RoleBadge({ role }) {
-  const value = String(role || "USER").toUpperCase();
+  const value = String(role || "UNKNOWN").toUpperCase();
 
   const className =
     value === "ADMIN"
@@ -784,7 +780,7 @@ function RoleBadge({ role }) {
 }
 
 function StatusBadge({ status }) {
-  const value = String(status || "ACTIVE").toUpperCase();
+  const value = String(status || "UNKNOWN").toUpperCase();
 
   const className =
     value === "ACTIVE"
@@ -898,7 +894,7 @@ function NumberInput({
         <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
       ) : (
         <p className="mt-2 text-xs leading-5 text-gray-500">
-          Backend expects duration in minutes. Example: 60 means 1 hour.
+          Enter how long the account should remain locked. Example: 60 minutes equals 1 hour.
         </p>
       )}
     </div>
@@ -981,7 +977,7 @@ function getUserStatus(user) {
     return "LOCKED";
   }
 
-  return rawStatus || "ACTIVE";
+  return rawStatus || "UNKNOWN";
 }
 
 function getWalletValue(wallet, key) {
@@ -1045,15 +1041,15 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;
 
   if (status === 401) {
-    return "Your session has expired. Please login again.";
+    return "Your session has expired. Please sign in again.";
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage this account.";
   }
 
   if (status === 404) {
-    return "Admin user detail API was not found. Please check backend route.";
+    return "User details are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

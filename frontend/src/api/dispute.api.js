@@ -24,10 +24,13 @@ const disputeApi = {
   },
 
   addDisputeImageEvidence(disputeId, data) {
+    /*
+     * Do not set Content-Type manually here.
+     * The browser/Axios must add the multipart boundary automatically.
+     */
     return axiosInstance.post(
-      `/disputes/${disputeId}/evidences/images`,
-      data,
-      multipartConfig
+      `/disputes/${disputeId}/evidences/image`,
+      data
     );
   },
 };
