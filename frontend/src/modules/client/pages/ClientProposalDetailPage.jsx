@@ -191,7 +191,6 @@ export default function ClientProposalDetailPage() {
   const [showMessage, setShowMessage] = useState(false);
   const [walletBalance, setWalletBalance] = useState(null);
   const [walletLoading, setWalletLoading] = useState(false);
-  const [clientProfile, setClientProfile] = useState(null);
   const [contractCreated, setContractCreated] = useState(null);
   const [contractChecked, setContractChecked] = useState(false);
   const [showAcceptModal, setShowAcceptModal] = useState(false);
@@ -239,27 +238,13 @@ export default function ClientProposalDetailPage() {
   }, [fetchProposal]);
 
   useEffect(() => {
-    const fetchClientProfile = async () => {
-      try {
-        const res = await axiosInstance.get("/client-profiles/me");
-        const profile = res.data?.data ?? res.data;
-        setClientProfile(profile);
-      } catch {
-        setClientProfile(null);
-      }
-    };
-
-    fetchClientProfile();
-  }, []);
-
-  useEffect(() => {
     const fetchWalletBalance = async () => {
       setWalletLoading(true);
+
       try {
         const res = await axiosInstance.get("/wallets/balance");
         setWalletBalance(Number(res.data?.balance ?? 0));
-      } catch (err) {
-        console.error(err);
+      } catch {
         setWalletBalance(0);
       } finally {
         setWalletLoading(false);
@@ -292,32 +277,47 @@ export default function ClientProposalDetailPage() {
 
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
-    setShowAcceptModal(false);
-    setActionLoading("accept");
-    setAcceptError("");
+  if (actionLoading === "accept") return;
+
+  setShowAcceptModal(false);
+  setActionLoading("accept");
+  setAcceptError("");
 
     try {
       await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
 
-      const contractRes = await axiosInstance.post(`/contracts/from-proposal/${proposalId}`);
-      const contract = contractRes.data?.data ?? contractRes.data;
+      const contractRes = await axiosInstance.post(
+        `/contracts/from-proposal/${proposalId}`
+      );
+
+      const contract =
+        contractRes.data?.data ?? contractRes.data;
+
       setContractCreated(contract);
 
-      const refreshed = await axiosInstance.get(`/proposals/${proposalId}`);
-      setProposal(refreshed.data?.data ?? refreshed.data);
+      const refreshed = await axiosInstance.get(
+        `/proposals/${proposalId}`
+      );
 
-      const totalPayment = Number(contract?.totalClientPayment ?? 0);
-      const walletEnough = !walletLoading && Number(walletBalance ?? 0) >= totalPayment;
+      const refreshedData =
+        refreshed.data?.data ?? refreshed.data;
 
-      if (walletEnough) {
-        // Đủ tiền → chuyển thẳng sang trang ký hợp đồng.
-        navigate(`/client/proposals/${proposalId}/contract`, {
-          state: {
-            contract,
-          },
-        });
-        return;
-      }
+      setProposal(
+        Array.isArray(refreshedData)
+          ? refreshedData[0] ?? null
+          : refreshedData
+      );
+
+      // Luôn chuyển sang trang ký hợp đồng.
+      // Trang ký sẽ hiển thị đúng phí BE vừa tính và kiểm tra số dư ví.
+      navigate(`/client/proposals/${proposalId}/contract`, {
+        replace: true,
+        state: {
+          contract,
+        },
+      });
+
+      return;
       // Không đủ tiền → ở lại trang này, banner "Continue to Contract" bên
       // dưới sẽ hiện ra (vì contractCreated đã có giá trị), user tự bấm
       // vào đó khi đã nạp đủ tiền.
@@ -386,18 +386,7 @@ export default function ClientProposalDetailPage() {
   const expertName = proposal.expertName || proposal.fullName || "Expert";
   const proposedPrice = Number(proposal.proposedPrice || proposal.bidAmount || 0);
 
-  const platformFeeRate = Number(
-    contractCreated?.platformFeeRate ?? clientProfile?.platformFeeRate ?? 5
-  );
-
-  const requiredDeposit = Number(
-    contractCreated?.totalClientPayment ??
-    proposedPrice * (1 + platformFeeRate / 100)
-  );
-
-  const hasEnoughWallet =
-    !walletLoading &&
-    Number(walletBalance ?? 0) >= requiredDeposit;
+  const acceptDisabled = isProcessing;
 
   const { bothSigned } = readContractSignState(contractCreated);
   const isCancelled = (contractCreated?.status || "").toUpperCase() === "CANCELLED";
@@ -462,12 +451,19 @@ export default function ClientProposalDetailPage() {
             </div>
 
             {isPending && (
-              <div style={{ marginTop: 14, fontSize: 12, color: hasEnoughWallet ? "#22c55e" : "#facc15" }}>
-                Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()}
+              <div
+                style={{
+                  marginTop: 14,
+                  fontSize: 12,
+                  color: "#facc15",
+                }}
+              >
+                Wallet balance: $
+                {walletLoading
+                  ? "Loading..."
+                  : Number(walletBalance ?? 0).toLocaleString()}
                 {" — "}
-                Required deposit: ${requiredDeposit.toFixed(2)}
-                {" "}
-                ({platformFeeRate}% platform fee)
+                Platform fee applies.
               </div>
             )}
 
@@ -491,19 +487,33 @@ export default function ClientProposalDetailPage() {
                   </button>
 
                   <button
-                    onClick={() => setShowAcceptModal(true)}
-                    disabled={isProcessing}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 6, padding: "10px 20px",
-                      background: isProcessing ? "rgba(34,197,94,0.08)" : "#22c55e",
-                      color: isProcessing ? "#22c55e" : "#002022",
-                      border: "1px solid rgba(34,197,94,0.5)", borderRadius: 8, fontSize: 13, fontWeight: 700,
-                      cursor: isProcessing ? "not-allowed" : "pointer",
-                      opacity: isProcessing ? 0.6 : 1,
-                      boxShadow: isProcessing ? "none" : "0 0 16px rgba(34,197,94,0.3)",
-                      transition: "all 0.2s",
-                    }}
-                  >
+                      onClick={() => setShowAcceptModal(true)}
+                      disabled={acceptDisabled}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "10px 20px",
+                        background: acceptDisabled
+                          ? "rgba(34,197,94,0.08)"
+                          : "#22c55e",
+                        color: acceptDisabled
+                          ? "#22c55e"
+                          : "#002022",
+                        border: "1px solid rgba(34,197,94,0.5)",
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: acceptDisabled
+                          ? "not-allowed"
+                          : "pointer",
+                        opacity: acceptDisabled ? 0.6 : 1,
+                        boxShadow: acceptDisabled
+                          ? "none"
+                          : "0 0 16px rgba(34,197,94,0.3)",
+                        transition: "all 0.2s",
+                      }}
+                    >
                     <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                       {isAccepting ? "hourglass_empty" : "check_circle"}
                     </span>
@@ -744,18 +754,20 @@ export default function ClientProposalDetailPage() {
                 Timeline: {proposal.proposedTimelineDays || proposal.estimatedDays} days
               </div>
 
-              <div className={`font-semibold ${hasEnoughWallet ? "text-green-400" : "text-yellow-400"}`}>
-                Required Deposit: ${requiredDeposit.toFixed(2)}
-                {" "}
-                ({platformFeeRate}% platform fee)
+              <div className="font-semibold text-yellow-400">
+                Platform fee applies.
               </div>
+
+              <div className="mt-3 text-sm text-slate-400">
+                Current wallet balance: $
+                {walletLoading
+                  ? "Loading..."
+                  : Number(walletBalance ?? 0).toLocaleString()}
+              </div>
+
             </div>
 
-            {!hasEnoughWallet && (
-              <div className="mb-5 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-3 text-sm text-yellow-300">
-                Your wallet balance is insufficient. You can still create the contract now and deposit funds before signing.
-              </div>
-            )}
+          
 
             <div className="flex justify-end gap-3">
               <button
