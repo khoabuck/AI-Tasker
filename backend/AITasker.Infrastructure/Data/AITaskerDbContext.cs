@@ -84,6 +84,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<Deliverable> Deliverables { get; set; }
 
+    public DbSet<DeliverableArtifact> DeliverableArtifacts { get; set; }
+
     public DbSet<Dispute> Disputes { get; set; }
 
     public DbSet<DisputeEvidence> DisputeEvidences { get; set; }
@@ -263,7 +265,9 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(x => x.UpdatedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.IsActive)
+                .IsUnique()
+                .HasFilter("[IsActive] = 1");
 
             entity.HasIndex(x => x.UpdatedByAdminId);
         });
@@ -277,7 +281,23 @@ public class AITaskerDbContext : DbContext
 
             entity.HasKey(x => x.MarketplaceWorkflowPolicyId);
 
+            entity.Property(x => x.ProposalResubmitLimit)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalResubmitWindowHours)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.ProposalCreditLowWarningThreshold)
+                .HasDefaultValue(3)
+                .IsRequired();
+
             entity.Property(x => x.ContractSignWindowHours)
+                .IsRequired();
+
+            entity.Property(x => x.DeliverableArtifactLimit)
+                .HasDefaultValue(10)
                 .IsRequired();
 
             entity.Property(x => x.MinimumWithdrawalAmount)
@@ -315,7 +335,9 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(x => x.UpdatedByAdminId);
 
-            entity.HasIndex(x => x.IsActive);
+            entity.HasIndex(x => x.IsActive)
+                .IsUnique()
+                .HasFilter("[IsActive] = 1");
         });
 
 
@@ -1416,6 +1438,10 @@ public class AITaskerDbContext : DbContext
                     "CK_Proposals_Price_Timeline",
                     "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
+                t.HasCheckConstraint(
+                    "CK_Proposals_StatusReason",
+                    "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED')");
+
             });
 
             entity.HasKey(e => e.ProposalId);
@@ -1433,6 +1459,9 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.StatusReason)
+                .HasMaxLength(50);
+
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
@@ -1445,6 +1474,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.ExpertId);
 
             entity.HasIndex(e => e.Status);
+
+            entity.HasIndex(e => new { e.JobId, e.Status, e.StatusReason });
 
             entity.HasIndex(e => new { e.JobId, e.ExpertId })
                 .IsUnique()
@@ -1495,15 +1526,6 @@ public class AITaskerDbContext : DbContext
             entity.Property(e => e.Title)
                 .IsRequired()
                 .HasMaxLength(255);
-
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
-                .IsRequired();
 
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
@@ -2041,15 +2063,6 @@ public class AITaskerDbContext : DbContext
                 .IsRequired()
                 .HasMaxLength(255);
 
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
-                .IsRequired();
-
             entity.Property(e => e.Amount)
                 .HasColumnType("decimal(18,2)")
                 .IsRequired();
@@ -2167,15 +2180,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.Title)
                 .HasMaxLength(255)
-                .IsRequired();
-
-            entity.Property(e => e.Description)
-                .IsRequired();
-
-            entity.Property(e => e.ExpectedDeliverable)
-                .IsRequired();
-
-            entity.Property(e => e.AcceptanceCriteria)
                 .IsRequired();
 
             entity.Property(e => e.Amount)
@@ -2596,6 +2600,14 @@ public class AITaskerDbContext : DbContext
                 t.HasCheckConstraint(
                 "CK_Deliverables_Status",
                 "[Status] IN ('SUBMITTED','APPROVED','AUTO_APPROVED','REVISION_REQUESTED')");
+
+                t.HasCheckConstraint(
+                "CK_Deliverables_DemoValidationStatus",
+                "[DemoValidationStatus] IS NULL OR [DemoValidationStatus] IN ('VALID','AUTH_REQUIRED')");
+
+                t.HasCheckConstraint(
+                "CK_Deliverables_TestValidationStatus",
+                "[TestValidationStatus] IS NULL OR [TestValidationStatus] IN ('VALID','AUTH_REQUIRED')");
             });
 
             entity.HasKey(d => d.DeliverableId);
@@ -2614,8 +2626,20 @@ public class AITaskerDbContext : DbContext
             entity.Property(d => d.DemoUrl)
                 .HasMaxLength(500);
 
+            entity.Property(d => d.DemoInstructions)
+                .HasMaxLength(2000);
+
+            entity.Property(d => d.DemoValidationStatus)
+                .HasMaxLength(30);
+
             entity.Property(d => d.TestResultUrl)
                 .HasMaxLength(500);
+
+            entity.Property(d => d.TestSummary)
+                .HasMaxLength(2000);
+
+            entity.Property(d => d.TestValidationStatus)
+                .HasMaxLength(30);
 
             entity.Property(d => d.HandoverNotes)
                 .HasMaxLength(4000);
@@ -2662,6 +2686,77 @@ public class AITaskerDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(d => d.MilestoneId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // =========================
+        // Deliverable Artifact
+        // =========================
+        modelBuilder.Entity<DeliverableArtifact>(entity =>
+        {
+            entity.ToTable("DeliverableArtifacts", t =>
+            {
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_ArtifactType",
+                    "[ArtifactType] IN ('FILE','FOLDER','ARCHIVE','SOURCE_REPOSITORY','DOCUMENTATION','DESIGN','DATASET','MODEL','BUILD','OTHER')");
+
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_AccessLevel",
+                    "[AccessLevel] IN ('PUBLIC','RESTRICTED')");
+
+                t.HasCheckConstraint(
+                    "CK_DeliverableArtifacts_ValidationStatus",
+                    "[ValidationStatus] IN ('VALID','AUTH_REQUIRED')");
+            });
+
+            entity.HasKey(x => x.DeliverableArtifactId);
+
+            entity.Property(x => x.ArtifactType)
+                .HasMaxLength(50)
+                .IsRequired();
+
+            entity.Property(x => x.Label)
+                .HasMaxLength(200)
+                .IsRequired();
+
+            entity.Property(x => x.Url)
+                .HasMaxLength(500)
+                .IsRequired();
+
+            entity.Property(x => x.Provider)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.AccessLevel)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.Version)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.CommitHash)
+                .HasMaxLength(100);
+
+            entity.Property(x => x.Checksum)
+                .HasMaxLength(200);
+
+            entity.Property(x => x.ValidationStatus)
+                .HasMaxLength(30)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.HasIndex(x => x.DeliverableId);
+
+            entity.HasIndex(x => new
+            {
+                x.DeliverableId,
+                x.Url
+            }).IsUnique();
+
+            entity.HasOne(x => x.Deliverable)
+                .WithMany(x => x.Artifacts)
+                .HasForeignKey(x => x.DeliverableId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // =========================
@@ -2723,6 +2818,8 @@ public class AITaskerDbContext : DbContext
 
             entity.HasIndex(d => d.RespondentUserId);
 
+            entity.HasIndex(d => d.DeliverableId);
+
             entity.HasIndex(d => new
             {
                 d.MilestoneId,
@@ -2748,6 +2845,11 @@ public class AITaskerDbContext : DbContext
             entity.HasOne(d => d.Milestone)
                 .WithMany()
                 .HasForeignKey(d => d.MilestoneId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(d => d.Deliverable)
+                .WithMany()
+                .HasForeignKey(d => d.DeliverableId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(d => d.OpenedByUser)
@@ -2781,9 +2883,6 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.FileUrl)
                 .HasMaxLength(500);
-
-            entity.Property(e => e.ImageUrl)
-                .HasMaxLength(1000);
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
@@ -3114,5 +3213,33 @@ public class AITaskerDbContext : DbContext
                 .HasForeignKey(w => w.ProcessedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
         });
+
+        ApplyUtcDateTimeConverters(modelBuilder);
+    }
+
+    private static void ApplyUtcDateTimeConverters(ModelBuilder modelBuilder)
+    {
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                // Certificate issue dates are calendar dates, not UTC timestamps.
+                if (entityType.ClrType == typeof(ExpertCertificate) &&
+                    (property.Name == nameof(ExpertCertificate.IssuedAt) ||
+                     property.Name == nameof(ExpertCertificate.DetectedIssuedAt)))
+                {
+                    continue;
+                }
+
+                if (property.ClrType == typeof(DateTime))
+                {
+                    property.SetValueConverter(new UtcDateTimeConverter());
+                }
+                else if (property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(new NullableUtcDateTimeConverter());
+                }
+            }
+        }
     }
 }

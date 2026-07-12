@@ -2,7 +2,6 @@ using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Banking
@@ -23,7 +22,7 @@ namespace AITasker.Infrastructure.Banking
 
         public async Task<PlatformWalletResponse> GetPlatformWalletAsync()
         {
-            var wallet = await GetOrCreateMainWalletAsync(VietnamDateTime.Now);
+            var wallet = await GetOrCreateMainWalletAsync(DateTime.UtcNow);
 
             await _context.SaveChangesAsync();
 
@@ -51,8 +50,18 @@ namespace AITasker.Infrastructure.Banking
                 .Take(take)
                 .ToListAsync();
 
+            var contexts = await TransactionDisplayResolver
+                .LoadPlatformTransactionContextsAsync(_context, transactions);
+
             return transactions
-                .Select(MapTransaction)
+                .Select(transaction =>
+                {
+                    contexts.TryGetValue(
+                        transaction.PlatformTransactionId,
+                        out var context);
+
+                    return MapTransaction(transaction, context);
+                })
                 .ToList();
         }
 
@@ -216,20 +225,40 @@ namespace AITasker.Infrastructure.Banking
             };
         }
 
-        private static PlatformTransactionResponse MapTransaction(PlatformTransaction transaction)
+        private static PlatformTransactionResponse MapTransaction(
+            PlatformTransaction transaction,
+            TransactionDisplayContext? context)
         {
+            var display = TransactionDisplayResolver.Resolve(
+                transaction.Type,
+                transaction.Status,
+                transaction.Description,
+                transaction.ReferenceId,
+                context);
+
             return new PlatformTransactionResponse
             {
                 PlatformTransactionId = transaction.PlatformTransactionId,
                 PlatformWalletId = transaction.PlatformWalletId,
                 ProjectId = transaction.ProjectId,
-                ContractId = transaction.ContractId,
+                ProjectTitle = context?.ProjectTitle,
+                ContractId = transaction.ContractId ?? context?.ContractId,
+                ContractTitle = context?.ContractTitle,
+                ProposalId = context?.ProposalId,
+                ProposalTitle = context?.ProposalTitle,
+                JobId = context?.JobId,
+                JobTitle = context?.JobTitle,
                 WithdrawalRequestId = transaction.WithdrawalRequestId,
                 UserId = transaction.UserId,
                 Type = transaction.Type,
                 Amount = transaction.Amount,
                 Status = transaction.Status,
                 Description = transaction.Description,
+                DisplayTitle = display.DisplayTitle,
+                DisplaySubtitle = display.DisplaySubtitle,
+                DisplayDescription = display.DisplayDescription,
+                ReferenceType = display.ReferenceType,
+                ReferenceDisplayName = display.ReferenceDisplayName,
                 ReferenceId = transaction.ReferenceId,
                 CreatedAt = transaction.CreatedAt
             };

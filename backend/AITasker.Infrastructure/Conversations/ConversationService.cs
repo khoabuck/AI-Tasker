@@ -4,7 +4,6 @@ using AITasker.Application.Interfaces;
 using AITasker.Domain.Constants;
 using AITasker.Domain.Entities;
 using AITasker.Infrastructure.Data;
-using AITasker.Infrastructure.Common;
 using Microsoft.EntityFrameworkCore;
 
 namespace AITasker.Infrastructure.Conversations
@@ -35,8 +34,6 @@ namespace AITasker.Infrastructure.Conversations
         private const string MessageTypeDeliverable = "DELIVERABLE";
         private const string MessageTypeDisputeEvidence = "DISPUTE_EVIDENCE";
 
-        private const string VietnamTimeZoneId = "SE Asia Standard Time";
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
         
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
@@ -111,7 +108,7 @@ namespace AITasker.Infrastructure.Conversations
                 RelatedMilestoneId = resolution.RelatedMilestoneId,
                 RelatedDisputeId = resolution.RelatedDisputeId,
                 Status = StatusActive,
-                CreatedAt = VietnamDateTime.Now,
+                CreatedAt = DateTime.UtcNow,
                 LastMessageAt = null
             };
 
@@ -266,7 +263,7 @@ namespace AITasker.Infrastructure.Conversations
                 Content = content,
                 MessageType = messageType,
                 AttachmentUrl = attachmentUrl,
-                CreatedAt = VietnamDateTime.Now
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.ConversationMessages.Add(message);
@@ -860,18 +857,8 @@ namespace AITasker.Infrastructure.Conversations
 
                 LastMessageContent = lastMessage?.Content,
 
-                CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(conversation.CreatedAt)),
-                CreatedAtUtc = SpecifyUtc(conversation.CreatedAt),
-
-                LastMessageAt = conversation.LastMessageAt.HasValue
-                    ? ConvertUtcToVietnamTime(SpecifyUtc(conversation.LastMessageAt.Value))
-                    : null,
-
-                LastMessageAtUtc = conversation.LastMessageAt.HasValue
-                    ? SpecifyUtc(conversation.LastMessageAt.Value)
-                    : null,
-
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = conversation.CreatedAt,
+                LastMessageAt = conversation.LastMessageAt
             };
         }
 
@@ -893,42 +880,13 @@ namespace AITasker.Infrastructure.Conversations
                 Content = message.Content,
                 MessageType = message.MessageType,
                 AttachmentUrl = message.AttachmentUrl,
-                CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(message.CreatedAt)),
-                CreatedAtUtc = SpecifyUtc(message.CreatedAt),
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = message.CreatedAt
             };
         }
 
         private static bool IsAdmin(User user)
         {
             return string.Equals(user.Role, RoleAdmin, StringComparison.OrdinalIgnoreCase);
-        }
-
-        private static DateTime SpecifyUtc(DateTime value)
-        {
-            if (value.Kind == DateTimeKind.Utc)
-            {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        }
-
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
-        {
-            try
-            {
-                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return utcDateTime.AddHours(7);
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return utcDateTime.AddHours(7);
-            }
         }
 
         private static bool IsClient(User user)

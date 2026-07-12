@@ -5,26 +5,27 @@ using AITasker.Domain.Constants;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace AITasker.Infrastructure.Notifications
 {
     public class NotificationService : INotificationService
     {
-        private const string VietnamTimeZoneId = "SE Asia Standard Time";
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
-
         private readonly AITaskerDbContext _context;
         private readonly INotificationRealtimeService _realtimeService;
         private readonly ILogger<NotificationService> _logger;
+        private readonly IServiceScopeFactory _scopeFactory;
 
         public NotificationService(
             AITaskerDbContext context,
             INotificationRealtimeService realtimeService,
-            ILogger<NotificationService> logger)
+            ILogger<NotificationService> logger,
+            IServiceScopeFactory scopeFactory)
         {
             _context = context;
             _realtimeService = realtimeService;
             _logger = logger;
+            _scopeFactory = scopeFactory;
         }
 
         public async Task<NotificationListResponse> GetNotificationsByUserIdAsync(
@@ -82,34 +83,42 @@ namespace AITasker.Infrastructure.Notifications
                 content,
                 type);
 
-            await EnsureUserExistsAsync(userId);
+            Notification notification;
 
-            var notification = new Notification
+            await using (var scope = _scopeFactory.CreateAsyncScope())
             {
-                UserId = userId,
-                Title = title.Trim(),
-                Content = content.Trim(),
-                Type = type.Trim().ToUpperInvariant(),
+                var notificationContext = scope.ServiceProvider
+                    .GetRequiredService<AITaskerDbContext>();
 
-                RelatedEntityType = string.IsNullOrWhiteSpace(relatedEntityType)
-                    ? null
-                    : relatedEntityType.Trim().ToUpperInvariant(),
-                RelatedEntityId = relatedEntityId,
-                RelatedJobId = relatedJobId,
-                RelatedProposalId = relatedProposalId,
-                RelatedContractId = relatedContractId,
-                RelatedProjectId = relatedProjectId,
-                RelatedMilestoneId = relatedMilestoneId,
-                RelatedDeliverableId = relatedDeliverableId,
-                RelatedDisputeId = relatedDisputeId,
-                RelatedConversationId = relatedConversationId,
+                await EnsureUserExistsAsync(notificationContext, userId);
 
-                IsRead = false,
-                CreatedAt = DateTime.UtcNow
-            };
+                notification = new Notification
+                {
+                    UserId = userId,
+                    Title = title.Trim(),
+                    Content = content.Trim(),
+                    Type = type.Trim().ToUpperInvariant(),
 
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
+                    RelatedEntityType = string.IsNullOrWhiteSpace(relatedEntityType)
+                        ? null
+                        : relatedEntityType.Trim().ToUpperInvariant(),
+                    RelatedEntityId = relatedEntityId,
+                    RelatedJobId = relatedJobId,
+                    RelatedProposalId = relatedProposalId,
+                    RelatedContractId = relatedContractId,
+                    RelatedProjectId = relatedProjectId,
+                    RelatedMilestoneId = relatedMilestoneId,
+                    RelatedDeliverableId = relatedDeliverableId,
+                    RelatedDisputeId = relatedDisputeId,
+                    RelatedConversationId = relatedConversationId,
+
+                    IsRead = false,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                notificationContext.Notifications.Add(notification);
+                await notificationContext.SaveChangesAsync();
+            }
 
             var response = MapToResponse(notification);
 
@@ -266,9 +275,16 @@ namespace AITasker.Infrastructure.Notifications
             }
         }
 
-        private async Task EnsureUserExistsAsync(int userId)
+        private Task EnsureUserExistsAsync(int userId)
         {
-            var exists = await _context.Users
+            return EnsureUserExistsAsync(_context, userId);
+        }
+
+        private static async Task EnsureUserExistsAsync(
+            AITaskerDbContext context,
+            int userId)
+        {
+            var exists = await context.Users
                 .AsNoTracking()
                 .AnyAsync(u => u.UserId == userId);
 
@@ -280,18 +296,13 @@ namespace AITasker.Infrastructure.Notifications
 
         private static NotificationResponse MapToResponse(Notification notification)
         {
-            var createdAtUtc = SpecifyUtc(notification.CreatedAt);
-            var createdAtVietnam = ConvertUtcToVietnamTime(createdAtUtc);
-
             return new NotificationResponse
             {
                 NotificationId = notification.NotificationId,
                 UserId = notification.UserId,
                 Title = notification.Title,
                 Content = notification.Content,
-                
                 Type = notification.Type,
-
                 RelatedEntityType = notification.RelatedEntityType,
                 RelatedEntityId = notification.RelatedEntityId,
                 RelatedJobId = notification.RelatedJobId,
@@ -302,45 +313,15 @@ namespace AITasker.Infrastructure.Notifications
                 RelatedDeliverableId = notification.RelatedDeliverableId,
                 RelatedDisputeId = notification.RelatedDisputeId,
                 RelatedConversationId = notification.RelatedConversationId,
-
                 IsRead = notification.IsRead,
-                CreatedAt = createdAtVietnam,
-                CreatedAtUtc = createdAtUtc,
-                TimeZone = VietnamTimeZoneName
+                CreatedAt = notification.CreatedAt
             };
-        }
-
-        private static DateTime SpecifyUtc(DateTime value)
-        {
-            if (value.Kind == DateTimeKind.Utc)
-            {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        }
-
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
-        {
-            try
-            {
-                var timeZone = TimeZoneInfo.FindSystemTimeZoneById(VietnamTimeZoneId);
-                return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, timeZone);
-            }
-            catch (TimeZoneNotFoundException)
-            {
-                return utcDateTime.AddHours(7);
-            }
-            catch (InvalidTimeZoneException)
-            {
-                return utcDateTime.AddHours(7);
-            }
         }
 
         private async Task<JobDigestNotificationPayload> BuildJobDigestPayloadAsync(
             Notification notification)
         {
-            var windowEndUtc = SpecifyUtc(notification.CreatedAt);
+            var windowEndUtc = notification.CreatedAt;
             var windowStartUtc = windowEndUtc.AddHours(-24);
 
             var jobsQuery = _context.JobPostings
@@ -361,11 +342,8 @@ namespace AITasker.Infrastructure.Notifications
 
             return new JobDigestNotificationPayload
             {
-                WindowStartUtc = windowStartUtc,
-                WindowEndUtc = windowEndUtc,
-                WindowStart = ConvertUtcToVietnamTime(windowStartUtc),
-                WindowEnd = ConvertUtcToVietnamTime(windowEndUtc),
-                TimeZone = VietnamTimeZoneName,
+                WindowStart = windowStartUtc,
+                WindowEnd = windowEndUtc,
                 TotalJobs = totalJobs,
                 DisplayedJobs = jobs.Count,
                 Jobs = jobs.Select(j => new JobDigestJobItemResponse
@@ -378,8 +356,7 @@ namespace AITasker.Infrastructure.Notifications
                     Complexity = j.Complexity,
                     Status = j.Status,
                     Deadline = j.Deadline,
-                    CreatedAtUtc = SpecifyUtc(j.CreatedAt),
-                    CreatedAt = ConvertUtcToVietnamTime(SpecifyUtc(j.CreatedAt)),
+                    CreatedAt = j.CreatedAt,
                     Skills = j.JobSkills.Select(js => new JobSkillResponse
                     {
                         SkillId = js.SkillId,

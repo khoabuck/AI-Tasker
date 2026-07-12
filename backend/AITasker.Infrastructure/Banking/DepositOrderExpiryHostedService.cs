@@ -1,5 +1,4 @@
 using AITasker.Application.Interfaces;
-using AITasker.Infrastructure.Common;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -56,7 +55,7 @@ public class DepositOrderExpiryHostedService : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<AITaskerDbContext>();
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
-        var now = VietnamDateTime.Now;
+        var now = DateTime.UtcNow;
 
         var orders = await context.DepositOrders
             .Where(x => x.Status == DepositOrderPending && x.ExpiresAt <= now)

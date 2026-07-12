@@ -1,6 +1,7 @@
 using AITasker.Application.DTOs.Responses;
 using AITasker.Application.Interfaces;
 using AITasker.Domain.Constants;
+using AITasker.Infrastructure.Common;
 using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -9,7 +10,6 @@ namespace AITasker.Infrastructure.Notifications
 {
     public class JobDigestNotificationService : IJobDigestNotificationService
     {
-        private const string VietnamTimeZoneName = "Asia/Ho_Chi_Minh";
         private const string JobStatusOpen = "OPEN";
         private const string ExpertRole = "EXPERT";
         private const string UserStatusActive = "ACTIVE";
@@ -43,11 +43,8 @@ namespace AITasker.Infrastructure.Notifications
 
             var response = new JobDigestRunResponse
             {
-                WindowStartUtc = actualWindowStartUtc,
-                WindowEndUtc = actualWindowEndUtc,
-                WindowStart = ConvertUtcToVietnamTime(actualWindowStartUtc),
-                WindowEnd = ConvertUtcToVietnamTime(actualWindowEndUtc),
-                TimeZone = VietnamTimeZoneName,
+                WindowStart = actualWindowStartUtc,
+                WindowEnd = actualWindowEndUtc,
                 NewJobCount = newJobCount,
                 SkippedBecauseNoJobs = newJobCount == 0
             };
@@ -74,6 +71,8 @@ namespace AITasker.Infrastructure.Notifications
 
             response.ExpertRecipientCount = expertUserIds.Count;
 
+            var windowStartVietnam = VietnamTimeZone.ToVietnamTime(actualWindowStartUtc);
+            var windowEndVietnam = VietnamTimeZone.ToVietnamTime(actualWindowEndUtc);
             var createdCount = 0;
 
             foreach (var expertUserId in expertUserIds)
@@ -90,7 +89,7 @@ namespace AITasker.Infrastructure.Notifications
                 await _notificationService.CreateNotificationAsync(
                     expertUserId,
                     "New jobs available",
-                    $"There are {newJobCount} new job(s) posted from {response.WindowStart:dd/MM/yyyy HH:mm} to {response.WindowEnd:dd/MM/yyyy HH:mm}. Open this notification to view up to 10 latest jobs.",
+                    $"There are {newJobCount} new job(s) posted from {windowStartVietnam:dd/MM/yyyy HH:mm} to {windowEndVietnam:dd/MM/yyyy HH:mm} Vietnam time. Open this notification to view up to 10 latest jobs.",
                     NotificationTypes.JobDailyDigest);
 
                 createdCount++;
@@ -125,17 +124,13 @@ namespace AITasker.Infrastructure.Notifications
 
         private static DateTime NormalizeUtc(DateTime value)
         {
-            if (value.Kind == DateTimeKind.Utc)
+            return value.Kind switch
             {
-                return value;
-            }
-
-            return DateTime.SpecifyKind(value, DateTimeKind.Utc);
-        }
-
-        private static DateTime ConvertUtcToVietnamTime(DateTime utcDateTime)
-        {
-            return utcDateTime.AddHours(7);
+                DateTimeKind.Utc => value,
+                DateTimeKind.Local => value.ToUniversalTime(),
+                _ => throw new InvalidOperationException(
+                    "Job digest windowEndUtc must include UTC or local timezone information.")
+            };
         }
     }
 }

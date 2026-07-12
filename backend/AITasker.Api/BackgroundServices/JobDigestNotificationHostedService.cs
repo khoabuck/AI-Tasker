@@ -1,4 +1,5 @@
 using AITasker.Application.Interfaces;
+using AITasker.Infrastructure.Common;
 
 namespace AITasker.Api.BackgroundServices
 {
@@ -35,7 +36,7 @@ namespace AITasker.Api.BackgroundServices
                     _logger.LogInformation(
                         "Next job digest run scheduled at Utc={NextRunUtc}, VietnamTime={VietnamTime}",
                         nextRunUtc,
-                        nextRunUtc.AddHours(7));
+                        VietnamTimeZone.ToVietnamTime(nextRunUtc));
 
                     await Task.Delay(delay, stoppingToken);
 
@@ -66,9 +67,9 @@ namespace AITasker.Api.BackgroundServices
         private static DateTime GetNextRunUtc()
         {
             var nowUtc = DateTime.UtcNow;
-            var nowVietnam = nowUtc.AddHours(7);
+            var nowVietnam = VietnamTimeZone.ToVietnamTime(nowUtc);
 
-            var today18Vietnam = new DateTime(
+            var nextRunVietnam = new DateTime(
                 nowVietnam.Year,
                 nowVietnam.Month,
                 nowVietnam.Day,
@@ -77,13 +78,12 @@ namespace AITasker.Api.BackgroundServices
                 0,
                 DateTimeKind.Unspecified);
 
-            var nextRunVietnam = nowVietnam < today18Vietnam
-                ? today18Vietnam
-                : today18Vietnam.AddDays(1);
+            if (nowVietnam >= nextRunVietnam)
+            {
+                nextRunVietnam = nextRunVietnam.AddDays(1);
+            }
 
-            return DateTime.SpecifyKind(
-                nextRunVietnam.AddHours(-7),
-                DateTimeKind.Utc);
+            return VietnamTimeZone.ToUtc(nextRunVietnam);
         }
     }
 }

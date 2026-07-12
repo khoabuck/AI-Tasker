@@ -10,6 +10,7 @@ public class ExpertDirectoryService : IExpertDirectoryService
 {
     private const string UserStatusActive = "ACTIVE";
     private const string ExpertReviewApproved = "APPROVED";
+    private const string ReviewStatusVisible = "VISIBLE";
 
     private readonly AITaskerDbContext _dbContext;
 
@@ -94,7 +95,7 @@ public class ExpertDirectoryService : IExpertDirectoryService
         };
     }
 
-    public async Task<ExpertDirectoryItemResponse?> GetExpertByIdAsync(
+    public async Task<ExpertDirectoryDetailResponse?> GetExpertByIdAsync(
         int expertProfileId
     )
     {
@@ -115,12 +116,41 @@ public class ExpertDirectoryService : IExpertDirectoryService
             return null;
         }
 
-        return ToResponse(expert);
+        var reviews = await _dbContext.Reviews
+            .AsNoTracking()
+            .Where(review =>
+                review.ExpertId == expert.UserId &&
+                review.Status == ReviewStatusVisible)
+            .OrderByDescending(review => review.CreatedAt)
+            .Select(review => new ExpertPublicReviewResponse
+            {
+                ReviewId = review.ReviewId,
+                Rating = review.Rating,
+                Comment = review.Comment,
+                IsVerifiedProjectReview = true,
+                CreatedAt = review.CreatedAt
+            })
+            .ToListAsync();
+
+        var response = ToResponse<ExpertDirectoryDetailResponse>(expert);
+        response.TotalReviews = reviews.Count;
+        response.AverageRating = reviews.Count == 0
+            ? 0m
+            : Math.Round((decimal)reviews.Average(review => review.Rating), 2);
+        response.Reviews = reviews;
+
+        return response;
     }
 
     private static ExpertDirectoryItemResponse ToResponse(ExpertProfile expert)
     {
-        return new ExpertDirectoryItemResponse
+        return ToResponse<ExpertDirectoryItemResponse>(expert);
+    }
+
+    private static TResponse ToResponse<TResponse>(ExpertProfile expert)
+        where TResponse : ExpertDirectoryItemResponse, new()
+    {
+        return new TResponse
         {
             ExpertProfileId = expert.ExpertProfileId,
             UserId = expert.UserId,

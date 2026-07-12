@@ -10,6 +10,12 @@ public class UpdateMarketplaceWorkflowPolicyRequest
 
     public int ResubmitNoteMaxLength { get; set; }
 
+    public int? ProposalResubmitLimit { get; set; }
+
+    public int? ProposalResubmitWindowHours { get; set; }
+
+    public int? ProposalCreditLowWarningThreshold { get; set; }
+
     public int ContractSignWindowHours { get; set; }
 
 
@@ -18,6 +24,8 @@ public class UpdateMarketplaceWorkflowPolicyRequest
     public int DeliverableReviewWindowHours { get; set; }
 
     public int DeliverableAutoApproveGraceHours { get; set; }
+
+    public int? DeliverableArtifactLimit { get; set; }
 
     public decimal MinimumWithdrawalAmount { get; set; }
 

@@ -18,7 +18,7 @@ public class PlatformFeePolicyRepository : IPlatformFeePolicyRepository
     {
         return await _dbContext.PlatformFeePolicies
             .Include(x => x.UpdatedByAdmin)
-            .FirstOrDefaultAsync(x => x.IsActive);
+            .SingleOrDefaultAsync(x => x.IsActive);
     }
 
     public async Task AddAsync(PlatformFeePolicy policy)

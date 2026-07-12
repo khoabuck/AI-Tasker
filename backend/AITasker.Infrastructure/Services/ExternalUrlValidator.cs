@@ -23,6 +23,7 @@ namespace AITasker.Infrastructure.Services
             string fieldName,
             int maxLength,
             bool requireImage = false,
+            bool requireReachable = true,
             CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(value))
@@ -49,6 +50,18 @@ namespace AITasker.Infrastructure.Services
             }
 
             await EnsurePublicHostAsync(uri, fieldName, cancellationToken);
+
+            if (!requireReachable)
+            {
+                if (requireImage && !ImageExtensions.Any(ext =>
+                    uri.AbsolutePath.EndsWith(ext, StringComparison.OrdinalIgnoreCase)))
+                {
+                    throw new InvalidOperationException(
+                        $"{fieldName} must use a recognized image extension when reachability validation is disabled.");
+                }
+
+                return trimmed;
+            }
 
             using var response = await SendProbeAsync(uri, cancellationToken);
 
