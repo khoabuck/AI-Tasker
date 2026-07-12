@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import contractService from "../../../services/contract.service";
 
-import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function ContractDetailPage() {
   const { contractId, proposalId } = useParams();
   const navigate = useNavigate();
@@ -382,7 +382,7 @@ export default function ContractDetailPage() {
                 </div>
 
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                  Contract Review
+                  Contract Workspace
                 </p>
 
                 <h1 className="max-w-3xl text-2xl font-bold text-white md:text-3xl">
@@ -390,9 +390,9 @@ export default function ContractDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Please review the contract details carefully. You can accept
-                  or decline only after the client sends the contract for your
-                  confirmation.
+                  Review the final scope, milestone plan, fees, and expected earnings in one place.
+                  Actions become available only when the client has sent the contract
+                  for your confirmation.
                 </p>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -427,7 +427,7 @@ export default function ContractDetailPage() {
                   {canRespond
                     ? "The client has sent this contract for your confirmation. Review it carefully before accepting or declining."
                     : isDraftContract(status)
-                      ? "This is still a draft contract. You can review the details, but you cannot accept or decline it until the client sends it to you."
+                      ? "This is still a draft contract. You can review the details."
                       : "This contract is no longer waiting for your response."}
                 </p>
 
@@ -518,6 +518,13 @@ export default function ContractDetailPage() {
             </section>
           )}
 
+
+          <ContractProgress
+            status={status}
+            contract={contract}
+            projectId={realProjectId}
+          />
+
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
               <Card title="Scope of Work" icon="assignment">
@@ -584,8 +591,37 @@ export default function ContractDetailPage() {
                 />
                 <Info
                   label="Created"
-                  value={formatDate(getField(contract, ["createdAt", "CreatedAt"], ""))}
+                  value={formatDate(
+                    getField(contract, ["createdAt", "CreatedAt"], "")
+                  )}
                 />
+
+                {getField(
+                  contract,
+                  [
+                    "signDeadlineAt",
+                    "SignDeadlineAt",
+                    "signatureDeadlineAt",
+                    "SignatureDeadlineAt",
+                  ],
+                  ""
+                ) && (
+                  <Info
+                    label="Response Deadline"
+                    value={formatDate(
+                      getField(
+                        contract,
+                        [
+                          "signDeadlineAt",
+                          "SignDeadlineAt",
+                          "signatureDeadlineAt",
+                          "SignatureDeadlineAt",
+                        ],
+                        ""
+                      )
+                    )}
+                  />
+                )}
               </Card>
 
             </aside>
@@ -610,6 +646,46 @@ export default function ContractDetailPage() {
       )}
     </ExpertLayout>
   );
+}
+
+
+function ContractProgress({ status, contract, projectId }) {
+  const accepted = isContractAccepted(status);
+  const waiting = isWaitingForExpert(status, contract);
+  const declined = isContractDeclined(status);
+
+  const steps = [
+    {
+      label: "Proposal accepted",
+      helper: "The client selected your proposal.",
+      complete: true,
+    },
+    {
+      label: "Contract review",
+      helper: waiting
+        ? "Your confirmation is required."
+        : accepted
+          ? "Contract terms were confirmed."
+          : declined
+            ? "The contract was declined."
+            : "The client is preparing the final terms.",
+      complete: waiting || accepted || declined,
+      active: waiting,
+      danger: declined,
+    },
+    {
+      label: "Project workspace",
+      helper: accepted
+        ? projectId
+          ? "Your project workspace is ready."
+          : "The project is being prepared."
+        : "Available after both parties confirm.",
+      complete: accepted,
+      active: accepted,
+    },
+  ];
+
+
 }
 
 function ConfirmActionModal({

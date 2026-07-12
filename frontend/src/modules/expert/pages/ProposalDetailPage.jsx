@@ -156,7 +156,7 @@ export default function ProposalDetailPage() {
                     </div>
 
                     <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                      Proposal Detail
+                      Proposal Workspace
                     </p>
 
                     <h1 className="text-3xl font-bold text-white md:text-4xl">
@@ -170,7 +170,7 @@ export default function ProposalDetailPage() {
                     </h1>
 
                     <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                      Client:{" "}
+                      Working with:{" "}
                       <span className="font-bold text-gray-300">
                         {formatDisplayValue(
                           proposal?.clientName ||
@@ -194,7 +194,7 @@ export default function ProposalDetailPage() {
                       View Versions
                     </button>
 
-                    {canViewContract(statusGroup, contractId) && (
+                    {canViewContract(contractId) && (
                       <button
                         type="button"
                         onClick={handleViewContract}
@@ -342,11 +342,7 @@ export default function ProposalDetailPage() {
 
                       <Info
                         label="Contract"
-                        value={
-                          statusGroup === "ACCEPTED" || contractId
-                            ? "Available"
-                            : "No contract yet"
-                        }
+                        value={contractId ? "Available" : "No contract yet"}
                       />
                     </div>
                   </Card>
@@ -395,6 +391,7 @@ export default function ProposalDetailPage() {
     </ExpertLayout>
   );
 }
+
 
 function ProposalConfirmModal({ loading, onCancel, onConfirm }) {
   return (
@@ -449,26 +446,28 @@ function AcceptedContractNotice({ contractId, onViewContract }) {
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-green-100/80">
-              The client has accepted this proposal. Open the contract to review
-              the final terms, milestones, payment amount and confirmation
-              status.
+              The client selected your proposal. You can open the related
+              contract to review its current status, final terms, milestones,
+              fees, and project information.
             </p>
 
             {!contractId && (
               <p className="mt-2 text-xs font-semibold text-green-200/80">
-                The contract will be loaded using this proposal.
+                The contract is being prepared by the client.
               </p>
             )}
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={onViewContract}
-          className="shrink-0 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-        >
-          View Contract
-        </button>
+        {contractId && (
+          <button
+            type="button"
+            onClick={onViewContract}
+            className="shrink-0 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+          >
+            View Contract
+          </button>
+        )}
       </div>
     </section>
   );
@@ -671,8 +670,8 @@ function getProposalStatusGroup(status) {
   return "SUBMITTED";
 }
 
-function canViewContract(statusGroup, contractId) {
-  return statusGroup === "ACCEPTED" || Boolean(contractId);
+function canViewContract(contractId) {
+  return Boolean(contractId);
 }
 
 function canResubmitProposal(statusGroup) {
