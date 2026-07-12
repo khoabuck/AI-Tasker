@@ -7,6 +7,7 @@ import {
   RESOLUTION_TYPE_LABEL,
 } from "../../../constants/disputeStatus";
 
+import { compareDateAsc, formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
 const emptyEvidenceForm = {
   evidenceText: "",
   fileUrl: "",
@@ -1014,11 +1015,9 @@ function EvidenceSubmission({ submission, index }) {
 }
 
 function groupEvidenceSubmissions(evidences = []) {
-  const sorted = [...evidences].sort((a, b) => {
-    const timeA = new Date(a?.createdAt || 0).getTime();
-    const timeB = new Date(b?.createdAt || 0).getTime();
-    return timeA - timeB;
-  });
+  const sorted = [...evidences].sort((a, b) =>
+    compareDateAsc(a?.createdAt, b?.createdAt)
+  );
 
   const groups = [];
   const MAX_GROUP_GAP_MS = 2 * 60 * 1000;
@@ -1027,11 +1026,12 @@ function groupEvidenceSubmissions(evidences = []) {
     const evidenceText = String(evidence?.evidenceText || "").trim();
     const uploadedByUserId = String(evidence?.uploadedByUserId || "");
     const uploadedByName = String(evidence?.uploadedByName || "User").trim();
-    const createdTime = new Date(evidence?.createdAt || 0).getTime();
+    const createdTime =
+      parseUtcDate(evidence?.createdAt)?.getTime() ?? Number.NaN;
 
     const lastGroup = groups[groups.length - 1];
     const lastTime = lastGroup
-      ? new Date(lastGroup.lastCreatedAt || 0).getTime()
+      ? parseUtcDate(lastGroup.lastCreatedAt)?.getTime() ?? Number.NaN
       : Number.NaN;
 
     const sameDescription =
@@ -1255,20 +1255,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

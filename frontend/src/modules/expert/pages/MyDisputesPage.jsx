@@ -7,6 +7,7 @@ import {
   RESOLUTION_TYPE_LABEL,
 } from "../../../constants/disputeStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const FILTERS = [
   { key: "ALL", label: "All" },
   { key: "OPEN", label: "Open" },
@@ -352,20 +353,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function getFriendlyError(err, fallback) {

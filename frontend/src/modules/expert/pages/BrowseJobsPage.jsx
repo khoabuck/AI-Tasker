@@ -6,6 +6,7 @@ import jobService from "../../../services/job.service";
 import proposalService from "../../../services/proposal.service";
 import { JobDetailModal } from "./JobDetailPage";
 
+import { compareDateAsc, compareDateDesc, formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const JOBS_PER_PAGE = 6;
 
 const BUDGET_FILTERS = [
@@ -106,18 +107,17 @@ export default function BrowseJobsPage() {
     }
 
     if (sortBy === "DEADLINE") {
-      result = [...result].sort(
-        (a, b) =>
-          new Date(a.deadline || "9999-12-31") -
-          new Date(b.deadline || "9999-12-31")
-      );
+      result = [...result].sort((a, b) => {
+        if (!a.deadline && !b.deadline) return 0;
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return compareDateAsc(a.deadline, b.deadline);
+      });
     }
 
     if (sortBy === "NEWEST") {
-      result = [...result].sort(
-        (a, b) =>
-          new Date(b.createdAt || 0).getTime() -
-          new Date(a.createdAt || 0).getTime()
+      result = [...result].sort((a, b) =>
+        compareDateDesc(a.createdAt, b.createdAt)
       );
     }
 
@@ -1114,15 +1114,5 @@ function formatDuration(days) {
 }
 
 function formatDate(value) {
-  if (!value) return "Flexible";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Flexible";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "Flexible");
 }

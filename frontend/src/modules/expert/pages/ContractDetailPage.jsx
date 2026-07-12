@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import contractService from "../../../services/contract.service";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 export default function ContractDetailPage() {
   const { contractId, proposalId } = useParams();
   const navigate = useNavigate();
@@ -1424,16 +1425,7 @@ function formatBoolean(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  return formatDateTime(value, "N/A");
 }
 
 function formatDisplayValue(value) {

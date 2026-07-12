@@ -5,6 +5,7 @@ import deliverableService from "../../../services/deliverable.service";
 import projectService from "../../../services/project.service";
 import { DELIVERABLE_STATUS_LABEL } from "../../../constants/deliverableStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const emptySubmissionForm = {
   milestoneId: "",
   fileUrl: "",
@@ -578,17 +579,7 @@ function Alert({ type, title, message }) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

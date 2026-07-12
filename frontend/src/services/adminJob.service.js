@@ -1,5 +1,6 @@
 import adminJobApi from "../api/adminJob.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -191,7 +192,15 @@ const normalizeProposal = (proposal) => {
 const adminJobService = {
   async getAllJobs() {
     const response = await adminJobApi.getAllJobs();
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
+        )
+      );
   },
 
   async getJobById(jobId) {
@@ -209,7 +218,10 @@ const adminJobService = {
     }
 
     const response = await adminJobApi.getJobProposals(jobId);
-    return unwrapListData(response).map(normalizeProposal).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeProposal)
+      .filter(Boolean)
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async cancelJob(jobId, reason = "") {

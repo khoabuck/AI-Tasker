@@ -1,10 +1,8 @@
 import adminUserApi from "../api/adminUser.api";
+import { compareDateDesc } from "../utils/dateTime.utils";
 
-const getValue = (...values) => {
-  return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
-  );
-};
+const getValue = (...values) =>
+  values.find((value) => value !== undefined && value !== null && value !== "");
 
 const trim = (value) => String(value || "").trim();
 
@@ -31,67 +29,48 @@ const toBoolean = (value, fallback = false) => {
   return fallback;
 };
 
-const isInvalidId = (value) => {
-  return !value || value === "undefined" || value === "null";
-};
+const isInvalidId = (value) =>
+  !value || value === "undefined" || value === "null";
 
 const unwrapData = (response) => {
   const data = response?.data;
-
   if (!data) return null;
-
   if (data?.data?.user) return data.data.user;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
-
+  if (data?.data !== undefined) return data.data;
   if (data?.user) return data.user;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
-
   return data;
 };
 
 const unwrapListData = (response) => {
   const data = response?.data;
-
   if (Array.isArray(data)) return data;
-
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.result)) return data.result;
   if (Array.isArray(data?.users)) return data.users;
-
   if (Array.isArray(data?.data?.items)) return data.data.items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
   if (Array.isArray(data?.data?.users)) return data.data.users;
-
   return [];
 };
 
 const getEmailVerified = (user) => {
   const directValue = getValue(
-    user.isEmailVerified,
-    user.IsEmailVerified,
-    user.emailVerified,
-    user.EmailVerified,
-    user.emailConfirmed,
-    user.EmailConfirmed,
-    user.isEmailConfirmed,
-    user.IsEmailConfirmed,
-    null
+    user.isEmailVerified, user.IsEmailVerified,
+    user.emailVerified, user.EmailVerified,
+    user.emailConfirmed, user.EmailConfirmed,
+    user.isEmailConfirmed, user.IsEmailConfirmed, null
   );
 
-  if (directValue !== null) {
-    return toBoolean(directValue, false);
-  }
+  if (directValue !== null) return toBoolean(directValue, false);
 
   const status = getValue(
-    user.emailVerificationStatus,
-    user.EmailVerificationStatus,
-    user.verificationStatus,
-    user.VerificationStatus,
-    ""
+    user.emailVerificationStatus, user.EmailVerificationStatus,
+    user.verificationStatus, user.VerificationStatus, ""
   );
 
   if (status) {
@@ -100,176 +79,121 @@ const getEmailVerified = (user) => {
     );
   }
 
-  const verifiedAt = getValue(
-    user.emailVerifiedAt,
-    user.EmailVerifiedAt,
-    user.emailConfirmedAt,
-    user.EmailConfirmedAt,
-    user.verifiedAt,
-    user.VerifiedAt,
-    null
-  );
-
-  return Boolean(verifiedAt);
+  return Boolean(getValue(
+    user.emailVerifiedAt, user.EmailVerifiedAt,
+    user.emailConfirmedAt, user.EmailConfirmedAt,
+    user.verifiedAt, user.VerifiedAt, null
+  ));
 };
 
 export const normalizeAdminUser = (user) => {
   if (!user) return null;
 
   const userId = getValue(user.userId, user.UserId, user.id, user.Id);
-
-  const role = String(getValue(user.role, user.Role, "USER"))
-    .trim()
-    .toUpperCase();
-
-  const status = String(getValue(user.status, user.Status, "ACTIVE"))
-    .trim()
-    .toUpperCase();
+  const role = String(getValue(user.role, user.Role, "USER")).trim().toUpperCase();
+  const status = String(getValue(user.status, user.Status, "ACTIVE")).trim().toUpperCase();
 
   return {
     userId,
     id: userId,
-
     email: getValue(user.email, user.Email, ""),
-
     fullName: getValue(
-      user.fullName,
-      user.FullName,
-      user.name,
-      user.Name,
-      user.displayName,
-      user.DisplayName,
-      "Unknown User"
+      user.fullName, user.FullName, user.name, user.Name,
+      user.displayName, user.DisplayName, "Unknown User"
     ),
-
     phoneNumber: getValue(user.phoneNumber, user.PhoneNumber, ""),
     avatarUrl: getValue(user.avatarUrl, user.AvatarUrl, ""),
-
     role,
     status,
-
     authProvider: getValue(
-      user.authProvider,
-      user.AuthProvider,
-      user.provider,
-      user.Provider,
-      ""
+      user.authProvider, user.AuthProvider, user.provider, user.Provider, ""
     ),
-
     isEmailVerified: getEmailVerified(user),
-
     banReason: getValue(user.banReason, user.BanReason, ""),
     bannedAt: getValue(user.bannedAt, user.BannedAt, null),
-
     lockReason: getValue(user.lockReason, user.LockReason, ""),
     lockoutCount: toNumber(getValue(user.lockoutCount, user.LockoutCount, 0)),
     lockoutEnd: getValue(user.lockoutEnd, user.LockoutEnd, null),
     lastLockedAt: getValue(user.lastLockedAt, user.LastLockedAt, null),
-
     statusBeforeSuspension: getValue(
-      user.statusBeforeSuspension,
-      user.StatusBeforeSuspension,
-      ""
+      user.statusBeforeSuspension, user.StatusBeforeSuspension, ""
     ),
-
     expertProfileId: getValue(
-      user.expertProfileId,
-      user.ExpertProfileId,
+      user.expertProfileId, user.ExpertProfileId,
       user.expertProfile?.expertProfileId,
-      user.ExpertProfile?.ExpertProfileId,
-      null
+      user.ExpertProfile?.ExpertProfileId, null
     ),
-
     clientProfileId: getValue(
-      user.clientProfileId,
-      user.ClientProfileId,
+      user.clientProfileId, user.ClientProfileId,
       user.clientProfile?.clientProfileId,
-      user.ClientProfile?.ClientProfileId,
-      null
+      user.ClientProfile?.ClientProfileId, null
     ),
-
     createdAt: getValue(user.createdAt, user.CreatedAt, ""),
     updatedAt: getValue(user.updatedAt, user.UpdatedAt, ""),
     lastLoginAt: getValue(user.lastLoginAt, user.LastLoginAt, null),
-
     raw: user,
   };
 };
 
-const buildLockPayload = (formData = {}) => {
-  return {
-    durationMinutes: toNumber(
-      getValue(
-        formData.durationMinutes,
-        formData.lockDurationMinutes,
-        formData.minutes,
-        60
-      ),
+const buildLockPayload = (formData = {}) => ({
+  durationMinutes: toNumber(
+    getValue(
+      formData.durationMinutes,
+      formData.lockDurationMinutes,
+      formData.minutes,
       60
     ),
-    reason: trim(getValue(formData.reason, formData.lockReason, formData.message)),
-  };
-};
+    60
+  ),
+  reason: trim(getValue(formData.reason, formData.lockReason, formData.message)),
+});
 
-const buildUnlockPayload = (formData = {}) => {
-  return {
-    reason:
-      trim(getValue(formData.reason, formData.unlockReason, formData.message)) ||
-      "Unlock user account.",
-  };
-};
+const buildUnlockPayload = (formData = {}) => ({
+  reason:
+    trim(getValue(formData.reason, formData.unlockReason, formData.message)) ||
+    "Unlock user account.",
+});
 
-const buildBanPayload = (formData = {}) => {
-  return {
-    reason: trim(getValue(formData.reason, formData.banReason, formData.message)),
-  };
-};
+const buildBanPayload = (formData = {}) => ({
+  reason: trim(getValue(formData.reason, formData.banReason, formData.message)),
+});
 
 const adminUserService = {
   async getAllUsers(params = {}) {
     const response = await adminUserApi.getAllUsers(params);
-    return unwrapListData(response).map(normalizeAdminUser).filter(Boolean);
+
+    return unwrapListData(response)
+      .map(normalizeAdminUser)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.lastLoginAt || a.createdAt,
+          b.updatedAt || b.lastLoginAt || b.createdAt
+        )
+      );
   },
 
   async getUserById(userId) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
+    if (isInvalidId(userId)) throw new Error("Invalid user id.");
     const response = await adminUserApi.getUserById(userId);
     return normalizeAdminUser(unwrapData(response));
   },
 
   async lockUser(userId, formData = {}) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
-    const payload = buildLockPayload(formData);
-    const response = await adminUserApi.lockUser(userId, payload);
-
+    if (isInvalidId(userId)) throw new Error("Invalid user id.");
+    const response = await adminUserApi.lockUser(userId, buildLockPayload(formData));
     return normalizeAdminUser(unwrapData(response));
   },
 
   async unlockUser(userId, formData = {}) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
-    const payload = buildUnlockPayload(formData);
-    const response = await adminUserApi.unlockUser(userId, payload);
-
+    if (isInvalidId(userId)) throw new Error("Invalid user id.");
+    const response = await adminUserApi.unlockUser(userId, buildUnlockPayload(formData));
     return normalizeAdminUser(unwrapData(response));
   },
 
   async banUser(userId, formData = {}) {
-    if (isInvalidId(userId)) {
-      throw new Error("Invalid user id.");
-    }
-
-    const payload = buildBanPayload(formData);
-    const response = await adminUserApi.banUser(userId, payload);
-
+    if (isInvalidId(userId)) throw new Error("Invalid user id.");
+    const response = await adminUserApi.banUser(userId, buildBanPayload(formData));
     return normalizeAdminUser(unwrapData(response));
   },
 

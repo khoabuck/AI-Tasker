@@ -5,6 +5,7 @@ import proposalService, {
   getFriendlyProposalError,
 } from "../../../services/proposal.service";
 
+import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
 export default function ProposalVersionsPage() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
@@ -16,7 +17,15 @@ export default function ProposalVersionsPage() {
 
   const sortedVersions = useMemo(() => {
     return [...versions].sort((a, b) => {
-      return Number(getVersionNumber(b) || 0) - Number(getVersionNumber(a) || 0);
+      const byCreatedTime = compareDateDesc(
+        a?.createdAt || a?.CreatedAt,
+        b?.createdAt || b?.CreatedAt
+      );
+
+      if (byCreatedTime !== 0) return byCreatedTime;
+
+      return Number(getVersionNumber(b) || 0) -
+        Number(getVersionNumber(a) || 0);
     });
   }, [versions]);
 
@@ -526,16 +535,7 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  return formatDateTime(value, "N/A");
 }
 
 function formatDisplayValue(value) {

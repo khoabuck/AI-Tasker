@@ -7,6 +7,7 @@ import {
   PROJECT_STATUS_LABEL,
 } from "../../../constants/projectStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function ProjectMilestonesPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -491,12 +492,7 @@ function formatMoney(value) {
   }).format(Number.isNaN(number) ? 0 : number);
 }
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

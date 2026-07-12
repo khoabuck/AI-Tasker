@@ -1,26 +1,54 @@
 import { transactionApi } from "../api/transaction.api";
+import { compareDateDesc } from "../utils/dateTime.utils";
 
-const unwrap = (res) => res.data?.data || res.data;
+const unwrap = (response) => response?.data?.data ?? response?.data;
 
 const normalizeList = (raw) => {
-  return Array.isArray(raw)
-    ? raw
-    : raw?.items ?? raw?.data ?? [];
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.items)) return raw.items;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.result)) return raw.result;
+  if (Array.isArray(raw?.transactions)) return raw.transactions;
+  return [];
+};
+
+const getTransactionId = (transaction) => {
+  return (
+    transaction?.transactionId ||
+    transaction?.TransactionId ||
+    transaction?.walletTransactionId ||
+    transaction?.WalletTransactionId ||
+    transaction?.id ||
+    transaction?.Id ||
+    ""
+  );
 };
 
 export const transactionService = {
   async getMyTransactions(config = {}) {
-    const res = await transactionApi.getMyTransactions(config);
-    const raw = unwrap(res);
+    const response = await transactionApi.getMyTransactions(config);
+    const list = normalizeList(unwrap(response));
 
-    return normalizeList(raw);
+    return [...list].sort((a, b) =>
+      compareDateDesc(
+        a?.updatedAt || a?.processedAt || a?.paidAt || a?.createdAt,
+        b?.updatedAt || b?.processedAt || b?.paidAt || b?.createdAt
+      )
+    );
   },
 
   async getTransactionById(id, signal) {
+    if (id === undefined || id === null || id === "") {
+      throw new Error("Transaction id is required.");
+    }
+
     const list = await this.getMyTransactions({ signal });
 
-    return list.find(
-      (tx) => String(tx.transactionId) === String(id)
+    return (
+      list.find(
+        (transaction) =>
+          String(getTransactionId(transaction)) === String(id)
+      ) || null
     );
   },
 };

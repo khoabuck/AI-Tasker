@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminWithdrawalService from "../../../services/adminWithdrawal.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const STATUS_OPTIONS = [
   "ALL",
   "PENDING",
@@ -1052,18 +1053,9 @@ function formatMoney(value, currency = "VND") {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
+  return formatDateTime(value, "N/A");
+};
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";

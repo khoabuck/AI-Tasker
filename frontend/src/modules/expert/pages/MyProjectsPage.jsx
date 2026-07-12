@@ -4,6 +4,7 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import projectService from "../../../services/project.service";
 import { PROJECT_STATUS_LABEL } from "../../../constants/projectStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const STATUS_TABS = [
   { key: "ALL", label: "All Projects" },
   { key: "ACTIVE", label: "Active" },
@@ -416,17 +417,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

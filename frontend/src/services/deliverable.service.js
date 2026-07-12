@@ -1,5 +1,6 @@
 import deliverableApi from "../api/deliverable.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -306,10 +307,16 @@ const deliverableService = {
     return unwrapListData(response)
       .map(normalizeDeliverable)
       .filter(Boolean)
-      .sort(
-        (a, b) =>
-          Number(b.versionNumber || 0) - Number(a.versionNumber || 0)
-      );
+      .sort((a, b) => {
+        const bySubmittedTime = compareDateDesc(
+          a.submittedAt || a.createdAt,
+          b.submittedAt || b.createdAt
+        );
+
+        if (bySubmittedTime !== 0) return bySubmittedTime;
+
+        return Number(b.versionNumber || 0) - Number(a.versionNumber || 0);
+      });
   },
 
   async submitDeliverable(milestoneId, formData) {

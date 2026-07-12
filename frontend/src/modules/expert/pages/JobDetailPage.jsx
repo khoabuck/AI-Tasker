@@ -5,6 +5,7 @@ import jobService from "../../../services/job.service";
 import conversationService from "../../../services/conversation.service";
 import proposalService from "../../../services/proposal.service";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 export function JobDetailModal({ jobId, onClose }) {
   const navigate = useNavigate();
 
@@ -1096,17 +1097,7 @@ function formatDuration(days) {
 }
 
 function formatDate(value) {
-  if (!value) return "Flexible";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Flexible";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "Flexible");
 }
 
 function formatDisplayValue(value) {

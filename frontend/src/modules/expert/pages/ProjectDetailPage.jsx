@@ -4,6 +4,7 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import projectService from "../../../services/project.service";
 import { PROJECT_STATUS_LABEL } from "../../../constants/projectStatus";
 
+import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
 export default function ProjectDetailPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
@@ -1107,10 +1108,7 @@ function getProjectCompletedDate(project) {
 }
 
 function toValidDate(value) {
-  if (!value) return null;
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return parseUtcDate(value);
 }
 
 function getValue(...values) {
@@ -1130,13 +1128,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function formatInfoValue(value) {

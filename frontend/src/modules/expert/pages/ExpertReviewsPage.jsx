@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import reviewService from "../../../services/review.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_REPORT_FORM = {
   reason: "",
 };
@@ -692,17 +693,7 @@ function getInitials(name) {
 }
 
 function formatDate(value) {
-  if (!value) return "No date";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "No date";
-
-  return date.toLocaleDateString("vi-VN", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function formatLabel(value) {

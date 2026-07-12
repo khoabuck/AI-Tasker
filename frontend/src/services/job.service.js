@@ -1,5 +1,6 @@
 import jobApi, { saveJobDraftApi, submitJobApi } from "../api/job.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -174,12 +175,23 @@ const normalizeJob = (job) => {
 const jobService = {
   async getOpenJobs(params = {}) {
     const response = await jobApi.getOpenJobs(params);
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async getRecommendedJobs(limit = 10) {
     const response = await jobApi.getRecommendedJobs(limit);
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const byScore = Number(b.matchScore || 0) - Number(a.matchScore || 0);
+        return byScore !== 0
+          ? byScore
+          : compareDateDesc(a.createdAt, b.createdAt);
+      });
   },
 
   async getJobById(jobId) {
@@ -197,7 +209,15 @@ const jobService = {
     const response = await jobApi.getMyJobs();
 
 
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
+        )
+      );
   },
 
   async saveJobDraft(payload) {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminPolicyService from "../../../services/adminPolicy.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_FORM = {
   individualClientFeeRate: 0,
   businessClientFeeRate: 0,
@@ -274,6 +275,15 @@ export default function AdminPlatformFeePolicyPage() {
                   Current policy
                 </h2>
 
+                <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Last Updated
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-white">
+                    {formatDateTime(policy?.updatedAt || policy?.createdAt, "N/A")}
+                  </p>
+                </div>
+
                 <div className="space-y-4">
                   <PolicyValue
                     icon="person"
@@ -488,24 +498,8 @@ function formatRate(value) {
   }
 
   return `${number}`;
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";

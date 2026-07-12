@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminWorkflowPolicyService from "../../../services/adminWorkflowPolicy.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const DEFAULT_FORM = {
   proposalDraftLimit: "",
   proposalMilestoneLimit: "",
@@ -484,7 +485,7 @@ function PolicySummary({ policy }) {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <MiniStat
             label="Last Updated"
-            value={formatDateTime(policy?.updatedAt)}
+            value={formatDateTime(policy?.updatedAt, "N/A")}
           />
           <MiniStat
             label="Policy Status"
@@ -886,20 +887,4 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   return err?.message || fallback;
-}
-
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
+};

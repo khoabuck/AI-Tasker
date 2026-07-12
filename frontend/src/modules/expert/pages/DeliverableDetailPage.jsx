@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import deliverableService from "../../../services/deliverable.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function DeliverableDetailPage() {
   const { deliverableId } = useParams();
   const navigate = useNavigate();
@@ -466,17 +467,7 @@ function getSubmissionUiStatus(status) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "N/A");
 }
 function formatInfoValue(value) {
   if (value === undefined || value === null || value === "") {

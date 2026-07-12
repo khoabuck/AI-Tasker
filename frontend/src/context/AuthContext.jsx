@@ -5,6 +5,7 @@ import {
   ACCOUNT_BLOCKED_EVENT,
   AUTH_ERROR_EVENT,
 } from "../api/axiosInstance";
+import { formatDateTime } from "../utils/dateTime.utils";
 
 const AuthContext = createContext(null);
 
@@ -698,7 +699,7 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
               Locked Until
             </p>
             <p className="mt-2 text-sm font-semibold text-yellow-100">
-              {formatBlockedUntil(until)}
+              {formatDateTime(until, String(until))}
             </p>
           </div>
         )}
@@ -719,21 +720,3 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
   );
 }
 
-function formatBlockedUntil(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return String(value);
-  }
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}

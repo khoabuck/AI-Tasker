@@ -5,6 +5,7 @@ import proposalService, {
   getFriendlyProposalError,
 } from "../../../services/proposal.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function ProposalDetailPage() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
@@ -712,16 +713,7 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  try {
-    return new Intl.DateTimeFormat("vi-VN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  return formatDateTime(value, "N/A");
 }
 
 function formatDisplayValue(value) {

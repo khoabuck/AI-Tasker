@@ -1,5 +1,6 @@
 import expertWalletApi from "../api/expertWallet.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -1024,17 +1025,7 @@ const expertWalletService = {
     return unwrapListData(response)
       .map(normalizeTransaction)
       .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(
-          a.createdAt || 0
-        ).getTime();
-
-        const dateB = new Date(
-          b.createdAt || 0
-        ).getTime();
-
-        return dateB - dateA;
-      });
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async getMyDepositOrders() {
@@ -1044,17 +1035,7 @@ const expertWalletService = {
     return unwrapListData(response)
       .map(normalizeDepositOrder)
       .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(
-          a.createdAt || 0
-        ).getTime();
-
-        const dateB = new Date(
-          b.createdAt || 0
-        ).getTime();
-
-        return dateB - dateA;
-      });
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async getMyWithdrawals() {
@@ -1064,17 +1045,7 @@ const expertWalletService = {
     return unwrapListData(response)
       .map(normalizeWithdrawal)
       .filter(Boolean)
-      .sort((a, b) => {
-        const dateA = new Date(
-          a.createdAt || 0
-        ).getTime();
-
-        const dateB = new Date(
-          b.createdAt || 0
-        ).getTime();
-
-        return dateB - dateA;
-      });
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async getWalletOverview() {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminService from "../../../services/admin.service";
 
+import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_SUMMARY = {
   totalUsers: 0,
   totalClients: 0,
@@ -89,11 +90,7 @@ export default function AdminDashboard() {
     });
 
     return [...uniqueMap.values()]
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt || 0).getTime() -
-          new Date(a.createdAt || 0).getTime()
-      )
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt))
       .slice(0, 5);
   }, [transactions, platformTransactions, revenue]);
 
@@ -584,18 +581,9 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
+  return formatDateTime(value, "N/A");
+};
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";

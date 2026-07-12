@@ -20,7 +20,10 @@ const conversationApi = {
   },
 
   sendMessage(conversationId, data) {
-    return axiosInstance.post(`/conversations/${conversationId}/messages`, data);
+    return axiosInstance.post(
+      `/conversations/${conversationId}/messages`,
+      data
+    );
   },
 };
 

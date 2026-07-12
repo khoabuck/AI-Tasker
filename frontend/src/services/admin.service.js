@@ -1,5 +1,6 @@
 import adminApi from "../api/admin.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -391,7 +392,8 @@ const normalizeRevenue = (raw) => {
     ),
     recentTransactions: transactions
       .map(normalizeRevenueTransaction)
-      .filter(Boolean),
+      .filter(Boolean)
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt)),
     raw,
   };
 };

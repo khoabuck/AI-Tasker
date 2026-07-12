@@ -4,6 +4,7 @@ import axiosInstance from "../../../api/axiosInstance";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_ACTION = {
   type: "",
 };
@@ -1018,24 +1019,10 @@ function formatLabel(value) {
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
 
-  const date = new Date(value);
 
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
 
 function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;

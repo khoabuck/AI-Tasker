@@ -4,6 +4,7 @@ import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import { useAuth } from "../../../context/AuthContext";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 export default function ExpertProfileLockedPage() {
@@ -490,9 +491,7 @@ function isProfileLocked(limit) {
 
   if (!limit.lockedUntil) return false;
 
-  const time = new Date(limit.lockedUntil).getTime();
-
-  return Number.isFinite(time) && time > Date.now();
+  return !isExpired(limit.lockedUntil);
 }
 
 function getReviewStatus(data) {
@@ -672,19 +671,3 @@ function firstSentence(text) {
   );
 }
 
-function formatDateTime(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}

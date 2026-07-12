@@ -610,7 +610,7 @@ function NotificationItem({
 
               <span className="truncate text-[10px] font-medium text-gray-500">
                 {notificationService.formatNotificationTime(
-                  notification.createdAt || notification.createdAtUtc
+                  notification.createdAt
                 )}
               </span>
             </div>

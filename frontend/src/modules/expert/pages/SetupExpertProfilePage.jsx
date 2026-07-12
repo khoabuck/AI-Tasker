@@ -5,6 +5,7 @@ import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
 import { useAuth } from "../../../context/AuthContext";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
@@ -2400,11 +2401,7 @@ function isExpertProfileReviewLocked(limit) {
 
   if (!limit.lockedUntil) return false;
 
-  const lockedUntilTime = new Date(limit.lockedUntil).getTime();
-
-  if (!Number.isFinite(lockedUntilTime)) return false;
-
-  return lockedUntilTime > Date.now();
+  return !isExpired(limit.lockedUntil);
 }
 
 function hasNoExpertProfileAttemptsLeft(limit) {
@@ -2958,19 +2955,3 @@ function isGitHubUrl(value) {
   }
 }
 
-function formatDateTime(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}

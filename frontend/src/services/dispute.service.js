@@ -1,5 +1,6 @@
 import disputeApi from "../api/dispute.api";
 
+import { compareDateAsc, compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -243,7 +244,10 @@ const normalizeDispute = (dispute) => {
     resolvedAt: getValue(dispute.resolvedAt, dispute.ResolvedAt, ""),
 
     evidences: Array.isArray(evidencesRaw)
-      ? evidencesRaw.map(normalizeEvidence).filter(Boolean)
+      ? evidencesRaw
+          .map(normalizeEvidence)
+          .filter(Boolean)
+          .sort((a, b) => compareDateAsc(a.createdAt, b.createdAt))
       : [],
 
     raw: dispute,

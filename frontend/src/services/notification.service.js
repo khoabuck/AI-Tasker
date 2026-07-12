@@ -1,4 +1,5 @@
 import notificationApi from "../api/notification.api";
+import { compareDateDesc, formatRelativeTime } from "../utils/dateTime.utils";
 
 const getValue = (...values) => {
   return values.find(
@@ -310,22 +311,11 @@ export const normalizeNotification = (notification) => {
     createdAt: getValue(
       notification.createdAt,
       notification.CreatedAt,
-      notification.createdAtUtc,
-      notification.CreatedAtUtc,
       raw.createdAt,
       raw.CreatedAt,
-      raw.createdAtUtc,
-      raw.CreatedAtUtc,
       ""
     ),
 
-    createdAtUtc: getValue(
-      notification.createdAtUtc,
-      notification.CreatedAtUtc,
-      raw.createdAtUtc,
-      raw.CreatedAtUtc,
-      ""
-    ),
 
     readAt: getValue(
       notification.readAt,
@@ -605,64 +595,9 @@ export function getNotificationTarget(notification) {
 }
 
 export function formatNotificationTime(value, options = {}) {
-  if (!value) return "No date";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "No date";
-
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-
-  const timeText = date.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-
-  if (!options.full) {
-    if (diffMinutes < 1) return "Just now";
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays === 1) return "Yesterday";
-
-    if (diffDays < 7) {
-      return date.toLocaleDateString("en-US", {
-        weekday: "short",
-      });
-    }
-
-    return date.toLocaleDateString("vi-VN", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  }
-
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-
-  if (diffDays === 1) {
-    return `Yesterday ${timeText}`;
-  }
-
-  if (diffDays < 7) {
-    const weekday = date.toLocaleDateString("en-US", {
-      weekday: "short",
-    });
-
-    return `${weekday} ${timeText}`;
-  }
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
+  return formatRelativeTime(value, {
+    full: Boolean(options.full),
+    fallback: "No date",
   });
 }
 
@@ -674,10 +609,7 @@ const notificationService = {
       .map(normalizeNotification)
       .filter(Boolean)
       .sort((a, b) => {
-        const dateA = new Date(a.createdAt || a.createdAtUtc || 0).getTime();
-        const dateB = new Date(b.createdAt || b.createdAtUtc || 0).getTime();
-
-        return dateB - dateA;
+        return compareDateDesc(a.createdAt, b.createdAt);
       });
   },
 

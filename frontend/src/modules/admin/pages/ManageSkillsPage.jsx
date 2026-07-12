@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminSkillService from "../../../services/adminSkill.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_FORM = {
   skillName: "",
   description: "",
@@ -480,7 +481,7 @@ export default function ManageSkillsPage() {
                         )}
 
                         <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                          Created {formatDate(skill.createdAt)}
+                          Created {formatDateTime(skill.createdAt, "N/A")}
                         </span>
                       </div>
 
@@ -743,21 +744,8 @@ function StatusBadge({ isActive }) {
       {isActive ? "ACTIVE" : "INACTIVE"}
     </span>
   );
-}
+};
 
-function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-}
 
 function getFriendlyError(err) {
   const status = err?.response?.status;

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertWalletService from "../../../services/expertWallet.service";
 
+import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
 const quickAmounts = [50000, 100000, 200000, 500000];
 const PAYMENT_CHECK_INTERVAL_MS = 5000;
 const DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
@@ -2189,30 +2190,8 @@ function getDepositRemainingSeconds(orderOrCreatedAt) {
 }
 
 function parseDepositDateTime(value) {
-  if (!value) return Number.NaN;
-
-  const text = String(value).trim();
-
-  /*
-   * Temporary FE workaround:
-   * POST currently returns Vietnam local time with a trailing Z,
-   * while GET returns the same local time without Z.
-   * Remove Z so both responses are interpreted as local time.
-   */
-  if (/Z$/i.test(text)) {
-    const localText = text.replace(/Z$/i, "");
-    const localTime = new Date(localText).getTime();
-
-    if (Number.isFinite(localTime)) {
-      return localTime;
-    }
-  }
-
-  const normalTime = new Date(text).getTime();
-
-  return Number.isFinite(normalTime)
-    ? normalTime
-    : Number.NaN;
+  const date = parseUtcDate(value);
+  return date ? date.getTime() : Number.NaN;
 }
 
 function formatRemainingTime(seconds) {
@@ -2243,20 +2222,7 @@ function formatCompactMoney(value) {
 }
 
 function formatShortDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateTime(value, "N/A");
 }
 
 function maskBankAccount(value) {

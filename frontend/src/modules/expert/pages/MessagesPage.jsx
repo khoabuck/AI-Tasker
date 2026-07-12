@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import conversationService from "../../../services/conversation.service";
 import authService from "../../../services/auth.service";
+import { formatTime } from "../../../utils/dateTime.utils";
 
 const MESSAGE_POLL_INTERVAL_MS = 2000;
 const CONVERSATION_POLL_INTERVAL_MS = 6000;
@@ -686,20 +687,6 @@ function isMyMessage(message, user) {
     .toUpperCase();
 
   return senderRole === "EXPERT";
-}
-
-function formatTime(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleTimeString("vi-VN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
 }
 
 function getInitials(name) {

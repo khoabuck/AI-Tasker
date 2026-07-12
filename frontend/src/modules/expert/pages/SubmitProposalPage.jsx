@@ -14,6 +14,7 @@ import proposalCreditPackageService from "../../../services/proposalCreditPackag
 import expertWalletService from "../../../services/expertWallet.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const createEmptyMilestone = () => ({
   title: "",
   amount: "",
@@ -1682,19 +1683,7 @@ function getJobDeadline(job) {
 }
 
 function formatDeadline(value) {
-  if (!value) return "No deadline provided";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No deadline provided";
-
-  return date.toLocaleString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
+  return formatDateTime(value, "Flexible");
 }
 
 function isWalletError(message) {

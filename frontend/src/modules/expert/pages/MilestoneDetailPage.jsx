@@ -6,6 +6,7 @@ import deliverableService from "../../../services/deliverable.service";
 import disputeService from "../../../services/dispute.service";
 import projectService from "../../../services/project.service";
 
+import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
 const emptySubmissionForm = {
   fileUrl: "",
   demoUrl: "",
@@ -1770,15 +1771,14 @@ function getLatestSubmission(submissions) {
   if (!Array.isArray(submissions) || submissions.length === 0) return null;
 
   return [...submissions].sort((a, b) => {
-    const dateA = new Date(a.submittedAt || a.createdAt || 0).getTime();
-    const dateB = new Date(b.submittedAt || b.createdAt || 0).getTime();
+    const bySubmittedTime = compareDateDesc(
+      a?.submittedAt || a?.createdAt,
+      b?.submittedAt || b?.createdAt
+    );
 
-    if (dateA !== dateB) return dateB - dateA;
+    if (bySubmittedTime !== 0) return bySubmittedTime;
 
-    const versionA = Number(a.versionNumber || 0);
-    const versionB = Number(b.versionNumber || 0);
-
-    return versionB - versionA;
+    return Number(b?.versionNumber || 0) - Number(a?.versionNumber || 0);
   })[0];
 }
 
@@ -2038,13 +2038,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function formatInfoValue(value) {

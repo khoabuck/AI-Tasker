@@ -5,6 +5,7 @@ import expertProfileService from "../../../services/expertProfile.service";
 import reviewService from "../../../services/review.service";
 import { changePasswordApi } from "../../../api/auth.api";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 export default function ExpertProfilePage() {
@@ -1058,17 +1059,7 @@ function getReviewInitials(name) {
 }
 
 function formatReviewDate(value) {
-  if (!value) return "No date";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "No date";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "No date");
 }
 
 function buildProfileFeedback(profile) {

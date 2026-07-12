@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const ROLE_OPTIONS = ["ALL", "CLIENT", "EXPERT", "USER"];
 const STATUS_OPTIONS = ["ALL", "ACTIVE", "LOCKED", "BANNED"];
 
@@ -1041,24 +1042,7 @@ function formatNumber(value) {
   return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
-}
-
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
+};
 
 function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;

@@ -460,7 +460,7 @@ function NotificationItem({
 
               <span className="text-xs text-gray-500">
                 {notificationService.formatNotificationTime(
-                  notification.createdAt || notification.createdAtUtc,
+                  notification.createdAt,
                   { full: true }
                 )}
               </span>

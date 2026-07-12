@@ -1,5 +1,6 @@
 import proposalApi from "../api/proposal.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -530,16 +531,12 @@ export const mapProposalToForm = (proposal) => {
 };
 
 const sortNewestFirst = (items) => {
-  return [...items].sort((a, b) => {
-    const dateA = new Date(
-      a.updatedAt || a.submittedAt || a.createdAt || 0
-    ).getTime();
-    const dateB = new Date(
-      b.updatedAt || b.submittedAt || b.createdAt || 0
-    ).getTime();
-
-    return dateB - dateA;
-  });
+  return [...items].sort((a, b) =>
+    compareDateDesc(
+      a.updatedAt || a.submittedAt || a.createdAt,
+      b.updatedAt || b.submittedAt || b.createdAt
+    )
+  );
 };
 
 const proposalService = {

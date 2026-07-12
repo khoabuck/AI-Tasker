@@ -1,5 +1,6 @@
 import adminReviewReportApi from "../api/adminReviewReport.api";
 
+import { compareDateAsc, compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -166,7 +167,15 @@ const normalizeMilestone = (milestone) => {
     ),
 
     deliverables: Array.isArray(deliverablesRaw)
-      ? deliverablesRaw.map(normalizeDeliverable).filter(Boolean)
+      ? deliverablesRaw
+          .map(normalizeDeliverable)
+          .filter(Boolean)
+          .sort((a, b) =>
+            compareDateDesc(
+              a.reviewedAt || a.submittedAt,
+              b.reviewedAt || b.submittedAt
+            )
+          )
       : [],
 
     raw: milestone,
@@ -313,11 +322,22 @@ export const normalizeReviewReport = (report) => {
     ),
 
     milestones: Array.isArray(milestonesRaw)
-      ? milestonesRaw.map(normalizeMilestone).filter(Boolean)
+      ? milestonesRaw
+          .map(normalizeMilestone)
+          .filter(Boolean)
+          .sort((a, b) => compareDateAsc(a.deadline, b.deadline))
       : [],
 
     disputes: Array.isArray(disputesRaw)
-      ? disputesRaw.map(normalizeDispute).filter(Boolean)
+      ? disputesRaw
+          .map(normalizeDispute)
+          .filter(Boolean)
+          .sort((a, b) =>
+            compareDateDesc(
+              a.resolvedAt || a.createdAt,
+              b.resolvedAt || b.createdAt
+            )
+          )
       : [],
 
     raw: report,
@@ -345,7 +365,15 @@ const adminReviewReportService = {
       take: params.take || 100,
     });
 
-    return unwrapListData(response).map(normalizeReviewReport).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeReviewReport)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.resolvedAt || a.createdAt,
+          b.resolvedAt || b.createdAt
+        )
+      );
   },
 
   async getReportById(reviewReportId) {

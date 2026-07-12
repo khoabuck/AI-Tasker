@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAiManagementService from "../../../services/adminAiManagement.service";
 
+import { formatDateTimeWithSeconds } from "../../../utils/dateTime.utils";
 const EMPTY_SETTINGS_FORM = {
   model: "",
   isEnabled: true,
@@ -1240,7 +1241,7 @@ function UsageTab({
             <tbody className="divide-y divide-white/10">
               {logs.map((item) => (
                 <tr key={item.aiUsageLogId}>
-                  <Td>{formatDate(item.createdAt)}</Td>
+                  <Td>{formatDateTimeWithSeconds(item.createdAt, "N/A")}</Td>
                   <Td>{item.feature || "N/A"}</Td>
                   <Td>{item.model || "N/A"}</Td>
                   <Td>
@@ -1906,24 +1907,8 @@ function formatVnd(value) {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
-}
+};
 
-function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";

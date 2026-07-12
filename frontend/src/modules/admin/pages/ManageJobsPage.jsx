@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminJobService from "../../../services/adminJob.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All" },
   { value: "DRAFT", label: "Draft" },
@@ -534,7 +535,7 @@ function JobDetailModal({
               <InfoBox label="Status" value={formatLabel(status)} />
               <InfoBox label="Budget" value={formatBudget(job)} />
               <InfoBox label="Category" value={formatLabel(job.category)} />
-              <InfoBox label="Created" value={formatDate(job.createdAt)} />
+              <InfoBox label="Created" value={formatDateTime(job.createdAt, "N/A")} />
             </div>
 
             <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -594,7 +595,7 @@ function ProposalItem({ proposal }) {
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <StatusBadge status={proposal.status || "PENDING"} />
         {proposal.createdAt && (
-          <Badge label={`Submitted ${formatDate(proposal.createdAt)}`} />
+          <Badge label={`Submitted ${formatDateTime(proposal.createdAt, "N/A")}`} />
         )}
       </div>
 
@@ -896,20 +897,6 @@ function formatNumber(value) {
   return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
-}
-
-function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
 }
 
 function formatLabel(value) {

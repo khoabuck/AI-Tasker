@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminTransactionService from "../../../services/adminTransaction.service";
 
+import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
 export default function ManageTransactionPage() {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -25,7 +26,11 @@ export default function ManageTransactionPage() {
       setError("");
 
       const data = await adminTransactionService.getAllTransactions();
-      setTransactions(data);
+      setTransactions(
+        [...(Array.isArray(data) ? data : [])].sort((a, b) =>
+          compareDateDesc(getCreatedDate(a), getCreatedDate(b))
+        )
+      );
     } catch (err) {
       console.error(err);
       setError("Transactions are temporarily unavailable. Please try again later.");
@@ -105,18 +110,7 @@ export default function ManageTransactionPage() {
   }).format(Number.isNaN(number) ? 0 : number);
 };
 
-  const formatDate = (value) => {
-    if (!value) return "No date";
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "No date";
-
-    return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-  };
 
   const getStatusClass = (status) => {
     const value = String(status).toUpperCase();
@@ -487,7 +481,7 @@ export default function ManageTransactionPage() {
 
                             <td className="px-4 py-4">
                               <p className="text-sm text-gray-400">
-                                {formatDate(getCreatedDate(transaction))}
+                                {formatDateTime(getCreatedDate(transaction), "No date")}
                               </p>
                             </td>
 

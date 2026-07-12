@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAuditLogService from "../../../services/adminAuditLog.service";
 
+import { formatDateTimeWithSeconds } from "../../../utils/dateTime.utils";
 export default function AdminAuditLogDetailPage() {
   const { auditLogId } = useParams();
   const navigate = useNavigate();
@@ -179,7 +180,7 @@ export default function AdminAuditLogDetailPage() {
                   <OverviewItem
                     icon="schedule"
                     label="Time"
-                    value={formatDateTime(auditLog.createdAt)}
+                    value={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                   />
 
                 </div>
@@ -240,7 +241,7 @@ export default function AdminAuditLogDetailPage() {
                             ? `${auditLog.adminName || auditLog.adminEmail} performed this action.`
                             : "An administrator performed this action."
                         }
-                        time={formatDateTime(auditLog.createdAt)}
+                        time={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                         tone="cyan"
                       />
 
@@ -283,7 +284,7 @@ export default function AdminAuditLogDetailPage() {
 
                       <DetailItem
                         label="Created At"
-                        value={formatDateTime(auditLog.createdAt)}
+                        value={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                       />
                     </div>
                   </section>
@@ -562,24 +563,8 @@ function safeJsonParse(value) {
   } catch {
     return null;
   }
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
 
 function getFriendlyError(err) {
   const status = err?.response?.status;

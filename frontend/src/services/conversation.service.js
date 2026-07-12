@@ -1,4 +1,5 @@
 import conversationApi from "../api/conversation.api";
+import { compareDateAsc, compareDateDesc } from "../utils/dateTime.utils";
 
 const getValue = (...values) => {
   return values.find(
@@ -372,8 +373,6 @@ const conversationService = {
       throw new Error("participantUserId is required to create conversation.");
     }
 
-    console.log("CREATE CONVERSATION PAYLOAD:", request);
-
     const response = await conversationApi.createConversation(request);
 
     return normalizeConversation(unwrapData(response));
@@ -382,7 +381,12 @@ const conversationService = {
   async getMyConversations(params = {}) {
     const response = await conversationApi.getMyConversations(params);
 
-    return unwrapListData(response).map(normalizeConversation).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeConversation)
+      .filter(Boolean)
+      .sort((first, second) =>
+        compareDateDesc(first.lastMessageAt, second.lastMessageAt)
+      );
   },
 
   async getConversations(params = {}) {
@@ -413,7 +417,12 @@ const conversationService = {
       params
     );
 
-    return unwrapListData(response).map(normalizeMessage).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeMessage)
+      .filter(Boolean)
+      .sort((first, second) =>
+        compareDateAsc(first.createdAt, second.createdAt)
+      );
   },
 
   async getMessages(conversationId, params = {}) {

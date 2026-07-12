@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminReviewReportService from "../../../services/adminReviewReport.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All" },
   { value: "OPEN", label: "Open" },
@@ -557,7 +558,7 @@ function ReportDetailModal({
               <InfoBox label="Status" value={formatLabel(status)} />
               <InfoBox label="Review Status" value={formatLabel(report.reviewStatus)} />
               <InfoBox label="Rating" value={`${report.rating || 0}/5`} />
-              <InfoBox label="Created" value={formatDate(report.createdAt)} />
+              <InfoBox label="Created" value={formatDateTime(report.createdAt, "N/A")} />
             </div>
 
             <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -589,7 +590,7 @@ function ReportDetailModal({
                 <InfoBox label="Project Status" value={formatLabel(report.projectStatus)} />
                 <InfoBox label="Contract Price" value={formatMoney(report.contractFinalPrice)} />
                 <InfoBox label="Expert Receivable" value={formatMoney(report.expertReceivableAmount)} />
-                <InfoBox label="Project End" value={formatDate(report.projectEndDate)} />
+                <InfoBox label="Project End" value={formatDateTime(report.projectEndDate, "N/A")} />
               </div>
             </section>
 
@@ -780,7 +781,7 @@ function MilestoneItem({ milestone }) {
 
       <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-4">
         <InfoBox label="Amount" value={formatMoney(milestone.amount)} />
-        <InfoBox label="Deadline" value={formatDate(milestone.deadline)} />
+        <InfoBox label="Deadline" value={formatDateTime(milestone.deadline, "N/A")} />
         <InfoBox label="Deliverables" value={milestone.deliverableCount} />
         <InfoBox label="Approved" value={milestone.approvedDeliverableCount} />
       </div>
@@ -800,6 +801,18 @@ function MilestoneItem({ milestone }) {
               <p className="text-sm leading-6 text-gray-400">
                 {deliverable.description || "No description."}
               </p>
+
+              {deliverable.submittedAt && (
+                <p className="mt-2 text-xs font-semibold text-gray-500">
+                  Submitted: {formatDateTime(deliverable.submittedAt, "N/A")}
+                </p>
+              )}
+
+              {deliverable.reviewedAt && (
+                <p className="mt-1 text-xs font-semibold text-gray-500">
+                  Reviewed: {formatDateTime(deliverable.reviewedAt, "N/A")}
+                </p>
+              )}
 
               {deliverable.clientFeedback && (
                 <p className="mt-2 text-sm leading-6 text-yellow-100/80">
@@ -831,6 +844,18 @@ function DisputeItem({ dispute }) {
       <p className="mt-3 text-sm font-bold text-cyan-300">
         Disputed Amount: {formatMoney(dispute.disputedAmount)}
       </p>
+
+      {dispute.createdAt && (
+        <p className="mt-2 text-xs font-semibold text-gray-500">
+          Opened: {formatDateTime(dispute.createdAt, "N/A")}
+        </p>
+      )}
+
+      {dispute.resolvedAt && (
+        <p className="mt-1 text-xs font-semibold text-gray-500">
+          Resolved: {formatDateTime(dispute.resolvedAt, "N/A")}
+        </p>
+      )}
 
       {dispute.adminDecision && (
         <p className="mt-2 text-sm leading-6 text-gray-300">
@@ -1035,21 +1060,9 @@ function formatNumber(value) {
   return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
-}
+};
 
-function formatDate(value) {
-  if (!value) return "N/A";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";

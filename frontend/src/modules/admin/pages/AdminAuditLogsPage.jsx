@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAuditLogService from "../../../services/adminAuditLog.service";
 
+import { formatDateTimeWithSeconds, vietnamDateEndToUtcIso, vietnamDateStartToUtcIso } from "../../../utils/dateTime.utils";
 const DEFAULT_FILTERS = {
   adminId: "",
   action: "",
@@ -59,8 +60,8 @@ export default function AdminAuditLogsPage() {
       const result = await adminAuditLogService.getAuditLogs({
         Action: nextFilters.action,
         EntityName: nextFilters.entityName,
-        From: toDateTimeStart(nextFilters.from),
-        To: toDateTimeEnd(nextFilters.to),
+        From: vietnamDateStartToUtcIso(nextFilters.from),
+        To: vietnamDateEndToUtcIso(nextFilters.to),
         PageNumber: nextFilters.pageNumber,
         PageSize: nextFilters.pageSize,
       });
@@ -443,7 +444,7 @@ function AuditLogRow({ log, onViewDetail }) {
           </p>
 
           <p className="text-sm font-bold text-white">
-            {formatDateTime(log.createdAt)}
+            {formatDateTimeWithSeconds(log.createdAt, "N/A")}
           </p>
         </div>
 
@@ -545,36 +546,8 @@ function EmptyState() {
       </p>
     </div>
   );
-}
+};
 
-function toDateTimeStart(value) {
-  if (!value) return "";
-
-  return `${value}T00:00:00`;
-}
-
-function toDateTimeEnd(value) {
-  if (!value) return "";
-
-  return `${value}T23:59:59`;
-}
-
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-}
 
 function getFriendlyError(err) {
   const status = err?.response?.status;

@@ -1,5 +1,6 @@
 import axiosInstance from "../api/axiosInstance";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 export const CERTIFICATE_TYPES = [
   "COURSE_CERTIFICATE",
   "PROFESSIONAL_CERTIFICATE",
@@ -255,7 +256,14 @@ export function normalizeExpertProfile(profile = {}) {
     "";
 
   const certificates = Array.isArray(raw.certificates)
-    ? raw.certificates.map(normalizeCertificate)
+    ? raw.certificates
+        .map(normalizeCertificate)
+        .sort((a, b) =>
+          compareDateDesc(
+            a.checkedAt || a.updatedAt || a.createdAt,
+            b.checkedAt || b.updatedAt || b.createdAt
+          )
+        )
     : [];
 
   const profileReviewStatus =

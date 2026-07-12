@@ -6,6 +6,7 @@ import jobService from "../../../services/job.service";
 import proposalService from "../../../services/proposal.service";
 import { JobDetailModal } from "./JobDetailPage";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const MIN_RECOMMENDED_SCORE = 55;
 
 export default function RecommendedJobsPage() {
@@ -907,15 +908,5 @@ function formatDuration(days) {
 }
 
 function formatDate(value) {
-  if (!value) return "Flexible";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Flexible";
-
-  return date.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
+  return formatDateTime(value, "Flexible");
 }

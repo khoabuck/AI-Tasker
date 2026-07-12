@@ -9,6 +9,7 @@ import { validateProposalForm } from "../../../utils/validateProposal";
 import proposalCreditPackageService from "../../../services/proposalCreditPackage.service";
 import expertWalletService from "../../../services/expertWallet.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function MyProposalDraftsPage() {
   const navigate = useNavigate();
 
@@ -900,13 +901,7 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatus(value) {
