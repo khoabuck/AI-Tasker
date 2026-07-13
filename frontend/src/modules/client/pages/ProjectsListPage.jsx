@@ -10,7 +10,6 @@ const STATUS_TABS = [
   { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
   { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
   { key: "DISPUTED", label: "Disputed", icon: "gavel", color: "#ef4444" },
-  { key: "CANCELLED", label: "Cancelled", icon: "cancel", color: "#9ca3af" },
 ];
 
 const STATUS_CLASS = {
@@ -27,7 +26,7 @@ const STATUS_CONFIG = {
   CANCELLED: { label: "Cancelled", color: "#9ca3af", bg: "rgba(156,163,175,0.08)", border: "rgba(156,163,175,0.25)" },
 };
 
-function ProjectCard({ project }) {
+function ProjectCard({ project, hasReview }) {
   const navigate = useNavigate();
   const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
@@ -46,7 +45,7 @@ function ProjectCard({ project }) {
           </h3>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <img
-              src={project.expertAvatar || "/images/default-avatar.png"}
+              src={project.expertAvatarUrl || "/images/default-avatar.png"}
               alt={expertName}
               style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover" }}
             />
@@ -105,7 +104,7 @@ function ProjectCard({ project }) {
               }}
               className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-xs font-bold text-green-400 transition hover:bg-green-500/20"
             >
-              Leave Review
+              {hasReview ? "View Review" : "Review"}
             </button>
           )}
 
@@ -131,7 +130,15 @@ export default function ProjectsListPage() {
   const location = useLocation();
   const activeStatus = searchParams.get("status") || "ACTIVE";
 
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      behavior: "instant",
+    });
+  }, [activeStatus]);
+
   const [allProjects, setAllProjects] = useState([]);
+  const [reviewedProjectIds, setReviewedProjectIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -141,7 +148,32 @@ export default function ProjectsListPage() {
     try {
       const res = await axiosInstance.get("/projects/me", { signal });
       const raw = res.data;
-      setAllProjects(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
+      const projects = Array.isArray(raw) ? raw : raw.items ?? raw.data ?? [];
+
+      setAllProjects(projects);
+
+      try {
+        const reviewRes = await axiosInstance.get("/reviews/me", { signal });
+        const rawReviews = reviewRes.data;
+
+        const reviews = Array.isArray(rawReviews)
+          ? rawReviews
+          : rawReviews.items ?? rawReviews.data ?? [];
+
+        const reviewedIds = new Set(
+          reviews
+            .map((review) => review.projectId ?? review.project?.projectId)
+            .filter(Boolean)
+        );
+
+        setReviewedProjectIds(reviewedIds);
+      } catch (reviewErr) {
+        if (reviewErr?.code === "ERR_CANCELED") return;
+
+        // Không cho lỗi review làm hỏng trang Projects.
+        // Nếu API reviews/me lỗi, chỉ coi như chưa có review nào.
+        setReviewedProjectIds(new Set());
+      }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(err?.response?.data?.message || "Unable to load the list of projects.");
@@ -221,7 +253,11 @@ export default function ProjectsListPage() {
         {!loading && !error && filteredProjects.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {filteredProjects.map((project) => (
-              <ProjectCard key={project.projectId} project={project} />
+              <ProjectCard
+                key={project.projectId}
+                project={project}
+                hasReview={reviewedProjectIds.has(project.projectId)}
+              />
             ))}
           </div>
         )}

@@ -6,19 +6,14 @@ const adminProposalCreditApi = {
   },
 
   getExpertCreditById(expertProfileId) {
-    return axiosInstance.get(`/admin/proposal-credits/experts/${expertProfileId}`);
+    return axiosInstance.get(
+      `/admin/proposal-credits/experts/${expertProfileId}`
+    );
   },
 
   adjustCredits(expertProfileId, data) {
     return axiosInstance.patch(
       `/admin/proposal-credits/experts/${expertProfileId}/credits`,
-      data
-    );
-  },
-
-  setFreeSubmit(expertProfileId, data) {
-    return axiosInstance.patch(
-      `/admin/proposal-credits/experts/${expertProfileId}/free-submit`,
       data
     );
   },

@@ -5,6 +5,7 @@ import proposalService, {
   getFriendlyProposalError,
 } from "../../../services/proposal.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const FILTERS = [
   { key: "ALL", label: "All" },
   { key: "SUBMITTED", label: "Submitted" },
@@ -1040,13 +1041,7 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function formatDisplayValue(value) {

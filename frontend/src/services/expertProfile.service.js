@@ -1,5 +1,6 @@
 import axiosInstance from "../api/axiosInstance";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 export const CERTIFICATE_TYPES = [
   "COURSE_CERTIFICATE",
   "PROFESSIONAL_CERTIFICATE",
@@ -255,7 +256,14 @@ export function normalizeExpertProfile(profile = {}) {
     "";
 
   const certificates = Array.isArray(raw.certificates)
-    ? raw.certificates.map(normalizeCertificate)
+    ? raw.certificates
+        .map(normalizeCertificate)
+        .sort((a, b) =>
+          compareDateDesc(
+            a.checkedAt || a.updatedAt || a.createdAt,
+            b.checkedAt || b.updatedAt || b.createdAt
+          )
+        )
     : [];
 
   const profileReviewStatus =
@@ -277,6 +285,9 @@ export function normalizeExpertProfile(profile = {}) {
     id: raw.id ?? raw.expertProfileId ?? null,
     expertProfileId: raw.expertProfileId ?? raw.id ?? null,
     userId: raw.userId ?? raw.accountId ?? null,
+
+    expertCategory: raw.expertCategory || raw.ExpertCategory || raw.category || raw.Category || "",
+level: raw.level || raw.Level || raw.expertLevel || raw.ExpertLevel || "",
 
     fullName: raw.fullName || raw.userFullName || raw.name || "",
     email: raw.email || raw.userEmail || "",
@@ -363,23 +374,40 @@ export function buildExpertProfilePayload(formData = {}) {
 
 export function buildBasicExpertProfilePayload(formData = {}) {
   return {
+    fullName: trimString(formData.fullName),
+
     avatarUrl: nullableString(formData.avatarUrl),
+
     professionalTitle: trimString(formData.professionalTitle),
+
     bio: trimString(formData.bio),
-    skills: Array.isArray(formData.skills)
-      ? formData.skills.map((item) => trimString(item)).filter(Boolean).join(", ")
-      : trimString(formData.skills),
-    yearsOfExperience: numberOrZero(formData.yearsOfExperience),
+
     availableForWork: booleanValue(formData.availableForWork),
   };
 }
 
 export function buildVerificationExpertProfilePayload(formData = {}) {
   return {
-    portfolioUrl: trimString(formData.portfolioUrl),
-    linkedInUrl: trimString(formData.linkedInUrl ?? formData.linkedinUrl),
-    gitHubUrl: trimString(formData.gitHubUrl ?? formData.githubUrl),
-    certificates: normalizeCertificatesForPayload(formData.certificates),
+    skills: Array.isArray(formData.skills)
+      ? formData.skills
+          .map((item) => trimString(item))
+          .filter(Boolean)
+          .join(", ")
+      : trimString(formData.skills),
+
+    portfolioUrl: nullableString(formData.portfolioUrl),
+
+    linkedInUrl: nullableString(
+      formData.linkedInUrl ?? formData.linkedinUrl
+    ),
+
+    gitHubUrl: nullableString(
+      formData.gitHubUrl ?? formData.githubUrl
+    ),
+
+    certificates: normalizeCertificatesForPayload(
+      formData.certificates
+    ),
   };
 }
 
@@ -714,18 +742,24 @@ const expertProfileService = {
     }
   },
 
-  async updateVerificationExpertProfile(formData) {
-    try {
-      const payload = buildVerificationExpertProfilePayload(formData);
-      const response = await axiosInstance.put(
-        "/expert-profiles/me/verification",
-        payload
-      );
-      return normalizeExpertProfile(unwrapData(response));
-    } catch (error) {
-      throwFriendlyError(error, "Unable to update verification information.");
-    }
-  },
+async updateVerificationExpertProfile(formData) {
+  try {
+    const payload = buildVerificationExpertProfilePayload(formData);
+
+    const response = await axiosInstance.put(
+      "/expert-profiles/me/verification",
+      payload
+    );
+
+    // Backend trả review result chứ không phải ExpertProfile
+    return unwrapData(response);
+  } catch (error) {
+    throwFriendlyError(
+      error,
+      "Unable to update verification information."
+    );
+  }
+},
 };
 
 export default expertProfileService;

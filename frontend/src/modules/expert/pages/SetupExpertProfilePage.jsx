@@ -5,6 +5,7 @@ import expertProfileService from "../../../services/expertProfile.service";
 import uploadService from "../../../services/upload.service";
 import { useAuth } from "../../../context/AuthContext";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const SETUP_DRAFT_KEY = "aitasker_expert_profile_setup_draft";
 const EDIT_DRAFT_KEY = "aitasker_expert_profile_edit_draft";
 const CORRECTION_DRAFT_KEY = "aitasker_expert_profile_correction_draft";
@@ -146,53 +147,83 @@ export default function SetupExpertProfilePage() {
       setError("");
 
       const registeredFullName = await getRegisteredFullNameFromAuth();
-      const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
-      const normalDraft = readJson(draftKey);
 
+      // =====================================================
+      // FIRST-TIME SETUP
+      // =====================================================
+      // A new expert does not have an expert profile yet.
+      // Do not call GET /expert-profiles/me and do not restore
+      // any old profile/correction draft here.
+      // Only prefill the registered full name.
+      if (!isEditPage) {
+        setReviewLimit({
+          submissionCount: 0,
+          lockedUntil: "",
+          reviewStatus: "",
+          userStatus: "",
+          remainingAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
+          maxAttempts: MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS,
+        });
+
+        setResubmitCounter(null);
+        setFieldScores({});
+        setTouched({});
+        setSubmitted(false);
+
+        setFormData({
+          ...createEmptyForm(),
+          fullName: registeredFullName,
+          availableForWork: true,
+        });
+
+        return;
+      }
+
+      // =====================================================
+      // CORRECTION / RESUBMISSION
+      // =====================================================
+      // Only /expert/profile/edit loads an existing profile.
       let profile = null;
 
       try {
         profile = await expertProfileService.getMyExpertProfile();
-
-        const nextLimit = extractExpertProfileReviewLimit(profile);
-        setReviewLimit(nextLimit);
-
-        if (shouldRedirectToLockedPage(nextLimit)) {
-          updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
-          navigate("/expert/profile-locked", { replace: true });
-          return;
-        }
-
-        const reviewStatus = getReviewStatus(profile);
-        const userStatus = getUserStatus(profile);
-
-        if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
-          updateLocalUserStatus("ACTIVE");
-          navigate("/expert/dashboard", { replace: true });
-          return;
-        }
-
-        if (!isEditPage) {
-          const hasExistingProfile =
-            reviewStatus === "NEEDS_CORRECTION" ||
-            reviewStatus === "REJECTED" ||
-            userStatus === "PENDING_PROFILE";
-
-          if (hasExistingProfile) {
-            navigate("/expert/profile/edit", { replace: true });
-            return;
-          }
-        }
       } catch (profileErr) {
-        if (
-          profileErr?.response?.status !== 404 &&
-          profileErr?.status !== 404
-        ) {
-          throw profileErr;
+        const status = getHttpStatus(profileErr);
+
+        // The correction route requires an existing profile.
+        // If none exists, return the user to first-time setup.
+        if (status === 404) {
+          navigate("/expert/setup-profile", { replace: true });
+          return;
         }
 
-        profile = null;
+        throw profileErr;
       }
+
+      if (!profile) {
+        navigate("/expert/setup-profile", { replace: true });
+        return;
+      }
+
+      const nextLimit = extractExpertProfileReviewLimit(profile);
+      setReviewLimit(nextLimit);
+
+      if (shouldRedirectToLockedPage(nextLimit)) {
+        updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
+        navigate("/expert/profile-locked", { replace: true });
+        return;
+      }
+
+      const reviewStatus = getReviewStatus(profile);
+      const userStatus = getUserStatus(profile);
+
+      if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
+        updateLocalUserStatus("ACTIVE");
+        navigate("/expert/dashboard", { replace: true });
+        return;
+      }
+
+      const correctionDraft = readJson(CORRECTION_DRAFT_KEY);
 
       if (correctionDraft) {
         const safeDraft = removeDeprecatedExpertFields(correctionDraft);
@@ -202,47 +233,86 @@ export default function SetupExpertProfilePage() {
           ...safeDraft,
           fullName: safeDraft.fullName || registeredFullName,
           availableForWork: true,
-          certificates: normalizeCertificatesForForm(safeDraft.certificates),
+          certificates: mergeCertificateMetadata(
+            safeDraft.certificates,
+            profile?.certificates || profile?.Certificates || []
+          ),
         });
 
         return;
       }
 
-      if (normalDraft) {
-        const safeDraft = removeDeprecatedExpertFields(normalDraft);
+      const editDraft = readJson(EDIT_DRAFT_KEY);
+
+      if (editDraft) {
+        const safeDraft = removeDeprecatedExpertFields(editDraft);
 
         setFormData({
           ...createEmptyForm(),
           ...safeDraft,
           fullName: safeDraft.fullName || registeredFullName,
           availableForWork: true,
-          certificates: normalizeCertificatesForForm(safeDraft.certificates),
+          certificates: mergeCertificateMetadata(
+            safeDraft.certificates,
+            profile?.certificates || profile?.Certificates || []
+          ),
         });
 
         return;
       }
 
-      if (isEditPage && profile) {
-        const profileForm = buildFormFromProfile(profile);
-
-        setFormData({
-          ...profileForm,
-          fullName: profileForm.fullName || registeredFullName,
-        });
-        return;
-      }
+      const profileForm = buildFormFromProfile(profile);
 
       setFormData({
-        ...createEmptyForm(),
-        fullName: registeredFullName,
+        ...profileForm,
+        fullName: profileForm.fullName || registeredFullName,
+        availableForWork: true,
+        certificates: normalizeCertificatesForForm(
+          profileForm.certificates
+        ),
       });
     } catch (err) {
-      console.error("LOAD EXPERT PROFILE ERROR:", getRawBackendPayload(err));
+      console.error(
+        "LOAD EXPERT PROFILE ERROR:",
+        getRawBackendPayload(err)
+      );
+
       setError(
-        "We could not load your expert profile right now. Please try again."
+        getFriendlyProfileLoadError(
+          err,
+          "We could not load your expert profile right now. Please try again."
+        )
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshSubmittedProfileFromServer = async () => {
+    try {
+      const profile = await expertProfileService.getMyExpertProfile();
+
+      if (!profile) return null;
+
+      const profileForm = buildFormFromProfile(profile);
+
+      setFormData((current) => ({
+        ...profileForm,
+        fullName: profileForm.fullName || current.fullName,
+        availableForWork: true,
+        certificates: normalizeCertificatesForForm(
+          profileForm.certificates
+        ),
+      }));
+
+      return profile;
+    } catch (refreshError) {
+      console.error(
+        "REFRESH SUBMITTED PROFILE ERROR:",
+        getRawBackendPayload(refreshError)
+      );
+
+      return null;
     }
   };
 
@@ -411,8 +481,15 @@ export default function SetupExpertProfilePage() {
 
       saveCorrectionFeedback(result);
 
+      // The submit payload only contains URL + type.
+      // Reload the saved profile so detected certificate metadata
+      // (name, holder, issuer, issued date, status) appears immediately.
+      const refreshedProfile = await refreshSubmittedProfileFromServer();
+
       const nextLimitFromResult = extractExpertProfileReviewLimit(result);
-      const refreshedLimit = await refreshProfileLimitFromServer();
+      const refreshedLimit = refreshedProfile
+        ? extractExpertProfileReviewLimit(refreshedProfile)
+        : await refreshProfileLimitFromServer();
 
       let nextLimit = chooseBestReviewLimit(
         previousLimit,
@@ -442,7 +519,13 @@ export default function SetupExpertProfilePage() {
       });
 
       if (shouldRedirectToLockedPage(nextLimit)) {
-        saveCorrectionDraft(submitPayload);
+        saveCorrectionDraft(
+          buildCorrectionDraftData({
+            submitPayload,
+            refreshedProfile,
+            currentFormData: formData,
+          })
+        );
         updateLocalUserStatus("EXPERT_PROFILE_LOCKED");
         navigate("/expert/profile-locked", { replace: true });
         return;
@@ -473,7 +556,13 @@ export default function SetupExpertProfilePage() {
       }
 
       if (reviewStatus === "NEEDS_CORRECTION") {
-        saveCorrectionDraft(submitPayload);
+        saveCorrectionDraft(
+          buildCorrectionDraftData({
+            submitPayload,
+            refreshedProfile,
+            currentFormData: formData,
+          })
+        );
         updateLocalUserStatus("PENDING_PROFILE");
 
         setModal({
@@ -490,7 +579,13 @@ export default function SetupExpertProfilePage() {
       }
 
       if (reviewStatus === "REJECTED") {
-        saveCorrectionDraft(submitPayload);
+        saveCorrectionDraft(
+          buildCorrectionDraftData({
+            submitPayload,
+            refreshedProfile,
+            currentFormData: formData,
+          })
+        );
         updateLocalUserStatus("PENDING_PROFILE");
 
         setModal({
@@ -506,7 +601,13 @@ export default function SetupExpertProfilePage() {
         return;
       }
 
-      saveCorrectionDraft(submitPayload);
+      saveCorrectionDraft(
+          buildCorrectionDraftData({
+            submitPayload,
+            refreshedProfile,
+            currentFormData: formData,
+          })
+        );
 
       setModal({
         type: "info",
@@ -586,15 +687,22 @@ export default function SetupExpertProfilePage() {
     navigate("/expert/profile/edit", { replace: true });
   };
 
-  const handleClearDraft = () => {
+  const handleClearDraft = async () => {
     clearExpertProfileDrafts();
     clearFieldScoreFeedback();
     setFieldScores({});
-    setFormData(createEmptyForm());
     setTouched({});
     setSubmitted(false);
     setModal(null);
     setError("");
+
+    const registeredFullName = await getRegisteredFullNameFromAuth();
+
+    setFormData({
+      ...createEmptyForm(),
+      fullName: registeredFullName,
+      availableForWork: true,
+    });
   };
 
   const handleLogout = async () => {
@@ -628,9 +736,7 @@ export default function SetupExpertProfilePage() {
   if (loading) {
     return (
       <SetupShell onLogout={handleLogout}>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading your profile form...
-        </div>
+        <SetupProfileSkeleton />
       </SetupShell>
     );
   }
@@ -640,20 +746,18 @@ export default function SetupExpertProfilePage() {
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {isEditPage ? "Update Expert Profile" : "Setup Expert Profile"}
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              {isEditPage ? "Profile review" : "Create profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Improve and resubmit your profile"
-                : "Create your expert profile"}
+                ? "Strengthen your expert profile"
+                : "Create a profile clients can trust"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Complete your profile so clients can understand your name, skills,
-              experience, public work links, and optional certificates.
-              Portfolio and GitHub are required. LinkedIn is optional.
+              Build a clear profile with your expertise, proof of work, and credentials.
             </p>
           </div>
 
@@ -675,23 +779,29 @@ export default function SetupExpertProfilePage() {
           {error && (
             <Alert
               type="danger"
-              title="Please check your form"
+              title={
+                error.includes("load your expert profile") ||
+                error.includes("session") ||
+                error.includes("permission")
+                  ? "Unable to load profile"
+                  : "Please check your form"
+              }
               message={error}
             />
           )}
 
           <form
             onSubmit={handleSubmit}
-            className="space-y-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+            className="space-y-6 rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.24)] md:p-7"
           >
             <section>
               <h2 className="mb-4 text-lg font-bold text-white">
-                Basic Information
+                Profile overview
               </h2>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_1fr]">
                 <div>
-                  <div className="mb-3 h-36 w-36 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                  <div className="mb-3 h-36 w-36 overflow-hidden rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
                     {formData.avatarUrl ? (
                       <img
                         src={formData.avatarUrl}
@@ -708,7 +818,7 @@ export default function SetupExpertProfilePage() {
                   </div>
 
                   <label className="inline-flex cursor-pointer rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
-                    {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
+                    {uploadingAvatar ? "Uploading..." : "Upload photo"}
 
                     <input
                       type="file"
@@ -787,12 +897,11 @@ export default function SetupExpertProfilePage() {
 
             <section className="border-t border-white/10 pt-6">
               <h2 className="mb-4 text-lg font-bold text-white">
-                Public Links
+                Work links
               </h2>
 
               <p className="mb-4 text-sm text-gray-500">
-                Portfolio and GitHub are required for verification. LinkedIn is
-                optional.
+                Add public links clients can review.
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -840,8 +949,7 @@ export default function SetupExpertProfilePage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Optional. If you add one, only Certificate URL and
-                    Certificate Type are required.
+                    Add credentials that strengthen your profile.
                   </p>
                 </div>
 
@@ -869,11 +977,6 @@ export default function SetupExpertProfilePage() {
                   <p className="font-bold text-gray-300">
                     No certificates added.
                   </p>
-
-                  <p className="mt-1">
-                    You can submit without certificates. Adding certificates can
-                    help strengthen your profile.
-                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -897,7 +1000,7 @@ export default function SetupExpertProfilePage() {
                           </div>
 
                           <p className="mt-1 text-xs text-gray-500">
-                            We will review the certificate link automatically.
+                            Credential details appear after review.
                           </p>
                         </div>
 
@@ -937,6 +1040,8 @@ export default function SetupExpertProfilePage() {
                           options={CERTIFICATE_TYPE_OPTIONS}
                         />
                       </div>
+
+                      <CertificateDetectedInfo certificate={certificate} />
                     </div>
                   ))}
                 </div>
@@ -950,7 +1055,7 @@ export default function SetupExpertProfilePage() {
                 disabled={saving || uploadingAvatar}
                 className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Clear Draft
+                Reset form
               </button>
 
               <button
@@ -981,6 +1086,221 @@ export default function SetupExpertProfilePage() {
         />
       )}
     </SetupShell>
+  );
+}
+
+
+
+function CertificateDetectedInfo({ certificate }) {
+  const certificateName =
+    certificate?.detectedCertificateName ||
+    certificate?.certificateName ||
+    certificate?.name ||
+    "";
+
+  const certificateIssuer =
+    certificate?.detectedIssuer ||
+    certificate?.certificateIssuer ||
+    "";
+
+  const certificateHolder =
+    certificate?.detectedHolderName ||
+    certificate?.certificateHolderName ||
+    certificate?.holderName ||
+    certificate?.recipientName ||
+    "";
+
+  const issuedDate =
+    certificate?.detectedIssuedAt ||
+    certificate?.issuedAt ||
+    certificate?.detectedIssuedDateText ||
+    "";
+
+  const verificationStatus = String(
+    certificate?.verificationStatus || ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const hasDetectedInformation = Boolean(
+    certificateName ||
+      certificateIssuer ||
+      certificateHolder ||
+      issuedDate ||
+      verificationStatus
+  );
+
+  if (!hasDetectedInformation) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-white/10 bg-black/10 p-4">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">
+            Certificate Details
+          </p>
+
+          <p className="mt-1 text-sm text-gray-400">
+            Information returned from the saved certificate record.
+          </p>
+        </div>
+
+        {verificationStatus && (
+          <CertificateVerificationBadge status={verificationStatus} />
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <CertificateInfoItem
+          label="Certificate Name"
+          value={certificateName || "Not available"}
+        />
+
+        <CertificateInfoItem
+          label="Certificate Type"
+          value={formatCertificateType(
+            certificate?.certificateType
+          )}
+        />
+
+        <CertificateInfoItem
+          label="Issuer"
+          value={certificateIssuer || "Not available"}
+        />
+
+        <CertificateInfoItem
+          label="Completed By"
+          value={certificateHolder || "Not available"}
+        />
+
+        <CertificateInfoItem
+          label="Issued Date"
+          value={formatCertificateIssuedDate(issuedDate)}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CertificateInfoItem({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500">
+        {label}
+      </p>
+
+      <p className="mt-1 break-words text-sm font-bold text-white">
+        {value || "N/A"}
+      </p>
+    </div>
+  );
+}
+
+function CertificateVerificationBadge({ status }) {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase();
+
+  const config = {
+    VERIFIED: {
+      label: "Verified",
+      className:
+        "border-green-400/30 bg-green-400/10 text-green-300",
+    },
+    VALID: {
+      label: "Valid",
+      className:
+        "border-green-400/30 bg-green-400/10 text-green-300",
+    },
+    PENDING: {
+      label: "Pending",
+      className:
+        "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+    },
+    NEEDS_REVIEW: {
+      label: "Needs Review",
+      className:
+        "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+    },
+    NAME_MISMATCH: {
+      label: "Name Mismatch",
+      className:
+        "border-orange-400/30 bg-orange-400/10 text-orange-300",
+    },
+    INVALID: {
+      label: "Invalid",
+      className:
+        "border-red-400/30 bg-red-400/10 text-red-300",
+    },
+    FAILED: {
+      label: "Failed",
+      className:
+        "border-red-400/30 bg-red-400/10 text-red-300",
+    },
+  };
+
+  const selected =
+    config[normalized] || {
+      label: formatCertificateType(normalized),
+      className:
+        "border-white/10 bg-white/[0.04] text-gray-300",
+    };
+
+  return (
+    <span
+      className={`w-fit rounded-full border px-3 py-1 text-xs font-bold ${selected.className}`}
+    >
+      {selected.label}
+    </span>
+  );
+}
+
+function formatCertificateType(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map(
+      (word) =>
+        word.charAt(0).toUpperCase() + word.slice(1)
+    )
+    .join(" ");
+}
+
+function formatCertificateIssuedDate(value) {
+  if (!value) return "Not available";
+
+  const parsedDate = new Date(value);
+
+  if (!Number.isNaN(parsedDate.getTime())) {
+    return new Intl.DateTimeFormat("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }).format(parsedDate);
+  }
+
+  return String(value);
+}
+
+function SetupProfileSkeleton() {
+  return (
+    <div className="animate-pulse px-5 py-10 md:px-8">
+      <div className="mx-auto max-w-5xl">
+        <div className="mb-8">
+          <div className="h-4 w-44 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-10 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-3/4 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="h-[760px] rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
   );
 }
 
@@ -1560,7 +1880,7 @@ function ScoreBadge({ badge }) {
   return (
     <span
       title={badge.label || "Review score"}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${toneClass}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-black ${toneClass}`}
     >
       <span aria-hidden="true">{icon}</span>
       <span>{badge.text}</span>
@@ -1728,16 +2048,113 @@ function normalizeCertificatesForForm(certificates) {
   return certificates
     .map((item) => {
       const certificateUrl =
-        item?.certificateUrl || item?.CertificateUrl || item?.url || "";
+        item?.certificateUrl ||
+        item?.CertificateUrl ||
+        item?.url ||
+        item?.Url ||
+        "";
 
-      const certificateType =
-        item?.certificateType || item?.CertificateType || "OTHER";
+      const rawCertificateType =
+        item?.certificateType ||
+        item?.CertificateType ||
+        "OTHER";
+
+      const certificateType = String(rawCertificateType || "")
+        .trim()
+        .toUpperCase();
 
       return {
+        expertCertificateId:
+          item?.expertCertificateId ||
+          item?.ExpertCertificateId ||
+          item?.certificateId ||
+          item?.CertificateId ||
+          item?.id ||
+          item?.Id ||
+          null,
+
         certificateUrl: String(certificateUrl || "").trim(),
+
         certificateType: CERTIFICATE_TYPES.includes(certificateType)
           ? certificateType
           : "OTHER",
+
+        certificateName:
+          item?.certificateName ||
+          item?.CertificateName ||
+          item?.detectedCertificateName ||
+          item?.DetectedCertificateName ||
+          item?.name ||
+          item?.Name ||
+          "",
+
+        certificateIssuer:
+          item?.certificateIssuer ||
+          item?.CertificateIssuer ||
+          item?.issuer ||
+          item?.Issuer ||
+          "",
+
+        issuedAt:
+          item?.issuedAt ||
+          item?.IssuedAt ||
+          null,
+
+        verificationStatus:
+          item?.verificationStatus ||
+          item?.VerificationStatus ||
+          "",
+
+        verificationScore: Number(
+          item?.verificationScore ??
+            item?.VerificationScore ??
+            0
+        ),
+
+        verificationNote:
+          item?.verificationNote ||
+          item?.VerificationNote ||
+          "",
+
+        detectedIssuer:
+          item?.detectedIssuer ||
+          item?.DetectedIssuer ||
+          "",
+
+        detectedCertificateName:
+          item?.detectedCertificateName ||
+          item?.DetectedCertificateName ||
+          "",
+
+        detectedHolderName:
+          item?.detectedHolderName ||
+          item?.DetectedHolderName ||
+          item?.certificateHolderName ||
+          item?.CertificateHolderName ||
+          item?.holderName ||
+          item?.HolderName ||
+          item?.recipientName ||
+          item?.RecipientName ||
+          "",
+
+        detectedIssuedDateText:
+          item?.detectedIssuedDateText ||
+          item?.DetectedIssuedDateText ||
+          item?.issuedDateText ||
+          item?.IssuedDateText ||
+          item?.issuedDate ||
+          item?.IssuedDate ||
+          "",
+
+        detectedIssuedAt:
+          item?.detectedIssuedAt ||
+          item?.DetectedIssuedAt ||
+          null,
+
+        checkedAt:
+          item?.checkedAt ||
+          item?.CheckedAt ||
+          null,
       };
     })
     .filter((item) => item.certificateUrl);
@@ -1754,6 +2171,86 @@ function normalizeCertificatesForPayload(certificates) {
         : "OTHER",
     }))
     .filter((item) => item.certificateUrl);
+}
+
+
+function mergeCertificateMetadata(
+  draftCertificates,
+  profileCertificates
+) {
+  const draftItems = normalizeCertificatesForForm(draftCertificates);
+  const profileItems = normalizeCertificatesForForm(profileCertificates);
+
+  if (draftItems.length === 0) {
+    return profileItems;
+  }
+
+  return draftItems.map((draftItem) => {
+    const draftUrl = normalizeCertificateUrl(
+      draftItem.certificateUrl
+    );
+
+    const matchedProfile = profileItems.find(
+      (profileItem) =>
+        normalizeCertificateUrl(profileItem.certificateUrl) === draftUrl
+    );
+
+    if (!matchedProfile) {
+      return draftItem;
+    }
+
+    return {
+      ...draftItem,
+      ...matchedProfile,
+
+      // Keep the editable values entered by the expert.
+      certificateUrl:
+        draftItem.certificateUrl || matchedProfile.certificateUrl,
+
+      certificateType:
+        draftItem.certificateType ||
+        matchedProfile.certificateType ||
+        "OTHER",
+    };
+  });
+}
+
+function buildCorrectionDraftData({
+  submitPayload,
+  refreshedProfile,
+  currentFormData,
+}) {
+  const backendCertificates =
+    refreshedProfile?.certificates ||
+    refreshedProfile?.Certificates ||
+    [];
+
+  const currentCertificates =
+    currentFormData?.certificates ||
+    submitPayload?.certificates ||
+    [];
+
+  return {
+    ...(submitPayload || {}),
+    fullName:
+      refreshedProfile?.fullName ||
+      refreshedProfile?.FullName ||
+      submitPayload?.fullName ||
+      currentFormData?.fullName ||
+      "",
+
+    certificates: mergeCertificateMetadata(
+      currentCertificates,
+      backendCertificates
+    ),
+  };
+}
+
+function normalizeCertificateUrl(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "")
+    .toLowerCase();
 }
 
 function buildReviewFeedback({ backendPayload, missingInformation, limit }) {
@@ -2400,11 +2897,7 @@ function isExpertProfileReviewLocked(limit) {
 
   if (!limit.lockedUntil) return false;
 
-  const lockedUntilTime = new Date(limit.lockedUntil).getTime();
-
-  if (!Number.isFinite(lockedUntilTime)) return false;
-
-  return lockedUntilTime > Date.now();
+  return !isExpired(limit.lockedUntil);
 }
 
 function hasNoExpertProfileAttemptsLeft(limit) {
@@ -2767,7 +3260,7 @@ function saveCorrectionDraft(data) {
       JSON.stringify({
         ...data,
         availableForWork: true,
-        certificates: normalizeCertificatesForPayload(data?.certificates),
+        certificates: normalizeCertificatesForForm(data?.certificates),
       })
     );
   } catch {
@@ -2837,6 +3330,49 @@ function getRawBackendPayload(error) {
     error?.response?.data ||
     error?.data ||
     error
+  );
+}
+
+
+function getHttpStatus(error) {
+  return Number(
+    error?.response?.status ??
+      error?.status ??
+      error?.response?.data?.status ??
+      error?.response?.data?.statusCode ??
+      error?.data?.status ??
+      error?.data?.statusCode ??
+      0
+  );
+}
+
+function getFriendlyProfileLoadError(error, fallback) {
+  const status = getHttpStatus(error);
+
+  if (status === 401) {
+    return "Your session has expired. Please sign in again.";
+  }
+
+  if (status === 403) {
+    return "You do not have permission to access expert profile setup.";
+  }
+
+  if (status >= 500) {
+    return "The server could not load your expert profile. Please try again shortly.";
+  }
+
+  const payload = getRawBackendPayload(error);
+
+  if (typeof payload === "string" && payload.trim()) {
+    return payload;
+  }
+
+  return (
+    payload?.message ||
+    payload?.detail ||
+    payload?.title ||
+    error?.message ||
+    fallback
   );
 }
 
@@ -2955,18 +3491,5 @@ function isGitHubUrl(value) {
     return host === "github.com" && pathParts.length >= 1;
   } catch {
     return false;
-  }
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
   }
 }

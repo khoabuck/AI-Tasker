@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
 import conversationService from "../../../services/conversation.service";
+import proposalService from "../../../services/proposal.service";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 export function JobDetailModal({ jobId, onClose }) {
   const navigate = useNavigate();
 
@@ -34,8 +36,7 @@ export function JobDetailModal({ jobId, onClose }) {
       setLoadError("");
       setActionError("");
 
-      const data = await jobService.getJobById(jobId);
-      const normalizedJob = normalizeLoadedJob(data);
+      const normalizedJob = await loadJobWithApplicationState(jobId);
 
       if (!normalizedJob.id) {
         throw new Error("This job is unavailable right now.");
@@ -52,11 +53,11 @@ export function JobDetailModal({ jobId, onClose }) {
     }
   };
 
-  const handleSubmitProposal = () => {
+  const handleProposalAction = () => {
     if (!job?.id) return;
 
     onClose?.();
-    navigate(`/expert/jobs/${job.id}/proposal`);
+    navigate(getJobProposalTarget(job));
   };
 
   const handleMessageClient = async () => {
@@ -81,10 +82,10 @@ export function JobDetailModal({ jobId, onClose }) {
         <div className="flex items-center justify-between border-b border-white/10 bg-[#101722] px-5 py-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#00F0FF]">
-              Job Detail
+              Job Overview
             </p>
             <h2 className="mt-0.5 text-base font-extrabold text-white">
-              Review before applying
+              Review the project before applying
             </h2>
           </div>
 
@@ -98,11 +99,7 @@ export function JobDetailModal({ jobId, onClose }) {
         </div>
 
         <div className="custom-scrollbar max-h-[84vh] overflow-y-auto p-4 md:p-5">
-          {loading && (
-            <div className="flex min-h-[40vh] items-center justify-center text-gray-400">
-              Loading job detail...
-            </div>
-          )}
+          {loading && <JobDetailSkeleton compact />}
 
           {!loading && loadError && (
             <FriendlyError
@@ -119,7 +116,7 @@ export function JobDetailModal({ jobId, onClose }) {
               startingChat={startingChat}
               compact
               canMessageClient={Boolean(job.clientUserId || job.clientProfileId)}
-              onSubmitProposal={handleSubmitProposal}
+              onProposalAction={handleProposalAction}
               onMessageClient={handleMessageClient}
             />
           )}
@@ -177,8 +174,7 @@ export default function JobDetailPage() {
       setLoadError("");
       setActionError("");
 
-      const data = await jobService.getJobById(jobId);
-      const normalizedJob = normalizeLoadedJob(data);
+      const normalizedJob = await loadJobWithApplicationState(jobId);
 
       if (!normalizedJob.id) {
         throw new Error("This job is unavailable right now.");
@@ -195,9 +191,9 @@ export default function JobDetailPage() {
     }
   };
 
-  const handleSubmitProposal = () => {
+  const handleProposalAction = () => {
     if (!job?.id) return;
-    navigate(`/expert/jobs/${job.id}/proposal`);
+    navigate(getJobProposalTarget(job));
   };
 
   const handleMessageClient = async () => {
@@ -212,9 +208,7 @@ export default function JobDetailPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job detail...
-        </div>
+        <PageSkeleton cards={4} compact />
       </ExpertLayout>
     );
   }
@@ -247,7 +241,7 @@ export default function JobDetailPage() {
             actionError={actionError}
             startingChat={startingChat}
             canMessageClient={Boolean(job?.clientUserId || job?.clientProfileId)}
-            onSubmitProposal={handleSubmitProposal}
+            onProposalAction={handleProposalAction}
             onMessageClient={handleMessageClient}
           />
         </div>
@@ -256,12 +250,69 @@ export default function JobDetailPage() {
   );
 }
 
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function JobDetailSkeleton({ compact = false }) {
+  return (
+    <div className="animate-pulse">
+      <div className="mb-4 rounded-2xl border border-white/10 bg-[#151a22] p-5">
+        <div className="h-5 w-32 rounded-full bg-white/10" />
+        <div className="mt-4 h-8 w-3/4 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+      </div>
+
+      <div className={`grid grid-cols-1 gap-4 ${compact ? "xl:grid-cols-[1fr_280px]" : "xl:grid-cols-[1fr_320px]"}`}>
+        <div className="space-y-4">
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+        <div className="h-64 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
 function JobDetailContent({
   job,
   actionError,
   startingChat,
   canMessageClient,
-  onSubmitProposal,
+  onProposalAction,
   onMessageClient,
   compact = false,
 }) {
@@ -320,14 +371,14 @@ function JobDetailContent({
               <div className="flex shrink-0 flex-col gap-2 sm:flex-row lg:w-[260px] lg:flex-col">
                 <button
                   type="button"
-                  onClick={onSubmitProposal}
-                  disabled={!canApply}
+                  onClick={onProposalAction}
+                  disabled={!canApply && job.applicationStatus === "NONE"}
                   className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
                 >
                   <span className="material-symbols-outlined text-[18px]">
-                    send
+                    {getProposalActionIcon(job)}
                   </span>
-                  Submit Proposal
+                  {getProposalActionLabel(job, canApply)}
                 </button>
 
                 <button
@@ -339,7 +390,7 @@ function JobDetailContent({
                   <span className="material-symbols-outlined text-[18px]">
                     chat
                   </span>
-                  {startingChat ? "Opening..." : "Message Client"}
+                  {startingChat ? "Opening..." : "Message client"}
                 </button>
               </div>
             </div>
@@ -374,16 +425,16 @@ function JobDetailContent({
 
           <InfoSection
             icon="article"
-            title="Project Description"
-            description="Understand what the client needs before writing your proposal."
+            title="About the project"
+            description=""
           >
             <TextBlock value={job.description || "No project description provided."} />
           </InfoSection>
 
           <InfoSection
             icon="task_alt"
-            title="Expected Outcomes"
-            description="What the client expects to receive after the project."
+            title="Deliverables"
+            description=""
           >
             <TextBlock
               value={
@@ -395,8 +446,8 @@ function JobDetailContent({
 
           <InfoSection
             icon="psychology"
-            title="Skills Needed"
-            description="Skills that may help you complete this project."
+            title="Required skills"
+            description=""
           >
             {skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
@@ -423,7 +474,7 @@ function JobDetailContent({
             canApply={canApply}
             startingChat={startingChat}
             canMessageClient={canMessageClient}
-            onSubmitProposal={onSubmitProposal}
+            onProposalAction={onProposalAction}
             onMessageClient={onMessageClient}
           />
 
@@ -439,26 +490,25 @@ function ApplyCard({
   canApply,
   startingChat,
   canMessageClient,
-  onSubmitProposal,
+  onProposalAction,
   onMessageClient,
 }) {
   return (
     <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-      <p className="text-sm font-extrabold text-white">Ready to apply?</p>
+      <p className="text-sm font-extrabold text-white">Interested in this project?</p>
 
       <p className="mt-2 text-sm leading-6 text-cyan-100/80">
-        Send a proposal explaining your approach, timeline, and expected
-        deliverables.
+        Send a proposal with your approach, timeline, and price.
       </p>
 
       <div className="mt-4 space-y-2">
         <button
           type="button"
-          onClick={onSubmitProposal}
-          disabled={!canApply}
+          onClick={onProposalAction}
+          disabled={!canApply && job.applicationStatus === "NONE"}
           className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-white/[0.04] disabled:text-gray-500"
         >
-          {canApply ? "Submit Proposal" : "Not accepting proposals"}
+          {getProposalActionLabel(job, canApply)}
         </button>
 
         <button
@@ -467,7 +517,7 @@ function ApplyCard({
           disabled={startingChat || !canMessageClient}
           className="w-full rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {startingChat ? "Opening Chat..." : "Message Client"}
+          {startingChat ? "Opening Chat..." : "Message client"}
         </button>
       </div>
 
@@ -482,7 +532,7 @@ function SnapshotCard({ job }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
       <h2 className="mb-3 text-base font-extrabold text-white">
-        Job Snapshot
+        Project details
       </h2>
 
       <div className="space-y-2">
@@ -576,7 +626,7 @@ function BackButton({ onClick }) {
       className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
     >
       <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-      Back to jobs
+      Back 
     </button>
   );
 }
@@ -695,6 +745,132 @@ async function startConversationFromJob({
   } finally {
     setStartingChat(false);
   }
+}
+
+
+async function loadJobWithApplicationState(jobId) {
+  const [jobResult, proposalsResult, draftsResult] = await Promise.allSettled([
+    jobService.getJobById(jobId),
+    proposalService.getMyProposals(),
+    proposalService.getMyDraftProposals(),
+  ]);
+
+  if (jobResult.status !== "fulfilled") {
+    throw jobResult.reason;
+  }
+
+  const normalizedJob = normalizeLoadedJob(jobResult.value);
+  const proposals =
+    proposalsResult.status === "fulfilled" && Array.isArray(proposalsResult.value)
+      ? proposalsResult.value
+      : [];
+  const drafts =
+    draftsResult.status === "fulfilled" && Array.isArray(draftsResult.value)
+      ? draftsResult.value
+      : [];
+
+  const proposal = findProposalForJob(proposals, normalizedJob.id, false);
+  const draft = proposal
+    ? null
+    : findProposalForJob(drafts, normalizedJob.id, true);
+
+  if (proposal) {
+    return {
+      ...normalizedJob,
+      applicationStatus: "SUBMITTED",
+      proposal,
+      draft: null,
+    };
+  }
+
+  if (draft) {
+    return {
+      ...normalizedJob,
+      applicationStatus: "DRAFT",
+      proposal: null,
+      draft,
+    };
+  }
+
+  return {
+    ...normalizedJob,
+    applicationStatus: "NONE",
+    proposal: null,
+    draft: null,
+  };
+}
+
+function findProposalForJob(items, jobId, draftOnly) {
+  if (!Array.isArray(items) || !jobId) return null;
+
+  return (
+    items.find((item) => {
+      const status = String(item?.status || item?.Status || "").toUpperCase();
+      const sameJob = String(getProposalJobId(item)) === String(jobId);
+
+      if (!sameJob) return false;
+      if (draftOnly) return !status || status === "DRAFT";
+      return status !== "DRAFT";
+    }) || null
+  );
+}
+
+function getProposalJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobId ||
+    proposal?.JobPostingId ||
+    proposal?.raw?.jobId ||
+    proposal?.raw?.jobPostingId ||
+    proposal?.raw?.JobId ||
+    proposal?.raw?.JobPostingId ||
+    ""
+  );
+}
+
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.id ||
+    proposal?.ProposalId ||
+    proposal?.Id ||
+    proposal?.raw?.proposalId ||
+    proposal?.raw?.id ||
+    proposal?.raw?.ProposalId ||
+    proposal?.raw?.Id ||
+    ""
+  );
+}
+
+function getJobProposalTarget(job) {
+  if (job?.applicationStatus === "SUBMITTED") {
+    const proposalId = getProposalId(job.proposal);
+    return proposalId
+      ? `/expert/proposals/${proposalId}`
+      : "/expert/proposals";
+  }
+
+  if (job?.applicationStatus === "DRAFT") {
+    const draftId = getProposalId(job.draft);
+    return draftId
+      ? `/expert/jobs/${job.id}/proposal?draftId=${draftId}`
+      : `/expert/jobs/${job.id}/proposal`;
+  }
+
+  return `/expert/jobs/${job.id}/proposal`;
+}
+
+function getProposalActionLabel(job, canApply) {
+  if (job?.applicationStatus === "SUBMITTED") return "View Proposal";
+  if (job?.applicationStatus === "DRAFT") return "Continue Draft";
+  return canApply ? "Submit Proposal" : "Not accepting proposals";
+}
+
+function getProposalActionIcon(job) {
+  if (job?.applicationStatus === "SUBMITTED") return "visibility";
+  if (job?.applicationStatus === "DRAFT") return "edit_note";
+  return "send";
 }
 
 function normalizeLoadedJob(data) {
@@ -971,17 +1147,7 @@ function formatDuration(days) {
 }
 
 function formatDate(value) {
-  if (!value) return "Flexible";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Flexible";
-
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-  });
+  return formatDateTime(value, "Flexible");
 }
 
 function formatDisplayValue(value) {

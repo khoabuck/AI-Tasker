@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import GuestRoute from "./GuestRoute";
 import ProtectedRoute from "./ProtectedRoute";
-import authService from "../../services/auth.service";
 
 // Auth pages
 import LoginPage from "../../modules/auth/pages/LoginPage";
@@ -26,7 +25,7 @@ import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
-import ProjectsPage from "../../modules/client/pages/ProjectsPage";
+import ProjectsPage from "../../modules/client/pages/ProjectPage";
 import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
@@ -68,7 +67,6 @@ import ContractDetailPage from "../../modules/expert/pages/ContractDetailPage";
 import MyProjectsPage from "../../modules/expert/pages/MyProjectsPage";
 import ProjectDetailPage from "../../modules/expert/pages/ProjectDetailPage";
 import DeliverablesPage from "../../modules/expert/pages/DeliverablesPage";
-import DisputePage from "../../modules/expert/pages/DisputePage";
 import ExpertMessagesPage from "../../modules/expert/pages/MessagesPage";
 import RecommendedJobsPage from "../../modules/expert/pages/RecommendedJobsPage";
 import ExpertWalletPage from "../../modules/expert/pages/ExpertWalletPage";
@@ -101,6 +99,10 @@ import AdminJobCreditPackagesPage from "../../modules/admin/pages/AdminJobCredit
 import AdminProposalCreditPackagesPage from "../../modules/admin/pages/AdminProposalCreditPackagesPage";
 import AdminProposalCreditsPage from "../../modules/admin/pages/AdminProposalCreditsPage";
 import AdminAiManagementPage from "../../modules/admin/pages/AdminAiManagementPage";
+import AdminWorkflowPolicyPage from "../../modules/admin/pages/AdminWorkflowPolicyPage";
+import AdminReviewReportsPage from "../../modules/admin/pages/AdminReviewReportsPage";
+import AdminLoginSecurityPolicyPage from "../../modules/admin/pages/AdminLoginSecurityPolicyPage";
+
 
 
 // Error pages
@@ -117,7 +119,7 @@ const RequireAuth = ({ children }) => {
     );
   }
 
-  if (!user && !authService.isAuthenticated()) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 
@@ -218,7 +220,6 @@ export default function AppRouter() {
       <Route path="/expert/projects/:projectId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectDetailPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/milestones" element={<ProtectedRoute allowedRoles={["EXPERT"]}><ProjectMilestonesPage /></ProtectedRoute>} />
       <Route path="/expert/projects/:projectId/deliverables" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DeliverablesPage /></ProtectedRoute>} />
-      <Route path="/expert/projects/:projectId/dispute" element={<ProtectedRoute allowedRoles={["EXPERT"]}><DisputePage /></ProtectedRoute>} />
 
       {/* Expert milestones + deliverables */}
       <Route path="/expert/milestones/:milestoneId" element={<ProtectedRoute allowedRoles={["EXPERT"]}><MilestoneDetailPage /></ProtectedRoute>} />
@@ -240,7 +241,6 @@ export default function AppRouter() {
       <Route path="/admin/disputes" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageDisputesPage /></ProtectedRoute>} />
       <Route path="/admin/jobs" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageJobsPage /></ProtectedRoute>} />
       <Route path="/admin/users" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageUsersPage /></ProtectedRoute>} />
-      <Route path="/admin/transactions" element={<ProtectedRoute allowedRoles={["ADMIN"]}><Navigate to="/admin/withdrawals" replace /></ProtectedRoute>} />
       <Route path="/admin/withdrawals" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageWithdrawalsPage /></ProtectedRoute>} />
       <Route path="/admin/skills" element={<ProtectedRoute allowedRoles={["ADMIN"]}><ManageSkillsPage /></ProtectedRoute>} />
       <Route path="/admin/users/:userId" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminUserDetailPage /></ProtectedRoute>} />
@@ -253,7 +253,9 @@ export default function AppRouter() {
       <Route path="/admin/proposal-credit-packages" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditPackagesPage /></ProtectedRoute>} />
       <Route path="/admin/proposal-credits" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminProposalCreditsPage /></ProtectedRoute>} />
       <Route path="/admin/ai-management" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminAiManagementPage /></ProtectedRoute>}/>
-
+      <Route path="/admin/workflow-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminWorkflowPolicyPage /></ProtectedRoute>}/>
+      <Route path="/admin/review-reports" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminReviewReportsPage /></ProtectedRoute>}/>
+      <Route path="/admin/login-security-policy" element={<ProtectedRoute allowedRoles={["ADMIN"]}><AdminLoginSecurityPolicyPage /></ProtectedRoute>}/>  
 
       {/* 404 */}
       <Route path="*" element={<NotFoundPage />} />

@@ -36,6 +36,18 @@ export default function AdminJobCreditPackagesPage() {
   const [action, setAction] = useState(EMPTY_ACTION);
   const [form, setForm] = useState(EMPTY_FORM);
   const [reason, setReason] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [showStatusConfirm, setShowStatusConfirm] = useState(false);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadPackages();
@@ -52,8 +64,7 @@ export default function AdminJobCreditPackagesPage() {
       const matchSearch =
         !search ||
         String(item.packageName || "").toLowerCase().includes(search) ||
-        String(item.description || "").toLowerCase().includes(search) ||
-        String(item.packageId || "").toLowerCase().includes(search);
+        String(item.description || "").toLowerCase().includes(search);
 
       const matchActive =
         activeFilter === "ALL" ||
@@ -181,7 +192,7 @@ export default function AdminJobCreditPackagesPage() {
     }));
   };
 
-  const handleCreateOrUpdate = async () => {
+  const requestCreateOrUpdate = () => {
     const validation = validateForm(form);
 
     if (!validation.valid) {
@@ -190,22 +201,33 @@ export default function AdminJobCreditPackagesPage() {
       return;
     }
 
+    setModalError("");
+    setShowSaveConfirm(true);
+  };
+
+  const handleCreateOrUpdate = async () => {
     try {
       setSaving(true);
       setModalError("");
       setFieldErrors({});
       setError("");
       setSuccess("");
+      setShowSaveConfirm(false);
+
+      const payload = {
+        ...form,
+        currency: "VND",
+      };
 
       if (action.type === "CREATE") {
-        await adminJobCreditPackageService.createPackage(form);
+        await adminJobCreditPackageService.createPackage(payload);
         setSuccess("Job credit package has been created successfully.");
       }
 
       if (action.type === "EDIT") {
         await adminJobCreditPackageService.updatePackage(
           action.packageItem.packageId,
-          form
+          payload
         );
         setSuccess("Job credit package has been updated successfully.");
       }
@@ -220,7 +242,7 @@ export default function AdminJobCreditPackagesPage() {
     }
   };
 
-  const handleToggleActive = async () => {
+  const requestToggleActive = () => {
     if (!action.packageItem?.packageId) return;
 
     if (!reason.trim()) {
@@ -234,6 +256,14 @@ export default function AdminJobCreditPackagesPage() {
       setModalError("Please fix the highlighted fields.");
       return;
     }
+
+    setReasonError("");
+    setModalError("");
+    setShowStatusConfirm(true);
+  };
+
+  const executeToggleActive = async () => {
+    if (!action.packageItem?.packageId) return;
 
     try {
       setSaving(true);
@@ -273,17 +303,16 @@ export default function AdminJobCreditPackagesPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Package Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Packages
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Job credit packages
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Job credit plans
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Manage job posting credit packages and AI generation credit
-              packages available for clients.
+              Manage job-posting and AI-generation credit plans.
             </p>
           </div>
 
@@ -303,7 +332,7 @@ export default function AdminJobCreditPackagesPage() {
               disabled={loading || saving}
               className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Create Package
+              New package
             </button>
           </div>
         </div>
@@ -317,19 +346,12 @@ export default function AdminJobCreditPackagesPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon="inventory_2"
-            label="Total Packages"
+            label="Packages"
             value={stats.total}
             description="All credit packages"
             tone="cyan"
@@ -353,14 +375,14 @@ export default function AdminJobCreditPackagesPage() {
 
           <StatCard
             icon="payments"
-            label="Total Price"
+            label="Combined price"
             value={formatMoney(stats.totalPrice, "VND")}
             description="Sum of package prices"
             tone="purple"
           />
         </section>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
             <div>
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -375,7 +397,7 @@ export default function AdminJobCreditPackagesPage() {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by package name, description, or package id..."
+                  placeholder="Search by package name or description..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
@@ -390,7 +412,7 @@ export default function AdminJobCreditPackagesPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">Packages</h2>
@@ -401,12 +423,7 @@ export default function AdminJobCreditPackagesPage() {
           </div>
 
           {loading ? (
-            <div className="p-12 text-center text-gray-400">
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading job credit packages...
-            </div>
+            <ListSkeleton rows={6} />
           ) : filteredPackages.length === 0 ? (
             <EmptyState />
           ) : (
@@ -427,16 +444,27 @@ export default function AdminJobCreditPackagesPage() {
 
         {(action.type === "CREATE" || action.type === "EDIT") && (
           <PackageFormModal
-            title={action.type === "CREATE" ? "Create Package" : "Edit Package"}
+            title={action.type === "CREATE" ? "New package" : "Edit package"}
             form={form}
             loading={saving}
             errors={fieldErrors}
             modalError={modalError}
             onClose={closeModal}
-            onConfirm={handleCreateOrUpdate}
+            onConfirm={requestCreateOrUpdate}
             onChange={handleFormChange}
           />
         )}
+
+        {showSaveConfirm &&
+          (action.type === "CREATE" || action.type === "EDIT") && (
+            <SavePackageConfirmModal
+              packageName={form.packageName}
+              actionType={action.type}
+              loading={saving}
+              onCancel={() => !saving && setShowSaveConfirm(false)}
+              onConfirm={handleCreateOrUpdate}
+            />
+          )}
 
         {(action.type === "ACTIVATE" || action.type === "DEACTIVATE") && (
           <ReasonModal
@@ -460,14 +488,227 @@ export default function AdminJobCreditPackagesPage() {
               setModalError("");
             }}
             onClose={closeModal}
-            onConfirm={handleToggleActive}
+            onConfirm={requestToggleActive}
           />
         )}
+
+        {showStatusConfirm &&
+          (action.type === "ACTIVATE" || action.type === "DEACTIVATE") && (
+            <StatusChangeConfirmModal
+              packageName={action.packageItem?.packageName}
+              actionType={action.type}
+              reason={reason.trim()}
+              loading={saving}
+              onCancel={() => !saving && setShowStatusConfirm(false)}
+              onConfirm={async () => {
+                setShowStatusConfirm(false);
+                await executeToggleActive();
+              }}
+            />
+          )}
       </div>
     </AdminLayout>
   );
 }
 
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3 p-5">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-white/[0.025] p-5"
+        >
+          <div className="h-4 w-1/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+          <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function SavePackageConfirmModal({
+  packageName,
+  actionType,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const isCreate = actionType === "CREATE";
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-cyan-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+          <span className="material-symbols-outlined">
+            {isCreate ? "add_box" : "edit_note"}
+          </span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">
+          {isCreate ? "Create package?" : "Save package?"}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          {isCreate ? "Create" : "Update"}{" "}
+          <span className="font-bold text-white">
+            {packageName || "this package"}
+          </span>{" "}
+          with the values currently entered.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
+          >
+            {loading ? "Saving..." : isCreate ? "New package" : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusChangeConfirmModal({
+  packageName,
+  actionType,
+  reason,
+  loading,
+  onCancel,
+  onConfirm,
+}) {
+  const isActivate = actionType === "ACTIVATE";
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="status-change-confirm-title"
+        className={`w-full max-w-md rounded-2xl border bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.72)] ${
+          isActivate ? "border-green-400/25" : "border-red-400/25"
+        }`}
+      >
+        <div
+          className={`mb-4 flex h-12 w-12 items-center justify-center rounded-xl border ${
+            isActivate
+              ? "border-green-400/30 bg-green-400/10 text-green-300"
+              : "border-red-400/30 bg-red-400/10 text-red-300"
+          }`}
+        >
+          <span className="material-symbols-outlined">
+            {isActivate ? "published_with_changes" : "block"}
+          </span>
+        </div>
+
+        <h2
+          id="status-change-confirm-title"
+          className="text-xl font-black text-white"
+        >
+          {isActivate ? "Activate this package?" : "Deactivate this package?"}
+        </h2>
+
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          {isActivate
+            ? "The package will become available for purchase."
+            : "The package will be hidden from new purchases. Existing purchase records are not removed."}
+        </p>
+
+        <div className="mt-5 space-y-3 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+          <ReviewItem label="Package" value={packageName || "Unnamed package"} />
+          <ReviewItem
+            label="New Status"
+            value={isActivate ? "Active" : "Inactive"}
+          />
+          <ReviewItem label="Admin Reason" value={reason || "N/A"} />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              isActivate
+                ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+                : "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+            }`}
+          >
+            {loading
+              ? "Processing..."
+              : isActivate
+                ? "Confirm Activate"
+                : "Confirm Deactivate"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewItem({ label, value }) {
+  return (
+    <div className="grid grid-cols-[110px_1fr] gap-3 text-sm">
+      <span className="font-bold text-gray-500">{label}</span>
+      <span className="break-words text-right font-semibold text-white">
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function ensureHiddenScrollbarStyle() {
   if (typeof document === "undefined") return;
@@ -505,7 +746,6 @@ function PackageRow({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge active={packageItem.isActive} />
-            <Badge label={`Package #${packageItem.packageId || "N/A"}`} />
             <Badge label={`Order ${packageItem.displayOrder || 0}`} />
           </div>
 
@@ -526,7 +766,7 @@ function PackageRow({
             Job: {formatNumber(packageItem.jobPostCredits)}
           </p>
           <p className="mt-1 text-sm font-bold text-white">
-            AI: {formatNumber(packageItem.aiGenerationCredits)}
+            AI Assistant: {formatNumber(packageItem.aiGenerationCredits)}
           </p>
         </div>
 
@@ -586,11 +826,11 @@ function PackageFormModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-6">
-      <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-5 py-4">
           <h2 className="text-lg font-bold text-white">{title}</h2>
           <p className="mt-1 text-xs text-gray-400">
-            Fill package information and provide an admin reason.
+            Enter the package details and explain why this change is needed.
           </p>
         </div>
 
@@ -630,7 +870,7 @@ function PackageFormModal({
             />
 
             <NumberInput
-              label="AI Generation Credits"
+              label="AI Assistant Credits"
               required
               error={errors.aiGenerationCredits}
               value={form.aiGenerationCredits}
@@ -644,15 +884,6 @@ function PackageFormModal({
               value={form.price}
               onChange={(value) => onChange("price", value)}
               step="0.01"
-            />
-
-            <TextInput
-              label="Currency"
-              required
-              error={errors.currency}
-              value={form.currency}
-              onChange={(value) => onChange("currency", value)}
-              placeholder="VND"
             />
 
             <NumberInput
@@ -793,7 +1024,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1080,11 +1311,11 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to manage job credit packages.";
   }
 
   if (status === 404) {
-    return "Job credit packages API was not found. Please check backend route.";
+    return "Job credit plans are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

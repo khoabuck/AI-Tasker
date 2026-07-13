@@ -43,7 +43,7 @@ const TYPE_CONFIG = {
   DEPOSIT:        { label: "Deposit to wallet", icon: "account_balance_wallet", color: "#34d399", isExpense: false },
   WITHDRAWAL:     { label: "Withdraw",         icon: "outbox",                 color: "#f87171", isExpense: true },
   ESCROW_LOCK:    { label: "Lock fund in Escrow", icon: "lock_clock",          color: "#f87171", isExpense: true },
-  ESCROW_RELEASE: { label: "Release Escrow fund", icon: "lock_open",              color: "#34d399", isExpense: false },
+  ESCROW_RELEASE: { label: "Release Escrow fund", icon: "lock_open",              color: "#34d399", isExpense: true },
   PLATFORM_FEE:   { label: "Platform fee",     icon: "percent",                color: "#f87171", isExpense: true },
 };
 
@@ -52,6 +52,7 @@ export default function TransactionDetailPage() {
   const navigate = useNavigate();
 
   const [transaction, setTransaction] = useState(null);
+  const [projectMilestones, setProjectMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -65,6 +66,15 @@ export default function TransactionDetailPage() {
         return;
       }
       setTransaction(match);
+
+      if (match.projectId) {
+        try {
+          const msRes = await transactionService.getProjectMilestones(match.projectId, signal);
+          setProjectMilestones(msRes);
+        } catch {
+          setProjectMilestones([]);
+        }
+      }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
       setError(err?.response?.data?.message || "Could not load transaction information.");
@@ -155,8 +165,8 @@ export default function TransactionDetailPage() {
 
           <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
-              <span style={sectionLabel}>Transaction ID</span>
-              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#e1e2eb", textAlign: "right" }}>#{transaction.transactionId}</span>
+              <span style={sectionLabel}>Project Name</span>
+              <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#e1e2eb", textAlign: "right" }}>{transaction.projectTitle || "—"}</span>
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
@@ -183,8 +193,8 @@ export default function TransactionDetailPage() {
           </div>
         </div>
 
-        {/* Related links — chỉ hiện khi có liên kết tới Project/Milestone */}
-        {(transaction.projectId || transaction.milestoneId || transaction.escrowId) && (
+        {/* Related links — chỉ hiện Project và Milestone, không hiện Escrow */}
+        {(transaction.projectId || projectMilestones.length > 0) && (
           <div style={cardStyle}>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 14, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               Related Records
@@ -202,23 +212,86 @@ export default function TransactionDetailPage() {
                 </button>
               )}
 
-              {transaction.milestoneId && (
-                <button onClick={() => navigate(`/client/milestones/${transaction.milestoneId}/deliverables`)}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", background: "rgba(192,193,255,0.04)", border: "1px solid rgba(192,193,255,0.18)", borderRadius: 10, cursor: "pointer", textAlign: "left" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#c0c1ff" }}>flag</span>
-                    <span style={{ fontSize: 14, color: "#e1e2eb" }}>Milestone #{transaction.milestoneId}</span>
-                  </div>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#c0c1ff" }}>chevron_right</span>
-                </button>
-              )}
+              {projectMilestones.map((m) => {
+                const mid = m.milestoneId ?? m.id;
+                const isCurrentTransactionMilestone =
+                  String(mid) === String(transaction.milestoneId);
 
-              {transaction.escrowId && (
-                <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10 }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 18, color: "#8c90a0" }}>lock</span>
-                  <span style={{ fontSize: 14, color: "#c2c6d6" }}>Escrow #{transaction.escrowId}</span>
-                </div>
-              )}
+                const content = (
+                  <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span
+                        className="material-symbols-outlined"
+                        style={{
+                          fontSize: 18,
+                          color: isCurrentTransactionMilestone ? "#c0c1ff" : "#8c90a0",
+                        }}
+                      >
+                        {isCurrentTransactionMilestone ? "flag" : "lock"}
+                      </span>
+
+                      <span
+                        style={{
+                          fontSize: 14,
+                          color: isCurrentTransactionMilestone ? "#e1e2eb" : "#8c90a0",
+                        }}
+                      >
+                        {m.title || m.milestoneTitle || `Milestone #${mid}`}
+                      </span>
+                    </div>
+
+                    {isCurrentTransactionMilestone && (
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: 18, color: "#c0c1ff" }}
+                      >
+                        chevron_right
+                      </span>
+                    )}
+                  </>
+                );
+
+                if (!isCurrentTransactionMilestone) {
+                  return (
+                    <div
+                      key={mid}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        padding: "14px 16px",
+                        background: "rgba(255,255,255,0.02)",
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        borderRadius: 10,
+                        cursor: "not-allowed",
+                        opacity: 0.65,
+                      }}
+                    >
+                      {content}
+                    </div>
+                  );
+                }
+
+                return (
+                  <button
+                    key={mid}
+                    onClick={() => navigate(`/client/milestones/${mid}/deliverables`)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      padding: "14px 16px",
+                      background: "rgba(192,193,255,0.04)",
+                      border: "1px solid rgba(192,193,255,0.18)",
+                      borderRadius: 10,
+                      cursor: "pointer",
+                      textAlign: "left",
+                    }}
+                  >
+                    {content}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}

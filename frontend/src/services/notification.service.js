@@ -1,4 +1,5 @@
 import notificationApi from "../api/notification.api";
+import { compareDateDesc, formatRelativeTime } from "../utils/dateTime.utils";
 
 const getValue = (...values) => {
   return values.find(
@@ -310,24 +311,19 @@ export const normalizeNotification = (notification) => {
     createdAt: getValue(
       notification.createdAt,
       notification.CreatedAt,
-      notification.createdAtUtc,
-      notification.CreatedAtUtc,
       raw.createdAt,
       raw.CreatedAt,
-      raw.createdAtUtc,
-      raw.CreatedAtUtc,
       ""
     ),
 
-    createdAtUtc: getValue(
-      notification.createdAtUtc,
-      notification.CreatedAtUtc,
-      raw.createdAtUtc,
-      raw.CreatedAtUtc,
+
+    readAt: getValue(
+      notification.readAt,
+      notification.ReadAt,
+      raw.readAt,
+      raw.ReadAt,
       ""
     ),
-
-    readAt: getValue(notification.readAt, notification.ReadAt, raw.readAt, raw.ReadAt, ""),
 
     raw: notification,
   };
@@ -353,17 +349,10 @@ export function getNotificationTarget(notification) {
   const jobId = getValue(notification.relatedJobId, "");
   const entityId = getValue(notification.relatedEntityId, "");
 
-  const isProposal =
-    type.includes("PROPOSAL") || entityType === "PROPOSAL";
-
-  const isContract =
-    type.includes("CONTRACT") || entityType === "CONTRACT";
-
-  const isProject =
-    type.includes("PROJECT") || entityType === "PROJECT";
-
-  const isMilestone =
-    type.includes("MILESTONE") || entityType === "MILESTONE";
+  const isProposal = type.includes("PROPOSAL") || entityType === "PROPOSAL";
+  const isContract = type.includes("CONTRACT") || entityType === "CONTRACT";
+  const isProject = type.includes("PROJECT") || entityType === "PROJECT";
+  const isMilestone = type.includes("MILESTONE") || entityType === "MILESTONE";
 
   const isDeliverable =
     type.includes("DELIVERABLE") ||
@@ -377,41 +366,60 @@ export function getNotificationTarget(notification) {
     type.includes("MESSAGE") ||
     entityType === "CONVERSATION";
 
-  const isDispute =
-    type.includes("DISPUTE") || entityType === "DISPUTE";
+  const isDispute = type.includes("DISPUTE") || entityType === "DISPUTE";
+
+  const walletKeywords = [
+    "WALLET",
+    "PAYMENT",
+    "ESCROW",
+    "WITHDRAW",
+    "WITHDRAWAL",
+    "DEPOSIT",
+    "TOP_UP",
+    "TOPUP",
+    "PAYOUT",
+    "BALANCE",
+    "EARNING",
+  ];
 
   const isWallet =
-    type.includes("WALLET") ||
-    type.includes("PAYMENT") ||
-    type.includes("ESCROW");
+    walletKeywords.some((keyword) => type.includes(keyword)) ||
+    walletKeywords.includes(entityType);
 
-  const isReview =
-    type.includes("REVIEW") || entityType === "REVIEW";
+  const isReview = type.includes("REVIEW") || entityType === "REVIEW";
 
   const isJob =
-    type.includes("JOB") || entityType === "JOB" || entityType === "JOBPOSTING";
+    type.includes("JOB") ||
+    entityType === "JOB" ||
+    entityType === "JOBPOSTING";
 
-  // Proposal
   if (isProposal) {
-    const id = !isInvalidId(proposalId) ? proposalId : entityType === "PROPOSAL" ? entityId : "";
+    const id = !isInvalidId(proposalId)
+      ? proposalId
+      : entityType === "PROPOSAL"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/proposals/${id}`,
-        label: "View Proposal",
+        label: "View proposal",
         kind: "PROPOSAL",
       };
     }
   }
 
-  // Contract
   if (isContract) {
-    const id = !isInvalidId(contractId) ? contractId : entityType === "CONTRACT" ? entityId : "";
+    const id = !isInvalidId(contractId)
+      ? contractId
+      : entityType === "CONTRACT"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/contracts/${id}`,
-        label: "View Agreement",
+        label: "View agreement",
         kind: "CONTRACT",
       };
     }
@@ -419,14 +427,17 @@ export function getNotificationTarget(notification) {
     if (!isInvalidId(proposalId)) {
       return {
         path: `/expert/proposals/${proposalId}/contract`,
-        label: "View Agreement",
+        label: "View agreement",
         kind: "CONTRACT",
       };
     }
   }
 
-  // Revision requested: theo flow hiện tại nộp lại ngay ở MilestoneDetailPage
-  if (type.includes("REVISION") || type.includes("RESUBMIT") || type.includes("REWORK")) {
+  if (
+    type.includes("REVISION") ||
+    type.includes("RESUBMIT") ||
+    type.includes("REWORK")
+  ) {
     const id = !isInvalidId(milestoneId)
       ? milestoneId
       : entityType === "MILESTONE"
@@ -436,33 +447,47 @@ export function getNotificationTarget(notification) {
     if (!isInvalidId(id)) {
       return {
         path: `/expert/milestones/${id}`,
-        label: "Resubmit Work",
+        label: "Resubmit work",
         kind: "MILESTONE",
       };
     }
   }
 
-  // Project
+  if (isWallet) {
+    return {
+      path: "/expert/wallet",
+      label: "View wallet",
+      kind: "WALLET",
+    };
+  }
+
   if (isProject) {
-    const id = !isInvalidId(projectId) ? projectId : entityType === "PROJECT" ? entityId : "";
+    const id = !isInvalidId(projectId)
+      ? projectId
+      : entityType === "PROJECT"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/projects/${id}`,
-        label: "View Project",
+        label: "View project",
         kind: "PROJECT",
       };
     }
   }
 
-  // Milestone
   if (isMilestone) {
-    const id = !isInvalidId(milestoneId) ? milestoneId : entityType === "MILESTONE" ? entityId : "";
+    const id = !isInvalidId(milestoneId)
+      ? milestoneId
+      : entityType === "MILESTONE"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/milestones/${id}`,
-        label: "View Milestone",
+        label: "View milestone",
         kind: "MILESTONE",
       };
     }
@@ -470,13 +495,12 @@ export function getNotificationTarget(notification) {
     if (!isInvalidId(projectId)) {
       return {
         path: `/expert/projects/${projectId}`,
-        label: "View Project",
+        label: "View project",
         kind: "PROJECT",
       };
     }
   }
 
-  // Deliverable / Submission
   if (isDeliverable) {
     const id = !isInvalidId(deliverableId)
       ? deliverableId
@@ -487,7 +511,7 @@ export function getNotificationTarget(notification) {
     if (!isInvalidId(id)) {
       return {
         path: `/expert/deliverables/${id}`,
-        label: "View Submission",
+        label: "View submission",
         kind: "SUBMISSION",
       };
     }
@@ -495,121 +519,86 @@ export function getNotificationTarget(notification) {
     if (!isInvalidId(milestoneId)) {
       return {
         path: `/expert/milestones/${milestoneId}`,
-        label: "View Milestone",
+        label: "View milestone",
         kind: "MILESTONE",
       };
     }
   }
 
-  // Message
   if (isConversation) {
     if (!isInvalidId(conversationId)) {
       return {
         path: `/expert/messages?conversationId=${conversationId}`,
-        label: "Open Message",
+        label: "Open message",
         kind: "MESSAGE",
       };
     }
 
     return {
       path: "/expert/messages",
-      label: "Open Messages",
+      label: "Open messages",
       kind: "MESSAGE",
     };
   }
 
-  // Dispute
   if (isDispute) {
-    const id = !isInvalidId(disputeId) ? disputeId : entityType === "DISPUTE" ? entityId : "";
+    const id = !isInvalidId(disputeId)
+      ? disputeId
+      : entityType === "DISPUTE"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/disputes/${id}`,
-        label: "View Dispute",
+        label: "View dispute",
         kind: "DISPUTE",
       };
     }
 
     return {
       path: "/expert/disputes",
-      label: "View Disputes",
+      label: "View disputes",
       kind: "DISPUTE",
     };
   }
 
-  // Wallet / Escrow
-  if (isWallet) {
-    return {
-      path: "/expert/wallet",
-      label: "View Wallet",
-      kind: "WALLET",
-    };
-  }
-
-  // Review
   if (isReview) {
     return {
       path: "/expert/reviews",
-      label: "View Reviews",
+      label: "View reviews",
       kind: "REVIEW",
     };
   }
 
-  // Job
   if (isJob) {
-    const id = !isInvalidId(jobId) ? jobId : entityType === "JOB" || entityType === "JOBPOSTING" ? entityId : "";
+    const id = !isInvalidId(jobId)
+      ? jobId
+      : entityType === "JOB" || entityType === "JOBPOSTING"
+      ? entityId
+      : "";
 
     if (!isInvalidId(id)) {
       return {
         path: `/expert/jobs/${id}`,
-        label: "View Job",
+        label: "View job",
         kind: "JOB",
       };
     }
   }
 
-  // Fallback theo entity type
-  if (entityType === "PROPOSAL" && !isInvalidId(entityId)) {
-    return {
-      path: `/expert/proposals/${entityId}`,
-      label: "View Proposal",
-      kind: "PROPOSAL",
-    };
-  }
+  return {
+    path: "/expert/notifications",
+    label: "View notification",
+    kind: "GENERAL",
+  };
+}
 
-  if (entityType === "CONTRACT" && !isInvalidId(entityId)) {
-    return {
-      path: `/expert/contracts/${entityId}`,
-      label: "View Agreement",
-      kind: "CONTRACT",
-    };
-  }
-
-  if (entityType === "PROJECT" && !isInvalidId(entityId)) {
-    return {
-      path: `/expert/projects/${entityId}`,
-      label: "View Project",
-      kind: "PROJECT",
-    };
-  }
-
-  if (entityType === "MILESTONE" && !isInvalidId(entityId)) {
-    return {
-      path: `/expert/milestones/${entityId}`,
-      label: "View Milestone",
-      kind: "MILESTONE",
-    };
-  }
-
-  if (entityType === "DELIVERABLE" && !isInvalidId(entityId)) {
-    return {
-      path: `/expert/deliverables/${entityId}`,
-      label: "View Submission",
-      kind: "SUBMISSION",
-    };
-  }
-
-  return null;
+export function formatNotificationTime(value, options = {}) {
+  return formatRelativeTime(value, {
+    full: Boolean(options.full),
+    fallback: "No date",
+  });
 }
 
 const notificationService = {
@@ -620,10 +609,7 @@ const notificationService = {
       .map(normalizeNotification)
       .filter(Boolean)
       .sort((a, b) => {
-        const dateA = new Date(a.createdAt || a.createdAtUtc || 0).getTime();
-        const dateB = new Date(b.createdAt || b.createdAtUtc || 0).getTime();
-
-        return dateB - dateA;
+        return compareDateDesc(a.createdAt, b.createdAt);
       });
   },
 
@@ -661,6 +647,7 @@ const notificationService = {
 
     if (typeof data === "number") return data;
     if (typeof data?.unreadCount === "number") return data.unreadCount;
+
     if (typeof response?.data?.unreadCount === "number") {
       return response.data.unreadCount;
     }
@@ -670,6 +657,7 @@ const notificationService = {
 
   getNotificationTarget,
   normalizeNotification,
+  formatNotificationTime,
 };
 
 export default notificationService;

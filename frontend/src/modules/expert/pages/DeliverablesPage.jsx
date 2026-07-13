@@ -5,6 +5,7 @@ import deliverableService from "../../../services/deliverable.service";
 import projectService from "../../../services/project.service";
 import { DELIVERABLE_STATUS_LABEL } from "../../../constants/deliverableStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const emptySubmissionForm = {
   milestoneId: "",
   fileUrl: "",
@@ -29,6 +30,7 @@ export default function DeliverablesPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -36,6 +38,16 @@ export default function DeliverablesPage() {
   const selectedMilestoneId = useMemo(() => {
     return milestoneId || submissionForm.milestoneId;
   }, [milestoneId, submissionForm.milestoneId]);
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     loadData();
@@ -143,7 +155,7 @@ export default function DeliverablesPage() {
     return "";
   };
 
-  const handleSubmitWork = async (event) => {
+  const handleSubmitWork = (event) => {
     event.preventDefault();
 
     const validationError = validateSubmission();
@@ -153,6 +165,11 @@ export default function DeliverablesPage() {
       return;
     }
 
+    setError("");
+    setShowSubmitConfirm(true);
+  };
+
+  const confirmSubmitWork = async () => {
     try {
       setSubmitting(true);
       setError("");
@@ -163,6 +180,7 @@ export default function DeliverablesPage() {
         submissionForm
       );
 
+      setShowSubmitConfirm(false);
       setMessage("Your work has been submitted successfully.");
 
       setSubmissionForm({
@@ -178,6 +196,7 @@ export default function DeliverablesPage() {
       await loadData();
     } catch (err) {
       console.error("SUBMIT WORK ERROR:", err?.response?.data || err);
+      setShowSubmitConfirm(false);
       setError(getFriendlyError(err, "Cannot submit your work."));
     } finally {
       setSubmitting(false);
@@ -207,9 +226,7 @@ export default function DeliverablesPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading submissions...
-        </div>
+        <PageSkeleton cards={4} />
       </ExpertLayout>
     );
   }
@@ -275,9 +292,7 @@ export default function DeliverablesPage() {
             </div>
           </section>
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {error && (
             <Alert type="danger" title="Submission error" message={error} />
@@ -437,9 +452,132 @@ export default function DeliverablesPage() {
           </div>
         </div>
       </div>
+      {showSubmitConfirm && (
+        <ConfirmActionModal
+          title="Submit this work?"
+          message="The client will receive this submission for review. Check that your links, delivery description, and handover notes are correct."
+          confirmLabel="Submit Work"
+          loading={submitting}
+          onCancel={() => !submitting && setShowSubmitConfirm(false)}
+          onConfirm={confirmSubmitWork}
+        />
+      )}
     </ExpertLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1300] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "verified"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SubmissionCard({ submission, onDetail }) {
   const status = String(submission.status || "SUBMITTED").toUpperCase();
@@ -578,13 +716,7 @@ function Alert({ type, title, message }) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString();
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

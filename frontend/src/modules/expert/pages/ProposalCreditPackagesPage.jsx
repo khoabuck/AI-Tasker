@@ -100,6 +100,10 @@ export default function ProposalCreditPackagesPage() {
 
     const packagePrice = Number(pkg.price || 0);
 
+    if (packagePrice <= 0) {
+      return;
+    }
+
     if (packagePrice > walletBalance) {
       navigate("/expert/wallet", {
         state: {
@@ -261,7 +265,7 @@ export default function ProposalCreditPackagesPage() {
         </div>
       </div>
 
-      {confirmPackage && (
+      {confirmPackage && Number(confirmPackage.price || 0) > 0 && (
         <PurchaseConfirmModal
           pkg={confirmPackage}
           purchasing={String(purchasingId) === String(confirmPackage.packageId)}
@@ -274,22 +278,36 @@ export default function ProposalCreditPackagesPage() {
 }
 
 function PackageCard({ pkg, index, walletBalance, purchasing, onPurchase }) {
-  const notEnoughBalance = Number(pkg.price || 0) > Number(walletBalance || 0);
-  const isPopular = index === 1 || pkg.isPopular || pkg.popular;
+  const packagePrice = Number(pkg.price || 0);
+  const isFree = packagePrice <= 0;
+  const notEnoughBalance = packagePrice > Number(walletBalance || 0);
+  const isPopular =
+    !isFree && (index === 1 || pkg.isPopular || pkg.popular);
+
   const pricePerCredit =
-    Number(pkg.proposalCredits || 0) > 0
-      ? Number(pkg.price || 0) / Number(pkg.proposalCredits || 1)
+    Number(pkg.proposalCredits || 0) > 0 && !isFree
+      ? packagePrice / Number(pkg.proposalCredits || 1)
       : 0;
 
   return (
     <article
-      className={`relative flex min-h-[430px] flex-col overflow-hidden rounded-[1.8rem] border p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition hover:-translate-y-1 ${
-        isPopular
-          ? "border-cyan-400/50 bg-[#14202b]"
-          : "border-white/10 bg-[#151a22]"
-      }`}
+      className={`relative flex min-h-[430px] flex-col overflow-hidden rounded-[1.8rem] border p-6 shadow-[0_20px_60px_rgba(0,0,0,0.25)] transition hover:-translate-y-1 ${isFree
+          ? "border-green-400/35 bg-[#132019]"
+          : isPopular
+            ? "border-cyan-400/50 bg-[#14202b]"
+            : "border-white/10 bg-[#151a22]"
+        }`}
     >
-      <div className="absolute -right-20 -top-20 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
+      <div
+        className={`absolute -right-20 -top-20 h-44 w-44 rounded-full blur-3xl ${isFree ? "bg-green-400/10" : "bg-cyan-400/10"
+          }`}
+      />
+
+      {isFree && (
+        <div className="absolute right-5 top-5 rounded-full border border-green-400/30 bg-green-400/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-green-300">
+          Included
+        </div>
+      )}
 
       {isPopular && (
         <div className="absolute right-5 top-5 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-300">
@@ -303,31 +321,50 @@ function PackageCard({ pkg, index, walletBalance, purchasing, onPurchase }) {
 
           <p className="mt-2 min-h-[44px] text-sm leading-6 text-gray-400">
             {pkg.description ||
-              "Get more proposal submissions for your next opportunities."}
+              (isFree
+                ? "Free proposal submissions included with your account."
+                : "Get more proposal submissions for your next opportunities.")}
           </p>
         </div>
 
         <div className="mb-6">
           <p className="text-sm font-bold text-gray-500">Price</p>
 
-          <p className="mt-2 text-3xl font-black text-white">
-            {formatMoney(pkg.price)}
+          <p
+            className={`mt-2 text-3xl font-black ${isFree ? "text-green-300" : "text-white"
+              }`}
+          >
+            {isFree ? "Free" : formatMoney(pkg.price)}
           </p>
 
-          {pricePerCredit > 0 && (
-            <p className="mt-2 text-xs font-bold text-gray-500">
-              About {formatMoney(pricePerCredit)} / submission
+          {isFree ? (
+            <p className="mt-2 text-xs font-bold text-green-200/70">
+              No wallet payment is required
             </p>
+          ) : (
+            pricePerCredit > 0 && (
+              <p className="mt-2 text-xs font-bold text-gray-500">
+                About {formatMoney(pricePerCredit)} / submission
+              </p>
+            )
           )}
         </div>
 
-        <div className="mb-6 rounded-2xl border border-white/10 bg-[#0f141d] p-5">
+        <div
+          className={`mb-6 rounded-2xl border p-5 ${isFree
+              ? "border-green-400/20 bg-green-400/[0.06]"
+              : "border-white/10 bg-[#0f141d]"
+            }`}
+        >
           <p className="text-xs font-black uppercase tracking-[0.22em] text-gray-500">
             Includes
           </p>
 
           <div className="mt-3 flex items-end gap-2">
-            <p className="text-5xl font-black text-cyan-300">
+            <p
+              className={`text-5xl font-black ${isFree ? "text-green-300" : "text-cyan-300"
+                }`}
+            >
               {formatNumber(pkg.proposalCredits)}
             </p>
 
@@ -338,18 +375,23 @@ function PackageCard({ pkg, index, walletBalance, purchasing, onPurchase }) {
         </div>
 
         <div className="mt-auto">
-          <button
-            type="button"
-            onClick={onPurchase}
-            disabled={purchasing}
-            className={`w-full rounded-2xl px-5 py-3.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${
-              isPopular
-                ? "bg-cyan-400 text-black hover:bg-cyan-300"
-                : "border border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
-            }`}
-          >
-            {purchasing ? "Purchasing..." : "Buy"}
-          </button>
+          {!isFree && (
+            <button
+              type="button"
+              onClick={onPurchase}
+              disabled={purchasing}
+              className={`w-full rounded-2xl px-5 py-3.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${isPopular
+                  ? "bg-cyan-400 text-black hover:bg-cyan-300"
+                  : "border border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
+                }`}
+            >
+              {purchasing
+                ? "Purchasing..."
+                : notEnoughBalance
+                  ? "Buy"
+                  : "Buy"}
+            </button>
+          )}
         </div>
       </div>
     </article>

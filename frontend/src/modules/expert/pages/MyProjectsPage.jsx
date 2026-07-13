@@ -4,6 +4,7 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import projectService from "../../../services/project.service";
 import { PROJECT_STATUS_LABEL } from "../../../constants/projectStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const STATUS_TABS = [
   { key: "ALL", label: "All Projects" },
   { key: "ACTIVE", label: "Active" },
@@ -91,9 +92,7 @@ export default function MyProjectsPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading your projects...
-        </div>
+        <PageSkeleton cards={5} />
       </ExpertLayout>
     );
   }
@@ -219,6 +218,37 @@ export default function MyProjectsPage() {
     </ExpertLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function ProjectCard({ project, onOpen }) {
   const status = String(project.status || "ACTIVE").toUpperCase();
@@ -416,13 +446,7 @@ function formatMoney(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString();
+  return formatDateTime(value, "N/A");
 }
 
 function formatStatusLabel(status) {

@@ -1,5 +1,6 @@
 import adminAuditLogApi from "../api/adminAuditLog.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -195,7 +196,10 @@ export const normalizeAuditLog = (item) => {
 
 const normalizeAuditLogListResponse = (response, fallbackParams = {}) => {
   const data = response?.data;
-  const items = getListSource(data).map(normalizeAuditLog).filter(Boolean);
+  const items = getListSource(data)
+    .map(normalizeAuditLog)
+    .filter(Boolean)
+    .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
 
   const metaSource = data?.data && !Array.isArray(data.data) ? data.data : data;
 

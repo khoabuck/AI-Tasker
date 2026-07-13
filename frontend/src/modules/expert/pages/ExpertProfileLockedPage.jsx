@@ -4,6 +4,7 @@ import authService from "../../../services/auth.service";
 import expertProfileService from "../../../services/expertProfile.service";
 import { useAuth } from "../../../context/AuthContext";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 export default function ExpertProfileLockedPage() {
@@ -109,8 +110,8 @@ export default function ExpertProfileLockedPage() {
   return (
     <LockedShell onLogout={handleLogout}>
       <div className="flex min-h-[calc(100vh-64px)] items-center justify-center px-5 py-10 md:px-8">
-        <div className="w-full max-w-5xl">
-          <section className="rounded-3xl border border-red-400/25 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.45)] md:p-8">
+        <div className="w-full max-w-4xl">
+          <section className="rounded-2xl border border-red-400/25 bg-[#151a22] p-6 shadow-[0_18px_55px_rgba(0,0,0,0.32)] md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
               <div>
                 <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10 text-red-300">
@@ -119,18 +120,16 @@ export default function ExpertProfileLockedPage() {
                   </span>
                 </div>
 
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-red-300">
-                  Profile Review Paused
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-red-300">
+                  Profile submissions paused
                 </p>
 
                 <h1 className="text-3xl font-extrabold text-white md:text-4xl">
-                  You have no profile submission attempts left
+                  Profile submissions are temporarily unavailable
                 </h1>
 
                 <p className="mt-4 max-w-2xl text-sm leading-7 text-gray-400">
-                  Your profile cannot be submitted again right now. You can
-                  prepare stronger evidence and update your information when
-                  submissions become available again.
+                  Review the feedback below and prepare stronger proof for your next submission.
                 </p>
 
                 {reviewLimit.lockedUntil ? (
@@ -145,17 +144,17 @@ export default function ExpertProfileLockedPage() {
 
               <div className="grid w-full gap-3 sm:grid-cols-3 md:w-[430px] md:grid-cols-1">
                 <SummaryCard
-                  label="Attempts Used"
+                  label="Used"
                   value={`${reviewLimit.submissionCount}/${reviewLimit.maxAttempts}`}
                 />
 
                 <SummaryCard
-                  label="Attempts Remaining"
+                  label="Remaining"
                   value={`${reviewLimit.remainingAttempts}/${reviewLimit.maxAttempts}`}
                 />
 
                 <SummaryCard
-                  label="Profile Score"
+                  label="Review score"
                   value={scoreInfo.scoreText || "N/A"}
                   subText={
                     scoreInfo.passScoreText
@@ -170,28 +169,28 @@ export default function ExpertProfileLockedPage() {
               <FriendlyCard
                 icon="priority_high"
                 tone="warning"
-                title="Main issue"
+                title="Why it was paused"
                 message={feedback.mainIssue}
               />
 
               <FriendlyCard
                 icon="tips_and_updates"
                 tone="danger"
-                title="What to improve"
+                title="Next improvement"
                 message={feedback.fixAction}
               />
             </div>
 
             <div className="mt-8 rounded-2xl border border-white/10 bg-black/20 p-5">
               <h2 className="text-lg font-black text-white">
-                What you can prepare next
+                Prepare for your next review
               </h2>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <TipItem text="Use a realistic years-of-experience value that matches your public evidence." />
-                <TipItem text="Add detailed project descriptions to your portfolio and GitHub repositories." />
-                <TipItem text="Add public certificate links if you have them." />
-                <TipItem text="Add a LinkedIn profile or other public proof of experience." />
+                <TipItem text="Keep experience claims consistent with your public work." />
+                <TipItem text="Add clear project details to your portfolio and GitHub." />
+                <TipItem text="Use public certificate links." />
+                <TipItem text="Add public professional proof." />
               </div>
             </div>
           </section>
@@ -490,9 +489,7 @@ function isProfileLocked(limit) {
 
   if (!limit.lockedUntil) return false;
 
-  const time = new Date(limit.lockedUntil).getTime();
-
-  return Number.isFinite(time) && time > Date.now();
+  return !isExpired(limit.lockedUntil);
 }
 
 function getReviewStatus(data) {
@@ -670,17 +667,4 @@ function firstSentence(text) {
       .map((sentence) => sentence.trim())
       .filter(Boolean)[0] || ""
   );
-}
-
-function formatDateTime(value) {
-  if (!value) return "";
-
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
 }

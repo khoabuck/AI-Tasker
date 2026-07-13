@@ -1,5 +1,6 @@
 import adminSkillApi from "../api/adminSkill.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -130,9 +131,18 @@ const adminSkillService = {
     return unwrapListData(response)
       .map(normalizeSkill)
       .filter(Boolean)
-      .sort((a, b) =>
-        String(a.skillName || "").localeCompare(String(b.skillName || ""))
-      );
+      .sort((a, b) => {
+        const byName = String(a.skillName || "").localeCompare(
+          String(b.skillName || "")
+        );
+
+        if (byName !== 0) return byName;
+
+        return compareDateDesc(
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
+        );
+      });
   },
 
   async getSkillById(skillId) {

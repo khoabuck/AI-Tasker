@@ -1,5 +1,6 @@
 import adminAiManagementApi from "../api/adminAiManagement.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -68,7 +69,12 @@ const adminAiManagementService = {
 
   async getModels() {
     const response = await adminAiManagementApi.getModels();
-    return unwrapList(response);
+    return unwrapList(response).sort((a, b) =>
+      compareDateDesc(
+        a?.updatedAt || a?.createdAt,
+        b?.updatedAt || b?.createdAt
+      )
+    );
   },
 
   async createModel(form = {}) {
@@ -135,7 +141,10 @@ const adminAiManagementService = {
 
   async getUsageLogs(take = 100, days = 30) {
     const response = await adminAiManagementApi.getUsageLogs(take, days);
-    return unwrapList(response);
+
+    return unwrapList(response).sort((a, b) =>
+      compareDateDesc(a?.createdAt, b?.createdAt)
+    );
   },
 };
 
