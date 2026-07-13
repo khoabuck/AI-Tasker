@@ -232,7 +232,7 @@ export default function ManageWithdrawalsPage() {
   const executeApprovePayos = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    const validation = validateActionForm(form, "Approval Reason");
+    const validation = validateActionForm(form, "Admin note");
 
     if (!validation.valid) {
       setFieldErrors(validation.errors);
@@ -335,7 +335,7 @@ export default function ManageWithdrawalsPage() {
   const executeReject = async () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    const validation = validateActionForm(form, "Rejection Reason");
+    const validation = validateActionForm(form, "Reason");
 
     if (!validation.valid) {
       setFieldErrors(validation.errors);
@@ -369,7 +369,7 @@ export default function ManageWithdrawalsPage() {
 const requestApprovePayos = () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    const validation = validateActionForm(form, "Approval Reason");
+    const validation = validateActionForm(form, "Admin note");
 
     if (!validation.valid) {
       setFieldErrors(validation.errors);
@@ -456,7 +456,7 @@ const requestApprovePayos = () => {
   const requestReject = () => {
     if (!action.withdrawal?.withdrawalRequestId) return;
 
-    const validation = validateActionForm(form, "Rejection Reason");
+    const validation = validateActionForm(form, "Reason");
 
     if (!validation.valid) {
       setFieldErrors(validation.errors);
@@ -520,17 +520,16 @@ const requestApprovePayos = () => {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Withdrawal Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Withdrawals
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Manage withdrawals
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Withdrawal requests
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review expert withdrawal requests, check PayOS payout balance,
-              approve via PayOS, sync payout status, or reject invalid requests.
+              Review payout requests, verify balance, and manage transfer status.
             </p>
           </div>
 
@@ -541,7 +540,7 @@ const requestApprovePayos = () => {
               disabled={loading || actionLoading || balanceLoading}
               className="w-fit rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {balanceLoading ? "Checking..." : "Check Payout Balance"}
+              {balanceLoading ? "Checking..." : "Check Balance"}
             </button>
 
             <button
@@ -569,7 +568,7 @@ const requestApprovePayos = () => {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
           <StatCard
             icon="account_balance"
-            label="Payout Balance"
+            label="PayOS balance"
             value={
               balanceChecked
                 ? formatMoney(
@@ -590,7 +589,7 @@ const requestApprovePayos = () => {
 
           <StatCard
             icon="account_balance_wallet"
-            label="Total Requests"
+            label="Requests"
             value={stats.total}
             description={formatMoney(stats.totalAmount, "VND")}
             tone="cyan"
@@ -621,7 +620,7 @@ const requestApprovePayos = () => {
           />
         </section>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
             <div>
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -651,11 +650,11 @@ const requestApprovePayos = () => {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">
-                Withdrawal Requests
+                Requests
               </h2>
 
               <p className="mt-1 text-sm text-gray-500">
@@ -686,7 +685,7 @@ const requestApprovePayos = () => {
 
         {action.type === "APPROVE_PAYOS" && (
           <ActionModal
-            title="Approve Withdrawal"
+            title="Approve payout"
             subtitle={`${action.withdrawal?.expertName || "Expert"} · ${formatMoney(action.withdrawal?.amount, action.withdrawal?.currency || "VND")}`}
             confirmLabel="Approve Payout"
             confirmTone="green"
@@ -698,7 +697,7 @@ const requestApprovePayos = () => {
             <WithdrawalSummary withdrawal={action.withdrawal} />
 
             <TextArea
-              label="Approval Reason"
+              label="Admin note"
               required
               value={form.reason}
               error={fieldErrors.reason}
@@ -726,7 +725,7 @@ const requestApprovePayos = () => {
 
         {action.type === "REJECT" && (
           <ActionModal
-            title="Reject Withdrawal"
+            title="Reject request"
             subtitle={`${action.withdrawal?.expertName || "Expert"} · ${formatMoney(action.withdrawal?.amount, action.withdrawal?.currency || "VND")}`}
             confirmLabel="Reject Request"
             confirmTone="red"
@@ -738,7 +737,7 @@ const requestApprovePayos = () => {
             <WithdrawalSummary withdrawal={action.withdrawal} />
 
             <TextArea
-              label="Rejection Reason"
+              label="Reason"
               required
               value={form.reason}
               error={fieldErrors.reason}
@@ -866,7 +865,7 @@ function ReviewConfirmationModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -886,12 +885,12 @@ function ReviewConfirmationModal({
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
         <button
@@ -936,7 +935,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -1100,7 +1099,7 @@ function WithdrawalRow({
             disabled={disabled || !canSync}
             className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Check Transfer Status
+            Check Status
           </button>
 
           <button
@@ -1171,7 +1170,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan

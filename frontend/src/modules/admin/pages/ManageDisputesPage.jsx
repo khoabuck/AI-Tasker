@@ -227,17 +227,16 @@ export default function ManageDisputesPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Dispute Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Disputes
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Manage disputes
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Dispute cases
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review dispute cases, inspect project information, and submit the
-              final admin decision.
+              Review evidence and issue final decisions.
             </p>
           </div>
 
@@ -265,7 +264,7 @@ export default function ManageDisputesPage() {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon="gavel"
-            label="Total Disputes"
+            label="Cases"
             value={stats.total}
             description="All dispute records"
             tone="cyan"
@@ -273,7 +272,7 @@ export default function ManageDisputesPage() {
 
           <StatCard
             icon="priority_high"
-            label="Open Cases"
+            label="Open"
             value={stats.open}
             description="Need admin review"
             tone="yellow"
@@ -281,7 +280,7 @@ export default function ManageDisputesPage() {
 
           <StatCard
             icon="verified"
-            label="Resolved Cases"
+            label="Resolved"
             value={stats.resolved}
             description="Completed decisions"
             tone="green"
@@ -289,14 +288,14 @@ export default function ManageDisputesPage() {
 
           <StatCard
             icon="payments"
-            label="Disputed Amount"
+            label="Total amount"
             value={formatMoney(stats.totalAmount)}
             description="Total disputed value"
             tone="purple"
           />
         </section>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
             <div>
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -326,7 +325,7 @@ export default function ManageDisputesPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">Disputes</h2>
@@ -523,7 +522,7 @@ function ReviewConfirmationModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -543,12 +542,12 @@ function ReviewConfirmationModal({
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
         <button
@@ -593,7 +592,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -681,7 +680,7 @@ function DisputeRow({
                   : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-cyan-400/40 hover:text-cyan-300"
               }`}
             >
-              {expanded ? "Hide Detail" : "View Detail"}
+              {expanded ? "Hide" : "View"}
               <span
                 className={`material-symbols-outlined text-[17px] transition ${
                   expanded ? "rotate-180" : ""
@@ -766,7 +765,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
-                Case Workspace
+                Case review
               </p>
 
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
@@ -781,7 +780,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
             </div>
 
             <h3 className="mt-2 text-lg font-black text-white">
-              Review this dispute case
+              Dispute details
             </h3>
 
             <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">
@@ -799,7 +798,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
               <span className="material-symbols-outlined text-[18px]">
                 task_alt
               </span>
-              Resolve Dispute
+              Resolve
             </button>
           )}
         </div>
@@ -807,7 +806,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
 
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_290px] lg:p-5">
         <div className="min-w-0 space-y-4">
-          <DetailSection title="Case Statement" icon="report_problem">
+          <DetailSection title="Statement" icon="report_problem">
             <div className="rounded-xl border border-white/10 bg-black/15 p-4">
               <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
                 {dispute.reason || dispute.description || "No reason provided."}
@@ -816,12 +815,12 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
           </DetailSection>
 
           <DetailSection
-            title={`Evidence Timeline (${evidenceSubmissions.length})`}
+            title={`Evidence history (${evidenceSubmissions.length})`}
             icon="timeline"
           >
             {evidenceSubmissions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-white/10 bg-black/10 p-7 text-center">
-                <span className="material-symbols-outlined text-4xl text-gray-600">
+                <span className="material-symbols-outlined text-3xl text-gray-600">
                   folder_open
                 </span>
                 <p className="mt-2 font-bold text-white">
@@ -864,7 +863,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
                 </span>
               </div>
               <div>
-                <p className="font-black text-white">Case Summary</p>
+                <p className="font-black text-white">Summary</p>
                 <p className="text-xs text-gray-500">
                   Key information for review
                 </p>
@@ -873,7 +872,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
 
             <InfoBox label="Status" value={formatLabel(status)} />
             <InfoBox
-              label="Disputed Amount"
+              label="Total amount"
               value={formatMoney(dispute.disputedAmount)}
             />
             <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
@@ -892,7 +891,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
               </span>
               <div>
                 <p className="text-sm font-black text-white">
-                  Review guidance
+                  Review checklist
                 </p>
                 <p className="mt-1 text-xs leading-5 text-gray-400">
                   Compare the case statement, timestamps, links, and all images
@@ -940,7 +939,7 @@ function ResolveDisputeModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
       <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
-          <h2 className="text-xl font-bold text-white">Resolve Dispute</h2>
+          <h2 className="text-xl font-bold text-white">Resolve</h2>
           <p className="mt-1 text-sm text-gray-400">
             {dispute.projectTitle || "Project"}
           </p>
@@ -1024,7 +1023,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan

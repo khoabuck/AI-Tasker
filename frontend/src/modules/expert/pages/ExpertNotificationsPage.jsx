@@ -175,17 +175,16 @@ export default function ExpertNotificationsPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-2 text-xs font-bold uppercase tracking-[0.22em] text-[#00F0FF]">
+              <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
                 Notifications
               </p>
 
               <h1 className="text-2xl font-bold text-white md:text-3xl">
-                Notification Center
+                Notifications
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                Track updates about proposals, agreements, projects,
-                submissions, wallet activity, reviews, and messages.
+                Stay updated on work, payments, reviews, and messages.
               </p>
             </div>
 
@@ -196,7 +195,7 @@ export default function ExpertNotificationsPage() {
                 disabled={markingAll || unreadCount <= 0}
                 className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {markingAll ? "Marking..." : "Mark all as read"}
+                {markingAll ? "Marking..." : "Mark all read"}
               </button>
 
               <button
@@ -240,7 +239,7 @@ export default function ExpertNotificationsPage() {
             <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-lg font-bold text-white">
-                  Recent updates
+                  Updates
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
@@ -253,7 +252,7 @@ export default function ExpertNotificationsPage() {
                     safePage * PAGE_SIZE,
                     filteredNotifications.length
                   )}{" "}
-                  of {filteredNotifications.length} notification(s)
+                  of {filteredNotifications.length} items
                 </p>
               </div>
 
@@ -352,13 +351,13 @@ function ListSkeleton({ rows = 5 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -535,7 +534,7 @@ function NotificationItem({
             </p>
 
             <p className="mt-2 text-xs font-bold text-cyan-300">
-              {target?.label || "View notification"}
+              {target?.label || "Open"}
             </p>
           </div>
         </div>
@@ -579,7 +578,7 @@ function EmptyState({ filter }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
-      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
+      <span className="material-symbols-outlined mb-3 block text-3xl text-gray-500">
         notifications_off
       </span>
 

@@ -255,18 +255,16 @@ export default function AdminReviewReportsPage() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Review Moderation
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Reviews
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Review Reports
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Reported reviews
               </h1>
 
               <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-                Review reports submitted by experts. Accepting a report hides
-                the review from the expert profile. Rejecting keeps the review
-                visible.
+                Review reported feedback and decide whether it remains visible.
               </p>
             </div>
 
@@ -294,7 +292,7 @@ export default function AdminReviewReportsPage() {
           <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               icon="flag"
-              label="Total Reports"
+              label="Reports"
               value={stats.total}
               description="Loaded review reports"
               tone="cyan"
@@ -325,11 +323,11 @@ export default function AdminReviewReportsPage() {
             />
           </section>
 
-          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
             <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_220px_160px]">
               <div>
                 <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                  Search Report
+                  Search
                 </label>
 
                 <div className="relative">
@@ -564,7 +562,7 @@ function ReviewConfirmationModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -608,13 +606,13 @@ function ListSkeleton({ rows = 5 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -637,7 +635,7 @@ function ReportCard({ report, disabled, onView, onAccept, onReject }) {
   const canResolve = status === "OPEN";
 
   return (
-    <article className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] transition hover:border-cyan-400/40">
+    <article className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)] transition hover:border-cyan-400/40">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -686,7 +684,7 @@ function ReportCard({ report, disabled, onView, onAccept, onReject }) {
 
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-72">
           <p className="mb-3 text-xs uppercase tracking-wider text-gray-500">
-            Admin Actions
+            Actions
           </p>
 
           <div className="grid grid-cols-1 gap-2">
@@ -705,7 +703,7 @@ function ReportCard({ report, disabled, onView, onAccept, onReject }) {
               onClick={onAccept}
               className="rounded-lg border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Accept Report
+              Accept
             </button>
 
             <button
@@ -714,7 +712,7 @@ function ReportCard({ report, disabled, onView, onAccept, onReject }) {
               onClick={onReject}
               className="rounded-lg border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Reject Report
+              Reject
             </button>
           </div>
 
@@ -744,8 +742,8 @@ function ReportDetailModal({
       <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
           <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
-              Review Report Detail
+            <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+              Report details
             </p>
 
             <h2 className="text-xl font-bold text-white">
@@ -753,7 +751,7 @@ function ReportDetailModal({
             </h2>
 
             <p className="mt-1 text-sm text-gray-400">
-              Review moderation details
+              Reported review information
             </p>
           </div>
 
@@ -852,7 +850,7 @@ function ReportDetailModal({
             {report.adminDecision && (
               <section className="mt-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                 <h3 className="mb-2 text-sm font-bold text-cyan-200">
-                  Admin Decision
+                  Decision note
                 </h3>
                 <p className="whitespace-pre-wrap text-sm leading-6 text-cyan-100/90">
                   {report.adminDecision}
@@ -867,7 +865,7 @@ function ReportDetailModal({
                   onClick={onReject}
                   className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                 >
-                  Reject Report
+                  Reject
                 </button>
 
                 <button
@@ -875,7 +873,7 @@ function ReportDetailModal({
                   onClick={onAccept}
                   className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
                 >
-                  Accept Report
+                  Accept
                 </button>
               </div>
             )}
@@ -939,7 +937,7 @@ function ResolveReportModal({
           )}
 
           <TextArea
-            label="Admin Decision"
+            label="Decision note"
             value={form.adminDecision}
             error={errors.adminDecision}
             onChange={(value) => onChange("adminDecision", value)}
@@ -1077,7 +1075,7 @@ function DisputeItem({ dispute }) {
 
       {dispute.adminDecision && (
         <p className="mt-2 text-sm leading-6 text-gray-300">
-          Admin Decision: {dispute.adminDecision}
+          Decision note: {dispute.adminDecision}
         </p>
       )}
     </article>
@@ -1093,7 +1091,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1230,7 +1228,7 @@ function Alert({ type, title, message, onClose }) {
 function LoadingState() {
   return (
     <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400">
-      <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
+      <span className="material-symbols-outlined mb-3 block text-3xl text-[#00F0FF]">
         hourglass_empty
       </span>
       Loading review reports...
@@ -1240,7 +1238,7 @@ function LoadingState() {
 
 function EmptyState() {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
         flag
       </span>

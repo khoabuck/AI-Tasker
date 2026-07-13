@@ -365,7 +365,7 @@ export default function MilestoneDetailPage() {
 
     if (handoverNotes.length > 4000) {
       fieldErrors.handoverNotes =
-        "Handover notes cannot exceed 4,000 characters.";
+        "Handover cannot exceed 4,000 characters.";
     }
 
     setSubmissionFieldErrors(fieldErrors);
@@ -708,14 +708,14 @@ export default function MilestoneDetailPage() {
   const formTitle = projectCompleted
     ? "Milestone Closed"
     : needsResubmission
-    ? "Resubmit Work"
-    : "Submit Work";
+    ? "Resubmit delivery"
+    : "Submit delivery";
 
   const formDescription = projectCompleted
     ? "This project is completed. You can review previous submissions, but no new work or dispute can be submitted."
     : needsResubmission
-    ? "Update your links and notes based on the client's request, then submit this milestone again."
-    : "Share your completed work with the client for review.";
+    ? "Update the delivery based on client feedback."
+    : "Send completed work to the client.";
 
   const latestClientFeedback = getClientFeedback(latestSubmission);
   const canOpenDispute =
@@ -756,7 +756,7 @@ export default function MilestoneDetailPage() {
               <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0">
                   <p className="mb-2 text-xs font-black uppercase tracking-[0.22em] text-[#00F0FF]">
-                    Milestone Workspace
+                    Milestone
                   </p>
 
                   <h1 className="max-w-4xl text-xl font-black leading-tight text-white md:text-3xl">
@@ -766,7 +766,7 @@ export default function MilestoneDetailPage() {
                   <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
                     {projectCompleted
                       ? "Review the completed milestone, previous submissions, and any existing dispute."
-                      : "Review the brief, submit your work, manage revisions, and open a dispute when the client rejects or requests revision."}
+                      : "Review the brief, submit work, and manage client feedback."}
                   </p>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -817,7 +817,7 @@ export default function MilestoneDetailPage() {
                       <span className="material-symbols-outlined text-[18px]">
                         visibility
                       </span>
-                      View Current Dispute
+                      View Dispute
                     </button>
                   )}
 
@@ -866,8 +866,8 @@ export default function MilestoneDetailPage() {
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
             <main className="min-w-0 space-y-5">
               <Card
-                title="Work Brief"
-                subtitle="Review what the client expects before submitting."
+                title="Milestone brief"
+                subtitle=""
                 icon="task_alt"
               >
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -911,16 +911,13 @@ export default function MilestoneDetailPage() {
 
                 {projectCompleted && (
                   <div className="mb-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-4 text-sm leading-6 text-green-100">
-                    This project is completed. You can review previous
-                    submissions, but you cannot submit, resubmit, or open a new
-                    dispute.
+                    This project is complete. Previous submissions remain available.
                   </div>
                 )}
 
                 {activeDisputeId && (
                   <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm leading-6 text-red-100">
-                    This milestone is currently in dispute. You cannot submit or
-                    resubmit work until admin resolves the dispute.
+                    This milestone is currently in dispute.
                   </div>
                 )}
 
@@ -978,7 +975,7 @@ export default function MilestoneDetailPage() {
                         <span className="material-symbols-outlined text-[18px]">
                           gavel
                         </span>
-                        Open Dispute Instead
+                        Open Dispute
                       </button>
                     )}
 
@@ -993,7 +990,7 @@ export default function MilestoneDetailPage() {
                         <span className="material-symbols-outlined text-[18px]">
                           visibility
                         </span>
-                        View Current Dispute
+                        View Dispute
                       </button>
                     )}
                   </div>
@@ -1012,10 +1009,10 @@ export default function MilestoneDetailPage() {
                             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-300">
                               <span className="material-symbols-outlined text-[18px]">inventory_2</span>
                             </span>
-                            <p className="text-sm font-black text-white">Deliver work to your client</p>
+                            <p className="text-sm font-black text-white">Delivery package</p>
                           </div>
                           <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                            Add the main delivery link first. Demo, testing, and handover notes help the client review faster and reduce revision requests.
+                            Add the main delivery link and any supporting review details.
                           </p>
                         </div>
                         <div className="flex items-center border-t border-white/10 bg-black/10 px-5 py-4 md:border-l md:border-t-0">
@@ -1060,7 +1057,7 @@ export default function MilestoneDetailPage() {
 
                     <SubmissionSection
                       number="2"
-                      title="Demo and review instructions"
+                      title="Demo details"
                       optional
                     >
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -1092,7 +1089,7 @@ export default function MilestoneDetailPage() {
 
                     <SubmissionSection
                       number="3"
-                      title="Testing evidence"
+                      title="Test results"
                       optional
                     >
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -1127,7 +1124,7 @@ export default function MilestoneDetailPage() {
 
                     <SubmissionSection
                       number="4"
-                      title="Handover notes"
+                      title="Handover"
                       optional
                     >
                       <SubmitWorkTextArea
@@ -1286,7 +1283,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -2060,7 +2057,7 @@ function LinkPill({ label, url }) {
 function EmptyState({ icon, title, description }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-7 text-center">
-      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
+      <span className="material-symbols-outlined mb-3 block text-3xl text-gray-500">
         {icon}
       </span>
 

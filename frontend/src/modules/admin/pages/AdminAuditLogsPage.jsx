@@ -156,7 +156,7 @@ export default function AdminAuditLogsPage() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   const inputStyle =
     "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
@@ -170,17 +170,16 @@ export default function AdminAuditLogsPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Admin Audit
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Audit
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Audit logs
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Audit log
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track admin actions, affected entities, timestamps, and audit
-                metadata.
+                Track administrative actions and affected records.
               </p>
             </div>
 
@@ -203,7 +202,7 @@ export default function AdminAuditLogsPage() {
           <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
             <SummaryCard
               icon="receipt_long"
-              label="Total Logs"
+              label="Logs"
               value={summary.total}
               tone="cyan"
             />
@@ -248,7 +247,7 @@ export default function AdminAuditLogsPage() {
               </div>
 
               <div>
-                <label className={labelStyle}>Entity Name</label>
+                <label className={labelStyle}>Entity</label>
 
                 <input
                   type="text"
@@ -284,7 +283,7 @@ export default function AdminAuditLogsPage() {
               </div>
 
               <div>
-                <label className={labelStyle}>Page Size</label>
+                <label className={labelStyle}>Rows</label>
 
                 <select
                   value={filters.pageSize}
@@ -461,7 +460,7 @@ function AuditLogRow({ log, onViewDetail }) {
 
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Created At
+            Created
           </p>
 
           <p className="text-sm font-bold text-white">
@@ -475,7 +474,7 @@ function AuditLogRow({ log, onViewDetail }) {
             onClick={onViewDetail}
             className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
           >
-            View Detail
+            View
           </button>
         </div>
       </div>
@@ -492,7 +491,7 @@ function SummaryCard({ icon, label, value, tone }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -582,7 +581,7 @@ function getFriendlyError(err) {
   }
 
   if (status === 404) {
-    return "Audit logs are temporarily unavailable. Please try again later.";
+    return "Audit log are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

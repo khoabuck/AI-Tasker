@@ -303,17 +303,16 @@ export default function AdminJobCreditPackagesPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Package Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Packages
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Job credit packages
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Job credit plans
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Manage job posting credit packages and AI generation credit
-              packages available for clients.
+              Manage job-posting and AI-generation credit plans.
             </p>
           </div>
 
@@ -333,7 +332,7 @@ export default function AdminJobCreditPackagesPage() {
               disabled={loading || saving}
               className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Create Package
+              New package
             </button>
           </div>
         </div>
@@ -352,7 +351,7 @@ export default function AdminJobCreditPackagesPage() {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon="inventory_2"
-            label="Total Packages"
+            label="Packages"
             value={stats.total}
             description="All credit packages"
             tone="cyan"
@@ -376,14 +375,14 @@ export default function AdminJobCreditPackagesPage() {
 
           <StatCard
             icon="payments"
-            label="Total Price"
+            label="Combined price"
             value={formatMoney(stats.totalPrice, "VND")}
             description="Sum of package prices"
             tone="purple"
           />
         </section>
 
-        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_220px]">
             <div>
               <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
@@ -413,7 +412,7 @@ export default function AdminJobCreditPackagesPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-white">Packages</h2>
@@ -445,7 +444,7 @@ export default function AdminJobCreditPackagesPage() {
 
         {(action.type === "CREATE" || action.type === "EDIT") && (
           <PackageFormModal
-            title={action.type === "CREATE" ? "Create Package" : "Edit Package"}
+            title={action.type === "CREATE" ? "New package" : "Edit package"}
             form={form}
             loading={saving}
             errors={fieldErrors}
@@ -536,13 +535,13 @@ function ListSkeleton({ rows = 5 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -579,7 +578,7 @@ function SavePackageConfirmModal({
         </div>
 
         <h2 className="text-lg font-black text-white">
-          {isCreate ? "Create this package?" : "Save package changes?"}
+          {isCreate ? "Create package?" : "Save package?"}
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -597,7 +596,7 @@ function SavePackageConfirmModal({
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -606,7 +605,7 @@ function SavePackageConfirmModal({
             disabled={loading}
             className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
           >
-            {loading ? "Saving..." : isCreate ? "Create Package" : "Save Changes"}
+            {loading ? "Saving..." : isCreate ? "New package" : "Save Changes"}
           </button>
         </div>
       </div>
@@ -675,7 +674,7 @@ function StatusChangeConfirmModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -747,7 +746,7 @@ function PackageRow({
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge active={packageItem.isActive} />
-            <Badge label={`Display order ${packageItem.displayOrder || 0}`} />
+            <Badge label={`Order ${packageItem.displayOrder || 0}`} />
           </div>
 
           <h3 className="line-clamp-1 font-bold text-white">
@@ -1025,7 +1024,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1316,7 +1315,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Job credit packages are temporarily unavailable. Please try again later.";
+    return "Job credit plans are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

@@ -82,10 +82,10 @@ export function JobDetailModal({ jobId, onClose }) {
         <div className="flex items-center justify-between border-b border-white/10 bg-[#101722] px-5 py-3">
           <div>
             <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#00F0FF]">
-              Job Detail
+              Job Overview
             </p>
             <h2 className="mt-0.5 text-base font-extrabold text-white">
-              Review before applying
+              Review the project before applying
             </h2>
           </div>
 
@@ -257,7 +257,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -390,7 +390,7 @@ function JobDetailContent({
                   <span className="material-symbols-outlined text-[18px]">
                     chat
                   </span>
-                  {startingChat ? "Opening..." : "Message Client"}
+                  {startingChat ? "Opening..." : "Message client"}
                 </button>
               </div>
             </div>
@@ -425,16 +425,16 @@ function JobDetailContent({
 
           <InfoSection
             icon="article"
-            title="Project Description"
-            description="Understand what the client needs before writing your proposal."
+            title="About the project"
+            description=""
           >
             <TextBlock value={job.description || "No project description provided."} />
           </InfoSection>
 
           <InfoSection
             icon="task_alt"
-            title="Expected Outcomes"
-            description="What the client expects to receive after the project."
+            title="Deliverables"
+            description=""
           >
             <TextBlock
               value={
@@ -446,8 +446,8 @@ function JobDetailContent({
 
           <InfoSection
             icon="psychology"
-            title="Skills Needed"
-            description="Skills that may help you complete this project."
+            title="Required skills"
+            description=""
           >
             {skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
@@ -495,11 +495,10 @@ function ApplyCard({
 }) {
   return (
     <section className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-      <p className="text-sm font-extrabold text-white">Ready to apply?</p>
+      <p className="text-sm font-extrabold text-white">Interested in this project?</p>
 
       <p className="mt-2 text-sm leading-6 text-cyan-100/80">
-        Send a proposal explaining your approach, timeline, and expected
-        deliverables.
+        Send a proposal with your approach, timeline, and price.
       </p>
 
       <div className="mt-4 space-y-2">
@@ -518,7 +517,7 @@ function ApplyCard({
           disabled={startingChat || !canMessageClient}
           className="w-full rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {startingChat ? "Opening Chat..." : "Message Client"}
+          {startingChat ? "Opening Chat..." : "Message client"}
         </button>
       </div>
 
@@ -533,7 +532,7 @@ function SnapshotCard({ job }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
       <h2 className="mb-3 text-base font-extrabold text-white">
-        Job Snapshot
+        Project details
       </h2>
 
       <div className="space-y-2">

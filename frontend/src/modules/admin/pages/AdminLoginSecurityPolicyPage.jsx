@@ -165,7 +165,7 @@ export default function AdminLoginSecurityPolicyPage() {
       });
 
       setSuccess(
-        "Login security policy has been updated successfully."
+        "Login security has been updated successfully."
       );
     } catch (err) {
       console.error(
@@ -186,17 +186,16 @@ export default function AdminLoginSecurityPolicyPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Policy Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Security
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Login security policy
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Login security
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure automatic account protection after repeated failed
-              login attempts. Changes affect all users on the platform.
+              Manage failed-login protection and temporary lockout rules.
             </p>
           </div>
 
@@ -232,11 +231,11 @@ export default function AdminLoginSecurityPolicyPage() {
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
             <form
               onSubmit={handleSubmit}
-              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
             >
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-white">
-                  Account lockout settings
+                  Lockout settings
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -247,7 +246,7 @@ export default function AdminLoginSecurityPolicyPage() {
 
               <div className="space-y-5">
                 <ToggleField
-                  label="Automatic Login Lockout"
+                  label="Automatic lockout"
                   description="When enabled, the system temporarily locks an account after repeated failed login attempts."
                   checked={form.isEnabled}
                   onChange={(checked) =>
@@ -256,7 +255,7 @@ export default function AdminLoginSecurityPolicyPage() {
                 />
 
                 <NumberInput
-                  label="Maximum Failed Login Attempts"
+                  label="Failed attempt limit"
                   value={form.maxFailedLoginAttempts}
                   min={1}
                   max={20}
@@ -317,21 +316,21 @@ export default function AdminLoginSecurityPolicyPage() {
                   disabled={saving || !hasChanged}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Policy"}
+                  {saving ? "Saving..." : "Save changes"}
                 </button>
               </div>
             </form>
 
             <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                 <div className="mb-5 flex items-center justify-between gap-4">
                   <div>
                     <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">
-                      Current Configuration
+                      Current settings
                     </p>
 
                     <h2 className="mt-1 text-xl font-bold text-white">
-                      Login protection
+                      Protection status
                     </h2>
                   </div>
 
@@ -362,9 +361,9 @@ export default function AdminLoginSecurityPolicyPage() {
                 </div>
               </section>
 
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                 <h2 className="text-lg font-bold text-white">
-                  Last policy update
+                  Last update
                 </h2>
 
                 <div className="mt-5 space-y-4">
@@ -402,7 +401,7 @@ export default function AdminLoginSecurityPolicyPage() {
 
                   <div>
                     <h3 className="font-bold text-white">
-                      How this policy works
+                      How it works
                     </h3>
 
                     <p className="mt-2 text-sm leading-6 text-cyan-100/70">
@@ -419,7 +418,7 @@ export default function AdminLoginSecurityPolicyPage() {
 
         {showSaveConfirm && (
           <ConfirmActionModal
-            title="Save login security policy?"
+            title="Save security changes?"
             message={
               form.isEnabled
                 ? `Automatic lockout will be enabled after ${form.maxFailedLoginAttempts} failed login attempts for ${form.lockoutDurationMinutes} minutes. Reason: ${form.reason.trim()}.`
@@ -678,7 +677,7 @@ function ConfirmActionModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -698,7 +697,7 @@ function ConfirmActionModal({
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">
             check_circle
@@ -707,7 +706,7 @@ function SuccessToast({ message, onClose }) {
 
         <div className="min-w-0 flex-1">
           <p className="text-sm font-black text-white">
-            Action completed
+            Updated
           </p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">
             {message}
@@ -844,7 +843,7 @@ function getFriendlyError(
   }
 
   if (status === 404) {
-    return "Login security policy is unavailable. Please verify that the latest backend is running.";
+    return "Login security is unavailable. Please verify that the latest backend is running.";
   }
 
   const data = err?.response?.data;

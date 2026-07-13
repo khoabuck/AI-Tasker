@@ -154,7 +154,7 @@ export default function AdminPlatformFeePolicyPage() {
         reason: "",
       });
 
-      setSuccess("Platform fee policy has been updated successfully.");
+      setSuccess("Platform fees has been updated successfully.");
     } catch (err) {
       console.error("UPDATE PLATFORM FEE POLICY ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot update platform fee policy."));
@@ -168,17 +168,16 @@ export default function AdminPlatformFeePolicyPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Policy Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Fees
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Platform fee policy
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Platform fees
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure fee rates for individual clients, business clients, and
-              experts. Each update requires an admin reason.
+              Manage fee rates for clients and experts.
             </p>
           </div>
 
@@ -209,11 +208,11 @@ export default function AdminPlatformFeePolicyPage() {
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
             <form
               onSubmit={handleSubmit}
-              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
             >
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-white">
-                  Update fee rates
+                  Fee configuration
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -223,7 +222,7 @@ export default function AdminPlatformFeePolicyPage() {
 
               <div className="space-y-5">
                 <NumberInput
-                  label="Individual Client Fee Rate"
+                  label="Individual client fee"
                   value={form.individualClientFeeRate}
                   required
                   error={fieldErrors.individualClientFeeRate}
@@ -234,7 +233,7 @@ export default function AdminPlatformFeePolicyPage() {
                 />
 
                 <NumberInput
-                  label="Business Client Fee Rate"
+                  label="Business client fee"
                   value={form.businessClientFeeRate}
                   required
                   error={fieldErrors.businessClientFeeRate}
@@ -245,7 +244,7 @@ export default function AdminPlatformFeePolicyPage() {
                 />
 
                 <NumberInput
-                  label="Expert Fee Rate"
+                  label="Expert fee"
                   value={form.expertFeeRate}
                   required
                   error={fieldErrors.expertFeeRate}
@@ -278,15 +277,15 @@ export default function AdminPlatformFeePolicyPage() {
                   disabled={saving || !hasChanged}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Policy"}
+                  {saving ? "Saving..." : "Save changes"}
                 </button>
               </div>
             </form>
 
             <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                 <h2 className="mb-5 text-xl font-bold text-white">
-                  Current policy
+                  Current fees
                 </h2>
 
                 <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
@@ -326,7 +325,7 @@ export default function AdminPlatformFeePolicyPage() {
         )}
         {showSaveConfirm && (
           <ConfirmActionModal
-            title="Save policy changes?"
+            title="Save fee changes?"
             message={`This update changes fees applied to future platform transactions. Individual client fee: ${form.individualClientFeeRate} · Business client fee: ${form.businessClientFeeRate} · Expert fee: ${form.expertFeeRate}. Reason: ${form.reason.trim()}.`}
             confirmLabel="Confirm Save"
             loading={saving}
@@ -346,7 +345,7 @@ export default function AdminPlatformFeePolicyPage() {
 function PageSkeleton({ cards = 4 }) {
   return (
     <div className="animate-pulse">
-      <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
         <div className="h-4 w-36 rounded bg-cyan-400/10" />
         <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
         <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -374,13 +373,13 @@ function PageSkeleton({ cards = 4 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -434,7 +433,7 @@ function ConfirmActionModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -661,7 +660,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Platform fee policy API was not found. Please check backend route.";
+    return "Platform fees API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;

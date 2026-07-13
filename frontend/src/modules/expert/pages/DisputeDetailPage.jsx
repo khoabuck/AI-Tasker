@@ -413,8 +413,8 @@ export default function DisputeDetailPage() {
               <div className="relative flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <div className="mb-2 flex flex-wrap items-center gap-2">
-                    <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
-                      Dispute Workspace
+                    <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
+                      Dispute
                     </p>
                     <StatusBadge status={status} />
                   </div>
@@ -445,7 +445,7 @@ export default function DisputeDetailPage() {
                       }
                       className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
-                      View Project
+                      Project
                     </button>
                   )}
 
@@ -457,7 +457,7 @@ export default function DisputeDetailPage() {
                       }
                       className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
-                      View Milestone
+                      Milestone
                     </button>
                   )}
 
@@ -509,7 +509,7 @@ export default function DisputeDetailPage() {
                 </ReadableText>
               </Card>
 
-              <Card title="Initial Evidence" icon="fact_check">
+              <Card title="Initial evidence" icon="fact_check">
                 <ReadableText>
                   {dispute.evidenceText || "No initial evidence description."}
                 </ReadableText>
@@ -536,7 +536,7 @@ export default function DisputeDetailPage() {
               </Card>
 
               <Card
-                title="Evidence Timeline"
+                title="Evidence history"
                 icon="history"
                 action={
                   <span className="text-xs font-semibold text-gray-500">
@@ -564,7 +564,7 @@ export default function DisputeDetailPage() {
               </Card>
 
               {dispute.adminDecision && (
-                <Card title="Admin Decision" icon="gavel">
+                <Card title="Resolution decision" icon="gavel">
                   <div className="rounded-xl border border-green-400/30 bg-green-400/10 p-4">
                     <ReadableText className="text-green-100">
                       {dispute.adminDecision}
@@ -619,7 +619,7 @@ export default function DisputeDetailPage() {
               )}
 
               <Card
-                title={resolved ? "Evidence Closed" : "Evidence Actions"}
+                title={resolved ? "Evidence closed" : "Evidence"}
                 icon={resolved ? "lock" : "add_circle"}
               >
                 {resolved ? (
@@ -630,8 +630,7 @@ export default function DisputeDetailPage() {
                 ) : (
                   <div>
                     <p className="text-sm leading-6 text-gray-400">
-                      Add screenshots, supporting links, or a short explanation
-                      without leaving this page.
+                      Add supporting details while the dispute is open.
                     </p>
 
                     <button
@@ -689,7 +688,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -715,13 +714,13 @@ function PageSkeleton({ cards = 4, admin = false }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -758,11 +757,11 @@ function EvidenceModal({
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
               Add Evidence
             </p>
             <h2 className="mt-1 text-xl font-black text-white">
-              Support your dispute
+              Add supporting evidence
             </h2>
           </div>
 
@@ -802,7 +801,7 @@ function EvidenceModal({
         )}
 
         <div className="space-y-4">
-          <Field label="Evidence Description (optional)">
+          <Field label="Description (optional)">
             <textarea
               rows={4}
               value={formData.evidenceText}
@@ -815,7 +814,7 @@ function EvidenceModal({
             />
           </Field>
 
-          <Field label="Supporting File URL (optional)" error={fieldErrors.fileUrl}>
+          <Field label="Supporting link (optional)" error={fieldErrors.fileUrl}>
             <input
               type="url"
               value={formData.fileUrl}
@@ -985,7 +984,7 @@ function EvidenceSubmission({ submission, index }) {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
-              Evidence Submission {index + 1}
+              Submission {index + 1}
             </span>
 
             {submission.uploadedByName && (
@@ -1237,7 +1236,7 @@ function ExternalLink({ href, label, icon }) {
 function EmptyState({ icon, title, description }) {
   return (
     <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
-      <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
+      <span className="material-symbols-outlined mb-2 block text-3xl text-gray-600">
         {icon}
       </span>
       <p className="font-bold text-white">{title}</p>

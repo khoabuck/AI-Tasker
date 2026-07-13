@@ -205,18 +205,16 @@ export default function ExpertReviewsPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
                 Reviews
               </p>
 
-              <h1 className="text-3xl font-extrabold text-white md:text-4xl">
-                Client reviews
+              <h1 className="text-3xl font-extrabold text-white md:text-3xl">
+                Reviews from clients
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                View ratings and feedback clients left for your completed
-                projects. If a review is unfair or violates platform rules, you
-                can report it for admin review.
+                Review your client feedback and report content that violates platform rules.
               </p>
             </div>
 
@@ -244,28 +242,28 @@ export default function ExpertReviewsPage() {
           <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-5">
             <SummaryCard
               icon="reviews"
-              label="Total Reviews"
+              label="Reviews"
               value={stats.total}
               tone="cyan"
             />
 
             <SummaryCard
               icon="star"
-              label="Average Rating"
+              label="Average"
               value={stats.average.toFixed(1)}
               tone="yellow"
             />
 
             <SummaryCard
               icon="workspace_premium"
-              label="5-Star Reviews"
+              label="5-star"
               value={stats.fiveStar}
               tone="green"
             />
 
             <SummaryCard
               icon="thumb_up"
-              label="Positive Reviews"
+              label="Positive"
               value={stats.positive}
               tone="green"
             />
@@ -278,11 +276,11 @@ export default function ExpertReviewsPage() {
             />
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
             <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-bold text-white">
-                  Review History
+                  Review history
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
@@ -361,12 +359,12 @@ export default function ExpertReviewsPage() {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
         <button
@@ -418,7 +416,7 @@ function SummaryCard({ icon, label, value, tone }) {
       : "border-cyan-400/20 bg-cyan-400/10 text-[#00F0FF]";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass}`}
       >
@@ -496,7 +494,7 @@ function ReviewCard({ review, disabled, onReport }) {
             onClick={onReport}
             className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {hasReported ? "Reported" : "Report Review"}
+            {hasReported ? "Reported" : "Report"}
           </button>
         </div>
       </div>
@@ -515,17 +513,16 @@ function ReportReviewModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10 text-red-300">
             <span className="material-symbols-outlined text-2xl">flag</span>
           </div>
 
-          <h2 className="text-2xl font-black text-white">Report Review</h2>
+          <h2 className="text-2xl font-black text-white">Report</h2>
 
           <p className="mt-2 text-sm leading-6 text-gray-400">
-            Report this review if it is unfair, abusive, misleading, spam, or
-            violates platform policy. Admin will review your report.
+            Explain why this review should be checked by an admin.
           </p>
         </div>
 
@@ -718,7 +715,7 @@ function EmptyState({ filter }) {
       ? "You do not have critical reviews."
       : filter === "reported"
       ? "You have not reported any reviews yet."
-      : "Client reviews will appear here after completed projects.";
+      : "Reviews from clients will appear here after completed projects.";
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">

@@ -60,7 +60,7 @@ export default function AdminAuditLogDetailPage() {
   }, [auditLog]);
 
   const displayEntity = useMemo(() => {
-    return toReadableText(auditLog?.entityName || "Affected Record");
+    return toReadableText(auditLog?.entityName || "Affected record");
   }, [auditLog]);
 
   const changes = useMemo(() => {
@@ -68,7 +68,7 @@ export default function AdminAuditLogDetailPage() {
   }, [auditLog]);
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   return (
     <AdminLayout>
@@ -76,17 +76,16 @@ export default function AdminAuditLogDetailPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Audit Log Detail
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Audit log
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
                 {loading ? "Loading audit log..." : displayAction}
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Review what changed, who performed the action, and which record
-                was affected.
+                Review the action, affected record, and captured changes.
               </p>
             </div>
 
@@ -96,7 +95,7 @@ export default function AdminAuditLogDetailPage() {
                 onClick={() => navigate("/admin/audit-logs")}
                 className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
               >
-                Back to Logs
+                Audit logs
               </button>
 
               <button
@@ -158,7 +157,7 @@ export default function AdminAuditLogDetailPage() {
                 <div className="grid grid-cols-1 gap-0 md:grid-cols-4">
                   <OverviewItem
                     icon="person"
-                    label="Performed By"
+                    label="Performed by"
                     value={
                       auditLog.adminName ||
                       auditLog.adminEmail ||
@@ -168,7 +167,7 @@ export default function AdminAuditLogDetailPage() {
 
                   <OverviewItem
                     icon="database"
-                    label="Affected Record"
+                    label="Affected record"
                     value={displayEntity}
                   />
 
@@ -187,7 +186,7 @@ export default function AdminAuditLogDetailPage() {
                     <div className="mb-6 flex items-start justify-between gap-4">
                       <div>
                         <h2 className="text-xl font-bold text-white">
-                          Change Summary
+                          Changes
                         </h2>
 
                         <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -199,7 +198,7 @@ export default function AdminAuditLogDetailPage() {
 
                     {changes.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                        <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
+                        <span className="material-symbols-outlined mb-3 block text-3xl text-gray-500">
                           difference
                         </span>
 
@@ -224,7 +223,7 @@ export default function AdminAuditLogDetailPage() {
 
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Action Timeline
+                      Timeline
                     </h2>
 
                     <div className="space-y-5">
@@ -263,7 +262,7 @@ export default function AdminAuditLogDetailPage() {
                 <aside className="space-y-6">
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Record Information
+                      Record
                     </h2>
 
                     <div className="space-y-4">
@@ -286,7 +285,7 @@ export default function AdminAuditLogDetailPage() {
 
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Admin Information
+                      Administrator
                     </h2>
 
                     <div className="space-y-4">
@@ -322,7 +321,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />

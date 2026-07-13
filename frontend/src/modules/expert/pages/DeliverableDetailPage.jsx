@@ -102,16 +102,15 @@ export default function DeliverableDetailPage() {
               <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div className="min-w-0">
                   <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
-                    Submission Detail
+                    Delivery
                   </p>
 
                   <h1 className="break-words text-2xl font-black leading-tight text-white md:text-3xl">
-                    {submission.title || "Submitted Work"}
+                    {submission.title || "Delivery details"}
                   </h1>
 
                   <p className="mt-2 max-w-2xl break-words text-sm leading-5 text-gray-400">
-                    Review what was submitted, check links, and read any client
-                    feedback.
+                    Review submitted work, links, and client feedback.
                   </p>
                 </div>
 
@@ -151,10 +150,9 @@ export default function DeliverableDetailPage() {
           <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
             <main className="min-w-0 space-y-4">
               {needsChanges && (
-                <Card title="Client requested changes" icon="edit_note">
+                <Card title="Changes requested" icon="edit_note">
                   <p className="text-sm leading-7 text-gray-300">
-                    The client asked for updates. Go back to the milestone page
-                    and use the resubmit form there.
+                    Update and resubmit from the milestone page.
                   </p>
 
                   {clientFeedback && (
@@ -171,21 +169,20 @@ export default function DeliverableDetailPage() {
                     onClick={goBackToMilestone}
                     className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Resubmit from Milestone
+                    Update delivery
                   </button>
                 </Card>
               )}
 
               {approved && (
-                <Card title="Approved by client" icon="verified">
+                <Card title="Approved" icon="verified">
                   <div className="rounded-2xl border border-green-400/30 bg-green-400/10 p-5 text-sm leading-7 text-green-100">
-                    This submission has been approved. No further action is
-                    needed from you for this submission.
+                    This submission has been approved. No further action is needed.
                   </div>
                 </Card>
               )}
 
-              <Card title="Submitted Work" icon="description">
+              <Card title="Delivery details" icon="description">
                 <div className="max-w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-4">
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-gray-300">
                     {submission.description || "No description provided."}
@@ -193,7 +190,7 @@ export default function DeliverableDetailPage() {
                 </div>
               </Card>
 
-              <Card title="Review Links" icon="link">
+              <Card title="Delivery links" icon="link">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <LinkBox label="File" url={submission.fileUrl} />
                   <LinkBox label="Demo" url={submission.demoUrl} />
@@ -204,7 +201,7 @@ export default function DeliverableDetailPage() {
                 </div>
               </Card>
 
-              <Card title="Notes for Client" icon="notes">
+              <Card title="Handover notes" icon="notes">
                 <div className="max-w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-4">
                   <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-gray-300">
                     {submission.handoverNotes || "No notes provided."}
@@ -222,7 +219,7 @@ export default function DeliverableDetailPage() {
             </main>
 
             <aside className="min-w-0 space-y-4">
-              <Card title="Current State" icon="monitoring">
+              <Card title="Status" icon="monitoring">
                 <FriendlyStatusBadge ui={statusUi} />
 
                 <p className="mt-4 text-sm leading-6 text-gray-400">
@@ -230,7 +227,7 @@ export default function DeliverableDetailPage() {
                 </p>
               </Card>
 
-              <Card title="Next Step" icon="route">
+              <Card title="Next step" icon="route">
                 {needsChanges ? (
                   <NextStep
                     icon="edit_note"
@@ -269,7 +266,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />

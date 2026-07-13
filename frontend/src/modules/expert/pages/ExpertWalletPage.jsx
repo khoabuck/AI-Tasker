@@ -614,16 +614,15 @@ export default function ExpertWalletPage() {
                   <span className="material-symbols-outlined text-[17px]">
                     account_balance_wallet
                   </span>
-                  Expert Wallet
+                  Wallet
                 </div>
 
                 <h1 className="text-2xl font-black text-white md:text-3xl">
-                  Wallet Overview
+                  Your wallet
                 </h1>
 
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                  Track your balance, deposits, proposal credit payments, and
-                  withdrawal requests in one place.
+                  Manage earnings, deposits, credits, and withdrawals.
                 </p>
               </div>
 
@@ -659,7 +658,7 @@ export default function ExpertWalletPage() {
                   <span className="material-symbols-outlined text-[22px]">
                     workspace_premium
                   </span>
-                  Buy Proposal Credits
+                  Buy Credits
                 </button>
               </div>
             </div>
@@ -670,7 +669,7 @@ export default function ExpertWalletPage() {
 
           <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <BalanceCard
-              label="Available Balance"
+              label="Available"
               value={formatMoney(balance?.availableBalance)}
               icon="account_balance_wallet"
               tone="cyan"
@@ -680,7 +679,7 @@ export default function ExpertWalletPage() {
             />
 
             <BalanceCard
-              label="Pending Earnings"
+              label="Pending"
               value={formatMoney(balance?.pendingEarningsBalance)}
               icon="hourglass_top"
               tone="yellow"
@@ -688,7 +687,7 @@ export default function ExpertWalletPage() {
             />
 
             <BalanceCard
-              label="Total Earnings"
+              label="Lifetime earnings"
               value={formatMoney(balance?.totalEarnings)}
               icon="trending_up"
               tone="purple"
@@ -696,7 +695,7 @@ export default function ExpertWalletPage() {
             />
 
             <BalanceCard
-              label="Total Withdrawn"
+              label="Withdrawn"
               value={formatMoney(totalWithdrawn)}
               icon="account_balance"
               tone="green"
@@ -710,7 +709,7 @@ export default function ExpertWalletPage() {
               <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-black text-white">
-                    Transaction History
+                    Transactions
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
@@ -766,7 +765,7 @@ export default function ExpertWalletPage() {
 
             <aside className="min-w-0 space-y-4">
               <HistoryPanel
-                title="Withdrawal History"
+                title="Withdrawals"
                 subtitle="Payout status and bank transfer requests"
                 empty="No withdrawal requests yet."
                 bodyClassName="max-h-[330px]"
@@ -780,7 +779,7 @@ export default function ExpertWalletPage() {
               </HistoryPanel>
 
               <HistoryPanel
-                title="Deposit History"
+                title="Deposits"
                 subtitle="Recent QR payment orders"
                 empty="No deposit orders yet."
                 bodyClassName="max-h-[330px]"
@@ -860,7 +859,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -895,12 +894,12 @@ function PageSkeleton({ rows = 4 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
         <button
@@ -929,15 +928,15 @@ function WithdrawalModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-md overflow-y-auto rounded-[1.4rem] border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-green-300">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-green-300">
               Bank Payout
             </p>
 
             <h2 className="mt-2 text-xl font-black text-white">
-              Withdraw Earnings
+              Request withdrawal
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
@@ -960,7 +959,7 @@ function WithdrawalModal({
 
         <div className="mb-5 rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
           <p className="text-sm font-bold text-yellow-200">
-            Your money will be held after submitting
+            Funds are reserved after submission
           </p>
 
           <p className="mt-1 text-xs leading-5 text-yellow-100/80">
@@ -1017,7 +1016,7 @@ function WithdrawalModal({
             disabled={creating}
             className="w-full rounded-2xl bg-green-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-green-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {creating ? "Submitting..." : "Submit Withdrawal Request"}
+            {creating ? "Submitting..." : "Submit Request"}
           </button>
         </form>
       </div>
@@ -1209,10 +1208,10 @@ function DepositModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-[1.4rem] border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-2xl border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
           <div>
-            <h2 className="text-xl font-black text-white">Scan QR to pay</h2>
+            <h2 className="text-xl font-black text-white">Deposit with QR</h2>
             <p className="mt-1.5 text-xs leading-5 text-gray-500">
               Complete the payment before the countdown reaches zero.
             </p>
@@ -1267,7 +1266,7 @@ function DepositModal({
                 disabled={creating}
                 className="w-full rounded-2xl bg-cyan-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {creating ? "Creating payment..." : "Generate Payment QR"}
+                {creating ? "Creating payment..." : "Generate QR"}
               </button>
             </form>
           ) : (
@@ -1293,7 +1292,7 @@ function DepositModal({
       />
     ) : (
       <div className="text-center text-gray-700">
-        <span className="material-symbols-outlined mb-2 block text-4xl">
+        <span className="material-symbols-outlined mb-2 block text-3xl">
           qr_code_2
         </span>
         <p className="text-sm font-bold">QR is not available</p>
@@ -1387,7 +1386,7 @@ function DepositModal({
                   disabled={creating || checking}
                   className="mt-4 w-full rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Back to Wallet
+                  Close
                 </button>
               )}
             </>
@@ -1753,7 +1752,7 @@ function getTransactionPresentation(transaction) {
       typeLabel: "Earnings Available",
       description:
         "Your earnings have been moved to your available balance.",
-      balanceMovement: "Pending Earnings → Available Balance",
+      balanceMovement: "Pending → Available",
       icon: "paid",
       iconClass:
         "border-green-400/20 bg-green-400/10 text-green-300",
@@ -1768,7 +1767,7 @@ function getTransactionPresentation(transaction) {
       typeLabel: "Pending Earning Refunded",
       description:
         "The milestone payment was refunded after dispute resolution.",
-      balanceMovement: "Pending Earnings → Client Refund",
+      balanceMovement: "Pending → Client Refund",
       icon: "undo",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
       sign: "-",
@@ -1798,7 +1797,7 @@ function getTransactionPresentation(transaction) {
       typeLabel: "Pending Earning",
       description:
         "Your milestone payment is being held until the project is completed.",
-      balanceMovement: "Milestone Payment → Pending Earnings",
+      balanceMovement: "Milestone Payment → Pending",
       icon: "hourglass_top",
       iconClass:
         "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
@@ -1815,7 +1814,7 @@ function getTransactionPresentation(transaction) {
         transaction.description,
         "The requested amount was moved to locked balance."
       ),
-      balanceMovement: "Available Balance → Locked Balance",
+      balanceMovement: "Available → Locked Balance",
       icon: "lock_clock",
       iconClass:
         "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
@@ -1879,7 +1878,7 @@ function getTransactionPresentation(transaction) {
         transaction.description,
         "The held withdrawal amount was returned to your available balance."
       ),
-      balanceMovement: "Locked Balance → Available Balance",
+      balanceMovement: "Locked Balance → Available",
       icon: "undo",
       iconClass:
         "border-green-400/20 bg-green-400/10 text-green-300",
@@ -1896,7 +1895,7 @@ function getTransactionPresentation(transaction) {
         transaction.description,
         "Wallet deposit confirmed."
       ),
-      balanceMovement: "Payment Provider → Available Balance",
+      balanceMovement: "Payment Provider → Available",
       icon: "add_card",
       iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
       sign: "+",
@@ -1936,7 +1935,7 @@ function getTransactionPresentation(transaction) {
         transaction.description,
         "Proposal credits were purchased."
       ),
-      balanceMovement: "Available Balance → Package Purchase",
+      balanceMovement: "Available → Package Purchase",
       icon: "shopping_bag",
       iconClass:
         "border-purple-400/20 bg-purple-400/10 text-purple-300",
@@ -1965,7 +1964,7 @@ function getTransactionPresentation(transaction) {
       ),
       balanceMovement: isOutgoing
         ? "Wallet → Escrow"
-        : "Escrow → Expert Wallet",
+        : "Escrow → Wallet",
       icon: isOutgoing ? "logout" : "paid",
       iconClass: isOutgoing
         ? "border-red-400/20 bg-red-400/10 text-red-300"

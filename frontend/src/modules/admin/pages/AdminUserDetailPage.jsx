@@ -421,20 +421,19 @@ const requestLockUser = () => {
               <span className="material-symbols-outlined text-[18px]">
                 arrow_back
               </span>
-              Back to Users
+              Users
             </button>
 
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              User Detail
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              User
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Account information
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Account overview
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review account status, wallet balances, security information,
-              and administrative restrictions.
+              Review account details, wallet balances, and restrictions.
             </p>
           </div>
 
@@ -462,7 +461,7 @@ const requestLockUser = () => {
         {loading ? (
           <PageSkeleton rows={4} />
         ) : !user ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
             <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
               person_off
             </span>
@@ -475,7 +474,7 @@ const requestLockUser = () => {
           </div>
         ) : (
           <>
-            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
               <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
                 <div className="flex min-w-0 flex-col gap-5 sm:flex-row sm:items-center">
                   <UserAvatar
@@ -508,7 +507,7 @@ const requestLockUser = () => {
                       disabled={actionLoading || isBanned}
                       className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Unlock User
+                      Unlock
                     </button>
                   ) : (
                     <button
@@ -517,7 +516,7 @@ const requestLockUser = () => {
                       disabled={actionLoading || isBanned}
                       className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Lock User
+                      Lock
                     </button>
                   )}
 
@@ -527,7 +526,7 @@ const requestLockUser = () => {
                     disabled={actionLoading || isBanned}
                     className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Ban User
+                    Ban
                   </button>
                 </div>
               </div>
@@ -556,15 +555,15 @@ const requestLockUser = () => {
               />
             </section>
 
-            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-white">
-                    Wallet Summary
+                    Wallet
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Current wallet balances recorded for this account.
+                    Current account balances.
                   </p>
                 </div>
 
@@ -599,7 +598,7 @@ const requestLockUser = () => {
 
                 <InfoCard
                   icon="savings"
-                  label="Total Earning"
+                  label="Total earnings"
                   value={formatMoney(getWalletValue(wallet, "totalEarning"))}
                   tone="green"
                 />
@@ -613,9 +612,9 @@ const requestLockUser = () => {
             </section>
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                 <h2 className="mb-5 text-xl font-bold text-white">
-                  Account Details
+                  Account details
                 </h2>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -641,9 +640,9 @@ const requestLockUser = () => {
               </section>
 
               <aside className="space-y-6">
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                   <h2 className="mb-5 text-xl font-bold text-white">
-                    Restriction Status
+                    Restrictions
                   </h2>
 
                   <div className="space-y-4">
@@ -665,9 +664,9 @@ const requestLockUser = () => {
                 </section>
 
                 {(user.lockReason || user.banReason) && (
-                  <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                  <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Admin Notes
+                      Restriction notes
                     </h2>
 
                     {user.lockReason && (
@@ -694,9 +693,9 @@ const requestLockUser = () => {
 
         {action.type === "LOCK" && (
           <ActionModal
-            title="Lock User"
+            title="Lock"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Lock User"
+            confirmLabel="Lock"
             confirmTone="yellow"
             loading={actionLoading}
             error={modalError}
@@ -747,9 +746,9 @@ const requestLockUser = () => {
 
         {action.type === "UNLOCK" && (
           <ActionModal
-            title="Unlock User"
+            title="Unlock"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Unlock User"
+            confirmLabel="Unlock"
             confirmTone="green"
             loading={actionLoading}
             error={modalError}
@@ -779,9 +778,9 @@ const requestLockUser = () => {
 
         {action.type === "BAN" && (
           <ActionModal
-            title="Ban User"
+            title="Ban"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Ban User"
+            confirmLabel="Ban"
             confirmTone="red"
             loading={actionLoading}
             error={modalError}
@@ -919,7 +918,7 @@ function ReviewConfirmationModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -939,12 +938,12 @@ function ReviewConfirmationModal({
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
         <button
@@ -989,7 +988,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -1026,13 +1025,13 @@ function UserAvatar({ name, avatarUrl }) {
       <img
         src={avatarUrl}
         alt={name || "User"}
-        className="h-24 w-24 rounded-3xl border border-white/10 object-cover"
+        className="h-24 w-24 rounded-2xl border border-white/10 object-cover"
       />
     );
   }
 
   return (
-    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-3xl border border-cyan-400/30 bg-cyan-400/10 text-3xl font-black text-cyan-300">
+    <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 text-3xl font-black text-cyan-300">
       {getInitials(name)}
     </div>
   );
@@ -1047,7 +1046,7 @@ function InfoCard({ icon, label, value, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan

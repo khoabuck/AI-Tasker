@@ -246,17 +246,16 @@ export default function ResubmitProposalPage() {
           </button>
 
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Resubmit Proposal
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Revise Proposal
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Update and resubmit your proposal
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Update your proposal
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Improve your proposal details and submit a new version for client
-              review.
+              Address the client feedback and send a revised version.
             </p>
           </div>
 
@@ -297,9 +296,9 @@ export default function ResubmitProposalPage() {
                   />
                 )}
 
-                <Card title="Resubmit Note" icon="edit_note">
+                <Card title="Revision Summary" icon="edit_note">
                   <TextArea
-                    label="What did you change?"
+                    label="What changed?"
                     required
                     value={formData.resubmitNote}
                     onChange={(value) => updateField("resubmitNote", value)}
@@ -310,7 +309,7 @@ export default function ResubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Proposal Content" icon="description">
+                <Card title="Cover Letter" icon="description">
                   <TextArea
                     label="Cover Letter"
                     required
@@ -323,7 +322,7 @@ export default function ResubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Price & Timeline" icon="payments">
+                <Card title="Terms" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <NumberInput
                       label="Proposed Price"
@@ -355,11 +354,11 @@ export default function ResubmitProposalPage() {
                     onClick={syncFromMilestones}
                     className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Sync price and timeline from milestones
+                    Use milestone totals
                   </button>
                 </Card>
 
-                <Card title="Delivery Plan" icon="task_alt">
+                <Card title="Project Plan" icon="task_alt">
                   <div className="space-y-5">
                     <TextArea
                       label="Expected Outputs"
@@ -405,12 +404,11 @@ export default function ResubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Milestone requirement
+                      Milestone details
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only needs title, payment amount, and
-                      duration days.
+                      Add a title, amount, and duration for each milestone.
                     </p>
                   </div>
 
@@ -479,7 +477,7 @@ export default function ResubmitProposalPage() {
                     disabled={submitting}
                     className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Resubmitting..." : "Resubmit Proposal"}
+                    {submitting ? "Resubmitting..." : "Revise Proposal"}
                   </button>
                 </div>
               </form>
@@ -487,7 +485,7 @@ export default function ResubmitProposalPage() {
               <aside className="space-y-6">
                 <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                   <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
-                    Current Proposal
+                    Current version
                   </p>
 
                   <h2 className="text-xl font-bold text-white">
@@ -515,11 +513,10 @@ export default function ResubmitProposalPage() {
                 </section>
 
                 <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5 text-cyan-100">
-                  <p className="font-bold">Tip</p>
+                  <p className="font-bold">Revision note</p>
 
                   <p className="mt-2 text-sm leading-6">
-                    Keep your resubmit note short and clear. Explain exactly
-                    what changed so the client can review faster.
+                    Briefly summarize the changes for the client.
                   </p>
                 </section>
               </aside>

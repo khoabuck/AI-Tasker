@@ -178,7 +178,7 @@ export default function ExpertNavbar() {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `text-[11px] font-bold tracking-[0.16em] uppercase transition ${
+    `relative py-2 text-[12px] font-bold tracking-[0.06em] transition ${
       isActive ? "text-[#00F0FF]" : "text-gray-400 hover:text-white"
     }`;
 
@@ -214,8 +214,8 @@ export default function ExpertNavbar() {
   };
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0d1117]/95 backdrop-blur-xl">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-5 md:px-8">
+    <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0b0f15]/95 shadow-[0_8px_30px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+      <div className="mx-auto flex h-[68px] max-w-7xl items-center justify-between px-4 sm:px-5 md:px-8">
         <Link
           to="/expert/dashboard"
           className="inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
@@ -224,7 +224,7 @@ export default function ExpertNavbar() {
           <span className="ml-1 text-white">Tasker</span>
         </Link>
 
-        <nav className="hidden items-center gap-6 md:flex">
+        <nav className="hidden items-center gap-5 lg:flex">
           <NavLink to="/expert/dashboard" className={navLinkClass}>
             Home
           </NavLink>
@@ -303,7 +303,7 @@ export default function ExpertNavbar() {
             <button
               type="button"
               onClick={handleToggleNotifications}
-              className={`relative flex h-9 w-9 items-center justify-center rounded-lg border transition ${
+              className={`relative flex h-10 w-10 items-center justify-center rounded-full border transition ${
                 showNotifications ||
                 location.pathname.startsWith("/expert/notifications")
                   ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300"
@@ -341,13 +341,13 @@ export default function ExpertNavbar() {
           <div className="group relative">
             <button
               type="button"
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-bold text-cyan-300"
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-black text-cyan-200 shadow-[0_0_0_3px_rgba(34,211,238,0.05)] transition hover:border-cyan-300/70"
             >
               {getInitials()}
             </button>
 
-            <div className="invisible absolute right-0 top-full z-50 w-64 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100">
-              <div className="rounded-xl border border-white/10 bg-[#151a22] p-2 shadow-2xl">
+            <div className="invisible absolute right-0 top-full z-50 w-72 pt-3 opacity-0 transition group-hover:visible group-hover:opacity-100">
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#111720] p-2 shadow-[0_28px_90px_rgba(0,0,0,0.65)]">
                 <p className="truncate border-b border-white/10 px-3 py-2 text-xs text-gray-400">
                   {user?.email || "expert@aitasker.com"}
                 </p>
@@ -452,26 +452,26 @@ function NotificationPopup({
   onViewAll,
 }) {
   const unreadText =
-    unreadCount > 0 ? `${unreadCount} unread` : "All caught up";
+    unreadCount > 0 ? `${unreadCount} unread` : "You're all caught up";
 
   return (
-    <div className="absolute right-0 top-full z-[999] mt-2 w-[350px] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_24px_70px_rgba(0,0,0,0.7)]">
-      <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-white/[0.03] to-purple-400/10 px-3 py-2.5">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-300">
-              <span className="material-symbols-outlined text-[17px]">
-                notifications
-              </span>
-            </span>
+    <div className="absolute right-0 top-full z-[999] mt-3 w-[min(94vw,420px)] overflow-hidden rounded-2xl border border-white/10 bg-[#111720] shadow-[0_28px_90px_rgba(0,0,0,0.72)]">
+      <div className="border-b border-white/10 px-4 py-3.5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                <span className="material-symbols-outlined text-[19px]">
+                  notifications
+                </span>
+              </div>
 
-            <div>
-              <p className="text-[13px] font-black text-white">
-                Notifications
-              </p>
-              <p className="text-[10px] font-medium text-gray-400">
-                {unreadText}
-              </p>
+              <div>
+                <p className="text-base font-black text-white">Notifications</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-gray-500">
+                  {unreadText}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -479,39 +479,36 @@ function NotificationPopup({
             type="button"
             onClick={onMarkAllAsRead}
             disabled={markingAll || unreadCount <= 0}
-            className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-bold text-cyan-200 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-cyan-300 transition hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-35"
           >
-            {markingAll ? "Reading..." : "Read all"}
+            {markingAll ? "Updating..." : "Mark all read"}
           </button>
         </div>
       </div>
 
       <div
-        className="max-h-[330px] overflow-y-auto p-2 [&::-webkit-scrollbar]:hidden"
-        style={{
-          scrollbarWidth: "none",
-          msOverflowStyle: "none",
-        }}
+        className="max-h-[430px] overflow-y-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ msOverflowStyle: "none" }}
       >
         {loading ? (
-          <div className="flex flex-col items-center justify-center px-4 py-10 text-center">
-            <div className="h-7 w-7 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-300" />
-            <p className="mt-3 text-xs font-semibold text-gray-300">
-              Loading notifications...
-            </p>
-          </div>
+          <NotificationLoading />
         ) : notifications.length === 0 ? (
-          <div className="px-4 py-10 text-center">
-            <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
-              notifications_off
-            </span>
-            <p className="text-sm font-bold text-white">No notifications yet</p>
-            <p className="mt-1 text-xs text-gray-500">
-              Updates will appear here.
+          <div className="px-5 py-12 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-gray-600">
+              <span className="material-symbols-outlined text-[28px]">
+                notifications_none
+              </span>
+            </div>
+            <p className="mt-4 text-sm font-black text-white">
+              No notifications yet
+            </p>
+            <p className="mt-1 text-xs leading-5 text-gray-500">
+              New updates about jobs, projects, payments, and messages will
+              appear here.
             </p>
           </div>
         ) : (
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {notifications.map((notification, index) => {
               const notificationId = getNotificationId(notification);
               const target =
@@ -538,18 +535,38 @@ function NotificationPopup({
         )}
       </div>
 
-      <div className="border-t border-white/10 bg-white/[0.03] p-2">
+      <div className="border-t border-white/10 bg-black/10 p-2.5">
         <button
           type="button"
           onClick={onViewAll}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-white/[0.04] px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-black text-cyan-300 transition hover:bg-cyan-400/10"
         >
-          View all notifications
+          See all notifications
           <span className="material-symbols-outlined text-[16px]">
             arrow_forward
           </span>
         </button>
       </div>
+    </div>
+  );
+}
+
+function NotificationLoading() {
+  return (
+    <div className="space-y-1.5 p-1">
+      {Array.from({ length: 4 }).map((_, index) => (
+        <div
+          key={index}
+          className="flex animate-pulse gap-3 rounded-xl px-3 py-3"
+        >
+          <div className="h-11 w-11 shrink-0 rounded-full bg-white/[0.07]" />
+          <div className="min-w-0 flex-1">
+            <div className="h-3.5 w-2/3 rounded bg-white/10" />
+            <div className="mt-2 h-3 w-full rounded bg-white/[0.06]" />
+            <div className="mt-2 h-3 w-1/3 rounded bg-white/[0.05]" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -565,88 +582,93 @@ function NotificationItem({
   const notificationId = getNotificationId(notification);
   const tone = getNotificationTone(notification.type, target?.kind);
   const isRead = Boolean(notification.isRead);
+  const isMarking = String(markingId) === String(notificationId);
 
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={`group w-full rounded-xl border px-3 py-2.5 text-left transition ${
+    <div
+      className={`group relative overflow-hidden rounded-xl transition ${
         isRead
-          ? "border-transparent bg-transparent hover:border-white/10 hover:bg-white/[0.04]"
-          : "border-cyan-400/20 bg-cyan-400/[0.07] hover:border-cyan-300/50 hover:bg-cyan-400/[0.11]"
+          ? "hover:bg-white/[0.035]"
+          : "bg-cyan-400/[0.065] hover:bg-cyan-400/[0.1]"
       }`}
     >
-      <div className="flex gap-2.5">
-        <div
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${tone.className}`}
-        >
-          <span className="material-symbols-outlined text-[18px]">
-            {tone.icon}
-          </span>
-        </div>
+      {!isRead && (
+        <span className="absolute left-0 top-0 h-full w-[3px] bg-cyan-300" />
+      )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-[13px] font-extrabold text-white">
-              {notification.title || "Notification"}
-            </p>
-
-            {!isRead && (
-              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(34,211,238,0.9)]" />
-            )}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="w-full px-3 py-3 text-left"
+      >
+        <div className="flex gap-3">
+          <div
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border ${tone.className}`}
+          >
+            <span className="material-symbols-outlined text-[20px]">
+              {tone.icon}
+            </span>
           </div>
 
-          <p className="mt-1 line-clamp-2 text-xs leading-4 text-gray-400">
-            {notification.message ||
-              notification.content ||
-              "No message content."}
-          </p>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-3">
+              <p
+                className={`line-clamp-1 text-[13px] text-white ${
+                  isRead ? "font-bold" : "font-black"
+                }`}
+              >
+                {notification.title || "Notification"}
+              </p>
 
-          <div className="mt-2 flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <span className="rounded-full border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] text-gray-400">
-                {tone.label}
-              </span>
-
-              <span className="truncate text-[10px] font-medium text-gray-500">
-                {notificationService.formatNotificationTime(
-                  notification.createdAt
-                )}
-              </span>
+              {!isRead && (
+                <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-cyan-300" />
+              )}
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
-              {!isRead && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onMarkAsRead(notificationId);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.stopPropagation();
-                      onMarkAsRead(notificationId);
-                    }
-                  }}
-                  className="rounded-full px-1.5 py-0.5 text-[10px] font-bold text-cyan-300 hover:bg-cyan-400/10"
-                >
-                  {markingId === notificationId ? "..." : "Read"}
-                </span>
-              )}
+            <p className="mt-1 line-clamp-2 text-xs leading-[1.15rem] text-gray-400">
+              {notification.message ||
+                notification.content ||
+                "No message content."}
+            </p>
 
-              <span className="flex items-center gap-0.5 text-[10px] font-bold text-cyan-300">
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className={`text-[10px] font-black ${tone.textClass}`}>
+                  {tone.label}
+                </span>
+
+                <span className="text-[10px] font-semibold text-gray-600">
+                  {notificationService.formatNotificationTime(
+                    notification.createdAt
+                  )}
+                </span>
+              </div>
+
+              <span className="flex shrink-0 items-center gap-0.5 text-[10px] font-black text-cyan-300">
                 {opening ? "Opening..." : target?.label || "Open"}
-                <span className="material-symbols-outlined text-[14px] transition group-hover:translate-x-0.5">
+                <span className="material-symbols-outlined text-[14px]">
                   chevron_right
                 </span>
               </span>
             </div>
           </div>
         </div>
-      </div>
-    </button>
+      </button>
+
+      {!isRead && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onMarkAsRead(notificationId);
+          }}
+          disabled={isMarking}
+          className="absolute bottom-2.5 right-9 rounded-md px-2 py-1 text-[10px] font-bold text-gray-500 opacity-0 transition hover:bg-white/[0.05] hover:text-cyan-300 group-hover:opacity-100 disabled:opacity-40"
+        >
+          {isMarking ? "Updating..." : "Mark read"}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -728,6 +750,7 @@ function getNotificationTone(type, kind) {
       label: "Proposal",
       icon: "description",
       className: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+      textClass: "text-purple-300",
     };
   }
 
@@ -736,6 +759,7 @@ function getNotificationTone(type, kind) {
       label: "Agreement",
       icon: "contract",
       className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      textClass: "text-cyan-300",
     };
   }
 
@@ -744,6 +768,7 @@ function getNotificationTone(type, kind) {
       label: "Project",
       icon: "folder_managed",
       className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      textClass: "text-cyan-300",
     };
   }
 
@@ -752,6 +777,7 @@ function getNotificationTone(type, kind) {
       label: "Milestone",
       icon: "flag",
       className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      textClass: "text-yellow-300",
     };
   }
 
@@ -779,6 +805,7 @@ function getNotificationTone(type, kind) {
       label: "Message",
       icon: "chat",
       className: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      textClass: "text-cyan-300",
     };
   }
 
@@ -793,6 +820,7 @@ function getNotificationTone(type, kind) {
       label: "Wallet",
       icon: "account_balance_wallet",
       className: "border-green-400/20 bg-green-400/10 text-green-300",
+      textClass: "text-green-300",
     };
   }
 
@@ -801,6 +829,7 @@ function getNotificationTone(type, kind) {
       label: "Review",
       icon: "reviews",
       className: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      textClass: "text-yellow-300",
     };
   }
 
@@ -809,6 +838,7 @@ function getNotificationTone(type, kind) {
       label: "Dispute",
       icon: "gavel",
       className: "border-red-400/20 bg-red-400/10 text-red-300",
+      textClass: "text-red-300",
     };
   }
 
@@ -816,5 +846,6 @@ function getNotificationTone(type, kind) {
     label: "Notification",
     icon: "notifications",
     className: "border-white/10 bg-white/[0.04] text-gray-300",
+    textClass: "text-gray-400",
   };
 } 

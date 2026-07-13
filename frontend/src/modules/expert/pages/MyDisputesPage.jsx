@@ -59,17 +59,16 @@ export default function MyDisputesPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                My Disputes
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Disputes
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Dispute management
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Your disputes
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track disputes you opened or are involved in, and submit
-                evidence when needed.
+                Track open cases, evidence, and admin decisions.
               </p>
             </div>
 
@@ -78,7 +77,7 @@ export default function MyDisputesPage() {
               onClick={() => navigate("/expert/projects")}
               className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
             >
-              View Projects
+              Projects
             </button>
           </div>
 
@@ -110,11 +109,11 @@ export default function MyDisputesPage() {
               </span>
 
               <h2 className="text-xl font-bold text-white">
-                No disputes found
+                No disputes
               </h2>
 
               <p className="mt-2 text-sm text-gray-400">
-                You can open a dispute from an eligible milestone detail page.
+                Eligible milestones allow you to open a dispute.
               </p>
 
               <button
@@ -122,7 +121,7 @@ export default function MyDisputesPage() {
                 onClick={() => navigate("/expert/projects")}
                 className="mt-6 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Go to Projects
+                View Projects
               </button>
             </div>
           )}
@@ -133,7 +132,7 @@ export default function MyDisputesPage() {
                 <DisputeCard
                   key={dispute.disputeId}
                   dispute={dispute}
-                  onDetail={() =>
+                  onView={() =>
                     navigate(`/expert/disputes/${dispute.disputeId}`)
                   }
                   onProject={() =>
@@ -174,7 +173,7 @@ function ListSkeleton({ rows = 5 }) {
 }
 
 
-function DisputeCard({ dispute, onDetail, onProject }) {
+function DisputeCard({ dispute, onView, onProject }) {
   const status = String(dispute.status || "").toUpperCase();
   const resolutionLabel =
     RESOLUTION_TYPE_LABEL[dispute.resolutionType] || dispute.resolutionType;
@@ -222,7 +221,7 @@ function DisputeCard({ dispute, onDetail, onProject }) {
           {dispute.adminDecision && (
             <div className="mt-4 rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-cyan-100">
               <p className="text-xs font-bold uppercase tracking-wider">
-                Admin Decision
+                Decision
               </p>
 
               <p className="mt-2 line-clamp-3 text-sm leading-6">
@@ -235,7 +234,7 @@ function DisputeCard({ dispute, onDetail, onProject }) {
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-72">
           <div className="space-y-4">
             <Info
-              label="Disputed Amount"
+              label="Amount"
               value={formatMoney(dispute.disputedAmount)}
             />
 
@@ -257,10 +256,10 @@ function DisputeCard({ dispute, onDetail, onProject }) {
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={onDetail}
+                onClick={onView}
                 className="flex-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Detail
+                View
               </button>
 
               <button

@@ -382,15 +382,15 @@ export default function ContractDetailPage() {
             Back to proposal
           </button>
 
-          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} contract={contract} />
                 </div>
 
-                <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                  Contract Workspace
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                  Contract
                 </p>
 
                 <h1 className="max-w-3xl text-2xl font-bold text-white md:text-3xl">
@@ -398,9 +398,7 @@ export default function ContractDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review the final scope, milestone plan, fees, and expected earnings in one place.
-                  Actions become available only when the client has sent the contract
-                  for your confirmation.
+                  Review the scope, milestones, payment, and response options.
                 </p>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -410,7 +408,7 @@ export default function ContractDetailPage() {
                     value={`${getTimelineDays(contract)} days`}
                   />
                   <QuickStat
-                    label="You'll Receive"
+                    label="Your earnings"
                     value={formatMoney(
                       getExpertReceivable(
                         contract,
@@ -428,7 +426,7 @@ export default function ContractDetailPage() {
 
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5 lg:w-[320px]">
                 <p className="text-sm font-bold text-cyan-100">
-                  What happens next?
+                  Next step
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-cyan-100/80">
@@ -499,7 +497,7 @@ export default function ContractDetailPage() {
               />
 
               <p className="mt-2 text-xs text-red-100/70">
-                Briefly explain why you cannot accept these terms.
+                
               </p>
 
               <div className="mt-4 flex justify-end gap-3">
@@ -535,7 +533,7 @@ export default function ContractDetailPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <Card title="Scope of Work" icon="assignment">
+              <Card title="Scope" icon="assignment">
                 <TextValue value={projectScope || "No project scope provided."} />
               </Card>
 
@@ -549,7 +547,7 @@ export default function ContractDetailPage() {
                 </Card>
               )}
 
-              <Card title="Payment Terms" icon="payments">
+              <Card title="Payment" icon="payments">
                 <TextValue value={contractTerms || "No payment terms provided."} />
               </Card>
 
@@ -563,13 +561,11 @@ export default function ContractDetailPage() {
                 {milestoneDrafts.length === 0 ? (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                     <p className="text-sm font-bold text-white">
-                      Milestones are not available yet.
+                      No milestones yet.
                     </p>
 
                     <p className="mt-2 text-sm leading-6 text-gray-400">
-                      You can still review the overall scope, deliverables, and
-                      payment terms. Milestones may be added by the client before
-                      the project starts.
+                      The client may add milestones before the project starts.
                     </p>
                   </div>
                 ) : (
@@ -590,7 +586,7 @@ export default function ContractDetailPage() {
             <aside className="space-y-6">
               <PaymentSummary contract={contract} milestones={milestoneDrafts} />
 
-              <Card title="Contract Info" icon="info">
+              <Card title="Contract details" icon="info">
                 <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
                 <Info
@@ -662,7 +658,7 @@ function PageSkeleton({ rows = 4 }) {
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-28 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
@@ -809,9 +805,9 @@ function ConfirmActionModal({
 function AcceptSuccessModal({ projectId }) {
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-green-400/30 bg-[#151a22] p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
+      <div className="w-full max-w-md rounded-2xl border border-green-400/30 bg-[#151a22] p-6 text-center shadow-[0_30px_120px_rgba(0,0,0,0.65)]">
         <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-green-400/30 bg-green-400/10">
-          <span className="material-symbols-outlined text-4xl text-green-300">
+          <span className="material-symbols-outlined text-3xl text-green-300">
             check_circle
           </span>
         </div>
@@ -865,7 +861,7 @@ function PaymentSummary({ contract, milestones = [] }) {
 
         <div className="mt-5 rounded-2xl border border-green-400/30 bg-black/20 p-5">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-green-100/70">
-            You'll Receive
+            Your earnings
           </p>
 
           <p className="mt-2 break-words text-3xl font-black text-green-300">
@@ -886,7 +882,7 @@ function PaymentSummary({ contract, milestones = [] }) {
           />
 
           <PaymentRow
-            label={`Expert Service Fee${
+            label={`Service fee${
               expertFeeRate > 0 ? ` (${formatPercentage(expertFeeRate)})` : ""
             }`}
             value={`-${formatMoney(expertServiceFee)}`}
@@ -1018,7 +1014,7 @@ function MilestoneDraftCard({
 
       <div className="mt-4 rounded-xl border border-green-400/25 bg-green-400/10 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-green-100/70">
-          You'll Receive
+          Your earnings
         </p>
 
         <p className="mt-1 text-xl font-black text-green-300">

@@ -1,67 +1,125 @@
+import { Link } from "react-router-dom";
 import ExpertNavbar from "./ExpertNavbar";
 
 export default function ExpertLayout({ children }) {
+  const currentYear = new Date().getFullYear();
+
   return (
-    <div className="min-h-screen bg-[#0d1117] text-[#e1e2eb]">
+    <div className="flex min-h-screen flex-col bg-[#0d1117] text-[#e1e2eb]">
       <ExpertNavbar />
 
-      <main>{children}</main>
+      <main className="min-h-0 flex-1">{children}</main>
 
-      <footer className="mt-16 border-t border-white/10 bg-[#0b0f16] px-5 py-10 md:px-8">
-        <div className="mx-auto grid max-w-7xl grid-cols-1 gap-8 md:grid-cols-4">
-          <div>
-            <div className="mb-3 inline-flex items-center text-lg font-extrabold">
-              <span className="text-[#00F0FF]">AI</span>
-              <span className="ml-1 text-white">Tasker</span>
+      <footer className="border-t border-white/10 bg-[#0b0f15]">
+        <div className="mx-auto max-w-7xl px-5 py-8 md:px-8">
+          <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-[1.35fr_1fr_1fr_1fr]">
+            <div>
+              <Link
+                to="/expert/dashboard"
+                className="inline-flex items-center text-lg font-extrabold tracking-tight no-underline"
+              >
+                <span className="text-cyan-300">AI</span>
+                <span className="ml-1 text-white">Tasker</span>
+              </Link>
+
+              <p className="mt-3 max-w-sm text-sm leading-6 text-gray-500">
+                Find AI projects, submit proposals, manage your work, and track
+                your earnings in one place.
+              </p>
             </div>
 
-            <p className="max-w-xs text-sm leading-6 text-gray-500">
-              Connect experts with AI projects, proposals, milestones and
-              deliverables.
-            </p>
+            <FooterSection title="Find Work">
+              <FooterLink to="/expert/jobs">Browse Jobs</FooterLink>
+
+              <FooterLink to="/expert/recommended-jobs">
+                Recommended Jobs
+              </FooterLink>
+
+              <FooterLink to="/expert/proposals">
+                My Proposals
+              </FooterLink>
+
+              <FooterLink to="/expert/proposal/drafts">
+                Saved Proposals
+              </FooterLink>
+            </FooterSection>
+
+            <FooterSection title="My Work">
+              <FooterLink to="/expert/projects">Projects</FooterLink>
+
+              <FooterLink to="/expert/disputes">Disputes</FooterLink>
+
+              <FooterLink to="/expert/messages">Messages</FooterLink>
+
+              <FooterLink to="/expert/reviews">Reviews</FooterLink>
+            </FooterSection>
+
+            <FooterSection title="Account">
+              <FooterLink to="/expert/profile">Profile</FooterLink>
+
+              <FooterLink to="/expert/skills">Skills</FooterLink>
+
+              <FooterLink to="/expert/wallet">Wallet</FooterLink>
+
+              <FooterLink to="/expert/notifications">
+                Notifications
+              </FooterLink>
+            </FooterSection>
           </div>
 
-          <div>
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-white">
-              Expert
-            </h3>
-            <div className="space-y-2 text-sm text-gray-500">
-              <p>Browse Jobs</p>
-              <p>My Proposals</p>
-              <p>My Projects</p>
-            </div>
-          </div>
+          <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-5 text-xs text-gray-600 sm:flex-row sm:items-center sm:justify-between">
+            <p>© {currentYear} AI Tasker. All rights reserved.</p>
 
-          <div>
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-white">
-              Support
-            </h3>
-            <div className="space-y-2 text-sm text-gray-500">
-              <p>Messages</p>
-              <p>Disputes</p>
-              <p>Notifications</p>
-            </div>
-          </div>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <Link
+                to="/expert/dashboard"
+                className="transition hover:text-cyan-300"
+              >
+                Dashboard
+              </Link>
 
-          <div>
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-white">
-              Social
-            </h3>
+              <Link
+                to="/expert/messages"
+                className="transition hover:text-cyan-300"
+              >
+                Messages
+              </Link>
 
-            <div className="flex gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-gray-400">
-                in
-              </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-gray-400">
-                gh
-              </div>
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-gray-400">
-                x
-              </div>
+              <Link
+                to="/expert/notifications"
+                className="transition hover:text-cyan-300"
+              >
+                Notifications
+              </Link>
             </div>
           </div>
         </div>
       </footer>
     </div>
+  );
+}
+
+function FooterSection({ title, children }) {
+  return (
+    <div>
+      <h3 className="mb-3 text-[11px] font-black uppercase tracking-[0.16em] text-gray-300">
+        {title}
+      </h3>
+
+      <div className="flex flex-col items-start gap-2.5 text-sm">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function FooterLink({ to, children }) {
+  return (
+    <Link
+      to={to}
+      className="text-gray-500 transition hover:text-cyan-300"
+    >
+      {children}
+    </Link>
   );
 }

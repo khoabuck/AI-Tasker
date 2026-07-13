@@ -450,7 +450,7 @@ export default function SubmitProposalPage() {
       title: "Submit this proposal draft?",
       message:
         "Your draft will be sent to the client and one proposal submission will be used. Please confirm that the price, timeline, and milestones are final.",
-      confirmLabel: "Submit Draft",
+      confirmLabel: "Send Draft",
       tone: "cyan",
     });
   };
@@ -462,7 +462,7 @@ export default function SubmitProposalPage() {
       title: "Submit this proposal?",
       message:
         "Your proposal will be sent to the client and one proposal submission will be used. Please review the price, timeline, and milestones before continuing.",
-      confirmLabel: "Submit Proposal",
+      confirmLabel: "Send Proposal",
       tone: "cyan",
     });
   };
@@ -654,25 +654,25 @@ export default function SubmitProposalPage() {
           </button>
 
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {currentDraftId ? "Edit Proposal Draft" : "Submit Proposal"}
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              {currentDraftId ? "Edit Proposal Draft" : "Send Proposal"}
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
               {currentDraftId
                 ? "Continue your draft"
-                : "Send proposal to client"}
+                : "Send a professional proposal"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
               {currentDraftId
                 ? "Update your saved draft, then submit it when you are ready."
-                : "Fill in your price, timeline, delivery plan, and milestones."}
+                : "Present your approach, price, timeline, and milestones."}
             </p>
           </div>
 
           {error && (
-            <Alert type="danger" title="Proposal error" message={error} />
+            <Alert type="danger" title="Please review your proposal" message={error} />
           )}
 
           {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
@@ -707,12 +707,11 @@ export default function SubmitProposalPage() {
                     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                       <div>
                         <p className="font-bold text-cyan-200">
-                          You are editing a saved draft.
+                          Editing saved draft
                         </p>
 
                         <p className="mt-1 text-sm leading-6 text-cyan-100/80">
-                          Saving draft will not submit it to the client and will
-                          not use proposal credits.
+                          Saving keeps this proposal private until you submit it.
                         </p>
                       </div>
 
@@ -746,13 +745,13 @@ export default function SubmitProposalPage() {
                         onClick={() => setShowUpgradeModal(true)}
                         className="rounded-xl bg-yellow-300 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-200"
                       >
-                        Buy Credits
+                        Get Credits
                       </button>
                     </div>
                   </section>
                 )}
 
-                <Card title="Proposal Content" icon="description">
+                <Card title="Cover Letter" icon="description">
                   <TextArea
                     label="Cover Letter"
                     required
@@ -765,7 +764,7 @@ export default function SubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Price & Timeline" icon="payments">
+                <Card title="Terms" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <NumberInput
                       label="Proposed Price"
@@ -797,11 +796,11 @@ export default function SubmitProposalPage() {
                     onClick={syncFromMilestones}
                     className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Sync price and timeline from milestones
+                    Use milestone totals
                   </button>
                 </Card>
 
-                <Card title="Delivery Plan" icon="task_alt">
+                <Card title="Project Plan" icon="task_alt">
                   <div className="space-y-5">
                     <TextArea
                       label="Expected Outputs"
@@ -847,12 +846,11 @@ export default function SubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Milestone requirement
+                      Milestone details
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only needs title, payment amount, and
-                      duration days.
+                      Add a title, amount, and duration for each milestone.
                     </p>
                   </div>
 
@@ -946,7 +944,7 @@ export default function SubmitProposalPage() {
                         ? "Submitting..."
                         : accessLoading
                         ? "Checking..."
-                        : "Submit Draft"}
+                        : "Send Draft"}
                     </button>
                   ) : (
                     <button
@@ -964,7 +962,7 @@ export default function SubmitProposalPage() {
                         ? "Submitting..."
                         : accessLoading
                         ? "Checking..."
-                        : "Submit Proposal"}
+                        : "Send Proposal"}
                     </button>
                   )}
                 </div>
@@ -982,12 +980,6 @@ export default function SubmitProposalPage() {
                       value={`${submissionsLeft || 0}`}
                       tone={submissionsLeft > 0 ? "green" : "warning"}
                     />
-
-                    <Info
-                      label="Wallet Balance"
-                      value={formatMoney(walletBalance?.availableBalance || 0)}
-                    />
-
                     <Info
                       label="Free Submit"
                       value={
@@ -1099,7 +1091,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -1211,10 +1203,10 @@ function UpgradeProposalModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-5xl overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-[#111823] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#111823] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
           <div>
-            <p className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-cyan-300">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
               Credits Required
             </p>
 

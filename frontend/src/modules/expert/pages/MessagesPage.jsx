@@ -291,24 +291,23 @@ export default function MessagesPage() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   return (
     <ExpertLayout>
       <div className="px-4 py-6 md:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Expert Messages
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Messages
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
               Messages
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Chat with clients about jobs, proposals, projects and
-              deliverables.
+              Chat with clients about active work and proposals.
             </p>
           </div>
 
@@ -326,7 +325,7 @@ export default function MessagesPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Select a client to start chatting.
+                  Choose a conversation.
                 </p>
 
                 <div className="relative mt-4">
@@ -338,7 +337,7 @@ export default function MessagesPage() {
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Search conversations..."
+                    placeholder="Search messages..."
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                   />
                 </div>
@@ -432,7 +431,7 @@ export default function MessagesPage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-500">
-                      Choose a conversation on the left to view messages.
+                      Select a conversation to view messages.
                     </p>
                   </div>
                 </div>
@@ -471,7 +470,7 @@ export default function MessagesPage() {
                         </h3>
 
                         <p className="mt-2 text-sm text-gray-500">
-                          Send the first message to start the conversation.
+                          Start the conversation with a message.
                         </p>
                       </div>
                     )}
@@ -530,7 +529,7 @@ export default function MessagesPage() {
                         onChange={(event) =>
                           setMessageInput(event.target.value)
                         }
-                        placeholder="Type your message..."
+                        placeholder="Write a message..."
                         className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                       />
 

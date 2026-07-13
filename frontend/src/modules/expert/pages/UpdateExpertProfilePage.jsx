@@ -368,7 +368,7 @@ export default function UpdateExpertProfilePage() {
             Back to profile
           </button>
 
-          <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+          <section className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.24)]">
             <div className="relative border-b border-white/10 px-5 py-6 md:px-7">
               <div className="pointer-events-none absolute right-0 top-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
 
@@ -382,11 +382,11 @@ export default function UpdateExpertProfilePage() {
                   </div>
 
                   <h1 className="text-2xl font-black text-white md:text-3xl">
-                    Make your profile easier to hire
+                    Keep your profile client-ready
                   </h1>
 
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                    Keep your public introduction clear and your proof of work up to date.
+                    Update your public profile and verification details.
                   </p>
                 </div>
 
@@ -504,7 +504,7 @@ function BasicProfileForm({
   return (
     <form onSubmit={onSubmit}>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+        <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_14px_36px_rgba(0,0,0,0.20)] md:p-7">
           <div className="mb-6 flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
               <span className="material-symbols-outlined text-[20px]">
@@ -517,7 +517,7 @@ function BasicProfileForm({
                 Public profile
               </h2>
               <p className="mt-1 text-sm text-gray-500">
-                This is what clients see first.
+                Visible to clients.
               </p>
             </div>
           </div>
@@ -532,7 +532,7 @@ function BasicProfileForm({
                 />
               ) : (
                 <div className="flex h-full w-full items-center justify-center text-cyan-300">
-                  <span className="material-symbols-outlined text-5xl">
+                  <span className="material-symbols-outlined text-4xl">
                     person
                   </span>
                 </div>
@@ -542,7 +542,7 @@ function BasicProfileForm({
             <div className="min-w-0 flex-1">
               <p className="font-black text-white">Profile photo</p>
               <p className="mt-1 text-sm leading-5 text-gray-500">
-                Use a clear square photo with a simple background.
+                Use a clear, professional photo.
               </p>
 
               <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
@@ -634,7 +634,7 @@ function BasicProfileForm({
         </section>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.2)]">
+          <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_14px_36px_rgba(0,0,0,0.20)]">
             <div className="h-20 bg-gradient-to-r from-cyan-400/20 via-purple-400/10 to-transparent" />
 
             <div className="-mt-10 p-5">
@@ -664,7 +664,7 @@ function BasicProfileForm({
 
               <p className="mt-4 line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-gray-400">
                 {formData.bio ||
-                  "Your introduction will appear here as clients browse expert profiles."}
+                  "Your profile preview appears here."}
               </p>
 
               <div className="mt-4 flex items-center gap-2">
@@ -728,7 +728,7 @@ function VerificationProfileForm({
     <form onSubmit={onSubmit}>
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="space-y-5">
-          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_14px_36px_rgba(0,0,0,0.20)] md:p-7">
             <div className="mb-6 flex items-start gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-400/20 bg-purple-400/10 text-purple-300">
                 <span className="material-symbols-outlined text-[20px]">
@@ -741,7 +741,7 @@ function VerificationProfileForm({
                   Skills and experience
                 </h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  Keep the skills focused on services you actively offer.
+                  List the services you actively offer.
                 </p>
               </div>
             </div>
@@ -763,7 +763,7 @@ function VerificationProfileForm({
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_14px_36px_rgba(0,0,0,0.20)] md:p-7">
             <div className="mb-6 flex items-start justify-between gap-4">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
@@ -777,7 +777,7 @@ function VerificationProfileForm({
                     Proof of work
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Add links clients can open and review.
+                    Add public work links.
                   </p>
                 </div>
               </div>
@@ -821,7 +821,7 @@ function VerificationProfileForm({
             <FieldError message={errors.publicLinks} />
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_14px_36px_rgba(0,0,0,0.20)] md:p-7">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-300">
@@ -835,7 +835,7 @@ function VerificationProfileForm({
                     Certificates
                   </h2>
                   <p className="mt-1 text-sm text-gray-500">
-                    Add only credentials that strengthen your profile.
+                    Add relevant credentials.
                   </p>
                 </div>
               </div>
@@ -952,7 +952,7 @@ function VerificationProfileForm({
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
-          <section className="rounded-3xl border border-purple-400/20 bg-purple-400/[0.06] p-5">
+          <section className="rounded-2xl border border-purple-400/20 bg-purple-400/[0.06] p-5">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-purple-400/20 bg-purple-400/10 text-purple-300">
               <span className="material-symbols-outlined">shield_person</span>
             </div>
@@ -962,7 +962,7 @@ function VerificationProfileForm({
             </h3>
 
             <p className="mt-2 text-sm leading-6 text-gray-400">
-              Updated proof is reviewed before it replaces the information on your active profile.
+              Changes are reviewed before publishing.
             </p>
           </section>
 
@@ -1013,7 +1013,7 @@ function AvailabilityToggle({ checked, disabled, onChange }) {
         <div>
           <p className="font-black text-white">Available for work</p>
           <p className="mt-1 text-sm text-gray-500">
-            Let clients know whether you are accepting new projects.
+            Show whether you are open to new work.
           </p>
         </div>
       </div>

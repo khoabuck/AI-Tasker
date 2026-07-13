@@ -284,10 +284,10 @@ export default function ExpertProfilePage() {
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-6xl">
-          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_55px_rgba(0,0,0,0.28)] md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
               <div className="flex gap-5">
-                <div className="h-24 w-24 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                <div className="h-24 w-24 overflow-hidden rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
                   {profile?.avatarUrl ? (
                     <img
                       src={profile.avatarUrl}
@@ -296,7 +296,7 @@ export default function ExpertProfilePage() {
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-cyan-300">
-                      <span className="material-symbols-outlined text-5xl">
+                      <span className="material-symbols-outlined text-4xl">
                         person
                       </span>
                     </div>
@@ -304,8 +304,8 @@ export default function ExpertProfilePage() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                    Expert Profile
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                    Public profile
                   </p>
 
                   <h1 className="text-3xl font-extrabold text-white">
@@ -335,7 +335,7 @@ export default function ExpertProfilePage() {
                 {canUpdateAfterActive && (
                   <Link
                     to="/expert/profile/update"
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    className="rounded-xl border border-green-400/50 bg-green-400 px-5 py-3 text-center text-sm font-black text-black transition hover:bg-green-300"
                   >
                     Update Profile
                   </Link>
@@ -346,7 +346,7 @@ export default function ExpertProfilePage() {
                   onClick={openChangePasswordModal}
                   className="rounded-xl border border-indigo-400/50 bg-indigo-400/10 px-5 py-3 text-center text-sm font-bold text-indigo-200 transition hover:bg-indigo-400 hover:text-white"
                 >
-                  Change Password
+                  Security
                 </button>
 
                 <Link
@@ -395,7 +395,7 @@ export default function ExpertProfilePage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <Card title="Bio">
+              <Card title="About">
                 <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
                   {profile?.bio || "No bio."}
                 </p>
@@ -431,13 +431,12 @@ export default function ExpertProfilePage() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">
-                    No certificates added. Certificates are optional, but they
-                    can help strengthen your profile.
+                    No certificates added.
                   </p>
                 )}
               </Card>
 
-              <Card title="Client Reviews">
+              <Card title="Reviews">
                 {reviewsLoading ? (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5 text-center text-sm text-gray-400">
                     Loading reviews...
@@ -472,7 +471,7 @@ export default function ExpertProfilePage() {
                     </span>
                     <p className="font-bold text-white">No reviews yet</p>
                     <p className="mt-1 text-sm leading-6 text-gray-500">
-                      Client reviews will appear after completed projects.
+                      Reviews will appear after completed projects.
                     </p>
                   </div>
                 ) : (
@@ -493,7 +492,7 @@ export default function ExpertProfilePage() {
             </main>
 
             <aside className="space-y-6">
-              <Card title="Profile Summary">
+              <Card title="Profile details">
                 <Summary label="Score" value={feedback.scoreText} />
                 <Summary label="Passing Score" value={feedback.passScore} />
                 <Summary
@@ -506,7 +505,7 @@ export default function ExpertProfilePage() {
                 />
               </Card>
 
-              <Card title="Work Preferences">
+              <Card title="Availability">
                 <Summary
                   label="Experience"
                   value={`${profile?.yearsOfExperience ?? 0} years`}
@@ -549,7 +548,7 @@ function ExpertProfileSkeleton() {
   return (
     <div className="animate-pulse px-5 py-8 md:px-8">
       <div className="mx-auto max-w-6xl">
-        <div className="h-56 rounded-3xl border border-white/10 bg-[#151a22]" />
+        <div className="h-56 rounded-2xl border border-white/10 bg-[#151a22]" />
 
         <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
           <div className="space-y-6">
@@ -602,7 +601,7 @@ function ChangePasswordModal({
     >
       <form
         onSubmit={onSubmit}
-        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-3xl border border-indigo-400/30 bg-[#151a22] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.75)]"
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-indigo-400/30 bg-[#151a22] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.75)]"
       >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
@@ -611,7 +610,7 @@ function ChangePasswordModal({
             </p>
 
             <h2 className="mt-2 text-2xl font-black text-white">
-              Change Password
+              Security
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -700,7 +699,7 @@ function ChangePasswordModal({
             <span className="material-symbols-outlined text-[19px]">
               lock_reset
             </span>
-            {loading ? "Changing..." : "Change Password"}
+            {loading ? "Changing..." : "Security"}
           </button>
         </div>
       </form>
@@ -855,7 +854,7 @@ function ReviewRatingOverview({ summary }) {
           </p>
 
           <div className="mt-2 flex items-end justify-center gap-1.5">
-            <span className="text-5xl font-black leading-none text-white">
+            <span className="text-4xl font-black leading-none text-white">
               {summary.averageText}
             </span>
             <span className="pb-1 text-sm font-bold text-gray-500">/ 5</span>
@@ -1350,14 +1349,14 @@ function getFriendlyProfileMessage(profile) {
   const userStatus = getUserStatus(profile);
 
   if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
-    return "Your profile is ready. Keep your information updated so clients can trust your expertise.";
+    return "Your profile is live and visible to clients.";
   }
 
   if (reviewStatus === "NEEDS_CORRECTION" || reviewStatus === "REJECTED") {
-    return "Your profile needs a few improvements before it can be approved.";
+    return "Update the highlighted areas before resubmitting.";
   }
 
-  return "Your profile is being reviewed. You can still keep your information up to date.";
+  return "Your profile is currently under review.";
 }
 
 function getReviewStatus(profile) {

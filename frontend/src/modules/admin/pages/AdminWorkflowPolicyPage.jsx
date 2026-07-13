@@ -27,7 +27,7 @@ const POLICY_SECTIONS = [
   {
     key: "proposal",
     icon: "edit_document",
-    title: "Proposal Rules",
+    title: "Proposals",
     description:
       "Controls expert proposal drafts, proposal milestones, free submissions, and resubmission note length.",
     fields: [
@@ -56,7 +56,7 @@ const POLICY_SECTIONS = [
   {
     key: "contract",
     icon: "contract",
-    title: "Contract & Project Rules",
+    title: "Contracts & projects",
     description:
       "Controls contract signing time and how many active projects an expert can handle.",
     fields: [
@@ -76,7 +76,7 @@ const POLICY_SECTIONS = [
   {
     key: "deliverable",
     icon: "task_alt",
-    title: "Deliverable Rules",
+    title: "Deliverables",
     description:
       "Controls client review time and automatic approval timing for submitted work.",
     fields: [
@@ -97,7 +97,7 @@ const POLICY_SECTIONS = [
   {
     key: "wallet",
     icon: "account_balance_wallet",
-    title: "Wallet & Payment Rules",
+    title: "Payments",
     description:
       "Controls deposit limits, withdrawal limits, withdrawal fee, QR expiration, and payout sync warning.",
     fields: [
@@ -148,7 +148,7 @@ const POLICY_SECTIONS = [
   {
     key: "dispute",
     icon: "gavel",
-    title: "Dispute Rules",
+    title: "Disputes",
     description: "Controls warning threshold after repeated lost disputes.",
     fields: [
       {
@@ -335,17 +335,16 @@ export default function AdminWorkflowPolicyPage() {
         <div className="mx-auto max-w-7xl">
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                System Workflow
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Workflow
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Workflow Policy
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Workflow rules
               </h1>
 
               <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-                View the current marketplace rules. To change a specific group,
-                click Edit on that section and provide an update reason.
+                Review and update marketplace workflow limits by section.
               </p>
             </div>
 
@@ -420,7 +419,7 @@ export default function AdminWorkflowPolicyPage() {
 function PageSkeleton({ cards = 4 }) {
   return (
     <div className="animate-pulse">
-      <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
         <div className="h-4 w-36 rounded bg-cyan-400/10" />
         <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
         <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -448,13 +447,13 @@ function PageSkeleton({ cards = 4 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -487,7 +486,7 @@ function PolicySaveConfirmModal({
         </div>
 
         <h2 className="text-lg font-black text-white">
-          Save policy changes?
+          Save workflow changes?
         </h2>
 
         <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -526,7 +525,7 @@ function PolicySaveConfirmModal({
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -545,7 +544,7 @@ function PolicySaveConfirmModal({
 
 function PolicySummary({ policy }) {
   return (
-    <section className="rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 via-[#151a22]/95 to-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 via-[#151a22]/95 to-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="mb-3 flex items-center gap-3">
@@ -557,10 +556,10 @@ function PolicySummary({ policy }) {
 
             <div>
               <h2 className="text-xl font-black text-white">
-                Current Workflow Setup
+                Current configuration
               </h2>
               <p className="mt-1 text-sm text-gray-400">
-                These values are currently applied by the marketplace workflow.
+                Rules currently applied across the marketplace.
               </p>
             </div>
           </div>
@@ -572,11 +571,11 @@ function PolicySummary({ policy }) {
             value={formatDateTime(policy?.updatedAt, "N/A")}
           />
           <MiniStat
-            label="Policy Status"
+            label="Status"
             value={policy?.isActive === false ? "Inactive" : "Active"}
           />
           <MiniStat
-            label="Updated By"
+            label="Updated by"
             value={
               policy?.updatedByAdminName ||
               policy?.updatedByAdminEmail ||
@@ -589,7 +588,7 @@ function PolicySummary({ policy }) {
       {policy?.updateReason && (
         <div className="mt-5 rounded-2xl border border-white/10 bg-black/10 p-4">
           <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
-            Last Update Reason
+            Last update note
           </p>
           <p className="mt-2 text-sm leading-6 text-gray-300">
             {policy.updateReason}
@@ -602,7 +601,7 @@ function PolicySummary({ policy }) {
 
 function PolicySectionCard({ section, policy, onEdit }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex items-start gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
@@ -692,8 +691,8 @@ function EditSectionModal({
             </div>
 
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-300">
-                Edit Workflow Policy
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-300">
+                Edit Workflow rules
               </p>
               <h2 className="mt-1 text-xl font-black text-white">
                 {section.title}

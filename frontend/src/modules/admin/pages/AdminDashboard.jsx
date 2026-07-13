@@ -159,24 +159,23 @@ export default function AdminDashboard() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Admin Dashboard
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Dashboard
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              System overview
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Platform overview
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Quick overview of users, projects, finance, disputes and recent
-              platform activity.
+              Monitor users, projects, finance, disputes, and recent activity.
             </p>
           </div>
 
@@ -241,14 +240,14 @@ export default function AdminDashboard() {
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
                 icon="account_balance_wallet"
-                label="User Wallet Balance"
+                label="User balances"
                 value={formatMoney(finance.totalUserAvailableBalance)}
                 tone="cyan"
               />
 
               <SummaryCard
                 icon="savings"
-                label="Expert Pending Earnings"
+                label="Pending expert earnings"
                 value={formatMoney(finance.totalExpertPendingEarningsBalance)}
                 tone="green"
               />
@@ -264,7 +263,7 @@ export default function AdminDashboard() {
 
               <SummaryCard
                 icon="pending_actions"
-                label="Pending Withdrawals"
+                label="Pending payouts"
                 value={formatNumber(
                   finance.pendingWithdrawalCount ||
                     summary.pendingWithdrawalCount
@@ -275,8 +274,8 @@ export default function AdminDashboard() {
 
             <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
               <SnapshotCard
-                title="Finance Snapshot"
-                subtitle="Main platform financial numbers"
+                title="Finance"
+                subtitle="Current financial summary"
                 icon="monitoring"
                 items={[
                   {
@@ -302,7 +301,7 @@ export default function AdminDashboard() {
                     ),
                   },
                   {
-                    label: "Pending Withdrawals",
+                    label: "Pending payouts",
                     value: formatMoney(
                       finance.pendingWithdrawalAmount ||
                         summary.pendingWithdrawalAmount
@@ -312,8 +311,8 @@ export default function AdminDashboard() {
               />
 
               <SnapshotCard
-                title="Project Snapshot"
-                subtitle="Current project status summary"
+                title="Projects"
+                subtitle="Current project summary"
                 icon="folder_copy"
                 items={[
                   {
@@ -340,11 +339,11 @@ export default function AdminDashboard() {
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-xl font-bold text-white">
-                    Recent Activity
+                    Recent activity
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Latest platform activity returned from backend.
+                    Latest financial activity.
                   </p>
                 </div>
 
@@ -398,7 +397,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -437,7 +436,7 @@ function SummaryCard({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -461,7 +460,7 @@ function SummaryCard({
 
 function SnapshotCard({ title, subtitle, icon, items }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-white">{title}</h2>

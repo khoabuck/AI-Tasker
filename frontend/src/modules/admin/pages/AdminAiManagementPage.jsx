@@ -37,10 +37,10 @@ const EMPTY_TEST_FORM = {
 };
 
 const TABS = [
-  { key: "SETTINGS", label: "AI Settings", icon: "tune" },
-  { key: "MODELS", label: "Allowed Models", icon: "view_module" },
-  { key: "TEST", label: "Test AI", icon: "science" },
-  { key: "USAGE", label: "Usage Monitor", icon: "monitoring" },
+  { key: "SETTINGS", label: "Settings", icon: "tune" },
+  { key: "MODELS", label: "Models", icon: "view_module" },
+  { key: "TEST", label: "Test", icon: "science" },
+  { key: "USAGE", label: "Usage", icon: "monitoring" },
 ];
 
 const SETTINGS_NUMBER_FIELDS = [
@@ -406,7 +406,7 @@ export default function AdminAiManagementPage() {
       }. Model: ${modelForm.model || "N/A"} · Max output tokens: ${
         modelForm.maxOutputTokens || "N/A"
       } · Status: ${modelForm.isEnabled ? "Enabled" : "Disabled"}.`,
-      confirmLabel: editingModel ? "Save Model" : "Create Model",
+      confirmLabel: editingModel ? "Save Model" : "Add model",
       tone: "cyan",
     });
   };
@@ -527,17 +527,16 @@ export default function AdminAiManagementPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Admin AI Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              AI Management
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              AI control center
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              AI management
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Manage global AI settings, allowed models, test model responses,
-              and monitor token usage across the platform.
+              Manage models, limits, testing, and AI usage.
             </p>
           </div>
 
@@ -577,7 +576,7 @@ export default function AdminAiManagementPage() {
 
               <StatCard
                 icon="memory"
-                label="Current Model"
+                label="Model"
                 value={settingsForm.model || "N/A"}
                 description="Primary model for AI features"
                 tone="cyan"
@@ -585,7 +584,7 @@ export default function AdminAiManagementPage() {
 
               <StatCard
                 icon="token"
-                label="Monthly Tokens"
+                label="Tokens"
                 value={formatNumber(usageSummary?.totalTokens || 0)}
                 description={`${formatPercent(
                   usageSummary?.tokenUsagePercent
@@ -606,7 +605,7 @@ export default function AdminAiManagementPage() {
               />
             </section>
 
-            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-2 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
               <div className="flex flex-wrap gap-2">
                 {TABS.map((tab) => (
                   <button
@@ -679,7 +678,7 @@ export default function AdminAiManagementPage() {
 
         {showModelModal && (
           <ModelModal
-            title={editingModel ? "Edit AI Model" : "Create AI Model"}
+            title={editingModel ? "Edit model" : "Add model"}
             form={modelForm}
             errors={modelErrors}
             modalError={modelModalError}
@@ -714,7 +713,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -740,13 +739,13 @@ function PageSkeleton({ cards = 4, admin = false }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -820,10 +819,10 @@ function ConfirmActionModal({
 
 function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="mb-6 flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">AI Settings</h2>
+          <h2 className="text-xl font-bold text-white">Settings</h2>
           <p className="mt-1 text-sm leading-6 text-gray-400">
             Configure the default model, response mode, token budgets, and
             request limits used by AI features.
@@ -847,7 +846,7 @@ function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <SelectInput
-            label="Current Model"
+            label="Model"
             required
             value={form.model}
             error={errors.model}
@@ -969,10 +968,10 @@ function ModelsTab({ models, onCreate, onEdit }) {
   const enabledCount = models.filter((item) => item.isEnabled).length;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-white">Allowed Models</h2>
+          <h2 className="text-lg font-bold text-white">Models</h2>
           <p className="mt-1 text-sm text-gray-500">
             {enabledCount} active of {models.length} configured model(s).
           </p>
@@ -983,7 +982,7 @@ function ModelsTab({ models, onCreate, onEdit }) {
           onClick={onCreate}
           className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
-          Create Model
+          Add model
         </button>
       </div>
 
@@ -1055,8 +1054,8 @@ function ModelsTab({ models, onCreate, onEdit }) {
 function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
-      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-        <h2 className="text-xl font-bold text-white">Test AI Model</h2>
+      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+        <h2 className="text-xl font-bold text-white">Test Model</h2>
         <p className="mt-1 text-sm text-gray-400">
           Send a controlled test prompt before using a model in production.
         </p>
@@ -1118,7 +1117,7 @@ function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <div className="mb-5">
           <h2 className="text-xl font-bold text-white">Test Result</h2>
           <p className="mt-1 text-sm text-gray-400">
@@ -1325,10 +1324,10 @@ function UsageTab({
 }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Usage Monitor</h2>
+            <h2 className="text-xl font-bold text-white">Usage</h2>
             <p className="mt-1 text-sm text-gray-400">
               Monitor AI requests, token usage, failed calls, and estimated cost.
             </p>
@@ -1389,7 +1388,7 @@ function UsageTab({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <h2 className="text-xl font-bold text-white">Usage By Feature</h2>
         <p className="mt-1 text-sm text-gray-400">
           Breakdown of AI usage by system feature.
@@ -1430,7 +1429,7 @@ function UsageTab({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <h2 className="text-xl font-bold text-white">Recent AI Logs</h2>
         <p className="mt-1 text-sm text-gray-400">
           Recent AI activity and failed request summaries.
@@ -1627,7 +1626,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1930,7 +1929,7 @@ function validateSettings(form) {
   const errors = {};
 
   if (!String(form.model || "").trim()) {
-    errors.model = "Current Model is required.";
+    errors.model = "Model is required.";
   }
 
   SETTINGS_NUMBER_FIELDS.forEach((field) => {

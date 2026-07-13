@@ -71,12 +71,12 @@ export default function ProjectMilestonesPage() {
 
           <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Project Milestones
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Milestones
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {project?.title || "Project milestones"}
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                {project?.title || "Milestones"}
               </h1>
 
               <p className="mt-2 text-sm text-gray-400">
@@ -96,7 +96,7 @@ export default function ProjectMilestonesPage() {
                 onClick={() => navigate(`/expert/projects/${projectId}`)}
                 className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
               >
-                Project Detail
+                Project overview
               </button>
 
               <button
@@ -115,9 +115,7 @@ export default function ProjectMilestonesPage() {
             <div className="mb-5 rounded-2xl border border-green-400/30 bg-green-400/10 px-5 py-4 text-sm text-green-100">
               <p className="font-bold text-green-300">Project completed</p>
               <p className="mt-1 leading-6">
-                Milestones are read-only. You can review details and previous
-                deliverables, but you cannot submit, resubmit, or open a new
-                dispute.
+                This project is complete. Milestones are read-only.
               </p>
             </div>
           )}
@@ -129,11 +127,11 @@ export default function ProjectMilestonesPage() {
               </span>
 
               <h2 className="text-xl font-bold text-white">
-                No milestones found
+                No milestones yet
               </h2>
 
               <p className="mt-2 text-sm text-gray-400">
-                Milestones will appear after the project is initialized.
+                Milestones will appear when the project is ready.
               </p>
             </div>
           )}
@@ -191,7 +189,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -256,7 +254,7 @@ function MilestoneCard({
 
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-80">
           <div className="space-y-4">
-            <Info label="Net Earning" value={formatMoney(getMilestoneNetEarning(milestone))} />
+            <Info label="Your earnings" value={formatMoney(getMilestoneNetEarning(milestone))} />
             <Info label="Due Date" value={formatDate(milestone.dueDate)} />
             <Info
               label="Status"
@@ -264,12 +262,12 @@ function MilestoneCard({
             />
 
             <div className="rounded-xl border border-green-400/20 bg-green-400/10 p-3">
-              <p className="text-xs uppercase tracking-wider text-green-100/70">Payment Breakdown</p>
+              <p className="text-xs uppercase tracking-wider text-green-100/70">Payment</p>
               <p className="mt-1 text-sm font-bold text-white">
                 {formatMoney(getMilestoneAmount(milestone))}
               </p>
               <p className="mt-1 text-xs text-green-100/70">
-                Fee -{formatMoney(getMilestoneServiceFee(milestone))} · You receive {formatMoney(getMilestoneNetEarning(milestone))}
+                Fee {formatMoney(getMilestoneServiceFee(milestone))} · You receive {formatMoney(getMilestoneNetEarning(milestone))}
               </p>
             </div>
 
@@ -303,7 +301,7 @@ function MilestoneCard({
 
             {canDispute && (
               <p className="text-xs leading-5 text-gray-500">
-                Open this milestone to submit a dispute with reason and evidence.
+                
               </p>
             )}
           </div>

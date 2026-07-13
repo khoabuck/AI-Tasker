@@ -746,20 +746,18 @@ export default function SetupExpertProfilePage() {
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-5xl">
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              {isEditPage ? "Update Expert Profile" : "Setup Expert Profile"}
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              {isEditPage ? "Profile review" : "Create profile"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-4xl">
               {isEditPage
-                ? "Improve and resubmit your profile"
-                : "Create your expert profile"}
+                ? "Strengthen your expert profile"
+                : "Create a profile clients can trust"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Complete your profile so clients can understand your name, skills,
-              experience, public work links, and optional certificates.
-              Portfolio and GitHub are required. LinkedIn is optional.
+              Build a clear profile with your expertise, proof of work, and credentials.
             </p>
           </div>
 
@@ -794,16 +792,16 @@ export default function SetupExpertProfilePage() {
 
           <form
             onSubmit={handleSubmit}
-            className="space-y-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+            className="space-y-6 rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.24)] md:p-7"
           >
             <section>
               <h2 className="mb-4 text-lg font-bold text-white">
-                Basic Information
+                Profile overview
               </h2>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-[180px_1fr]">
                 <div>
-                  <div className="mb-3 h-36 w-36 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                  <div className="mb-3 h-36 w-36 overflow-hidden rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
                     {formData.avatarUrl ? (
                       <img
                         src={formData.avatarUrl}
@@ -820,7 +818,7 @@ export default function SetupExpertProfilePage() {
                   </div>
 
                   <label className="inline-flex cursor-pointer rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
-                    {uploadingAvatar ? "Uploading..." : "Upload Avatar"}
+                    {uploadingAvatar ? "Uploading..." : "Upload photo"}
 
                     <input
                       type="file"
@@ -899,12 +897,11 @@ export default function SetupExpertProfilePage() {
 
             <section className="border-t border-white/10 pt-6">
               <h2 className="mb-4 text-lg font-bold text-white">
-                Public Links
+                Work links
               </h2>
 
               <p className="mb-4 text-sm text-gray-500">
-                Portfolio and GitHub are required for verification. LinkedIn is
-                optional.
+                Add public links clients can review.
               </p>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -952,8 +949,7 @@ export default function SetupExpertProfilePage() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
-                    Optional. If you add one, only Certificate URL and
-                    Certificate Type are required.
+                    Add credentials that strengthen your profile.
                   </p>
                 </div>
 
@@ -981,11 +977,6 @@ export default function SetupExpertProfilePage() {
                   <p className="font-bold text-gray-300">
                     No certificates added.
                   </p>
-
-                  <p className="mt-1">
-                    You can submit without certificates. Adding certificates can
-                    help strengthen your profile.
-                  </p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1009,7 +1000,7 @@ export default function SetupExpertProfilePage() {
                           </div>
 
                           <p className="mt-1 text-xs text-gray-500">
-                            We will review the certificate link automatically.
+                            Credential details appear after review.
                           </p>
                         </div>
 
@@ -1064,7 +1055,7 @@ export default function SetupExpertProfilePage() {
                 disabled={saving || uploadingAvatar}
                 className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Clear Draft
+                Reset form
               </button>
 
               <button
@@ -1889,7 +1880,7 @@ function ScoreBadge({ badge }) {
   return (
     <span
       title={badge.label || "Review score"}
-      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-black ${toneClass}`}
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-black ${toneClass}`}
     >
       <span aria-hidden="true">{icon}</span>
       <span>{badge.text}</span>

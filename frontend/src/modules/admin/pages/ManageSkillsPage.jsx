@@ -193,7 +193,7 @@ export default function ManageSkillsPage() {
         : `Create the skill "${formData.skillName.trim()}" for expert profiles, job posts, recommendations, and matching? Category: ${
             formData.category.trim() || "Uncategorized"
           }.`,
-      confirmLabel: selectedSkill ? "Update Skill" : "Create Skill",
+      confirmLabel: selectedSkill ? "Update Skill" : "Add skill",
       tone: "cyan",
     });
   };
@@ -338,7 +338,7 @@ export default function ManageSkillsPage() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   const inputStyle =
     "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
@@ -352,17 +352,16 @@ export default function ManageSkillsPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Admin Skills
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Skills
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Skills management
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Skill management
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Manage system skills used by experts, jobs, recommendations,
-                and matching features.
+                Manage skills used across expert profiles and job matching.
               </p>
             </div>
 
@@ -372,7 +371,7 @@ export default function ManageSkillsPage() {
                 onClick={handleCreateNew}
                 className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
               >
-                New Skill
+                Add skill
               </button>
 
               <button
@@ -397,7 +396,7 @@ export default function ManageSkillsPage() {
           <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
             <SummaryCard
               icon="psychology"
-              label="Total Skills"
+              label="Skills"
               value={summary.total}
               tone="cyan"
             />
@@ -452,7 +451,7 @@ export default function ManageSkillsPage() {
                   onChange={(event) => setCategoryFilter(event.target.value)}
                   className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
                 >
-                  <option value="">All Categories</option>
+                  <option value="">All categories</option>
 
                   {categories.map((category) => (
                     <option key={category} value={category}>
@@ -563,7 +562,7 @@ export default function ManageSkillsPage() {
                               disabled={isChanging}
                               className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                              {isChanging ? "Saving..." : "Set Inactive"}
+                              {isChanging ? "Saving..." : "Deactivate"}
                             </button>
                           ) : (
                             <button
@@ -593,7 +592,7 @@ export default function ManageSkillsPage() {
                   <div className="mb-6 flex items-start justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-bold text-white">
-                        {selectedSkill ? "Edit Skill" : "Create Skill"}
+                        {selectedSkill ? "Edit skill" : "Add skill"}
                       </h2>
 
                       <p className="mt-1 text-sm text-gray-500">
@@ -616,7 +615,7 @@ export default function ManageSkillsPage() {
 
                   <div className="space-y-5">
                     <div>
-                      <label className={labelStyle}>Skill Name *</label>
+                      <label className={labelStyle}>Name *</label>
 
                       <input
                         type="text"
@@ -702,7 +701,7 @@ export default function ManageSkillsPage() {
                         ? "Saving..."
                         : selectedSkill
                         ? "Update Skill"
-                        : "Create Skill"}
+                        : "Add skill"}
                     </button>
                   </div>
                 </form>
@@ -759,13 +758,13 @@ function ListSkeleton({ rows = 5 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -819,7 +818,7 @@ function ConfirmActionModal({
             onClick={onCancel}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button
@@ -868,7 +867,7 @@ function InactiveSkillModal({ skill, loading, onCancel, onConfirm }) {
             disabled={loading}
             className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Updating..." : "Set Inactive"}
+            {loading ? "Updating..." : "Deactivate"}
           </button>
         </div>
       </div>
@@ -885,7 +884,7 @@ function SummaryCard({ icon, label, value, tone }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -928,7 +927,7 @@ function getFriendlyError(err) {
   }
 
   if (status === 404) {
-    return "Skills management is temporarily unavailable. Please try again later.";
+    return "Skill management is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

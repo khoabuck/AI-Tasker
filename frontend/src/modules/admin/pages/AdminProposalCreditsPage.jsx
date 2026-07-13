@@ -271,18 +271,17 @@ export default function AdminProposalCreditsPage() {
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl space-y-5">
-        <section className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-5 shadow-[0_18px_55px_rgba(0,0,0,0.3)]">
+        <section className="rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-300">
-            Admin / Proposal Credits
+            Paid credits
           </p>
 
           <h1 className="mt-2 text-2xl font-black text-white md:text-3xl">
-            Expert Proposal Credits
+            Expert proposal credits
           </h1>
 
           <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-400">
-            Review proposal submission eligibility and adjust paid proposal
-            credits for Expert accounts.
+            Review expert balances and adjust proposal credits.
           </p>
         </section>
 
@@ -298,28 +297,28 @@ export default function AdminProposalCreditsPage() {
 
         <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <StatCard
-            label="Total Experts"
+            label="Experts"
             value={stats.totalExperts}
             icon="groups"
             tone="cyan"
           />
 
           <StatCard
-            label="Experts With Credits"
+            label="With credits"
             value={stats.expertsWithCredits}
             icon="confirmation_number"
             tone="purple"
           />
 
           <StatCard
-            label="Can Submit Proposal"
+            label="Can submit"
             value={stats.canSubmitCount}
             icon="task_alt"
             tone="green"
           />
 
           <StatCard
-            label="Total Proposal Credits"
+            label="Total credits"
             value={stats.totalCredits}
             icon="workspace_premium"
             tone="yellow"
@@ -377,7 +376,7 @@ export default function AdminProposalCreditsPage() {
         <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_40px_rgba(0,0,0,0.22)]">
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3.5">
             <div>
-              <h2 className="font-black text-white">Expert Proposal Credits</h2>
+              <h2 className="font-black text-white">Expert proposal credits</h2>
               <p className="mt-1 text-xs text-gray-500">
                 {filteredExperts.length} expert(s)
               </p>
@@ -414,9 +413,9 @@ export default function AdminProposalCreditsPage() {
                 <thead className="border-b border-white/10 bg-white/[0.025]">
                   <tr>
                     <TableHead>Expert</TableHead>
-                    <TableHead>Proposal Credits</TableHead>
-                    <TableHead>Free Remaining</TableHead>
-                    <TableHead>Submission Access</TableHead>
+                    <TableHead>Paid credits</TableHead>
+                    <TableHead>Free credits</TableHead>
+                    <TableHead>Access</TableHead>
                     <TableHead align="right">Action</TableHead>
                   </tr>
                 </thead>
@@ -508,13 +507,13 @@ function ListSkeleton({ rows = 5 }) {
 function SuccessToast({ message, onClose }) {
   return (
     <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
-      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
           <span className="material-symbols-outlined">check_circle</span>
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -576,7 +575,7 @@ function ExpertCreditRow({ expert, disabled, onManage }) {
           disabled={disabled}
           className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3.5 py-2 text-xs font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:opacity-50"
         >
-          Manage Credits
+          Manage
         </button>
       </td>
     </tr>
@@ -620,7 +619,7 @@ function ManageCreditsModal({
         <div className="flex items-start justify-between gap-4 border-b border-white/10 px-5 py-4">
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-[0.16em] text-cyan-300">
-              Manage Proposal Credits
+              Manage Paid credits
             </p>
             <h2 className="mt-1.5 truncate text-lg font-black text-white">
               {expert.fullName || "Expert"}
@@ -653,7 +652,7 @@ function ManageCreditsModal({
               value={expert.proposalSubmitCredits || 0}
             />
             <CompactMetric
-              label="Free Remaining"
+              label="Free credits"
               value={freeRemaining}
             />
             <CompactMetric
@@ -667,7 +666,7 @@ function ManageCreditsModal({
             >
               <div>
                 <h3 className="text-sm font-black text-white">
-                  Adjust Proposal Credits
+                  Adjust Paid credits
                 </h3>
                 <p className="mt-1 text-xs leading-5 text-gray-500">
                   Add credits for support or remove credits when a correction
@@ -781,7 +780,7 @@ function ConfirmationModal({
             disabled={loading}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
-            Review Again
+            Back
           </button>
 
           <button

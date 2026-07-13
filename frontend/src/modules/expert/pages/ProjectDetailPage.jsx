@@ -205,20 +205,19 @@ export default function ProjectDetailPage() {
             Back to projects
           </button>
 
-          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_16px_48px_rgba(0,0,0,0.28)] md:p-8">
             <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                  Project Workspace
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                  Project
                 </p>
 
-                <h1 className="text-3xl font-bold text-white md:text-4xl">
+                <h1 className="text-3xl font-bold text-white md:text-3xl">
                   {project.title || "Untitled Project"}
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review project requirements, open milestones, and submit your
-                  work from one place.
+                  Manage milestones, submissions, and project details.
                 </p>
 
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -252,7 +251,7 @@ export default function ProjectDetailPage() {
                     }
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
                   >
-                    View Agreement
+                    View Contract
                   </button>
                 )}
 
@@ -263,7 +262,7 @@ export default function ProjectDetailPage() {
                     disabled={completionChecking}
                     className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {completionChecking ? "Checking..." : "Check Completion"}
+                    {completionChecking ? "Checking..." : "Verify Completion"}
                   </button>
                 )}
 
@@ -291,7 +290,7 @@ export default function ProjectDetailPage() {
           {showWalletAction && (
             <div className="mb-5 flex flex-col gap-3 rounded-xl border border-green-400/30 bg-green-400/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm leading-6 text-green-100">
-                Check your wallet to confirm the latest Available Balance and transaction history.
+                Your latest earnings update is available in Wallet.
               </p>
 
               <button
@@ -306,7 +305,7 @@ export default function ProjectDetailPage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <Card title="Project Overview" icon="description">
+              <Card title="Overview" icon="description">
                 <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
                   {project.description || "No project description provided."}
                 </p>
@@ -334,11 +333,11 @@ export default function ProjectDetailPage() {
                     </span>
 
                     <h2 className="text-lg font-bold text-white">
-                      No milestones found
+                      No milestones yet
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-400">
-                      Milestones will appear here when this project is ready.
+                      Milestones will appear when the project is ready.
                     </p>
                   </div>
                 )}
@@ -358,11 +357,11 @@ export default function ProjectDetailPage() {
             </main>
 
             <aside className="space-y-6">
-              <Card title="Quick Overview" icon="monitoring">
+              <Card title="Project summary" icon="monitoring">
                 <Info label="Status" value={getProjectStatusLabel(status)} />
                 <Info label="Contract Amount" value={formatMoney(getProjectGrossAmount(project, displayedMilestones))} />
-                <Info label="Expert Service Fee" value={`-${formatMoney(getProjectServiceFee(project, displayedMilestones))}`} />
-                <Info label="You Receive" value={formatMoney(getProjectNetEarning(project, displayedMilestones))} />
+                <Info label="Service fee" value={`-${formatMoney(getProjectServiceFee(project, displayedMilestones))}`} />
+                <Info label="Your earnings" value={formatMoney(getProjectNetEarning(project, displayedMilestones))} />
                 <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
                   label="Start Date"
@@ -406,7 +405,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />

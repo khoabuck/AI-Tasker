@@ -230,7 +230,7 @@ export default function MyProposalDraftsPage() {
       draft,
       title: "Submit this draft?",
       message: `The proposal for "${draft?.jobTitle || "this job"}" will be sent to the client and one submission will be used.`,
-      confirmLabel: "Submit Draft",
+      confirmLabel: "Submit",
       tone: "cyan",
     });
   };
@@ -306,17 +306,16 @@ export default function MyProposalDraftsPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-black uppercase tracking-[0.28em] text-[#00F0FF]">
-                Proposal Drafts
+              <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#00F0FF]">
+                Saved Proposals
               </p>
 
-              <h1 className="text-3xl font-black text-white md:text-4xl">
-                My Draft Proposals
+              <h1 className="text-3xl font-black text-white md:text-3xl">
+                Your proposal drafts
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Continue editing saved proposals, delete old drafts, or submit
-                them when ready.
+                Continue editing or submit when ready.
               </p>
             </div>
 
@@ -350,22 +349,22 @@ export default function MyProposalDraftsPage() {
             />
 
             <SummaryCard
-              label="Submissions Left"
+              label="Applications available"
               value={formatNumber(submissionsLeft)}
               icon="workspace_premium"
             />
 
             <SummaryCard
-              label="Wallet Balance"
+              label="Available balance"
               value={formatMoney(walletBalance?.availableBalance || 0)}
               icon="account_balance_wallet"
             />
           </section>
 
-          <section className="overflow-hidden rounded-[2rem] border border-white/10 bg-[#151a22] shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
+          <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_14px_42px_rgba(0,0,0,0.22)]">
             <div className="flex items-center justify-between gap-4 border-b border-white/10 px-6 py-5">
               <div>
-                <h2 className="text-xl font-black text-white">Draft List</h2>
+                <h2 className="text-xl font-black text-white">Saved drafts</h2>
                 <p className="mt-1 text-sm text-gray-500">
                   {drafts.length} draft(s)
                 </p>
@@ -446,7 +445,7 @@ function PageSkeleton({ cards = 4, compact = false }) {
       <div className="mx-auto max-w-7xl">
         <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
           <div className="h-4 w-32 rounded bg-cyan-400/10" />
           <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
           <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
@@ -480,7 +479,7 @@ function SuccessToast({ message, onClose }) {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="text-sm font-black text-white">Updated</p>
           <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
         </div>
 
@@ -507,7 +506,7 @@ function DraftCard({
   onDelete,
 }) {
   return (
-    <article className="rounded-[1.7rem] border border-white/10 bg-white/[0.035] p-6 transition hover:border-cyan-400/40 hover:bg-white/[0.05]">
+    <article className="rounded-2xl border border-white/10 bg-white/[0.035] p-6 transition hover:border-cyan-400/40 hover:bg-white/[0.05]">
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-cyan-300">
@@ -548,7 +547,7 @@ function DraftCard({
           onClick={onEdit}
           className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
-          Continue Editing
+          Continue
         </button>
 
         <button
@@ -557,7 +556,7 @@ function DraftCard({
           disabled={submitting || deleting}
           className="rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? "Submitting..." : "Submit Draft"}
+          {submitting ? "Submitting..." : "Submit"}
         </button>
 
         <button
@@ -634,10 +633,10 @@ function UpgradeDraftModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-5xl overflow-hidden rounded-[2rem] border border-cyan-400/20 bg-[#111823] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#111823] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
           <div>
-            <p className="mb-2 text-xs font-black uppercase tracking-[0.25em] text-cyan-300">
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
               Credits Required
             </p>
 
@@ -662,7 +661,7 @@ function UpgradeDraftModal({
 
         <div className="px-7 py-6">
           <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-            <p className="text-sm text-gray-400">Wallet Balance</p>
+            <p className="text-sm text-gray-400">Available balance</p>
 
             <p className="mt-1 text-3xl font-black text-cyan-300">
               {formatMoney(balance)}
