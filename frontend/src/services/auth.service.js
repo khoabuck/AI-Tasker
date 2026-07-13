@@ -1,42 +1,17 @@
 import {
+  getMeApi,
   loginApi,
   loginWithGoogleApi,
-  getMeApi,
+  logoutApi,
   updateMyAvatarApi,
 } from "../api/auth.api";
 
-const USE_MOCK = false;
-
-const MOCK_USERS = [
-  {
-    email: "client@test.com",
-    password: "123456",
-    role: "CLIENT",
-    status: "ACTIVE",
-    userId: 1,
-    fullName: "Test Client",
-  },
-  {
-    email: "expert@test.com",
-    password: "123456",
-    role: "EXPERT",
-    status: "ACTIVE",
-    userId: 2,
-    fullName: "Test Expert",
-  },
-  {
-    email: "admin@test.com",
-    password: "123456",
-    role: "ADMIN",
-    status: "ACTIVE",
-    userId: 3,
-    fullName: "Test Admin",
-  },
-];
-
 const getValue = (...values) => {
   return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      value !== ""
   );
 };
 
@@ -62,8 +37,20 @@ const normalizeUser = (user) => {
   if (!user) return null;
 
   return {
-    userId: getValue(user.userId, user.UserId, user.id, user.Id, 0),
-    email: getValue(user.email, user.Email, ""),
+    userId: getValue(
+      user.userId,
+      user.UserId,
+      user.id,
+      user.Id,
+      0
+    ),
+
+    email: getValue(
+      user.email,
+      user.Email,
+      ""
+    ),
+
     fullName: getValue(
       user.fullName,
       user.FullName,
@@ -73,8 +60,21 @@ const normalizeUser = (user) => {
       user.Name,
       ""
     ),
-    role: getValue(user.role, user.Role, ""),
-    status: getValue(user.status, user.Status, ""),
+
+    role: getValue(
+      user.role,
+      user.Role,
+      ""
+    ),
+
+    status: getValue(
+      user.status,
+      user.Status,
+      user.userStatus,
+      user.UserStatus,
+      ""
+    ),
+
     authProvider: getValue(
       user.authProvider,
       user.AuthProvider,
@@ -82,6 +82,7 @@ const normalizeUser = (user) => {
       user.Provider,
       "LOCAL"
     ),
+
     avatarUrl: getValue(
       user.avatarUrl,
       user.AvatarUrl,
@@ -94,61 +95,30 @@ const normalizeUser = (user) => {
   };
 };
 
-const extractAccessToken = (data) => {
-  return getValue(
-    data?.accessToken,
-    data?.AccessToken,
-    data?.token,
-    data?.Token,
-    data?.data?.accessToken,
-    data?.data?.AccessToken,
-    data?.data?.token,
-    data?.data?.Token
-  );
-};
+const isValidUser = (user) => {
+  const userId = Number(user?.userId || 0);
+  const email = String(user?.email || "").trim();
 
-const decodeJwtPayload = (token) => {
-  try {
-    if (!token || !token.includes(".")) return null;
-
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((char) => {
-          return `%${`00${char.charCodeAt(0).toString(16)}`.slice(-2)}`;
-        })
-        .join("")
-    );
-
-    return JSON.parse(jsonPayload);
-  } catch {
-    return null;
-  }
-};
-
-const getRoleFromToken = (token) => {
-  const payload = decodeJwtPayload(token);
-
-  return getValue(
-    payload?.role,
-    payload?.Role,
-    payload?.[
-      "http://schemas.microsoft.com/ws/2008/06/identity/claims/role"
-    ],
-    payload?.[
-      "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/role"
-    ],
-    ""
-  );
+  return userId > 0 && Boolean(email);
 };
 
 const getCurrentUserFromStorage = () => {
   try {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
+    const storedUser = localStorage.getItem("user");
+
+    if (!storedUser) return null;
+
+    const parsedUser = JSON.parse(storedUser);
+    const normalizedUser = normalizeUser(parsedUser);
+
+    if (!isValidUser(normalizedUser)) {
+      localStorage.removeItem("user");
+      return null;
+    }
+
+    return normalizedUser;
   } catch {
+    localStorage.removeItem("user");
     return null;
   }
 };
@@ -158,9 +128,15 @@ const saveUserToLocalStorage = (user) => {
 
   const normalizedUser = normalizeUser(user);
 
-  if (normalizedUser) {
-    localStorage.setItem("user", JSON.stringify(normalizedUser));
+  if (!isValidUser(normalizedUser)) {
+    localStorage.removeItem("user");
+    return null;
   }
+
+  localStorage.setItem(
+    "user",
+    JSON.stringify(normalizedUser)
+  );
 
   return normalizedUser;
 };
@@ -173,145 +149,300 @@ const mergeUserToLocalStorage = (newUserData) => {
     ...(newUserData || {}),
   });
 
-  if (mergedUser) {
-    localStorage.setItem("user", JSON.stringify(mergedUser));
+  if (!isValidUser(mergedUser)) {
+    return null;
   }
+
+  localStorage.setItem(
+    "user",
+    JSON.stringify(mergedUser)
+  );
 
   return mergedUser;
 };
 
-const getFriendlyError = (error, fallback) => {
+const clearLegacyAuthStorage = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("refreshToken");
+};
+
+const clearExpertProfileDrafts = () => {
+  localStorage.removeItem(
+    "aitasker_expert_profile_setup_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_edit_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_correction_draft"
+  );
+};
+
+const getFriendlyError = (
+  error,
+  fallback = "Something went wrong."
+) => {
   const data = error?.response?.data;
 
-  if (typeof data === "string") return data;
+  if (typeof data === "string") {
+    return data;
+  }
 
-  return data?.message || data?.title || error?.message || fallback;
+  if (data?.errors && typeof data.errors === "object") {
+    const messages = Object.values(data.errors)
+      .flat()
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
+  }
+
+  return (
+    data?.message ||
+    data?.Message ||
+    data?.title ||
+    data?.Title ||
+    data?.detail ||
+    data?.Detail ||
+    error?.message ||
+    fallback
+  );
+};
+
+const getResponseBody = (response) => {
+  /*
+   * Hỗ trợ hai trường hợp:
+   * - auth.api trả response.data
+   * - auth.api trả Axios response đầy đủ
+   */
+  if (
+    response?.data &&
+    (
+      typeof response?.status === "number" ||
+      response?.headers ||
+      response?.config
+    )
+  ) {
+    return response.data;
+  }
+
+  return response;
 };
 
 const authService = {
   login: async (credentials) => {
-    if (USE_MOCK) {
-      await new Promise((res) => setTimeout(res, 500));
+    try {
+      const response = await loginApi(credentials);
+      const body = getResponseBody(response);
 
-      const user = MOCK_USERS.find(
-        (item) =>
-          item.email === credentials.email &&
-          item.password === credentials.password
+      const loginData =
+        body?.data ||
+        body?.Data ||
+        body ||
+        {};
+
+      let user = normalizeUser(
+        loginData?.user ||
+        loginData?.User ||
+        body?.user ||
+        body?.User
       );
 
-      if (!user) {
+      /*
+       * Nếu login response chưa chứa đủ user,
+       * xác minh lại bằng phiên HttpOnly cookie.
+       */
+      if (!isValidUser(user)) {
+        try {
+          const meResponse = await getMeApi();
+
+          user = normalizeUser(
+            unwrapUserData(
+              getResponseBody(meResponse)
+            )
+          );
+        } catch {
+          /*
+           * Một số trạng thái onboarding có thể chưa gọi được /auth/me.
+           * Khi đó sẽ kiểm tra lại dữ liệu từ login response bên dưới.
+           */
+        }
+      }
+
+      if (!isValidUser(user)) {
+        localStorage.removeItem("user");
+
         return {
           success: false,
-          message: "Invalid email or password.",
+          message:
+            "Login response does not contain valid user information.",
         };
       }
 
-      const { password, ...userInfo } = user;
-      const accessToken = "mock-token-" + userInfo.role;
+      const savedUser = saveUserToLocalStorage(user);
 
-      localStorage.setItem("accessToken", accessToken);
-      localStorage.setItem("user", JSON.stringify(userInfo));
+      if (!savedUser) {
+        return {
+          success: false,
+          message:
+            "Unable to save the authenticated user information.",
+        };
+      }
+
+      /*
+       * Backend dùng HttpOnly cookie.
+       * Không lưu hoặc tạo access token giả ở frontend.
+       */
+      clearLegacyAuthStorage();
 
       return {
         success: true,
-        accessToken,
-        user: userInfo,
-        role: userInfo.role,
-        status: userInfo.status,
-      };
-    }
 
-    try {
-      const data = await loginApi(credentials);
+        // Giữ field này để không làm hỏng code cũ đang đọc accessToken.
+        accessToken: "",
 
-      const accessToken = extractAccessToken(data);
+        user: savedUser,
+        role: savedUser.role,
+        status: savedUser.status,
 
-      if (!accessToken) {
-        return {
-          success: false,
-          message: "Login response does not contain accessToken.",
-        };
-      }
-
-      localStorage.setItem("accessToken", accessToken);
-
-      let user = normalizeUser(data?.user || data?.User || data?.data?.user || data?.data?.User);
-
-      const tokenRole = getRoleFromToken(accessToken);
-
-      if (!user) {
-        user = normalizeUser({
-          role: tokenRole,
-          status: "ACTIVE",
-        });
-      }
-
-      if (!user?.role || !user?.status) {
-        user = normalizeUser({
-          ...user,
-          role: user?.role || tokenRole || "",
-          status: user?.status || "PENDING_ROLE",
-        });
-      }
-
-      if (!user) {
-        return {
-          success: false,
-          message: "Login response does not contain user information.",
-        };
-      }
-
-      localStorage.setItem("user", JSON.stringify(user));
-
-      return {
-        success: true,
-        accessToken,
-        user,
-        role: user.role,
-        status: user.status,
+        expiresAt:
+          loginData?.expiresAt ||
+          loginData?.ExpiresAt ||
+          body?.expiresAt ||
+          body?.ExpiresAt ||
+          null,
       };
     } catch (error) {
+      const httpStatus = error?.response?.status;
+
+      const responseData =
+        error?.response?.data?.data ||
+        error?.response?.data ||
+        {};
+
+      const errorCode = String(
+        responseData?.code ||
+        responseData?.Code ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+
+      if (
+        httpStatus === 429 &&
+        errorCode === "LOGIN_TEMPORARILY_BLOCKED"
+      ) {
+        const retryAfterHeader =
+          error?.response?.headers?.["retry-after"];
+
+        const retryAfterSeconds = Number(
+          responseData?.retryAfterSeconds ??
+          responseData?.RetryAfterSeconds ??
+          retryAfterHeader ??
+          0
+        );
+
+        return {
+          success: false,
+          code: errorCode,
+
+          message:
+            responseData?.message ||
+            responseData?.Message ||
+            "Too many failed login attempts. Please try again later.",
+
+          blockedUntilUtc:
+            responseData?.blockedUntilUtc ||
+            responseData?.BlockedUntilUtc ||
+            null,
+
+          retryAfterSeconds:
+            Number.isFinite(retryAfterSeconds) &&
+            retryAfterSeconds > 0
+              ? retryAfterSeconds
+              : 0,
+        };
+      }
+
       return {
         success: false,
-        message: getFriendlyError(error, "Login failed."),
+        message: getFriendlyError(
+          error,
+          "Login failed."
+        ),
       };
     }
   },
 
-  loginWithGoogle: async () => {
-    loginWithGoogleApi();
+  loginWithGoogle: () => {
+    return loginWithGoogleApi();
   },
 
   logout: async () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("user");
-    localStorage.removeItem("token");
-    localStorage.removeItem("currentUser");
+    try {
+      /*
+       * Backend phải được gọi để xóa HttpOnly cookie.
+       */
+      await logoutApi();
+    } catch {
+      /*
+       * Dù API logout lỗi vẫn phải xóa auth state phía frontend.
+       */
+    } finally {
+      clearLegacyAuthStorage();
+      clearExpertProfileDrafts();
 
-    localStorage.removeItem("aitasker_expert_profile_setup_draft");
-    localStorage.removeItem("aitasker_expert_profile_edit_draft");
-    localStorage.removeItem("aitasker_expert_profile_correction_draft");
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+      localStorage.removeItem("currentUser");
 
-    sessionStorage.clear();
+      sessionStorage.clear();
+
+      /*
+       * Báo cho các tab khác rằng user đã logout.
+       */
+      localStorage.setItem(
+        "aitasker_logout_at",
+        `${Date.now()}-${Math.random()}`
+      );
+    }
   },
 
+  /*
+   * Chỉ dùng localStorage làm UI cache.
+   * Không dùng để xác thực hoặc phân quyền.
+   */
   getCurrentUser: () => {
     return getCurrentUserFromStorage();
   },
 
+  /*
+   * JWT nằm trong HttpOnly cookie nên JavaScript không đọc được.
+   */
   getToken: () => {
-    return localStorage.getItem("accessToken");
+    return null;
   },
 
   refreshCurrentUser: async () => {
-    const data = await getMeApi();
-    const user = normalizeUser(unwrapUserData(data));
+    const response = await getMeApi();
 
-    if (user) {
-      localStorage.setItem("user", JSON.stringify(user));
+    const user = normalizeUser(
+      unwrapUserData(
+        getResponseBody(response)
+      )
+    );
+
+    if (!isValidUser(user)) {
+      localStorage.removeItem("user");
+      return null;
     }
 
-    return user;
+    return saveUserToLocalStorage(user);
   },
 
   updateMyAvatar: async (avatarUrlOrPayload) => {
@@ -326,20 +457,29 @@ const authService = {
       throw new Error("Avatar URL is required.");
     }
 
-    const data = await updateMyAvatarApi(payload);
+    const response = await updateMyAvatarApi(payload);
 
-    let updatedUser = normalizeUser(unwrapUserData(data));
+    let updatedUser = normalizeUser(
+      unwrapUserData(
+        getResponseBody(response)
+      )
+    );
 
-    if (updatedUser?.userId) {
+    if (isValidUser(updatedUser)) {
       return saveUserToLocalStorage(updatedUser);
     }
 
     try {
-      updatedUser = await authService.refreshCurrentUser();
+      updatedUser =
+        await authService.refreshCurrentUser();
 
-      if (updatedUser) return updatedUser;
+      if (updatedUser) {
+        return updatedUser;
+      }
     } catch {
-      // Nếu refresh lỗi thì merge avatarUrl vào user hiện tại.
+      /*
+       * Nếu /auth/me lỗi thì chỉ cập nhật avatar trong UI cache.
+       */
     }
 
     return mergeUserToLocalStorage({
@@ -347,19 +487,33 @@ const authService = {
     });
   },
 
+  /*
+   * Giữ các method cũ để không ảnh hưởng page/service hiện tại.
+   * Đây chỉ là kiểm tra UI cache, không phải xác thực bảo mật.
+   */
   isAuthenticated: () => {
-    return Boolean(localStorage.getItem("accessToken"));
+    return isValidUser(
+      authService.getCurrentUser()
+    );
   },
 
   getRole: () => {
-    return authService.getCurrentUser()?.role || null;
+    return (
+      authService.getCurrentUser()?.role ||
+      null
+    );
   },
 
   getStatus: () => {
-    return authService.getCurrentUser()?.status || null;
+    return (
+      authService.getCurrentUser()?.status ||
+      null
+    );
   },
 
   normalizeUser,
+
+  isValidUser,
 };
 
 export default authService;

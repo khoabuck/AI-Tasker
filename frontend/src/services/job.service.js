@@ -1,5 +1,6 @@
 import jobApi, { saveJobDraftApi, submitJobApi } from "../api/job.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -174,18 +175,23 @@ const normalizeJob = (job) => {
 const jobService = {
   async getOpenJobs(params = {}) {
     const response = await jobApi.getOpenJobs(params);
-
-    console.log("GET OPEN JOBS RESPONSE:", response?.data);
-
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
   },
 
   async getRecommendedJobs(limit = 10) {
     const response = await jobApi.getRecommendedJobs(limit);
-
-    console.log("GET RECOMMENDED JOBS RESPONSE:", response?.data);
-
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const byScore = Number(b.matchScore || 0) - Number(a.matchScore || 0);
+        return byScore !== 0
+          ? byScore
+          : compareDateDesc(a.createdAt, b.createdAt);
+      });
   },
 
   async getJobById(jobId) {
@@ -195,7 +201,6 @@ const jobService = {
 
     const response = await jobApi.getJobById(jobId);
 
-    console.log("GET JOB DETAIL RESPONSE:", response?.data);
 
     return normalizeJob(unwrapDetailData(response));
   },
@@ -203,9 +208,16 @@ const jobService = {
   async getMyJobs() {
     const response = await jobApi.getMyJobs();
 
-    console.log("GET MY JOBS RESPONSE:", response?.data);
 
-    return unwrapListData(response).map(normalizeJob).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeJob)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.createdAt,
+          b.updatedAt || b.createdAt
+        )
+      );
   },
 
   async saveJobDraft(payload) {

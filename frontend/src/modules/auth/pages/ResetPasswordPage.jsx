@@ -115,7 +115,7 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (form.newPassword.length <= MIN_PASSWORD_LENGTH) {
+    if (form.newPassword.length < MIN_PASSWORD_LENGTH) {
       setError(`Password must be longer than ${MIN_PASSWORD_LENGTH} characters.`);
       return;
     }

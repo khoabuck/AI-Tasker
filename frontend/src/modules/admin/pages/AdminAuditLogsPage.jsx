@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAuditLogService from "../../../services/adminAuditLog.service";
 
+import { formatDateTimeWithSeconds, vietnamDateEndToUtcIso, vietnamDateStartToUtcIso } from "../../../utils/dateTime.utils";
 const DEFAULT_FILTERS = {
   adminId: "",
   action: "",
@@ -57,12 +58,10 @@ export default function AdminAuditLogsPage() {
       setError("");
 
       const result = await adminAuditLogService.getAuditLogs({
-        AdminId: nextFilters.adminId,
         Action: nextFilters.action,
         EntityName: nextFilters.entityName,
-        EntityId: nextFilters.entityId,
-        From: toDateTimeStart(nextFilters.from),
-        To: toDateTimeEnd(nextFilters.to),
+        From: vietnamDateStartToUtcIso(nextFilters.from),
+        To: vietnamDateEndToUtcIso(nextFilters.to),
         PageNumber: nextFilters.pageNumber,
         PageSize: nextFilters.pageSize,
       });
@@ -157,7 +156,7 @@ export default function AdminAuditLogsPage() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   const inputStyle =
     "w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]";
@@ -171,17 +170,16 @@ export default function AdminAuditLogsPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Admin Audit
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Audit
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Audit logs
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Audit log
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track admin actions, affected entities, timestamps, and audit
-                metadata.
+                Track administrative actions and affected records.
               </p>
             </div>
 
@@ -204,7 +202,7 @@ export default function AdminAuditLogsPage() {
           <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-4">
             <SummaryCard
               icon="receipt_long"
-              label="Total Logs"
+              label="Logs"
               value={summary.total}
               tone="cyan"
             />
@@ -232,20 +230,7 @@ export default function AdminAuditLogsPage() {
           </section>
 
           <section className={`${cardStyle} mb-6 p-6`}>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-              <div>
-                <label className={labelStyle}>Admin ID</label>
-
-                <input
-                  type="number"
-                  value={filters.adminId}
-                  onChange={(event) =>
-                    handleChange("adminId", event.target.value)
-                  }
-                  placeholder="Example: 1"
-                  className={inputStyle}
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
 
               <div>
                 <label className={labelStyle}>Action</label>
@@ -262,7 +247,7 @@ export default function AdminAuditLogsPage() {
               </div>
 
               <div>
-                <label className={labelStyle}>Entity Name</label>
+                <label className={labelStyle}>Entity</label>
 
                 <input
                   type="text"
@@ -271,20 +256,6 @@ export default function AdminAuditLogsPage() {
                     handleChange("entityName", event.target.value)
                   }
                   placeholder="Example: JobPostingAiPolicy"
-                  className={inputStyle}
-                />
-              </div>
-
-              <div>
-                <label className={labelStyle}>Entity ID</label>
-
-                <input
-                  type="number"
-                  value={filters.entityId}
-                  onChange={(event) =>
-                    handleChange("entityId", event.target.value)
-                  }
-                  placeholder="Example: 1"
                   className={inputStyle}
                 />
               </div>
@@ -312,7 +283,7 @@ export default function AdminAuditLogsPage() {
               </div>
 
               <div>
-                <label className={labelStyle}>Page Size</label>
+                <label className={labelStyle}>Rows</label>
 
                 <select
                   value={filters.pageSize}
@@ -362,11 +333,8 @@ export default function AdminAuditLogsPage() {
             </div>
 
             {loading ? (
-              <div className="p-12 text-center text-gray-400">
-                <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                  hourglass_empty
-                </span>
-                Loading audit logs...
+              <div className="p-5">
+                <ListSkeleton rows={6} />
               </div>
             ) : logs.length === 0 ? (
               <EmptyState />
@@ -429,6 +397,30 @@ export default function AdminAuditLogsPage() {
   );
 }
 
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="flex gap-4">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-white/10" />
+            <div className="min-w-0 flex-1">
+              <div className="h-4 w-1/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
 function AuditLogRow({ log, onViewDetail }) {
   return (
     <article className="p-6 transition hover:bg-white/[0.02]">
@@ -442,12 +434,12 @@ function AuditLogRow({ log, onViewDetail }) {
             </span>
 
             <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
-              {log.entityName || "N/A"} #{log.entityId || "N/A"}
+              {toReadableText(log.entityName || "Affected record")}
             </span>
           </div>
 
           <h3 className="font-bold text-white">
-            {log.action || "UNKNOWN"} on {log.entityName || "N/A"}
+            {toReadableText(log.action || "Admin action")} · {toReadableText(log.entityName || "Record")}
           </h3>
 
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
@@ -457,19 +449,22 @@ function AuditLogRow({ log, onViewDetail }) {
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-gray-500">
-            <span>Admin ID: {log.adminId || "N/A"}</span>
-            {log.adminEmail && <span>• {log.adminEmail}</span>}
+            {(log.adminName || log.adminEmail) && (
+              <span>
+                Performed by {log.adminName || log.adminEmail}
+              </span>
+            )}
             {log.ipAddress && <span>• IP: {log.ipAddress}</span>}
           </div>
         </div>
 
         <div>
           <p className="mb-2 text-xs font-bold uppercase tracking-wider text-gray-500">
-            Created At
+            Created
           </p>
 
           <p className="text-sm font-bold text-white">
-            {formatDateTime(log.createdAt)}
+            {formatDateTimeWithSeconds(log.createdAt, "N/A")}
           </p>
         </div>
 
@@ -479,7 +474,7 @@ function AuditLogRow({ log, onViewDetail }) {
             onClick={onViewDetail}
             className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
           >
-            View Detail
+            View
           </button>
         </div>
       </div>
@@ -496,7 +491,7 @@ function SummaryCard({ icon, label, value, tone }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -547,6 +542,16 @@ function ActionBadge({ action }) {
   );
 }
 
+function toReadableText(value) {
+  if (!value) return "N/A";
+
+  return String(value)
+    .replace(/_/g, " ")
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function EmptyState() {
   return (
     <div className="p-12 text-center">
@@ -561,35 +566,8 @@ function EmptyState() {
       </p>
     </div>
   );
-}
+};
 
-function toDateTimeStart(value) {
-  if (!value) return "";
-
-  return `${value}T00:00:00`;
-}
-
-function toDateTimeEnd(value) {
-  if (!value) return "";
-
-  return `${value}T23:59:59`;
-}
-
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function getFriendlyError(err) {
   const status = err?.response?.status;
@@ -599,11 +577,11 @@ function getFriendlyError(err) {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to view audit logs.";
   }
 
   if (status === 404) {
-    return "Audit logs API was not found. Please check backend route.";
+    return "Audit log are temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

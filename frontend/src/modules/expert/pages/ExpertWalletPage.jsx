@@ -3,9 +3,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertWalletService from "../../../services/expertWallet.service";
 
+import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
 const quickAmounts = [50000, 100000, 200000, 500000];
 const PAYMENT_CHECK_INTERVAL_MS = 5000;
-const DEPOSIT_EXPIRE_SECONDS = 120;
+const DEFAULT_DEPOSIT_EXPIRE_SECONDS = 180;
 
 const popularBanks = [
   "Vietcombank",
@@ -74,6 +75,16 @@ export default function ExpertWalletPage() {
   const [nowTick, setNowTick] = useState(Date.now());
 
   useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  useEffect(() => {
     loadWallet();
   }, []);
 
@@ -135,6 +146,24 @@ export default function ExpertWalletPage() {
     depositCountdown,
   ]);
 
+  useEffect(() => {
+    if (!showDepositModal || !activeDepositOrder?.depositOrderId) return;
+
+    if (isFinalDepositStatus(activeDepositOrder.status)) {
+      setDepositCountdown(0);
+      setDepositMinimized(false);
+      return;
+    }
+
+    setDepositCountdown(getDepositRemainingSeconds(activeDepositOrder));
+  }, [
+    showDepositModal,
+    activeDepositOrder?.depositOrderId,
+    activeDepositOrder?.createdAt,
+    activeDepositOrder?.expiresAt,
+    activeDepositOrder?.status,
+  ]);
+
   const normalizedTransactions = useMemo(() => {
     return transactions.map((transaction) => ({
       ...transaction,
@@ -142,28 +171,23 @@ export default function ExpertWalletPage() {
     }));
   }, [transactions]);
 
-  const totalDeposited = useMemo(() => {
-    const depositFromTransactions = normalizedTransactions
-      .filter((item) => item.ui.group === "DEPOSIT")
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
-
-    if (depositFromTransactions > 0) return depositFromTransactions;
-
-    return depositOrders
-      .filter((item) => isPaidDepositStatus(item.status))
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
-  }, [normalizedTransactions, depositOrders]);
 
   const totalWithdrawn = useMemo(() => {
     const fromTransactions = normalizedTransactions
-      .filter((item) => item.ui.group === "WITHDRAW")
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
+      .filter((item) => item.ui.group === "WITHDRAW_PAID")
+      .reduce(
+        (total, item) => total + Math.abs(Number(item.amount || 0)),
+        0
+      );
 
     if (fromTransactions > 0) return fromTransactions;
 
     return withdrawals
       .filter((item) => isSuccessStatus(item.status))
-      .reduce((total, item) => total + Number(item.amount || 0), 0);
+      .reduce(
+        (total, item) => total + Math.abs(Number(item.amount || 0)),
+        0
+      );
   }, [normalizedTransactions, withdrawals]);
 
   const activeDepositOrderForPayment = useMemo(() => {
@@ -342,7 +366,7 @@ export default function ExpertWalletPage() {
 
       if (order) {
         setActiveDepositOrder(order);
-        setDepositCountdown(getDepositRemainingSeconds(order.createdAt));
+        setDepositCountdown(getDepositRemainingSeconds(order));
         setDepositMinimized(false);
         updateDepositOrderInList(order);
       }
@@ -378,6 +402,10 @@ export default function ExpertWalletPage() {
       if (detail) {
         setActiveDepositOrder(detail);
         updateDepositOrderInList(detail);
+
+        if (!isFinalDepositStatus(detail.status)) {
+          setDepositCountdown(getDepositRemainingSeconds(detail));
+        }
 
         const currentStatus = String(detail.status || "").toUpperCase();
 
@@ -415,7 +443,7 @@ export default function ExpertWalletPage() {
 
     const isExpired =
       String(order.status || "").toUpperCase() === "PENDING" &&
-      getDepositRemainingSeconds(order.createdAt) <= 0;
+      getDepositRemainingSeconds(order) <= 0;
 
     if (isExpired) return;
 
@@ -430,17 +458,17 @@ export default function ExpertWalletPage() {
       const selectedOrder = detail || order;
       const selectedExpired =
         String(selectedOrder.status || "").toUpperCase() === "PENDING" &&
-        getDepositRemainingSeconds(selectedOrder.createdAt) <= 0;
+        getDepositRemainingSeconds(selectedOrder) <= 0;
 
       if (selectedExpired) return;
 
       setActiveDepositOrder(selectedOrder);
-      setDepositCountdown(getDepositRemainingSeconds(selectedOrder?.createdAt));
+      setDepositCountdown(getDepositRemainingSeconds(selectedOrder));
       setDepositMinimized(false);
       setShowDepositModal(true);
     } catch {
       setActiveDepositOrder(order);
-      setDepositCountdown(getDepositRemainingSeconds(order?.createdAt));
+      setDepositCountdown(getDepositRemainingSeconds(order));
       setDepositMinimized(false);
       setShowDepositModal(true);
     }
@@ -549,17 +577,15 @@ export default function ExpertWalletPage() {
     }
   };
 
-  const openMilestone = (milestoneId) => {
-    if (!milestoneId) return;
-    navigate(`/expert/milestones/${milestoneId}`);
+  const openTransactionTarget = (target) => {
+    if (!target?.path) return;
+    navigate(target.path);
   };
 
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading wallet...
-        </div>
+        <PageSkeleton rows={4} />
       </ExpertLayout>
     );
   }
@@ -579,34 +605,33 @@ export default function ExpertWalletPage() {
         `}
       </style>
 
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-7xl">
-          <section className="mb-8 rounded-[2rem] border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-6 shadow-[0_24px_90px_rgba(0,0,0,0.35)] md:p-8">
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+      <div className="overflow-x-hidden px-4 py-5 md:px-6">
+        <div className="mx-auto max-w-6xl">
+          <section className="mb-5 rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#151a22] via-[#111823] to-[#0b1018] p-4 shadow-[0_16px_48px_rgba(0,0,0,0.3)] md:p-5">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
-                <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.16em] text-cyan-300">
                   <span className="material-symbols-outlined text-[17px]">
                     account_balance_wallet
                   </span>
-                  Expert Wallet
+                  Wallet
                 </div>
 
-                <h1 className="text-4xl font-black text-white md:text-5xl">
-                  Wallet Overview
+                <h1 className="text-2xl font-black text-white md:text-3xl">
+                  Your wallet
                 </h1>
 
-                <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400 md:text-base">
-                  Track your balance, deposits, proposal credit payments, and
-                  withdrawal requests in one place.
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
+                  Manage earnings, deposits, credits, and withdrawals.
                 </p>
               </div>
 
-              <div className="flex flex-wrap gap-3">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={openWithdrawalModal}
                   disabled={withdrawableBalance <= 0}
-                  className="flex items-center gap-2 rounded-2xl border border-green-400/60 bg-green-400/10 px-6 py-4 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-2.5 text-sm font-black text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     account_balance
@@ -617,7 +642,7 @@ export default function ExpertWalletPage() {
                 <button
                   type="button"
                   onClick={openDepositModal}
-                  className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-blue-500 to-cyan-400 px-6 py-4 text-sm font-black text-white shadow-[0_18px_45px_rgba(0,240,255,0.2)] transition hover:scale-[1.01]"
+                  className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-400 px-4 py-2.5 text-sm font-black text-white shadow-[0_12px_30px_rgba(0,240,255,0.18)] transition hover:brightness-110"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     add_card
@@ -628,60 +653,63 @@ export default function ExpertWalletPage() {
                 <button
                   type="button"
                   onClick={goToProposalCredits}
-                  className="flex items-center gap-2 rounded-2xl border border-purple-400/50 bg-purple-400/10 px-6 py-4 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                  className="flex items-center gap-2 rounded-xl border border-purple-400/40 bg-purple-400/10 px-4 py-2.5 text-sm font-black text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
                   <span className="material-symbols-outlined text-[22px]">
                     workspace_premium
                   </span>
-                  Buy Proposal Credits
+                  Buy Credits
                 </button>
               </div>
             </div>
           </section>
 
-          {message && <Alert type="success" message={message} />}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
           {error && <Alert type="danger" message={error} />}
 
-          <section className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+          <section className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <BalanceCard
-              label="Available Balance"
+              label="Available"
               value={formatMoney(balance?.availableBalance)}
               icon="account_balance_wallet"
               tone="cyan"
-              description="Money currently available in your wallet."
+              description={`Ready to withdraw: ${formatMoney(
+                withdrawableBalance
+              )}`}
             />
 
             <BalanceCard
-              label="Pending Earnings"
+              label="Pending"
               value={formatMoney(balance?.pendingEarningsBalance)}
               icon="hourglass_top"
               tone="yellow"
-              description="Approved milestone earnings waiting for project completion."
+              description="Net milestone earnings waiting for project completion."
             />
 
             <BalanceCard
-              label="Total Withdrawn"
-              value={formatMoney(totalWithdrawn)}
-              icon="logout"
-              tone="green"
-              description="Total amount successfully withdrawn from your wallet."
-            />
-
-            <BalanceCard
-              label="Total Earnings"
+              label="Lifetime earnings"
               value={formatMoney(balance?.totalEarnings)}
               icon="trending_up"
               tone="purple"
-              description="Total earnings tracked for your Expert account."
+              description="Total net earnings recorded for your Expert account."
+            />
+
+            <BalanceCard
+              label="Withdrawn"
+              value={formatMoney(totalWithdrawn)}
+              icon="account_balance"
+              tone="green"
+              description="Successfully transferred to your bank account."
             />
           </section>
 
-          <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_430px]">
-            <div className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
-              <div className="flex flex-col gap-4 border-b border-white/10 px-6 py-5 md:flex-row md:items-center md:justify-between">
+
+          <section className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_12px_36px_rgba(0,0,0,0.24)]">
+              <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h2 className="text-xl font-black text-white">
-                    Transaction History
+                    Transactions
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-500">
@@ -702,8 +730,15 @@ export default function ExpertWalletPage() {
               {normalizedTransactions.length === 0 ? (
                 <EmptyState />
               ) : (
-                <div className="wallet-scrollbar-hide max-h-[520px] overflow-auto">
-                  <table className="w-full min-w-[850px] text-left">
+                <div className="wallet-scrollbar-hide max-h-[480px] overflow-y-auto overflow-x-hidden">
+                  <table className="w-full table-fixed text-left">
+                    <colgroup>
+                      <col className="w-[24%]" />
+                      <col className="w-[36%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[15%]" />
+                      <col className="w-[10%]" />
+                    </colgroup>
                     <thead className="sticky top-0 z-10 border-b border-white/10 bg-[#151a22]">
                       <tr>
                         <TableHead>Type</TableHead>
@@ -719,7 +754,7 @@ export default function ExpertWalletPage() {
                         <TransactionRow
                           key={transaction.transactionId || index}
                           transaction={transaction}
-                          onOpenMilestone={openMilestone}
+                          onOpenTarget={openTransactionTarget}
                         />
                       ))}
                     </tbody>
@@ -728,12 +763,12 @@ export default function ExpertWalletPage() {
               )}
             </div>
 
-            <aside className="space-y-6">
+            <aside className="min-w-0 space-y-4">
               <HistoryPanel
-                title="Withdrawal Requests"
+                title="Withdrawals"
                 subtitle="Payout status and bank transfer requests"
                 empty="No withdrawal requests yet."
-                bodyClassName="max-h-[390px]"
+                bodyClassName="max-h-[330px]"
               >
                 {latestWithdrawals.map((item, index) => (
                   <WithdrawalHistoryItem
@@ -744,10 +779,10 @@ export default function ExpertWalletPage() {
               </HistoryPanel>
 
               <HistoryPanel
-                title="Deposit History"
+                title="Deposits"
                 subtitle="Recent QR payment orders"
                 empty="No deposit orders yet."
-                bodyClassName="max-h-[390px]"
+                bodyClassName="max-h-[330px]"
               >
                 {latestDepositOrders.map((order, index) => (
                   <DepositHistoryItem
@@ -819,6 +854,68 @@ export default function ExpertWalletPage() {
   );
 }
 
+function PageSkeleton({ rows = 4 }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-28 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div
+                key={item}
+                className="h-20 rounded-2xl border border-white/10 bg-white/[0.03]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: rows }).map((_, index) => (
+              <div
+                key={index}
+                className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+          <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 function WithdrawalModal({
   form,
   withdrawableBalance,
@@ -831,15 +928,15 @@ function WithdrawalModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-md overflow-y-auto rounded-[1.4rem] border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-green-400/30 bg-[#0f141d] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-green-300">
+            <p className="text-xs font-black uppercase tracking-[0.16em] text-green-300">
               Bank Payout
             </p>
 
             <h2 className="mt-2 text-xl font-black text-white">
-              Withdraw Earnings
+              Request withdrawal
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-gray-500">
@@ -862,7 +959,7 @@ function WithdrawalModal({
 
         <div className="mb-5 rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4">
           <p className="text-sm font-bold text-yellow-200">
-            Your money will be held after submitting
+            Funds are reserved after submission
           </p>
 
           <p className="mt-1 text-xs leading-5 text-yellow-100/80">
@@ -919,7 +1016,7 @@ function WithdrawalModal({
             disabled={creating}
             className="w-full rounded-2xl bg-green-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-green-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {creating ? "Submitting..." : "Submit Withdrawal Request"}
+            {creating ? "Submitting..." : "Submit Request"}
           </button>
         </form>
       </div>
@@ -1034,14 +1131,14 @@ function HistoryPanel({
     : Boolean(children);
 
   return (
-    <aside className="overflow-hidden rounded-[1.7rem] border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
-      <div className="border-b border-white/10 px-6 py-5">
+    <aside className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
+      <div className="border-b border-white/10 px-4 py-4">
         <h2 className="text-xl font-black text-white">{title}</h2>
         <p className="mt-1 text-sm text-gray-500">{subtitle}</p>
       </div>
 
       {!hasChildren ? (
-        <div className="p-6 text-sm text-gray-400">{empty}</div>
+        <div className="p-4 text-sm text-gray-400">{empty}</div>
       ) : (
         <div
           className={`wallet-scrollbar-hide divide-y divide-white/10 overflow-y-auto ${bodyClassName}`}
@@ -1055,7 +1152,7 @@ function HistoryPanel({
 
 function WithdrawalHistoryItem({ withdrawal }) {
   return (
-    <article className="p-6">
+    <article className="p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-lg font-black text-white">
@@ -1111,12 +1208,12 @@ function DepositModal({
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-4 backdrop-blur-sm">
-      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-[1.4rem] border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+      <div className="wallet-scrollbar-hide relative max-h-[92vh] w-full max-w-[420px] overflow-y-auto rounded-2xl border border-cyan-400/30 bg-[#0f141d] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
         <div className="flex items-start justify-between gap-4 px-6 pt-6">
           <div>
-            <h2 className="text-xl font-black text-white">Scan QR to pay</h2>
+            <h2 className="text-xl font-black text-white">Deposit with QR</h2>
             <p className="mt-1.5 text-xs leading-5 text-gray-500">
-              Complete this payment within 2 minutes.
+              Complete the payment before the countdown reaches zero.
             </p>
           </div>
 
@@ -1169,7 +1266,7 @@ function DepositModal({
                 disabled={creating}
                 className="w-full rounded-2xl bg-cyan-400 px-5 py-3.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {creating ? "Creating payment..." : "Generate Payment QR"}
+                {creating ? "Creating payment..." : "Generate QR"}
               </button>
             </form>
           ) : (
@@ -1195,10 +1292,13 @@ function DepositModal({
       />
     ) : (
       <div className="text-center text-gray-700">
-        <span className="material-symbols-outlined mb-2 block text-4xl">
+        <span className="material-symbols-outlined mb-2 block text-3xl">
           qr_code_2
         </span>
         <p className="text-sm font-bold">QR is not available</p>
+        <p className="mt-1 text-[11px] leading-4">
+          Use the payment page below or refresh the payment status.
+        </p>
       </div>
     )}
   </div>
@@ -1226,17 +1326,6 @@ function DepositModal({
               </div>
 
               <PaymentInformation order={order} onCopy={onCopy} />
-
-              {order.paymentUrl && !isExpired && (
-                <a
-                  href={order.paymentUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-4 flex w-full items-center justify-center rounded-2xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-                >
-                  Open PayOS Payment Page
-                </a>
-              )}
 
               {!isPaid && !isFailed && !isExpired && (
                 <button
@@ -1297,7 +1386,7 @@ function DepositModal({
                   disabled={creating || checking}
                   className="mt-4 w-full rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-gray-300 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Back to Wallet
+                  Close
                 </button>
               )}
             </>
@@ -1330,12 +1419,21 @@ function FloatingDepositButton({ order, remainingSeconds, onOpen }) {
 }
 
 function PaymentInformation({ order, onCopy }) {
+  const bankName = order?.bankName || "";
   const accountName = order?.accountName || "";
   const accountNumber = order?.accountNumber || "";
   const transferContent = order?.transferContent || "";
 
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+      {bankName && (
+        <PaymentInfoRow
+          label="Bank"
+          value={bankName}
+          copyable={false}
+          onCopy={onCopy}
+        />
+      )}
       {accountName && (
         <PaymentInfoRow
           label="Account holder"
@@ -1412,18 +1510,24 @@ function BalanceCard({ label, value, icon, tone, description }) {
       : "border-red-400/20 bg-red-400/10 text-red-300";
 
   return (
-    <article className="rounded-[1.5rem] border border-white/10 bg-[#151a22] p-7 shadow-[0_15px_45px_rgba(0,0,0,0.22)]">
-      <div
-        className={`mb-6 flex h-14 w-14 items-center justify-center rounded-2xl border ${toneClass}`}
-      >
-        <span className="material-symbols-outlined text-[28px]">{icon}</span>
+    <article className="min-w-0 rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[11px] font-black uppercase tracking-[0.15em] text-gray-500">
+            {label}
+          </p>
+
+          <p className="mt-2 break-words text-xl font-black text-white">
+            {value}
+          </p>
+        </div>
+
+        <div
+          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border ${toneClass}`}
+        >
+          <span className="material-symbols-outlined text-[19px]">{icon}</span>
+        </div>
       </div>
-
-      <p className="text-xs font-black uppercase tracking-[0.22em] text-gray-500">
-        {label}
-      </p>
-
-      <p className="mt-4 text-3xl font-black text-white">{value}</p>
 
       {description && (
         <p className="mt-3 text-xs leading-5 text-gray-500">{description}</p>
@@ -1434,60 +1538,90 @@ function BalanceCard({ label, value, icon, tone, description }) {
 
 function TableHead({ children }) {
   return (
-    <th className="px-6 py-4 text-xs font-black uppercase tracking-[0.22em] text-gray-500">
+    <th className="px-3 py-3 text-[10px] font-black uppercase tracking-[0.14em] text-gray-500">
       {children}
     </th>
   );
 }
 
-function TransactionRow({ transaction, onOpenMilestone }) {
+function TransactionRow({ transaction, onOpenTarget }) {
   const ui = transaction.ui;
+  const target = getTransactionTarget(transaction);
+  const displayAmount = Math.abs(Number(transaction.amount || 0));
 
   return (
-    <tr className="border-b border-white/10 transition hover:bg-white/[0.025]">
-      <td className="px-6 py-5">
-        <div className="flex items-center gap-3">
+    <tr className="border-b border-white/10 align-top transition hover:bg-white/[0.025]">
+      <td className="px-3 py-3">
+        <div className="flex min-w-0 items-start gap-2.5">
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl border ${ui.iconClass}`}
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border ${ui.iconClass}`}
           >
-            <span className="material-symbols-outlined text-[20px]">
+            <span className="material-symbols-outlined text-[17px]">
               {ui.icon}
             </span>
           </div>
 
-          <span className="font-bold text-gray-300">{ui.typeLabel}</span>
+          <div className="min-w-0">
+            <p className="break-words text-sm font-bold leading-5 text-gray-200">
+              {ui.typeLabel}
+            </p>
+
+            {ui.balanceMovement && (
+              <p className="mt-0.5 line-clamp-2 text-[10px] leading-4 text-gray-600">
+                {ui.balanceMovement}
+              </p>
+            )}
+          </div>
         </div>
       </td>
 
-      <td className="px-6 py-5">
-        <p className="max-w-[360px] truncate font-semibold text-white">
+      <td className="px-3 py-3">
+        <p className="line-clamp-2 break-words text-sm font-semibold leading-5 text-white">
           {ui.description}
         </p>
 
-        {transaction.milestoneId && (
+        {(transaction.milestoneTitle || transaction.projectTitle) && (
+          <p
+            className="mt-1 line-clamp-1 break-words text-[11px] text-gray-500"
+            title={[transaction.milestoneTitle, transaction.projectTitle]
+              .filter(Boolean)
+              .join(" • ")}
+          >
+            {[transaction.milestoneTitle, transaction.projectTitle]
+              .filter(Boolean)
+              .join(" • ")}
+          </p>
+        )}
+
+        {target && (
           <button
             type="button"
-            onClick={() => onOpenMilestone(transaction.milestoneId)}
-            className="mt-2 text-xs font-bold text-cyan-300 transition hover:text-cyan-200"
+            onClick={() => onOpenTarget(target)}
+            className="mt-1.5 text-[11px] font-bold text-cyan-300 transition hover:text-cyan-200"
           >
-            View milestone
+            {target.label}
           </button>
         )}
       </td>
 
-      <td className="px-6 py-5 text-gray-400">
-        {formatShortDate(transaction.createdAt)}
-      </td>
-
-      <td className="px-6 py-5">
-        <span className={`font-black ${ui.amountClass}`}>
-          {ui.sign}
-          {formatMoney(transaction.amount)}
+      <td className="px-3 py-3 text-[12px] leading-5 text-gray-400">
+        <span className="block whitespace-normal break-words">
+          {formatShortDate(transaction.createdAt)}
         </span>
       </td>
 
-      <td className="px-6 py-5">
-        <StatusBadge status={transaction.status} />
+      <td className="px-3 py-3 text-right">
+        <span
+          className={`whitespace-nowrap text-sm font-black ${ui.amountClass}`}
+        >
+          {ui.hideZeroAmount
+            ? "—"
+            : `${ui.sign}${formatMoney(displayAmount)}`}
+        </span>
+      </td>
+
+      <td className="px-3 py-3 text-center">
+        <StatusBadge status={transaction.statusGroup || transaction.status} />
       </td>
     </tr>
   );
@@ -1496,7 +1630,7 @@ function TransactionRow({ transaction, onOpenMilestone }) {
 function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
   const isPaid = isPaidDepositStatus(order.status);
   const isFinal = isFinalDepositStatus(order.status);
-  const remain = getDepositRemainingSeconds(order.createdAt);
+  const remain = getDepositRemainingSeconds(order);
   const isLocalExpired =
     String(order.status || "").toUpperCase() === "PENDING" && remain <= 0;
 
@@ -1504,7 +1638,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
   const displayStatus = isLocalExpired ? "EXPIRED" : order.status;
 
   return (
-    <article className="p-6">
+    <article className="p-4">
       <div className="flex w-full items-start justify-between gap-4 text-left">
         <div>
           <p className="text-lg font-black text-white">
@@ -1512,7 +1646,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
           </p>
 
           <p className="mt-2 text-sm text-gray-500">
-            PayOS • {formatShortDate(order.createdAt)}
+            QR Payment • {formatShortDate(order.createdAt)}
           </p>
 
           {order.transferContent && (
@@ -1527,7 +1661,7 @@ function DepositHistoryItem({ order, checking, onOpen, onCheck }) {
             </p>
           )}
 
-
+    
         </div>
 
         <StatusBadge status={displayStatus} />
@@ -1569,7 +1703,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-lg border px-3 py-1 text-xs font-black uppercase ${style}`}
+      className={`inline-flex max-w-full items-center justify-center rounded-md border px-2 py-1 text-[9px] font-black uppercase leading-none ${style}`}
     >
       {formatStatusForUser(value)}
     </span>
@@ -1607,16 +1741,161 @@ function Alert({ type, message }) {
 }
 
 function getTransactionPresentation(transaction) {
-  const type = String(transaction.type || "").toUpperCase();
+  const type = normalizeTransactionType(transaction?.type);
   const signedAmount = Number(
-    transaction.signedAmount || transaction.amount || 0
+    transaction?.signedAmount ?? transaction?.amount ?? 0
   );
+
+  if (type === "EXPERT_PENDING_EARNING_RELEASE") {
+    return {
+      group: "INCOME",
+      typeLabel: "Earnings Available",
+      description:
+        "Your earnings have been moved to your available balance.",
+      balanceMovement: "Pending → Available",
+      icon: "paid",
+      iconClass:
+        "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: "+",
+      amountClass: "text-green-300",
+    };
+  }
+
+  if (type === "EXPERT_PENDING_EARNING_REFUND") {
+    return {
+      group: "REFUND",
+      typeLabel: "Pending Earning Refunded",
+      description:
+        "The milestone payment was refunded after dispute resolution.",
+      balanceMovement: "Pending → Client Refund",
+      icon: "undo",
+      iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type === "EXPERT_SERVICE_FEE") {
+    return {
+      group: "FEE",
+      typeLabel: "Expert Service Fee",
+      description: "Platform service fee deducted.",
+      balanceMovement: "Milestone Payment → Service Fee",
+      icon: "percent",
+      iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (
+    type === "EXPERT_PENDING_EARNING_HOLD" ||
+    type === "MILESTONE_APPROVED"
+  ) {
+    return {
+      group: "PENDING",
+      typeLabel: "Pending Earning",
+      description:
+        "Your milestone payment is being held until the project is completed.",
+      balanceMovement: "Milestone Payment → Pending",
+      icon: "hourglass_top",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "+",
+      amountClass: "text-yellow-300",
+    };
+  }
+
+  if (type === "WITHDRAWAL_HOLD") {
+    return {
+      group: "WITHDRAW_PENDING",
+      typeLabel: "Withdrawal Pending",
+      description: cleanDescription(
+        transaction.description,
+        "The requested amount was moved to locked balance."
+      ),
+      balanceMovement: "Available → Locked Balance",
+      icon: "lock_clock",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (type === "WITHDRAWAL_PAYOUT_PROCESSING") {
+    return {
+      group: "WITHDRAW_PROCESSING",
+      typeLabel: "Withdrawal Processing",
+      description: cleanDescription(
+        transaction.description,
+        "The payout provider is processing your withdrawal."
+      ),
+      balanceMovement: "Locked Balance → Payout Processing",
+      icon: "sync",
+      iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+      sign: "",
+      amountClass: "text-cyan-300",
+    };
+  }
+
+  if (
+    type === "WITHDRAWAL_PAID" ||
+    type === "WITHDRAWAL_COMPLETED"
+  ) {
+    return {
+      group: "WITHDRAW_PAID",
+      typeLabel: "Withdrawal Paid",
+      description: cleanDescription(
+        transaction.description,
+        "The withdrawal was transferred successfully."
+      ),
+      balanceMovement: "Locked Balance → Bank Account",
+      icon: "account_balance",
+      iconClass:
+        "border-orange-400/20 bg-orange-400/10 text-orange-300",
+      sign: "-",
+      amountClass: "text-red-300",
+    };
+  }
+
+  if (
+    type === "WITHDRAWAL_REJECTED" ||
+    type === "WITHDRAWAL_FAILED" ||
+    type === "WITHDRAWAL_EXPIRED"
+  ) {
+    const label =
+      type === "WITHDRAWAL_REJECTED"
+        ? "Withdrawal Rejected"
+        : type === "WITHDRAWAL_EXPIRED"
+          ? "Withdrawal Expired"
+          : "Withdrawal Failed";
+
+    return {
+      group: "WITHDRAW_REFUND",
+      typeLabel: label,
+      description: cleanDescription(
+        transaction.description,
+        "The held withdrawal amount was returned to your available balance."
+      ),
+      balanceMovement: "Locked Balance → Available",
+      icon: "undo",
+      iconClass:
+        "border-green-400/20 bg-green-400/10 text-green-300",
+      sign: "+",
+      amountClass: "text-green-300",
+    };
+  }
 
   if (type.includes("DEPOSIT") || type.includes("TOP_UP")) {
     return {
       group: "DEPOSIT",
-      typeLabel: "Deposit",
-      description: "Wallet deposit confirmed",
+      typeLabel: "Wallet Deposit",
+      description: cleanDescription(
+        transaction.description,
+        "Wallet deposit confirmed."
+      ),
+      balanceMovement: "Payment Provider → Available",
       icon: "add_card",
       iconClass: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
       sign: "+",
@@ -1624,37 +1903,44 @@ function getTransactionPresentation(transaction) {
     };
   }
 
-  if (type.includes("WITHDRAW")) {
+  if (
+    type === "ESCROW_FROZEN" ||
+    type.includes("ESCROW_FROZEN")
+  ) {
     return {
-      group: "WITHDRAW",
-      typeLabel: "Withdrawal",
-      description: cleanDescription(
-        transaction.description,
-        "Wallet withdrawal"
-      ),
-      icon: "account_balance",
-      iconClass: "border-orange-400/20 bg-orange-400/10 text-orange-300",
-      sign: "-",
-      amountClass: "text-red-300",
+      group: "ESCROW",
+      typeLabel: "Escrow Frozen",
+      description: "This milestone is currently under dispute.",
+      balanceMovement: "Escrow locked during dispute",
+      icon: "lock",
+      iconClass:
+        "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+      sign: "",
+      amountClass: "text-gray-400",
+      hideZeroAmount: true,
     };
   }
 
   if (
-    type.includes("PENDING_EARNING") ||
-    type.includes("EXPERT_PENDING") ||
-    type.includes("MILESTONE_APPROVED")
+    type.includes("PROPOSAL_CREDIT_PACKAGE") ||
+    type.includes("PACKAGE_PURCHASE") ||
+    type.includes("PROPOSAL_PACKAGE") ||
+    type.includes("SUBSCRIPTION") ||
+    type.includes("PURCHASE")
   ) {
     return {
-      group: "PENDING",
-      typeLabel: "Pending Earning",
+      group: "PAYMENT",
+      typeLabel: "Proposal Credit Package",
       description: cleanDescription(
         transaction.description,
-        "Milestone approved. Earnings are pending project completion."
+        "Proposal credits were purchased."
       ),
-      icon: "hourglass_top",
-      iconClass: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
-      sign: "+",
-      amountClass: "text-yellow-300",
+      balanceMovement: "Available → Package Purchase",
+      icon: "shopping_bag",
+      iconClass:
+        "border-purple-400/20 bg-purple-400/10 text-purple-300",
+      sign: "-",
+      amountClass: "text-red-300",
     };
   }
 
@@ -1664,7 +1950,8 @@ function getTransactionPresentation(transaction) {
     type.includes("ESCROW_RELEASE") ||
     type.includes("MILESTONE")
   ) {
-    const isOutgoing = signedAmount < 0 || transaction.direction === "OUT";
+    const isOutgoing =
+      signedAmount < 0 || transaction.direction === "OUT";
 
     return {
       group: isOutgoing ? "PAYMENT" : "INCOME",
@@ -1672,11 +1959,12 @@ function getTransactionPresentation(transaction) {
       description: cleanDescription(
         transaction.description,
         isOutgoing
-          ? "Escrow payment released"
-          : transaction.milestoneId
-          ? `Payment received for Milestone ${transaction.milestoneId}`
-          : "Expert earning received"
+          ? "Escrow payment released."
+          : "Expert earning received."
       ),
+      balanceMovement: isOutgoing
+        ? "Wallet → Escrow"
+        : "Escrow → Wallet",
       icon: isOutgoing ? "logout" : "paid",
       iconClass: isOutgoing
         ? "border-red-400/20 bg-red-400/10 text-red-300"
@@ -1686,34 +1974,15 @@ function getTransactionPresentation(transaction) {
     };
   }
 
-  if (
-    type.includes("PACKAGE") ||
-    type.includes("PROPOSAL_PACKAGE") ||
-    type.includes("SUBSCRIPTION") ||
-    type.includes("PURCHASE")
-  ) {
-    return {
-      group: "PAYMENT",
-      typeLabel: "Package Purchase",
-      description: cleanDescription(
-        transaction.description,
-        "Proposal package purchase"
-      ),
-      icon: "shopping_bag",
-      iconClass: "border-purple-400/20 bg-purple-400/10 text-purple-300",
-      sign: "-",
-      amountClass: "text-red-300",
-    };
-  }
-
   if (type.includes("FEE")) {
     return {
       group: "FEE",
-      typeLabel: "Platform Fee",
+      typeLabel: "Service Fee",
       description: cleanDescription(
         transaction.description,
-        "Platform service fee"
+        "A service fee was deducted."
       ),
+      balanceMovement: "Wallet → Service Fee",
       icon: "percent",
       iconClass: "border-red-400/20 bg-red-400/10 text-red-300",
       sign: "-",
@@ -1722,18 +1991,110 @@ function getTransactionPresentation(transaction) {
   }
 
   const isOut = transaction.direction === "OUT" || signedAmount < 0;
+  const isNeutral =
+    transaction.direction === "NEUTRAL" || signedAmount === 0;
 
   return {
-    group: isOut ? "PAYMENT" : "INCOME",
-    typeLabel: isOut ? "Payment" : "Income",
-    description: cleanDescription(transaction.description, "Wallet transaction"),
-    icon: isOut ? "north_east" : "south_west",
-    iconClass: isOut
-      ? "border-red-400/20 bg-red-400/10 text-red-300"
-      : "border-green-400/20 bg-green-400/10 text-green-300",
-    sign: isOut ? "-" : "+",
-    amountClass: isOut ? "text-red-300" : "text-green-300",
+    group: isNeutral
+      ? "OTHER"
+      : isOut
+        ? "PAYMENT"
+        : "INCOME",
+
+    /*
+     * Do not use displayTitle as the transaction type because
+     * the backend may return a long project title in this field.
+     */
+    typeLabel: formatTransactionTypeLabel(
+      transaction.type,
+      isNeutral
+        ? "Wallet Update"
+        : isOut
+          ? "Payment"
+          : "Income"
+    ),
+
+    description: cleanDescription(
+      transaction.description || transaction.displaySubtitle,
+      "Wallet transaction"
+    ),
+
+    balanceMovement: "",
+
+    icon: isNeutral
+      ? "info"
+      : isOut
+        ? "north_east"
+        : "south_west",
+
+    iconClass: isNeutral
+      ? "border-gray-400/20 bg-gray-400/10 text-gray-300"
+      : isOut
+        ? "border-red-400/20 bg-red-400/10 text-red-300"
+        : "border-green-400/20 bg-green-400/10 text-green-300",
+
+    sign: isNeutral ? "" : isOut ? "-" : "+",
+
+    amountClass: isNeutral
+      ? "text-gray-400"
+      : isOut
+        ? "text-red-300"
+        : "text-green-300",
+
+    hideZeroAmount: isNeutral && signedAmount === 0,
   };
+}
+
+function normalizeTransactionType(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
+}
+
+function formatTransactionTypeLabel(
+  type,
+  fallback = "Wallet Transaction"
+) {
+  const normalized = normalizeTransactionType(type);
+
+  if (!normalized || normalized === "TRANSACTION") {
+    return fallback;
+  }
+
+  return normalized
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getTransactionTarget(transaction) {
+  const type = normalizeTransactionType(transaction?.type);
+
+  if (
+    type === "EXPERT_PENDING_EARNING_REFUND" &&
+    transaction?.disputeId
+  ) {
+    return {
+      label: "View dispute",
+      path: `/expert/disputes/${transaction.disputeId}`,
+    };
+  }
+
+  if (transaction?.milestoneId) {
+    return {
+      label: "View milestone",
+      path: `/expert/milestones/${transaction.milestoneId}`,
+    };
+  }
+
+  if (transaction?.projectId) {
+    return {
+      label: "View project",
+      path: `/expert/projects/${transaction.projectId}`,
+    };
+  }
+
+  return null;
 }
 
 function getWithdrawalStatusMessage(status) {
@@ -1764,28 +2125,52 @@ function cleanDescription(description, fallback) {
   return String(description)
     .replace(/\[.*?\]\s*/g, "")
     .replace(/_/g, " ")
+    .replace(/\bMilestone\s+ID\s+\d+\b/gi, "this milestone")
+    .replace(/\bDispute\s+ID\s+\d+\b/gi, "this dispute")
+    .replace(/\bProject\s+ID\s+\d+\b/gi, "this project")
+    .replace(/\bContract\s+ID\s+\d+\b/gi, "this contract")
+    .replace(/\bEscrow\s+ID\s+\d+\b/gi, "escrow")
+    .replace(/\bTransaction\s+ID\s+\d+\b/gi, "transaction")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
 function getQrSource(order) {
   if (!order) return "";
 
-  const image = order.qrImageUrl || "";
+  const imageUrl =
+    order.qrImageUrl ||
+    order.qrCodeUrl ||
+    order.qrUrl ||
+    "";
 
-  if (image) return image;
+  if (imageUrl) return imageUrl;
 
-  const qrCode = order.qrCode || "";
+  const qrContent =
+    order.qrContent ||
+    order.qrCode ||
+    "";
 
-  if (!qrCode) return "";
+  if (!qrContent) return "";
 
-  if (qrCode.startsWith("data:image")) return qrCode;
-
-  if (qrCode.startsWith("http://") || qrCode.startsWith("https://")) {
-    return qrCode;
+  if (qrContent.startsWith("data:image")) {
+    return qrContent;
   }
 
-  return `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(
-    qrCode
+  if (
+    qrContent.startsWith("http://") ||
+    qrContent.startsWith("https://")
+  ) {
+    return qrContent;
+  }
+
+  /*
+   * Backend/PayOS trả chuỗi QR EMV qua qrContent.
+   * Trình duyệt không thể hiển thị trực tiếp chuỗi này như một ảnh,
+   * nên chuyển nội dung thành ảnh QR để người dùng quét.
+   */
+  return `https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=${encodeURIComponent(
+    qrContent
   )}`;
 }
 
@@ -1843,16 +2228,39 @@ function formatFriendlyStatus(status) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function getDepositRemainingSeconds(createdAt) {
-  if (!createdAt) return DEPOSIT_EXPIRE_SECONDS;
+function getDepositRemainingSeconds(orderOrCreatedAt) {
+  const order =
+    orderOrCreatedAt && typeof orderOrCreatedAt === "object"
+      ? orderOrCreatedAt
+      : { createdAt: orderOrCreatedAt };
 
-  const createdTime = new Date(createdAt).getTime();
+  const expiresTime = parseDepositDateTime(order?.expiresAt);
 
-  if (Number.isNaN(createdTime)) return DEPOSIT_EXPIRE_SECONDS;
+  if (Number.isFinite(expiresTime)) {
+    return Math.max(
+      Math.ceil((expiresTime - Date.now()) / 1000),
+      0
+    );
+  }
 
-  const elapsedSeconds = Math.floor((Date.now() - createdTime) / 1000);
+  const createdTime = parseDepositDateTime(order?.createdAt);
 
-  return Math.max(DEPOSIT_EXPIRE_SECONDS - elapsedSeconds, 0);
+  if (Number.isFinite(createdTime)) {
+    const fallbackExpiresAt =
+      createdTime + DEFAULT_DEPOSIT_EXPIRE_SECONDS * 1000;
+
+    return Math.max(
+      Math.ceil((fallbackExpiresAt - Date.now()) / 1000),
+      0
+    );
+  }
+
+  return DEFAULT_DEPOSIT_EXPIRE_SECONDS;
+}
+
+function parseDepositDateTime(value) {
+  const date = parseUtcDate(value);
+  return date ? date.getTime() : Number.NaN;
 }
 
 function formatRemainingTime(seconds) {
@@ -1883,13 +2291,7 @@ function formatCompactMoney(value) {
 }
 
 function formatShortDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString("vi-VN");
+  return formatDateTime(value, "N/A");
 }
 
 function maskBankAccount(value) {
@@ -1908,7 +2310,7 @@ function isActiveDepositOrder(order) {
 
   return (
     ["PENDING", "PROCESSING", "WAITING"].includes(status) &&
-    getDepositRemainingSeconds(order.createdAt) > 0
+    getDepositRemainingSeconds(order) > 0
   );
 }
 

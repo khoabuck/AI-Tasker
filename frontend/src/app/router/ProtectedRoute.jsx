@@ -1,36 +1,101 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
-// Chỉ cho vào nếu đã đăng nhập và đúng role
-// allowedRoles: ["CLIENT"] | ["EXPERT"] | ["ADMIN"] | bỏ trống = mọi role
-export default function ProtectedRoute({ children, allowedRoles }) {
+const ROUTES = {
+  LOGIN: "/login",
+  SELECT_ROLE: "/select-role",
+  UNAUTHORIZED: "/unauthorized",
+  CLIENT_SETUP: "/setup-profile",
+  EXPERT_SETUP: "/expert/setup-profile",
+  EXPERT_EDIT: "/expert/profile/edit",
+  EXPERT_LOCKED: "/expert/profile-locked",
+  EXPERT_DASHBOARD: "/expert/dashboard",
+  CLIENT_DASHBOARD: "/client/dashboard",
+  ADMIN_DASHBOARD: "/admin/dashboard",
+};
+
+const ACCOUNT_BLOCKED_STATUSES = new Set([
+  "LOCKED",
+  "BANNED",
+  "SUSPENDED",
+  "INACTIVE",
+  "DISABLED",
+  "ACCOUNT_LOCKED",
+  "ACCOUNT_BANNED",
+  "ACCOUNT_SUSPENDED",
+]);
+
+const LEGACY_PROFILE_STATUSES = new Set([
+  "PENDING_PROFILE",
+  "EXPERT_PROFILE_LOCKED",
+  "PROFILE_PENDING",
+  "PROFILE_REJECTED",
+  "PROFILE_LOCKED",
+]);
+
+export default function ProtectedRoute({
+  children,
+  allowedRoles,
+}) {
   const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-        Đang tải...
+      <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">
+        Loading...
       </div>
     );
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    return (
+      <Navigate
+        to={ROUTES.LOGIN}
+        replace
+        state={{
+          from: location.pathname,
+        }}
+      />
+    );
   }
 
-  const role = String(user?.role || "").trim().toUpperCase();
-  const status = String(user?.status || "").trim().toUpperCase();
+  const role = normalizeStatus(user?.role);
+  const legacyStatus = normalizeStatus(user?.status);
+
+  const accountStatus = normalizeStatus(
+    user?.accountStatus ||
+      user?.AccountStatus ||
+      user?.userStatus ||
+      user?.UserStatus ||
+      (LEGACY_PROFILE_STATUSES.has(legacyStatus)
+        ? "ACTIVE"
+        : legacyStatus)
+  );
+
+  const expertProfileStatus = normalizeStatus(
+    user?.expertProfileStatus ||
+      user?.ExpertProfileStatus ||
+      user?.profileStatus ||
+      user?.ProfileStatus ||
+      (LEGACY_PROFILE_STATUSES.has(legacyStatus)
+        ? legacyStatus
+        : "")
+  );
+
   const pathname = location.pathname;
 
-  const ROUTES = {
-  CLIENT_SETUP: "/setup-profile",
-  EXPERT_SETUP: "/expert/setup-profile",
-  EXPERT_EDIT: "/expert/profile/edit",
-  EXPERT_LOCKED: "/expert/profile-locked",
-};
+  const isClientSetupPage =
+    pathname === ROUTES.CLIENT_SETUP;
 
-  const isClientSetupPage = pathname === ROUTES.CLIENT_SETUP;
+  const isExpertSetupPage =
+    pathname === ROUTES.EXPERT_SETUP;
+
+  const isExpertEditPage =
+    pathname === ROUTES.EXPERT_EDIT;
+
+  const isExpertLockedPage =
+    pathname === ROUTES.EXPERT_LOCKED;
 
   const isExpertProfileReviewPage = [
     ROUTES.EXPERT_SETUP,
@@ -38,44 +103,232 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     ROUTES.EXPERT_LOCKED,
   ].includes(pathname);
 
-  const isExpertLockedPage = pathname === "/expert/profile-locked";
-
-  if (status === "PENDING_ROLE") {
-    return <Navigate to="/select-role" replace />;
-  }
-
-  // Quan trọng: vẫn cho /expert/profile/edit đi qua khi userStatus đang LOCKED.
-  // Lý do: khi lockUntil đã hết hạn, SetupExpertProfilePage sẽ gọi backend,
-  // backend reset lock khi resubmit, và user có thể gửi lại hồ sơ.
-  if (role === "EXPERT" && status === "EXPERT_PROFILE_LOCKED") {
-    if (!isExpertProfileReviewPage) {
-      return <Navigate to="/expert/profile-locked" replace />;
+  if (
+    legacyStatus === "PENDING_ROLE" ||
+    accountStatus === "PENDING_ROLE"
+  ) {
+    if (pathname === ROUTES.SELECT_ROLE) {
+      return children;
     }
 
-    return children;
+    return (
+      <Navigate
+        to={ROUTES.SELECT_ROLE}
+        replace
+      />
+    );
   }
 
-  if (status === "PENDING_PROFILE") {
+  if (ACCOUNT_BLOCKED_STATUSES.has(accountStatus)) {
+    return (
+      <Navigate
+        to={ROUTES.LOGIN}
+        replace
+        state={{
+          accountRestricted: true,
+          accountStatus,
+          from: pathname,
+        }}
+      />
+    );
+  }
+
+  if (
+    role === "CLIENT" &&
+    isPendingProfileStatus(
+      expertProfileStatus,
+      legacyStatus
+    )
+  ) {
+    if (isClientSetupPage) {
+      return children;
+    }
+
+    return (
+      <Navigate
+        to={ROUTES.CLIENT_SETUP}
+        replace
+      />
+    );
+  }
+
+  if (role === "EXPERT") {
+    if (
+      isExpertLockedStatus(
+        expertProfileStatus,
+        legacyStatus
+      )
+    ) {
+      if (isExpertProfileReviewPage) {
+        return children;
+      }
+
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_LOCKED}
+          replace
+        />
+      );
+    }
+
+    if (
+      isPendingProfileStatus(
+        expertProfileStatus,
+        legacyStatus
+      )
+    ) {
+      if (isExpertSetupPage || isExpertEditPage) {
+        return children;
+      }
+
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_SETUP}
+          replace
+        />
+      );
+    }
+
+    if (
+      isRejectedProfileStatus(
+        expertProfileStatus
+      )
+    ) {
+      if (isExpertEditPage || isExpertSetupPage) {
+        return children;
+      }
+
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_EDIT}
+          replace
+        />
+      );
+    }
+
+    if (
+      isApprovedProfileStatus(
+        expertProfileStatus
+      ) &&
+      isExpertProfileReviewPage &&
+      !isExpertLockedPage
+    ) {
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_DASHBOARD}
+          replace
+        />
+      );
+    }
+  }
+
+  if (
+    role === "ADMIN" &&
+    legacyStatus === "PENDING_PROFILE"
+  ) {
+    return (
+      <Navigate
+        to={ROUTES.ADMIN_DASHBOARD}
+        replace
+      />
+    );
+  }
+
+  const normalizedRoles = Array.isArray(allowedRoles)
+    ? allowedRoles
+        .map(normalizeStatus)
+        .filter(Boolean)
+    : [];
+
+  if (
+    normalizedRoles.length > 0 &&
+    !normalizedRoles.includes(role)
+  ) {
     if (role === "CLIENT") {
-      if (isClientSetupPage) return children;
-      return <Navigate to="/setup-profile" replace />;
+      return (
+        <Navigate
+          to={ROUTES.CLIENT_DASHBOARD}
+          replace
+        />
+      );
     }
 
     if (role === "EXPERT") {
-      if (isExpertProfileReviewPage) return children;
-      return <Navigate to="/expert/setup-profile" replace />;
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_DASHBOARD}
+          replace
+        />
+      );
     }
 
     if (role === "ADMIN") {
-      return <Navigate to="/admin/dashboard" replace />;
+      return (
+        <Navigate
+          to={ROUTES.ADMIN_DASHBOARD}
+          replace
+        />
+      );
     }
-  }
 
-  const normalizedRoles = allowedRoles?.map(r => String(r).toUpperCase());
-
-  if (normalizedRoles?.length && !normalizedRoles.includes(role)) {
-    return <Navigate to="/unauthorized" replace />;
+    return (
+      <Navigate
+        to={ROUTES.UNAUTHORIZED}
+        replace
+      />
+    );
   }
 
   return children;
+}
+
+function normalizeStatus(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function isPendingProfileStatus(
+  profileStatus,
+  legacyStatus
+) {
+  return [
+    "PENDING_PROFILE",
+    "PROFILE_PENDING",
+    "PENDING",
+    "PENDING_REVIEW",
+    "UNDER_REVIEW",
+    "NOT_CREATED",
+  ].includes(profileStatus || legacyStatus);
+}
+
+function isRejectedProfileStatus(profileStatus) {
+  return [
+    "REJECTED",
+    "PROFILE_REJECTED",
+    "NEEDS_CORRECTION",
+    "REVISION_REQUIRED",
+    "RESUBMIT_REQUIRED",
+  ].includes(profileStatus);
+}
+
+function isExpertLockedStatus(
+  profileStatus,
+  legacyStatus
+) {
+  return [
+    "EXPERT_PROFILE_LOCKED",
+    "PROFILE_LOCKED",
+    "LOCKED_FOR_REVIEW",
+    "REVIEW_LOCKED",
+  ].includes(profileStatus || legacyStatus);
+}
+
+function isApprovedProfileStatus(profileStatus) {
+  return [
+    "APPROVED",
+    "ACTIVE",
+    "VERIFIED",
+  ].includes(profileStatus);
 }

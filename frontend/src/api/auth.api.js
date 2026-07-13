@@ -1,13 +1,30 @@
 import axiosInstance from "./axiosInstance";
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.replace(/\/+$/, "");
+const getAuthRedirectUrl = (path) => {
+  const configuredApiBaseUrl = String(
+    axiosInstance.defaults.baseURL || ""
+  ).trim();
 
-if (!BACKEND_BASE_URL) {
-  throw new Error("Missing VITE_BACKEND_BASE_URL");
-}
+  if (!configuredApiBaseUrl) {
+    throw new Error("Missing API base URL configuration.");
+  }
+
+  const apiBaseUrl = configuredApiBaseUrl.endsWith("/")
+    ? configuredApiBaseUrl
+    : `${configuredApiBaseUrl}/`;
+
+  const absoluteApiBaseUrl = new URL(
+    apiBaseUrl,
+    window.location.origin
+  );
+
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+
+  return new URL(normalizedPath, absoluteApiBaseUrl).toString();
+};
 
 // POST /api/auth/register
-// Không trả accessToken — user phải verify email trước
+// Không trả token đăng nhập về frontend — user phải verify email trước
 export const registerApi = async ({ fullName, email, password }) => {
   const res = await axiosInstance.post("/auth/register", {
     fullName,
@@ -18,7 +35,6 @@ export const registerApi = async ({ fullName, email, password }) => {
   return res.data;
 };
 
-// GET /api/auth/verify-email?token=xxx
 export const verifyEmailApi = async (token) => {
   const res = await axiosInstance.get("/auth/verify-email", {
     params: { token },
@@ -27,7 +43,6 @@ export const verifyEmailApi = async (token) => {
   return res.data;
 };
 
-// POST /api/auth/resend-verification-email
 export const resendVerificationEmailApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/resend-verification-email", {
     email,
@@ -37,7 +52,7 @@ export const resendVerificationEmailApi = async ({ email }) => {
 };
 
 // POST /api/auth/login
-// Trả về { accessToken, expiresAt, user }
+// Backend set JWT vào HttpOnly cookie.
 export const loginApi = async ({ email, password }) => {
   const res = await axiosInstance.post("/auth/login", {
     email,
@@ -47,19 +62,26 @@ export const loginApi = async ({ email, password }) => {
   return res.data;
 };
 
-// GET /api/auth/google-login — redirect browser, không dùng axios
-export const loginWithGoogleApi = () => {
-  window.location.href = `${BACKEND_BASE_URL}/api/auth/google-login`;
+// POST /api/auth/logout
+// Backend clear HttpOnly cookie.
+export const logoutApi = async () => {
+  const res = await axiosInstance.post("/auth/logout");
+
+  return res.data;
 };
 
-// GET /api/auth/me
+export const loginWithGoogleApi = () => {
+  const redirectUrl = getAuthRedirectUrl("auth/google-login");
+
+  window.location.assign(redirectUrl);
+};
+
 export const getMeApi = async () => {
   const res = await axiosInstance.get("/auth/me");
 
   return res.data;
 };
 
-// POST /api/auth/forgot-password
 export const forgotPasswordApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/forgot-password", {
     email,
@@ -68,8 +90,6 @@ export const forgotPasswordApi = async ({ email }) => {
   return res.data;
 };
 
-// POST /api/auth/reset-password
-// token lấy từ URL: /reset-password?token=xxx
 export const resetPasswordApi = async ({
   token,
   newPassword,
@@ -84,7 +104,24 @@ export const resetPasswordApi = async ({
   return res.data;
 };
 
-// POST /api/auth/select-role
+/* ===========================
+   CHANGE PASSWORD
+=========================== */
+
+export const changePasswordApi = async ({
+  currentPassword,
+  newPassword,
+  confirmNewPassword,
+}) => {
+  const res = await axiosInstance.post("/auth/change-password", {
+    currentPassword,
+    newPassword,
+    confirmNewPassword,
+  });
+
+  return res.data;
+};
+
 export const selectRoleApi = async ({ role }) => {
   const res = await axiosInstance.post("/auth/select-role", {
     role,
@@ -93,7 +130,6 @@ export const selectRoleApi = async ({ role }) => {
   return res.data;
 };
 
-// PUT /api/auth/me/avatar
 export const updateMyAvatarApi = async (avatarUrlOrPayload) => {
   const payload =
     typeof avatarUrlOrPayload === "string"
@@ -112,10 +148,12 @@ export default {
   verifyEmailApi,
   resendVerificationEmailApi,
   loginApi,
+  logoutApi,
   loginWithGoogleApi,
   getMeApi,
   forgotPasswordApi,
   resetPasswordApi,
+  changePasswordApi,
   selectRoleApi,
   updateMyAvatarApi,
 };

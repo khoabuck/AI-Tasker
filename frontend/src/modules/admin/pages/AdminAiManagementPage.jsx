@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAiManagementService from "../../../services/adminAiManagement.service";
 
+import { formatDateTimeWithSeconds } from "../../../utils/dateTime.utils";
 const EMPTY_SETTINGS_FORM = {
   model: "",
   isEnabled: true,
@@ -36,10 +37,10 @@ const EMPTY_TEST_FORM = {
 };
 
 const TABS = [
-  { key: "SETTINGS", label: "AI Settings", icon: "tune" },
-  { key: "MODELS", label: "Allowed Models", icon: "view_module" },
-  { key: "TEST", label: "Test AI", icon: "science" },
-  { key: "USAGE", label: "Usage Monitor", icon: "monitoring" },
+  { key: "SETTINGS", label: "Settings", icon: "tune" },
+  { key: "MODELS", label: "Models", icon: "view_module" },
+  { key: "TEST", label: "Test", icon: "science" },
+  { key: "USAGE", label: "Usage", icon: "monitoring" },
 ];
 
 const SETTINGS_NUMBER_FIELDS = [
@@ -83,10 +84,21 @@ export default function AdminAiManagementPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [confirmAction, setConfirmAction] = useState(null);
 
   const enabledModels = useMemo(() => {
     return models.filter((item) => item.isEnabled);
   }, [models]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3600);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadInitialData();
@@ -277,7 +289,31 @@ export default function AdminAiManagementPage() {
     }));
   };
 
-  const handleSaveSettings = async () => {
+  const handleSaveSettings = () => {
+    const validation = validateSettings(settingsForm);
+
+    if (!validation.valid) {
+      setSettingsErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setConfirmAction({
+      type: "SAVE_SETTINGS",
+      title: "Save AI settings?",
+      message: `These settings affect every AI feature on the platform. Model: ${
+        settingsForm.model || "N/A"
+      } · AI: ${settingsForm.isEnabled ? "Enabled" : "Disabled"} · Monthly token limit: ${
+        settingsForm.monthlyTokenLimit || "N/A"
+      } · Monthly request limit: ${
+        settingsForm.monthlyRequestLimit || "N/A"
+      }. Reason: ${settingsForm.reason.trim()}.`,
+      confirmLabel: "Save Settings",
+      tone: "cyan",
+    });
+  };
+
+  const executeSaveSettings = async () => {
     const validation = validateSettings(settingsForm);
 
     if (!validation.valid) {
@@ -351,7 +387,31 @@ export default function AdminAiManagementPage() {
     setModelModalError("");
   };
 
-  const handleSaveModel = async () => {
+  const requestSaveModel = () => {
+    const validation = validateModel(modelForm, Boolean(editingModel));
+
+    if (!validation.valid) {
+      setModelErrors(validation.errors);
+      setModelModalError("Please fix the highlighted fields.");
+      return;
+    }
+
+    const actionLabel = editingModel ? "update" : "create";
+
+    setConfirmAction({
+      type: "SAVE_MODEL",
+      title: editingModel ? "Save AI model changes?" : "Create this AI model?",
+      message: `You are about to ${actionLabel} ${
+        modelForm.displayName || modelForm.model || "this AI model"
+      }. Model: ${modelForm.model || "N/A"} · Max output tokens: ${
+        modelForm.maxOutputTokens || "N/A"
+      } · Status: ${modelForm.isEnabled ? "Enabled" : "Disabled"}.`,
+      confirmLabel: editingModel ? "Save Model" : "Add model",
+      tone: "cyan",
+    });
+  };
+
+  const executeSaveModel = async () => {
     const validation = validateModel(modelForm, Boolean(editingModel));
 
     if (!validation.valid) {
@@ -392,7 +452,48 @@ export default function AdminAiManagementPage() {
     }
   };
 
-  const handleTestAi = async () => {
+  const handleTestAi = () => {
+    const validation = validateTest(testForm);
+
+    if (!validation.valid) {
+      setTestErrors(validation.errors);
+      setError("Please fix the highlighted fields before running the test.");
+      return;
+    }
+
+    setConfirmAction({
+      type: "TEST_AI",
+      title: "Run this AI test?",
+      message: `The prompt will be sent to ${
+        testForm.model || "the selected model"
+      } with max ${testForm.maxTokens || "N/A"} tokens and temperature ${
+        testForm.temperature || "N/A"
+      }. This request will be recorded in AI usage logs.`,
+      confirmLabel: "Run Test",
+      tone: "cyan",
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (action === "SAVE_SETTINGS") {
+      await executeSaveSettings();
+      return;
+    }
+
+    if (action === "TEST_AI") {
+      await executeTestAi();
+      return;
+    }
+
+    if (action === "SAVE_MODEL") {
+      await executeSaveModel();
+    }
+  };
+
+  const executeTestAi = async () => {
     const validation = validateTest(testForm);
 
     if (!validation.valid) {
@@ -426,17 +527,16 @@ export default function AdminAiManagementPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Admin AI Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              AI Management
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              AI control center
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              AI management
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Manage global AI settings, allowed models, test model responses,
-              and monitor token usage across the platform.
+              Manage models, limits, testing, and AI usage.
             </p>
           </div>
 
@@ -459,22 +559,10 @@ export default function AdminAiManagementPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400">
-            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading AI management...
-          </div>
+          <PageSkeleton cards={4} admin />
         ) : (
           <>
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -488,7 +576,7 @@ export default function AdminAiManagementPage() {
 
               <StatCard
                 icon="memory"
-                label="Current Model"
+                label="Model"
                 value={settingsForm.model || "N/A"}
                 description="Primary model for AI features"
                 tone="cyan"
@@ -496,7 +584,7 @@ export default function AdminAiManagementPage() {
 
               <StatCard
                 icon="token"
-                label="Monthly Tokens"
+                label="Tokens"
                 value={formatNumber(usageSummary?.totalTokens || 0)}
                 description={`${formatPercent(
                   usageSummary?.tokenUsagePercent
@@ -517,7 +605,7 @@ export default function AdminAiManagementPage() {
               />
             </section>
 
-            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+            <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22]/95 p-2 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
               <div className="flex flex-wrap gap-2">
                 {TABS.map((tab) => (
                   <button
@@ -590,7 +678,7 @@ export default function AdminAiManagementPage() {
 
         {showModelModal && (
           <ModelModal
-            title={editingModel ? "Edit AI Model" : "Create AI Model"}
+            title={editingModel ? "Edit model" : "Add model"}
             form={modelForm}
             errors={modelErrors}
             modalError={modelModalError}
@@ -598,7 +686,19 @@ export default function AdminAiManagementPage() {
             loading={savingModel}
             onChange={updateModelField}
             onClose={closeModelModal}
-            onSave={handleSaveModel}
+            onSave={requestSaveModel}
+          />
+        )}
+
+        {confirmAction && (
+          <ConfirmActionModal
+            title={confirmAction.title}
+            message={confirmAction.message}
+            confirmLabel={confirmAction.confirmLabel}
+            tone={confirmAction.tone}
+            loading={savingSettings || testing}
+            onCancel={() => setConfirmAction(null)}
+            onConfirm={handleConfirmAction}
           />
         )}
       </div>
@@ -606,12 +706,123 @@ export default function AdminAiManagementPage() {
   );
 }
 
+
+function PageSkeleton({ cards = 4, admin = false }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: cards }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+
+        <div className="mt-6 h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "verified"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="mb-6 flex flex-col gap-3 border-b border-white/10 pb-5 md:flex-row md:items-start md:justify-between">
         <div>
-          <h2 className="text-xl font-bold text-white">AI Settings</h2>
+          <h2 className="text-xl font-bold text-white">Settings</h2>
           <p className="mt-1 text-sm leading-6 text-gray-400">
             Configure the default model, response mode, token budgets, and
             request limits used by AI features.
@@ -635,7 +846,7 @@ function SettingsTab({ form, errors, models, saving, onChange, onSave }) {
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <SelectInput
-            label="Current Model"
+            label="Model"
             required
             value={form.model}
             error={errors.model}
@@ -757,10 +968,10 @@ function ModelsTab({ models, onCreate, onEdit }) {
   const enabledCount = models.filter((item) => item.isEnabled).length;
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-lg font-bold text-white">Allowed Models</h2>
+          <h2 className="text-lg font-bold text-white">Models</h2>
           <p className="mt-1 text-sm text-gray-500">
             {enabledCount} active of {models.length} configured model(s).
           </p>
@@ -771,7 +982,7 @@ function ModelsTab({ models, onCreate, onEdit }) {
           onClick={onCreate}
           className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
-          Create Model
+          Add model
         </button>
       </div>
 
@@ -792,8 +1003,7 @@ function ModelsTab({ models, onCreate, onEdit }) {
                 <div className="min-w-0">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <StatusBadge active={item.isEnabled} />
-                    <Badge label={item.provider || "Provider"} />
-                    <Badge label={`ID #${item.aiAllowedModelId || "N/A"}`} />
+                    {item.provider && <Badge label={item.provider} />}
                   </div>
 
                   <h3 className="font-bold text-white">
@@ -844,8 +1054,8 @@ function ModelsTab({ models, onCreate, onEdit }) {
 function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
   return (
     <section className="grid grid-cols-1 gap-6 xl:grid-cols-[420px_1fr]">
-      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-        <h2 className="text-xl font-bold text-white">Test AI Model</h2>
+      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+        <h2 className="text-xl font-bold text-white">Test Model</h2>
         <p className="mt-1 text-sm text-gray-400">
           Send a controlled test prompt before using a model in production.
         </p>
@@ -907,11 +1117,11 @@ function TestTab({ form, errors, models, result, testing, onChange, onTest }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <div className="mb-5">
           <h2 className="text-xl font-bold text-white">Test Result</h2>
           <p className="mt-1 text-sm text-gray-400">
-            Response and metadata returned by the AI test endpoint.
+            Review the generated response and basic performance information.
           </p>
         </div>
 
@@ -1114,10 +1324,10 @@ function UsageTab({
 }) {
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-white">Usage Monitor</h2>
+            <h2 className="text-xl font-bold text-white">Usage</h2>
             <p className="mt-1 text-sm text-gray-400">
               Monitor AI requests, token usage, failed calls, and estimated cost.
             </p>
@@ -1178,7 +1388,7 @@ function UsageTab({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <h2 className="text-xl font-bold text-white">Usage By Feature</h2>
         <p className="mt-1 text-sm text-gray-400">
           Breakdown of AI usage by system feature.
@@ -1205,7 +1415,7 @@ function UsageTab({
                   <Td>{formatNumber(item.successfulRequests)}</Td>
                   <Td>{formatNumber(item.failedRequests)}</Td>
                   <Td>{formatNumber(item.totalTokens)}</Td>
-                  <Td>{formatUsd(item.estimatedCostUsd)}</Td>
+                  <Td>{formatVnd(item.estimatedCostUsd)}</Td>
                 </tr>
               ))}
             </tbody>
@@ -1219,10 +1429,10 @@ function UsageTab({
         </div>
       </section>
 
-      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+      <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
         <h2 className="text-xl font-bold text-white">Recent AI Logs</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Latest AI calls and error details.
+          Recent AI activity and failed request summaries.
         </p>
 
         <div className="mt-5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1241,7 +1451,7 @@ function UsageTab({
             <tbody className="divide-y divide-white/10">
               {logs.map((item) => (
                 <tr key={item.aiUsageLogId}>
-                  <Td>{formatDate(item.createdAt)}</Td>
+                  <Td>{formatDateTimeWithSeconds(item.createdAt, "N/A")}</Td>
                   <Td>{item.feature || "N/A"}</Td>
                   <Td>{item.model || "N/A"}</Td>
                   <Td>
@@ -1250,8 +1460,8 @@ function UsageTab({
                   <Td>{formatNumber(item.totalTokens)}</Td>
                   <Td>
                     <p className="max-w-[360px] whitespace-normal text-xs text-gray-400">
-                      {item.errorCode || item.errorMessage
-                        ? `${item.errorCode || ""} ${item.errorMessage || ""}`
+                      {item.errorMessage
+                        ? getFriendlyAiLogError(item.errorMessage)
                         : "-"}
                     </p>
                   </Td>
@@ -1416,7 +1626,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   };
 
   return (
-    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -1719,7 +1929,7 @@ function validateSettings(form) {
   const errors = {};
 
   if (!String(form.model || "").trim()) {
-    errors.model = "Current Model is required.";
+    errors.model = "Model is required.";
   }
 
   SETTINGS_NUMBER_FIELDS.forEach((field) => {
@@ -1899,25 +2109,16 @@ function formatPercent(value) {
   }).format(Number.isNaN(number) ? 0 : number)}%`;
 }
 
-function formatUsd(value) {
+function formatVnd(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 4,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
-}
+};
 
-function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("vi-VN");
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";
@@ -1936,7 +2137,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   if (status === 401) return "Your session has expired. Please login again.";
   if (status === 403) return "You do not have permission to manage AI settings.";
   if (status === 404)
-    return "AI management API was not found. Please check backend route.";
+    return "AI management is temporarily unavailable. Please try again later.";
 
   const data = err?.response?.data;
 
@@ -1951,6 +2152,22 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   return err?.message || fallback;
+}
+
+function getFriendlyAiLogError(value) {
+  const text = String(value || "").trim();
+
+  if (!text) return "-";
+
+  const lower = text.toLowerCase();
+
+  if (lower.includes("timeout")) return "The AI request timed out.";
+  if (lower.includes("rate limit")) return "The AI request limit was reached.";
+  if (lower.includes("unauthorized") || lower.includes("forbidden")) {
+    return "The AI provider rejected the request.";
+  }
+
+  return text.length > 140 ? `${text.slice(0, 140)}...` : text;
 }
 
 function extractAiContent(result) {

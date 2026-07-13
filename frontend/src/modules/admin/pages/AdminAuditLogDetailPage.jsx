@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminAuditLogService from "../../../services/adminAuditLog.service";
 
+import { formatDateTimeWithSeconds } from "../../../utils/dateTime.utils";
 export default function AdminAuditLogDetailPage() {
   const { auditLogId } = useParams();
   const navigate = useNavigate();
@@ -18,7 +19,7 @@ export default function AdminAuditLogDetailPage() {
 
   const loadAuditLogDetail = async () => {
     if (!auditLogId) {
-      setError("Audit log id is missing.");
+      setError("Audit log information is unavailable.");
       setLoading(false);
       return;
     }
@@ -59,12 +60,7 @@ export default function AdminAuditLogDetailPage() {
   }, [auditLog]);
 
   const displayEntity = useMemo(() => {
-    const entityName = auditLog?.entityName || "Unknown Entity";
-    const entityId = auditLog?.entityId && auditLog.entityId !== "N/A"
-      ? ` #${auditLog.entityId}`
-      : "";
-
-    return `${toReadableText(entityName)}${entityId}`;
+    return toReadableText(auditLog?.entityName || "Affected record");
   }, [auditLog]);
 
   const changes = useMemo(() => {
@@ -72,7 +68,7 @@ export default function AdminAuditLogDetailPage() {
   }, [auditLog]);
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   return (
     <AdminLayout>
@@ -80,17 +76,16 @@ export default function AdminAuditLogDetailPage() {
         <div className="mx-auto max-w-7xl">
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Audit Log Detail
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Audit log
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
                 {loading ? "Loading audit log..." : displayAction}
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Review what changed, who performed the action, and which record
-                was affected.
+                Review the action, affected record, and captured changes.
               </p>
             </div>
 
@@ -100,7 +95,7 @@ export default function AdminAuditLogDetailPage() {
                 onClick={() => navigate("/admin/audit-logs")}
                 className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
               >
-                Back to Logs
+                Audit logs
               </button>
 
               <button
@@ -121,12 +116,7 @@ export default function AdminAuditLogDetailPage() {
           )}
 
           {loading ? (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading audit log detail...
-            </div>
+            <PageSkeleton cards={4} admin />
           ) : !auditLog ? (
             <div className={`${cardStyle} p-12 text-center`}>
               <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
@@ -148,10 +138,6 @@ export default function AdminAuditLogDetailPage() {
                   <div className="mb-4 flex flex-wrap items-center gap-2">
                     <ActionBadge action={auditLog.action} />
 
-                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                      Log #{auditLog.auditLogId || "N/A"}
-                    </span>
-
                     <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
                       {displayEntity}
                     </span>
@@ -171,31 +157,26 @@ export default function AdminAuditLogDetailPage() {
                 <div className="grid grid-cols-1 gap-0 md:grid-cols-4">
                   <OverviewItem
                     icon="person"
-                    label="Performed By"
+                    label="Performed by"
                     value={
-                      auditLog.adminEmail ||
                       auditLog.adminName ||
-                      `Admin #${auditLog.adminId || "N/A"}`
+                      auditLog.adminEmail ||
+                      "Administrator"
                     }
                   />
 
                   <OverviewItem
                     icon="database"
-                    label="Affected Record"
+                    label="Affected record"
                     value={displayEntity}
                   />
 
                   <OverviewItem
                     icon="schedule"
                     label="Time"
-                    value={formatDateTime(auditLog.createdAt)}
+                    value={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                   />
 
-                  <OverviewItem
-                    icon="verified_user"
-                    label="Admin ID"
-                    value={auditLog.adminId || "N/A"}
-                  />
                 </div>
               </section>
 
@@ -205,7 +186,7 @@ export default function AdminAuditLogDetailPage() {
                     <div className="mb-6 flex items-start justify-between gap-4">
                       <div>
                         <h2 className="text-xl font-bold text-white">
-                          Change Summary
+                          Changes
                         </h2>
 
                         <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -217,7 +198,7 @@ export default function AdminAuditLogDetailPage() {
 
                     {changes.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
-                        <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
+                        <span className="material-symbols-outlined mb-3 block text-3xl text-gray-500">
                           difference
                         </span>
 
@@ -227,8 +208,8 @@ export default function AdminAuditLogDetailPage() {
 
                         <p className="mt-2 text-sm leading-6 text-gray-400">
                           This audit log does not include structured old and new
-                          values. Check the action summary or advanced details
-                          below.
+                          values. Review the action summary and reason for more
+                          context.
                         </p>
                       </div>
                     ) : (
@@ -242,7 +223,7 @@ export default function AdminAuditLogDetailPage() {
 
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Action Timeline
+                      Timeline
                     </h2>
 
                     <div className="space-y-5">
@@ -250,11 +231,11 @@ export default function AdminAuditLogDetailPage() {
                         icon="login"
                         title="Admin action recorded"
                         description={
-                          auditLog.adminEmail
-                            ? `${auditLog.adminEmail} performed this action.`
-                            : `Admin #${auditLog.adminId || "N/A"} performed this action.`
+                          auditLog.adminName || auditLog.adminEmail
+                            ? `${auditLog.adminName || auditLog.adminEmail} performed this action.`
+                            : "An administrator performed this action."
                         }
-                        time={formatDateTime(auditLog.createdAt)}
+                        time={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                         tone="cyan"
                       />
 
@@ -270,27 +251,21 @@ export default function AdminAuditLogDetailPage() {
                         icon="shield"
                         title="Audit trail saved"
                         description="This record is available for admin review and compliance tracking."
-                        time={auditLog.ipAddress ? `IP: ${auditLog.ipAddress}` : "IP address not available"}
+                        time="Saved for admin review"
                         tone="green"
                       />
                     </div>
                   </section>
 
-                  <AdvancedDetails auditLog={auditLog} />
                 </main>
 
                 <aside className="space-y-6">
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Record Information
+                      Record
                     </h2>
 
                     <div className="space-y-4">
-                      <DetailItem
-                        label="Audit Log ID"
-                        value={auditLog.auditLogId || "N/A"}
-                      />
-
                       <DetailItem
                         label="Action"
                         value={toReadableText(auditLog.action || "UNKNOWN")}
@@ -303,21 +278,18 @@ export default function AdminAuditLogDetailPage() {
 
                       <DetailItem
                         label="Created At"
-                        value={formatDateTime(auditLog.createdAt)}
+                        value={formatDateTimeWithSeconds(auditLog.createdAt, "N/A")}
                       />
                     </div>
                   </section>
 
                   <section className={`${cardStyle} p-6`}>
                     <h2 className="mb-5 text-xl font-bold text-white">
-                      Admin Information
+                      Administrator
                     </h2>
 
                     <div className="space-y-4">
-                      <DetailItem label="Admin ID" value={auditLog.adminId} />
-                      <DetailItem label="Name" value={auditLog.adminName} />
                       <DetailItem label="Email" value={auditLog.adminEmail} />
-                      <DetailItem label="IP Address" value={auditLog.ipAddress} />
                     </div>
                   </section>
 
@@ -341,6 +313,35 @@ export default function AdminAuditLogDetailPage() {
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4, admin = false }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className={`h-4 w-32 rounded ${admin ? "bg-purple-400/10" : "bg-cyan-400/10"}`} />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: cards }).map((_, index) => (
+            <div
+              key={index}
+              className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+            />
+          ))}
+        </div>
+
+        <div className="mt-6 h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
 
 function OverviewItem({ icon, label, value }) {
   return (
@@ -446,52 +447,6 @@ function DetailItem({ label, value }) {
       <p className="mt-1 break-words text-sm font-bold text-white">
         {value || "N/A"}
       </p>
-    </div>
-  );
-}
-
-function AdvancedDetails({ auditLog }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
-      >
-        <div>
-          <h2 className="text-xl font-bold text-white">Advanced Details</h2>
-
-          <p className="mt-1 text-sm text-gray-500">
-            Technical data for troubleshooting and backend verification.
-          </p>
-        </div>
-
-        <span className="material-symbols-outlined text-gray-400">
-          {open ? "expand_less" : "expand_more"}
-        </span>
-      </button>
-
-      {open && (
-        <div className="space-y-5 border-t border-white/10 p-6">
-          <JsonPanel title="Old Values" value={auditLog.oldValues} />
-          <JsonPanel title="New Values" value={auditLog.newValues} />
-          <JsonPanel title="Raw Audit Log" value={auditLog.raw || auditLog} />
-        </div>
-      )}
-    </section>
-  );
-}
-
-function JsonPanel({ title, value }) {
-  return (
-    <div>
-      <h3 className="mb-3 font-bold text-white">{title}</h3>
-
-      <pre className="max-h-[420px] overflow-auto rounded-xl border border-white/10 bg-[#0d1117] p-4 text-xs leading-6 text-gray-300">
-        {formatJsonValue(value)}
-      </pre>
     </div>
   );
 }
@@ -631,23 +586,8 @@ function safeJsonParse(value) {
   } catch {
     return null;
   }
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function getFriendlyError(err) {
   const status = err?.response?.status;
@@ -657,11 +597,11 @@ function getFriendlyError(err) {
   }
 
   if (status === 403) {
-    return "Backend blocked this request because the current token does not have ADMIN permission.";
+    return "You do not have permission to view this audit record.";
   }
 
   if (status === 404) {
-    return "Audit log detail API was not found. Please check backend route.";
+    return "This audit record is temporarily unavailable. Please try again later.";
   }
 
   const data = err?.response?.data;

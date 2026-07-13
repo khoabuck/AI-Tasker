@@ -57,7 +57,7 @@ export default function ClientReviewPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  
 
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
@@ -67,11 +67,13 @@ export default function ClientReviewPage() {
     const controller = new AbortController();
     axiosInstance.get(`/projects/${projectId}/review`, { signal: controller.signal })
       .then((res) => {
-        setExistingReview(res.data);
-        // Prefill nếu đã review
-        if (res.data) {
-          setRating(res.data.rating ?? 0);
-          setComment(res.data.comment ?? "");
+        const reviewData = res.data?.data ?? res.data;
+
+        setExistingReview(reviewData);
+
+        if (reviewData) {
+          setRating(reviewData.rating ?? 0);
+          setComment(reviewData.comment ?? "");
         }
       })
       .catch((err) => {
@@ -88,14 +90,25 @@ export default function ClientReviewPage() {
     if (!comment.trim()) { setError("Please enter your review."); return; }
     if (comment.trim().length < 10) { setError("Review is too short (minimum 10 characters)."); return; }
 
-    setSubmitting(true);
+    navigate(`/client/projects/${projectId}`, {
+      replace: true,
+      state: {
+        successMsg: "Review submitted successfully.",
+      },
+    });
     setError("");
     try {
       await axiosInstance.post(`/projects/${projectId}/reviews`, {
-        rating,
-        comment: comment.trim(),
-      });
-      setSubmitted(true);
+      rating,
+      comment: comment.trim(),
+    });
+
+    navigate(`/client/projects/${projectId}`, {
+      replace: true,
+      state: {
+        successMsg: "Review submitted successfully.",
+      },
+    });
     } catch (err) {
       setError(err?.response?.data?.message || "Submit review failed. Please try again.");
     } finally {
@@ -113,29 +126,8 @@ export default function ClientReviewPage() {
     </ClientLayout>
   );
 
-  // ── Submitted success ─────────────────────────────────────────────
-  if (submitted) return (
-    <ClientLayout>
-      <div style={{ maxWidth: 560, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
-        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "1px solid rgba(34,197,94,0.3)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 24px" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 40, color: "#22c55e", fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-        </div>
-        <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 28, fontWeight: 700, color: "#e1e2eb", marginBottom: 12 }}>
-          Review Submitted!
-        </h1>
-        <p style={{ color: "#8c90a0", fontSize: 15, marginBottom: 32, lineHeight: 1.7 }}>
-          Thank you for your review. Your feedback helps us improve service quality.
-        </p>
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={() => navigate("/client/projects")}
-            style={{ padding: "12px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontFamily: "Hanken Grotesk, sans-serif", fontSize: 14, boxShadow: "0 0 16px rgba(0,240,255,0.3)" }}>
-            Back to Projects
-          </button>
-        </div>
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-      </div>
-    </ClientLayout>
-  );
+  
+  
 
   const isReadonly = !!existingReview;
 
@@ -143,14 +135,7 @@ export default function ClientReviewPage() {
     <ClientLayout>
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 24px" }}>
 
-        {/* Back */}
-        <button onClick={() => navigate(-1)}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 32, padding: 0 }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#8c90a0")}>
-          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
-          Back
-        </button>
+       
 
         {/* Header */}
         <div style={{ marginBottom: 36, textAlign: "center" }}>
@@ -259,7 +244,7 @@ export default function ClientReviewPage() {
           {/* Buttons */}
           {!isReadonly ? (
             <div style={{ display: "flex", gap: 12 }}>
-              <button type="button" onClick={() => navigate(-1)}
+              <button type="button" onClick={() => navigate("/client/projects?status=COMPLETED")}
                 style={{ flex: 1, padding: "13px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
                 Cancel
               </button>

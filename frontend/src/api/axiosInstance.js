@@ -1,39 +1,117 @@
 import axios from "axios";
 
-const cleanUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
-
 const getApiBaseUrl = () => {
-  const apiBaseUrl = cleanUrl(import.meta.env.VITE_API_BASE_URL);
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
-  if (!apiBaseUrl) {
-    throw new Error("Missing VITE_API_BASE_URL");
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
   }
 
-  return apiBaseUrl;
+  const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
+
+  if (backendBaseUrl) {
+    return `${backendBaseUrl.replace(/\/+$/, "")}/api`;
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://localhost:5070/api";
+  }
+
+  return "";
+};
+
+const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
+const AUTH_ERROR_EVENT = "aitasker-auth-error";
+
+const normalizeRequestUrl = (config) => {
+  return String(config?.url || "").toLowerCase();
+};
+
+const isAuthMeRequest = (config) => {
+  return normalizeRequestUrl(config).includes("/auth/me");
+};
+
+const isPublicAuthRequest = (config) => {
+  const url = normalizeRequestUrl(config);
+
+  const publicAuthPaths = [
+    "/auth/login",
+    "/auth/register",
+    "/auth/google-login",
+    "/auth/google-callback",
+    "/auth/forgot-password",
+    "/auth/reset-password",
+    "/auth/verify-email",
+    "/auth/resend-verification",
+    "/auth/logout",
+  ];
+
+  return publicAuthPaths.some((path) => url.includes(path));
+};
+
+const dispatchAuthErrorEvent = (error) => {
+  if (typeof window === "undefined") return;
+
+  if (isAuthMeRequest(error?.config)) return;
+  if (isPublicAuthRequest(error?.config)) return;
+
+  window.dispatchEvent(
+    new CustomEvent(AUTH_ERROR_EVENT, {
+      detail: {
+        status: error?.response?.status,
+        url: error?.config?.url || "",
+      },
+    })
+  );
+};
+
+const isFormDataRequest = (data) => {
+  return typeof FormData !== "undefined" && data instanceof FormData;
+};
+
+const removeContentTypeHeader = (headers) => {
+  if (!headers) return;
+
+  if (typeof headers.delete === "function") {
+    headers.delete("Content-Type");
+    headers.delete("content-type");
+    return;
+  }
+
+  delete headers["Content-Type"];
+  delete headers["content-type"];
 };
 
 const axiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
+  withCredentials: true,
   headers: {
-    "Content-Type": "application/json",
+    Accept: "application/json",
   },
 });
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token =
-      localStorage.getItem("accessToken") ||
-      localStorage.getItem("token") ||
-      localStorage.getItem("authToken");
-
-    if (token) {
-      config.headers = config.headers || {};
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-
-    if (import.meta.env.DEV) {
-      console.log("REQUEST URL:", `${config.baseURL}${config.url}`);
-      console.log("SEND TOKEN:", Boolean(token));
+    /*
+     * Không ép application/json cho FormData.
+     * Trình duyệt phải tự tạo multipart boundary.
+     */
+    if (isFormDataRequest(config.data)) {
+      removeContentTypeHeader(config.headers);
+    } else if (
+      config.data !== undefined &&
+      config.data !== null &&
+      !config.headers?.["Content-Type"] &&
+      !config.headers?.["content-type"]
+    ) {
+      if (typeof config.headers?.set === "function") {
+        config.headers.set("Content-Type", "application/json");
+      } else {
+        config.headers = {
+          ...(config.headers || {}),
+          "Content-Type": "application/json",
+        };
+      }
     }
 
     return config;
@@ -41,4 +119,18 @@ axiosInstance.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+axiosInstance.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const status = error?.response?.status;
+
+    if (status === 401 || status === 403) {
+      dispatchAuthErrorEvent(error);
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+export { ACCOUNT_BLOCKED_EVENT, AUTH_ERROR_EVENT };
 export default axiosInstance;

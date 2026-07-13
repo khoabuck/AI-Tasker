@@ -1,5 +1,6 @@
 import projectApi from "../api/project.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -379,7 +380,15 @@ const projectService = {
   async getMyProjects() {
     const response = await projectApi.getMyProjects();
 
-    return unwrapListData(response).map(normalizeProject).filter(Boolean);
+    return unwrapListData(response)
+      .map(normalizeProject)
+      .filter(Boolean)
+      .sort((a, b) =>
+        compareDateDesc(
+          a.updatedAt || a.createdAt || a.startDate,
+          b.updatedAt || b.createdAt || b.startDate
+        )
+      );
   },
 
   async getProjectById(projectId) {

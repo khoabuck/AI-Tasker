@@ -125,7 +125,25 @@ export default function ExpertSearchPage() {
 
   const navigate = useNavigate();
 
+  const saveSearchState = () => {
+  try {
+    sessionStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify({
+        query,
+        seniority,
+        experts,
+        hasSearched,
+      })
+    );
+  } catch {
+    // ignore
+  }
+};
+
   const handleConnect = async (expert) => {
+    saveSearchState();
+
     try {
       const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,

@@ -3,11 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import deliverableService from "../../../services/deliverable.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function DeliverableDetailPage() {
   const { deliverableId } = useParams();
   const navigate = useNavigate();
 
   const [submission, setSubmission] = useState(null);
+  const [submissionNumber, setSubmissionNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -24,10 +26,34 @@ export default function DeliverableDetailPage() {
       const data = await deliverableService.getDeliverableById(deliverableId);
 
       setSubmission(data);
+
+      const milestoneId = getMilestoneIdFromSubmission(data);
+      const explicitNumber = getExplicitSubmissionNumber(data);
+
+      if (milestoneId) {
+        try {
+          const milestoneSubmissions =
+            await deliverableService.getDeliverablesByMilestone(milestoneId);
+
+          setSubmissionNumber(
+            getSubmissionNumberFromList(
+              Array.isArray(milestoneSubmissions)
+                ? milestoneSubmissions
+                : [],
+              data
+            ) || explicitNumber || 1
+          );
+        } catch {
+          setSubmissionNumber(explicitNumber || 1);
+        }
+      } else {
+        setSubmissionNumber(explicitNumber || 1);
+      }
     } catch (err) {
       console.error("LOAD SUBMISSION DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load submission detail."));
       setSubmission(null);
+      setSubmissionNumber(1);
     } finally {
       setLoading(false);
     }
@@ -47,9 +73,7 @@ export default function DeliverableDetailPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading submission...
-        </div>
+        <PageSkeleton cards={4} compact />
       </ExpertLayout>
     );
   }
@@ -68,7 +92,7 @@ export default function DeliverableDetailPage() {
             <button
               type="button"
               onClick={() => navigate("/expert/projects")}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+              className="rounded-lg border border-cyan-400/50 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
             >
               Back to Projects
             </button>
@@ -85,12 +109,12 @@ export default function DeliverableDetailPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-6xl">
+      <div className="min-w-0 overflow-x-hidden px-4 py-5 md:px-6">
+        <div className="mx-auto w-full max-w-5xl min-w-0">
           <button
             type="button"
             onClick={goBackToMilestone}
-            className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
+            className="mb-4 inline-flex items-center gap-2 text-xs font-semibold text-cyan-300 hover:text-cyan-200"
           >
             <span className="material-symbols-outlined text-sm">
               arrow_back
@@ -98,25 +122,24 @@ export default function DeliverableDetailPage() {
             Back to milestone
           </button>
 
-          <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-purple-400/10 to-transparent p-6 md:p-8">
-              <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                    Submission Detail
+          <section className="mb-4 min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_14px_40px_rgba(0,0,0,0.28)]">
+            <div className="border-b border-white/10 bg-gradient-to-r from-cyan-400/10 via-purple-400/10 to-transparent p-4 md:p-5">
+              <div className="flex min-w-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div className="min-w-0">
+                  <p className="mb-2 text-[11px] font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
+                    Delivery
                   </p>
 
-                  <h1 className="text-3xl font-black text-white md:text-4xl">
-                    {submission.title || "Submitted Work"}
+                  <h1 className="break-words text-2xl font-black leading-tight text-white md:text-3xl">
+                    Submission {submissionNumber}
                   </h1>
 
-                  <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                    Review what was submitted, check links, and read any client
-                    feedback.
+                  <p className="mt-2 max-w-2xl break-words text-sm leading-5 text-gray-400">
+                    Review submitted work, links, and client feedback.
                   </p>
                 </div>
 
-                <div className="flex flex-wrap gap-3 lg:justify-end">
+                <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
                   <FriendlyStatusBadge ui={statusUi} />
 
                   <button
@@ -130,13 +153,7 @@ export default function DeliverableDetailPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-0 md:grid-cols-3">
-              <HeroInfo
-                icon="history"
-                label="Version"
-                value={`Version ${submission.versionNumber || 1}`}
-              />
-
+            <div className="grid grid-cols-1 gap-0 md:grid-cols-2">
               <HeroInfo
                 icon="schedule"
                 label="Submitted"
@@ -155,13 +172,12 @@ export default function DeliverableDetailPage() {
             <Alert type="danger" title="Submission error" message={error} />
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
-            <main className="space-y-6">
+          <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <main className="min-w-0 space-y-4">
               {needsChanges && (
-                <Card title="Client requested changes" icon="edit_note">
+                <Card title="Changes requested" icon="edit_note">
                   <p className="text-sm leading-7 text-gray-300">
-                    The client asked for updates. Go back to the milestone page
-                    and use the resubmit form there.
+                    Update and resubmit from the milestone page.
                   </p>
 
                   {clientFeedback && (
@@ -178,27 +194,28 @@ export default function DeliverableDetailPage() {
                     onClick={goBackToMilestone}
                     className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Resubmit from Milestone
+                    Update delivery
                   </button>
                 </Card>
               )}
 
               {approved && (
-                <Card title="Approved by client" icon="verified">
+                <Card title="Approved" icon="verified">
                   <div className="rounded-2xl border border-green-400/30 bg-green-400/10 p-5 text-sm leading-7 text-green-100">
-                    This submission has been approved. No further action is
-                    needed from you for this submission.
+                    This submission has been approved. No further action is needed.
                   </div>
                 </Card>
               )}
 
-              <Card title="Submitted Work" icon="description">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {submission.description || "No description provided."}
-                </p>
+              <Card title="Delivery details" icon="description">
+                <div className="max-w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-4">
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-gray-300">
+                    {submission.description || "No description provided."}
+                  </p>
+                </div>
               </Card>
 
-              <Card title="Review Links" icon="link">
+              <Card title="Delivery links" icon="link">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <LinkBox label="File" url={submission.fileUrl} />
                   <LinkBox label="Demo" url={submission.demoUrl} />
@@ -209,10 +226,12 @@ export default function DeliverableDetailPage() {
                 </div>
               </Card>
 
-              <Card title="Notes for Client" icon="notes">
-                <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
-                  {submission.handoverNotes || "No notes provided."}
-                </p>
+              <Card title="Handover notes" icon="notes">
+                <div className="max-w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.025] p-4">
+                  <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-sm leading-6 text-gray-300">
+                    {submission.handoverNotes || "No notes provided."}
+                  </p>
+                </div>
               </Card>
 
               {!needsChanges && clientFeedback && (
@@ -224,8 +243,8 @@ export default function DeliverableDetailPage() {
               )}
             </main>
 
-            <aside className="space-y-6">
-              <Card title="Current State" icon="monitoring">
+            <aside className="min-w-0 space-y-4">
+              <Card title="Status" icon="monitoring">
                 <FriendlyStatusBadge ui={statusUi} />
 
                 <p className="mt-4 text-sm leading-6 text-gray-400">
@@ -233,7 +252,7 @@ export default function DeliverableDetailPage() {
                 </p>
               </Card>
 
-              <Card title="Next Step" icon="route">
+              <Card title="Next step" icon="route">
                 {needsChanges ? (
                   <NextStep
                     icon="edit_note"
@@ -257,13 +276,6 @@ export default function DeliverableDetailPage() {
                 )}
               </Card>
 
-              <Card title="Quick Tips" icon="tips_and_updates">
-                <ul className="space-y-3 text-sm leading-6 text-gray-300">
-                  <li>This page is for viewing submission details.</li>
-                  <li>Resubmission is handled from the milestone page.</li>
-                  <li>Use the links above to verify your submitted work.</li>
-                </ul>
-              </Card>
             </aside>
           </div>
         </div>
@@ -272,19 +284,50 @@ export default function DeliverableDetailPage() {
   );
 }
 
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function Card({ title, icon, children }) {
   return (
-    <section className="rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_16px_50px_rgba(0,0,0,0.22)]">
-      <div className="mb-5 flex items-start gap-3">
+    <section className="min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_30px_rgba(0,0,0,0.18)]">
+      <div className="mb-3 flex min-w-0 items-start gap-3">
         {icon && (
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-400/20 bg-cyan-400/10">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
             <span className="material-symbols-outlined text-xl text-cyan-300">
               {icon}
             </span>
           </div>
         )}
 
-        <h2 className="text-xl font-extrabold text-white">{title}</h2>
+        <h2 className="break-words text-base font-extrabold text-white">{title}</h2>
       </div>
 
       {children}
@@ -294,7 +337,7 @@ function Card({ title, icon, children }) {
 
 function HeroInfo({ icon, label, value }) {
   return (
-    <div className="border-t border-white/10 p-5 md:border-r md:border-t-0 md:last:border-r-0">
+    <div className="min-w-0 border-t border-white/10 p-3 md:border-r md:border-t-0 md:last:border-r-0">
       <div className="mb-2 flex items-center gap-2 text-gray-500">
         <span className="material-symbols-outlined text-lg">{icon}</span>
         <span className="text-xs font-bold uppercase tracking-wider">
@@ -302,14 +345,14 @@ function HeroInfo({ icon, label, value }) {
         </span>
       </div>
 
-      <p className="text-lg font-black text-white">{formatInfoValue(value)}</p>
+      <p className="break-words text-sm font-black text-white">{formatInfoValue(value)}</p>
     </div>
   );
 }
 
 function LinkBox({ label, url }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="min-w-0 rounded-xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
       </p>
@@ -319,7 +362,7 @@ function LinkBox({ label, url }) {
           href={url}
           target="_blank"
           rel="noreferrer"
-          className="mt-3 inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="mt-3 inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
           Open Link
           <span className="material-symbols-outlined text-sm">open_in_new</span>
@@ -362,7 +405,7 @@ function NextStep({ icon, title, description, buttonText, onClick }) {
         <button
           type="button"
           onClick={onClick}
-          className="mt-5 w-full rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="mt-4 w-full rounded-lg border border-cyan-400/50 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
           {buttonText}
         </button>
@@ -383,6 +426,85 @@ function Alert({ type, title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+function getSubmissionId(submission) {
+  return (
+    submission?.deliverableId ||
+    submission?.DeliverableId ||
+    submission?.submissionId ||
+    submission?.SubmissionId ||
+    submission?.id ||
+    submission?.Id ||
+    submission?.raw?.deliverableId ||
+    submission?.raw?.DeliverableId ||
+    submission?.raw?.submissionId ||
+    submission?.raw?.SubmissionId ||
+    submission?.raw?.id ||
+    submission?.raw?.Id ||
+    ""
+  );
+}
+
+function getExplicitSubmissionNumber(submission) {
+  const number = Number(
+    submission?.versionNumber ||
+      submission?.VersionNumber ||
+      submission?.submissionNumber ||
+      submission?.SubmissionNumber ||
+      submission?.raw?.versionNumber ||
+      submission?.raw?.VersionNumber ||
+      submission?.raw?.submissionNumber ||
+      submission?.raw?.SubmissionNumber ||
+      0
+  );
+
+  return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function getSubmissionNumberFromList(submissions, currentSubmission) {
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    return 0;
+  }
+
+  const currentId = String(getSubmissionId(currentSubmission) || "");
+
+  const ordered = [...submissions].sort((a, b) => {
+    const timeA = getSubmissionTime(a);
+    const timeB = getSubmissionTime(b);
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    return (
+      getExplicitSubmissionNumber(a) -
+      getExplicitSubmissionNumber(b)
+    );
+  });
+
+  const index = ordered.findIndex(
+    (item) => String(getSubmissionId(item) || "") === currentId
+  );
+
+  return index >= 0 ? index + 1 : 0;
+}
+
+function getSubmissionTime(submission) {
+  const value =
+    submission?.submittedAt ||
+    submission?.SubmittedAt ||
+    submission?.createdAt ||
+    submission?.CreatedAt ||
+    submission?.raw?.submittedAt ||
+    submission?.raw?.SubmittedAt ||
+    submission?.raw?.createdAt ||
+    submission?.raw?.CreatedAt ||
+    "";
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 function getMilestoneIdFromSubmission(submission) {
@@ -475,15 +597,8 @@ function getSubmissionUiStatus(status) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleDateString();
+  return formatDateTime(value, "N/A");
 }
-
 function formatInfoValue(value) {
   if (value === undefined || value === null || value === "") {
     return "N/A";

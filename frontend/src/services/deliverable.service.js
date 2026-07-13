@@ -1,5 +1,6 @@
 import deliverableApi from "../api/deliverable.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -182,9 +183,21 @@ export const normalizeDeliverable = (deliverable) => {
     fileUrl: getValue(deliverable.fileUrl, deliverable.FileUrl, ""),
     demoUrl: getValue(deliverable.demoUrl, deliverable.DemoUrl, ""),
 
+    demoInstructions: getValue(
+      deliverable.demoInstructions,
+      deliverable.DemoInstructions,
+      ""
+    ),
+
     testResultUrl: getValue(
       deliverable.testResultUrl,
       deliverable.TestResultUrl,
+      ""
+    ),
+
+    testSummary: getValue(
+      deliverable.testSummary,
+      deliverable.TestSummary,
       ""
     ),
 
@@ -253,7 +266,9 @@ export const normalizeDeliverable = (deliverable) => {
 function buildSubmitPayload(formData = {}) {
   const fileUrl = trim(formData.fileUrl);
   const demoUrl = trim(formData.demoUrl);
+  const demoInstructions = trim(formData.demoInstructions);
   const testResultUrl = trim(formData.testResultUrl);
+  const testSummary = trim(formData.testSummary);
   const description = trim(formData.description);
   const handoverNotes = trim(formData.handoverNotes);
 
@@ -261,14 +276,24 @@ function buildSubmitPayload(formData = {}) {
     throw new Error("Deliverable description is required.");
   }
 
-  if (!fileUrl && !demoUrl && !testResultUrl) {
-    throw new Error("Please provide at least File URL, Demo URL, or Test Result URL.");
+  if (!fileUrl) {
+    throw new Error(
+      "A public file or repository URL is required for this deliverable."
+    );
+  }
+
+  if (testResultUrl && !testSummary) {
+    throw new Error(
+      "Test summary is required when a test result URL is provided."
+    );
   }
 
   return {
-    fileUrl: fileUrl || null,
+    fileUrl,
     demoUrl: demoUrl || null,
+    demoInstructions: demoInstructions || null,
     testResultUrl: testResultUrl || null,
+    testSummary: testSummary || null,
     description,
     handoverNotes: handoverNotes || null,
   };
@@ -306,10 +331,16 @@ const deliverableService = {
     return unwrapListData(response)
       .map(normalizeDeliverable)
       .filter(Boolean)
-      .sort(
-        (a, b) =>
-          Number(b.versionNumber || 0) - Number(a.versionNumber || 0)
-      );
+      .sort((a, b) => {
+        const bySubmittedTime = compareDateDesc(
+          a.submittedAt || a.createdAt,
+          b.submittedAt || b.createdAt
+        );
+
+        if (bySubmittedTime !== 0) return bySubmittedTime;
+
+        return Number(b.versionNumber || 0) - Number(a.versionNumber || 0);
+      });
   },
 
   async submitDeliverable(milestoneId, formData) {

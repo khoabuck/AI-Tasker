@@ -5,9 +5,17 @@ const adminJobApi = {
     return axiosInstance.get("/admin/jobs");
   },
 
-  updateJobStatus(jobId, data) {
-    return axiosInstance.patch(`/admin/jobs/${jobId}/status`, data);
+  getJobById(jobId) {
+    return axiosInstance.get(`/admin/jobs/${jobId}`);
+  },
+
+  getJobProposals(jobId) {
+    return axiosInstance.get(`/admin/jobs/${jobId}/proposals`);
+  },
+
+  cancelJob(jobId, data = {}) {
+    return axiosInstance.patch(`/admin/jobs/${jobId}/cancel`, data);
   },
 };
 
-export default adminJobApi;
+export default adminJobApi; 

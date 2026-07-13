@@ -234,6 +234,54 @@ export const normalizeContract = (contract) => {
     confirmedAt: getValue(contract.confirmedAt, contract.ConfirmedAt, ""),
     cancelledAt: getValue(contract.cancelledAt, contract.CancelledAt, ""),
 
+    signDeadlineAt: getValue(
+      contract.signDeadlineAt,
+      contract.SignDeadlineAt,
+      contract.signatureDeadlineAt,
+      contract.SignatureDeadlineAt,
+      ""
+    ),
+
+    clientConfirmed: Boolean(
+      getValue(
+        contract.clientConfirmed,
+        contract.ClientConfirmed,
+        contract.isClientConfirmed,
+        contract.IsClientConfirmed,
+        false
+      )
+    ),
+
+    expertConfirmed: Boolean(
+      getValue(
+        contract.expertConfirmed,
+        contract.ExpertConfirmed,
+        contract.isExpertConfirmed,
+        contract.IsExpertConfirmed,
+        false
+      )
+    ),
+
+    finalPrice: toNumber(
+      getValue(contract.finalPrice, contract.FinalPrice, 0)
+    ),
+
+    expertFeeRate: toNumber(
+      getValue(contract.expertFeeRate, contract.ExpertFeeRate, 0)
+    ),
+
+    expertFeeAmount: toNumber(
+      getValue(contract.expertFeeAmount, contract.ExpertFeeAmount, 0)
+    ),
+
+    expertReceivableAmount: toNumber(
+      getValue(
+        contract.expertReceivableAmount,
+        contract.ExpertReceivableAmount,
+        0
+      )
+    ),
+
     raw: contract,
   };
 };
@@ -358,42 +406,14 @@ const ensureId = (id, message) => {
 };
 
 const contractService = {
-  async createFromProposal(proposalId, data = undefined) {
+  /**
+   * Client-side action only.
+   * Expert pages must never call this method.
+   */
+  async createFromProposal(proposalId) {
     ensureId(proposalId, "Invalid proposal id.");
 
-    const response = await contractApi.createContractFromProposal(
-      proposalId,
-      data
-    );
-
-    return normalizeContract(unwrapData(response));
-  },
-
-  async createContractFromProposal(proposalId, data = undefined) {
-    return this.createFromProposal(proposalId, data);
-  },
-
-  async createDraftContract(data) {
-    const response = await contractApi.createDraftContract(data);
-    return normalizeContract(unwrapData(response));
-  },
-
-  async createContractDraft(data) {
-    const response = await contractApi.createContractDraft(data);
-    return normalizeContract(unwrapData(response));
-  },
-
-  async updateDraftContract(contractId, data) {
-    ensureId(contractId, "Invalid contract id.");
-
-    const response = await contractApi.updateDraftContract(contractId, data);
-    return normalizeContract(unwrapData(response));
-  },
-
-  async updateContractDraft(contractId, data) {
-    ensureId(contractId, "Invalid contract id.");
-
-    const response = await contractApi.updateContractDraft(contractId, data);
+    const response = await contractApi.createContractFromProposal(proposalId);
     return normalizeContract(unwrapData(response));
   },
 
@@ -404,10 +424,6 @@ const contractService = {
     return normalizeContract(unwrapData(response));
   },
 
-  async getContract(contractId) {
-    return this.getContractById(contractId);
-  },
-
   async getContractByProposalId(proposalId) {
     ensureId(proposalId, "Invalid proposal id.");
 
@@ -415,11 +431,7 @@ const contractService = {
     return normalizeContract(unwrapData(response));
   },
 
-  async getContractByProposal(proposalId) {
-    return this.getContractByProposalId(proposalId);
-  },
-
-  async getMilestoneDrafts(contractId) {
+  async getContractMilestoneDrafts(contractId) {
     ensureId(contractId, "Invalid contract id.");
 
     const response = await contractApi.getContractMilestoneDrafts(contractId);
@@ -430,54 +442,29 @@ const contractService = {
       .sort((a, b) => Number(a.orderIndex || 0) - Number(b.orderIndex || 0));
   },
 
-  async getContractMilestoneDrafts(contractId) {
-    return this.getMilestoneDrafts(contractId);
-  },
-
-  async updateContractMilestoneDrafts(contractId, data) {
+  async confirmContract(contractId) {
     ensureId(contractId, "Invalid contract id.");
 
-    const response = await contractApi.updateContractMilestoneDrafts(
-      contractId,
-      data
-    );
-
-    return unwrapListData(response)
-      .map((item, index) => normalizeContractMilestone(item, index))
-      .filter(Boolean);
-  },
-
-  async replaceContractMilestoneDrafts(contractId, data) {
-    ensureId(contractId, "Invalid contract id.");
-
-    const response = await contractApi.replaceContractMilestoneDrafts(
-      contractId,
-      data
-    );
-
-    return unwrapListData(response)
-      .map((item, index) => normalizeContractMilestone(item, index))
-      .filter(Boolean);
-  },
-
-  async confirmContract(contractId, data = undefined) {
-    ensureId(contractId, "Invalid contract id.");
-
-    const response = await contractApi.confirmContract(contractId, data);
+    const response = await contractApi.confirmContract(contractId);
     return normalizeContract(unwrapData(response));
   },
 
   async cancelContract(contractId, reason) {
     ensureId(contractId, "Invalid contract id.");
 
-    const payload =
+    const normalizedReason =
       typeof reason === "object"
-        ? reason
-        : {
-            reason: trim(reason),
-          };
+        ? trim(reason?.reason)
+        : trim(reason);
 
-    const response = await contractApi.cancelContract(contractId, payload);
+    if (!normalizedReason) {
+      throw new Error("Cancellation reason is required.");
+    }
+
+    const response = await contractApi.cancelContract(contractId, {
+      reason: normalizedReason,
+    });
+
     return normalizeContract(unwrapData(response));
   },
 };

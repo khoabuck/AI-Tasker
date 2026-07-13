@@ -2,18 +2,36 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
+import reviewService from "../../../services/review.service";
+import { changePasswordApi } from "../../../api/auth.api";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const MAX_EXPERT_PROFILE_REVIEW_SUBMISSIONS = 5;
 
 export default function ExpertProfilePage() {
   const navigate = useNavigate();
 
   const [profile, setProfile] = useState(null);
+  const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [reviewsError, setReviewsError] = useState("");
+
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmNewPassword: "",
+  });
+  const [passwordErrors, setPasswordErrors] = useState({});
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadProfile = async () => {
@@ -22,10 +40,22 @@ export default function ExpertProfilePage() {
       setError("");
 
       const result = await expertProfileService.getMyExpertProfile();
-      const data = unwrapData(result);
+      const data = unwrapProfileData(result);
 
       setProfile(data);
       updateLocalUserStatus(getUserStatus(data));
+
+      const expertProfileId =
+        data?.expertProfileId ||
+        data?.ExpertProfileId ||
+        data?.id ||
+        data?.Id;
+
+      if (expertProfileId) {
+        await loadExpertReviews(expertProfileId);
+      } else {
+        setReviews([]);
+      }
     } catch (err) {
       console.error("LOAD EXPERT PROFILE ERROR:", getRawPayload(err));
 
@@ -42,12 +72,155 @@ export default function ExpertProfilePage() {
     }
   };
 
+
+  const loadExpertReviews = async (expertProfileId) => {
+    try {
+      setReviewsLoading(true);
+      setReviewsError("");
+
+      const result = await reviewService.getExpertReviews(expertProfileId);
+
+      setReviews(Array.isArray(result) ? result : []);
+    } catch (err) {
+      console.error("LOAD EXPERT REVIEWS ERROR:", err?.response?.data || err);
+      setReviews([]);
+      setReviewsError(
+        getFriendlyError(err, "Cannot load expert reviews right now.")
+      );
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  const openChangePasswordModal = () => {
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setPasswordErrors({});
+    setPasswordError("");
+    setPasswordMessage("");
+    setShowChangePasswordModal(true);
+  };
+
+  const closeChangePasswordModal = () => {
+    if (changingPassword) return;
+
+    setShowChangePasswordModal(false);
+    setPasswordForm({
+      currentPassword: "",
+      newPassword: "",
+      confirmNewPassword: "",
+    });
+    setPasswordErrors({});
+    setPasswordError("");
+    setPasswordMessage("");
+  };
+
+  const updatePasswordField = (name, value) => {
+    setPasswordError("");
+    setPasswordMessage("");
+
+    setPasswordErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
+
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const validatePasswordForm = () => {
+    const errors = {};
+    const currentPassword = passwordForm.currentPassword;
+    const newPassword = passwordForm.newPassword;
+    const confirmNewPassword = passwordForm.confirmNewPassword;
+
+    if (!currentPassword.trim()) {
+      errors.currentPassword = "Current password is required.";
+    }
+
+    if (!newPassword.trim()) {
+      errors.newPassword = "New password is required.";
+    } else if (newPassword.length < 6) {
+      errors.newPassword = "New password must be at least 6 characters.";
+    } else if (newPassword.length > 100) {
+      errors.newPassword = "New password must not exceed 100 characters.";
+    }
+
+    if (!confirmNewPassword.trim()) {
+      errors.confirmNewPassword = "Confirm new password is required.";
+    } else if (newPassword !== confirmNewPassword) {
+      errors.confirmNewPassword = "Confirm new password does not match.";
+    }
+
+    if (
+      currentPassword &&
+      newPassword &&
+      currentPassword === newPassword
+    ) {
+      errors.newPassword =
+        "New password must be different from current password.";
+    }
+
+    setPasswordErrors(errors);
+
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleChangePassword = async (event) => {
+    event.preventDefault();
+
+    if (!validatePasswordForm()) {
+      setPasswordError("Please fix the highlighted fields.");
+      return;
+    }
+
+    try {
+      setChangingPassword(true);
+      setPasswordError("");
+      setPasswordMessage("");
+      setPasswordErrors({});
+
+      const response = await changePasswordApi({
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+        confirmNewPassword: passwordForm.confirmNewPassword,
+      });
+
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmNewPassword: "",
+      });
+
+      setPasswordMessage(
+        response?.message || "Password changed successfully."
+      );
+    } catch (err) {
+      console.error(
+        "CHANGE PASSWORD ERROR:",
+        err?.response?.data || err
+      );
+
+      setPasswordError(
+        getFriendlyError(
+          err,
+          "Cannot change password. Please check your current password and try again."
+        )
+      );
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading expert profile...
-        </div>
+        <ExpertProfileSkeleton />
       </ExpertLayout>
     );
   }
@@ -105,15 +278,16 @@ export default function ExpertProfilePage() {
     userStatus === "ACTIVE" || reviewStatus === "APPROVED";
 
   const feedback = buildProfileFeedback(profile);
+  const reviewSummary = buildReviewSummary(reviews);
 
   return (
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-6xl">
-          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+          <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_55px_rgba(0,0,0,0.28)] md:p-8">
             <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
               <div className="flex gap-5">
-                <div className="h-24 w-24 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
+                <div className="h-24 w-24 overflow-hidden rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
                   {profile?.avatarUrl ? (
                     <img
                       src={profile.avatarUrl}
@@ -122,7 +296,7 @@ export default function ExpertProfilePage() {
                     />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-cyan-300">
-                      <span className="material-symbols-outlined text-5xl">
+                      <span className="material-symbols-outlined text-4xl">
                         person
                       </span>
                     </div>
@@ -130,8 +304,8 @@ export default function ExpertProfilePage() {
                 </div>
 
                 <div>
-                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                    Expert Profile
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                    Public profile
                   </p>
 
                   <h1 className="text-3xl font-extrabold text-white">
@@ -161,11 +335,19 @@ export default function ExpertProfilePage() {
                 {canUpdateAfterActive && (
                   <Link
                     to="/expert/profile/update"
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-center text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    className="rounded-xl border border-green-400/50 bg-green-400 px-5 py-3 text-center text-sm font-black text-black transition hover:bg-green-300"
                   >
                     Update Profile
                   </Link>
                 )}
+
+                <button
+                  type="button"
+                  onClick={openChangePasswordModal}
+                  className="rounded-xl border border-indigo-400/50 bg-indigo-400/10 px-5 py-3 text-center text-sm font-bold text-indigo-200 transition hover:bg-indigo-400 hover:text-white"
+                >
+                  Security
+                </button>
 
                 <Link
                   to="/expert/jobs"
@@ -213,7 +395,7 @@ export default function ExpertProfilePage() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
             <main className="space-y-6">
-              <Card title="Bio">
+              <Card title="About">
                 <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
                   {profile?.bio || "No bio."}
                 </p>
@@ -249,33 +431,84 @@ export default function ExpertProfilePage() {
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">
-                    No certificates added. Certificates are optional, but they
-                    can help strengthen your profile.
+                    No certificates added.
                   </p>
+                )}
+              </Card>
+
+              <Card title="Reviews">
+                {reviewsLoading ? (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.03] p-5 text-center text-sm text-gray-400">
+                    Loading reviews...
+                  </div>
+                ) : reviewsError ? (
+                  <div className="rounded-xl border border-red-400/20 bg-red-400/10 p-4">
+                    <p className="text-sm font-bold text-red-300">
+                      Reviews are unavailable
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-red-100/80">
+                      {reviewsError}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        loadExpertReviews(
+                          profile?.expertProfileId ||
+                            profile?.ExpertProfileId ||
+                            profile?.id ||
+                            profile?.Id
+                        )
+                      }
+                      className="mt-3 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-200 transition hover:bg-red-400 hover:text-black"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : reviews.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] p-6 text-center">
+                    <span className="material-symbols-outlined mb-2 block text-4xl text-gray-600">
+                      reviews
+                    </span>
+                    <p className="font-bold text-white">No reviews yet</p>
+                    <p className="mt-1 text-sm leading-6 text-gray-500">
+                      Reviews will appear after completed projects.
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <ReviewRatingOverview summary={reviewSummary} />
+
+                    <div className="space-y-3">
+                      {reviews.map((review, index) => (
+                        <ReviewItem
+                          key={review.reviewId || review.id || index}
+                          review={review}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 )}
               </Card>
             </main>
 
             <aside className="space-y-6">
-              <Card title="Profile Summary">
+              <Card title="Profile details">
                 <Summary label="Score" value={feedback.scoreText} />
                 <Summary label="Passing Score" value={feedback.passScore} />
                 <Summary
                   label="Category"
-                  value={profile?.expertCategory || "N/A"}
+                  value={formatExpertCategory(profile?.expertCategory)}
                 />
-                <Summary label="Level" value={profile?.level || "N/A"} />
+                <Summary
+                  label="Level"
+                  value={formatExpertLevel(profile?.level)}
+                />
               </Card>
 
-              <Card title="Work Preferences">
+              <Card title="Availability">
                 <Summary
                   label="Experience"
                   value={`${profile?.yearsOfExperience ?? 0} years`}
-                />
-
-                <Summary
-                  label="Verified Experience"
-                  value={`${profile?.verifiedYearsOfExperience ?? 0} years`}
                 />
 
                 <Summary
@@ -293,7 +526,243 @@ export default function ExpertProfilePage() {
           </div>
         </div>
       </div>
+
+      {showChangePasswordModal && (
+        <ChangePasswordModal
+          form={passwordForm}
+          errors={passwordErrors}
+          error={passwordError}
+          message={passwordMessage}
+          loading={changingPassword}
+          onChange={updatePasswordField}
+          onClose={closeChangePasswordModal}
+          onSubmit={handleChangePassword}
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+
+function ExpertProfileSkeleton() {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="h-56 rounded-2xl border border-white/10 bg-[#151a22]" />
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-6">
+            <div className="h-44 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-40 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-64 rounded-2xl border border-white/10 bg-[#151a22]" />
+          </div>
+
+          <div className="space-y-6">
+            <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-48 rounded-2xl border border-white/10 bg-[#151a22]" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChangePasswordModal({
+  form,
+  errors,
+  error,
+  message,
+  loading,
+  onChange,
+  onClose,
+  onSubmit,
+}) {
+  const [showPasswords, setShowPasswords] = useState({
+    currentPassword: false,
+    newPassword: false,
+    confirmNewPassword: false,
+  });
+
+  const togglePassword = (name) => {
+    setShowPasswords((prev) => ({
+      ...prev,
+      [name]: !prev[name],
+    }));
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <form
+        onSubmit={onSubmit}
+        className="max-h-[92vh] w-full max-w-md overflow-y-auto rounded-2xl border border-indigo-400/30 bg-[#151a22] p-6 shadow-[0_35px_120px_rgba(0,0,0,0.75)]"
+      >
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-indigo-300">
+              Account Security
+            </p>
+
+            <h2 className="mt-2 text-2xl font-black text-white">
+              Security
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-gray-400">
+              Enter your current password and choose a new password for your
+              account.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Close change password modal"
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              close
+            </span>
+          </button>
+        </div>
+
+        {error && (
+          <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {error}
+          </div>
+        )}
+
+        {message && (
+          <div className="mb-4 rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3 text-sm text-green-200">
+            {message}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <PasswordInput
+            label="Current Password"
+            value={form.currentPassword}
+            show={showPasswords.currentPassword}
+            error={errors.currentPassword}
+            disabled={loading}
+            autoComplete="current-password"
+            placeholder="Enter your current password"
+            onChange={(value) => onChange("currentPassword", value)}
+            onToggle={() => togglePassword("currentPassword")}
+          />
+
+          <PasswordInput
+            label="New Password"
+            value={form.newPassword}
+            show={showPasswords.newPassword}
+            error={errors.newPassword}
+            disabled={loading}
+            autoComplete="new-password"
+            placeholder="Enter your new password"
+            onChange={(value) => onChange("newPassword", value)}
+            onToggle={() => togglePassword("newPassword")}
+          />
+
+          <PasswordInput
+            label="Confirm New Password"
+            value={form.confirmNewPassword}
+            show={showPasswords.confirmNewPassword}
+            error={errors.confirmNewPassword}
+            disabled={loading}
+            autoComplete="new-password"
+            placeholder="Enter your new password again"
+            onChange={(value) => onChange("confirmNewPassword", value)}
+            onToggle={() => togglePassword("confirmNewPassword")}
+          />
+        </div>
+        <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-400 px-5 py-3 text-sm font-black text-black transition hover:bg-indigo-300 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <span className="material-symbols-outlined text-[19px]">
+              lock_reset
+            </span>
+            {loading ? "Changing..." : "Security"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function PasswordInput({
+  label,
+  value,
+  show,
+  error,
+  disabled,
+  autoComplete,
+  placeholder,
+  onChange,
+  onToggle,
+}) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-gray-400">
+        {label}
+        <span className="ml-1 text-red-400">*</span>
+      </span>
+
+      <div className="relative">
+        <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[20px] text-gray-500">
+          lock
+        </span>
+
+        <input
+          type={show ? "text" : "password"}
+          value={value}
+          disabled={disabled}
+          autoComplete={autoComplete}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          className={`h-12 w-full rounded-xl border bg-white/[0.04] pl-12 pr-12 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60 ${
+            error
+              ? "border-red-400/70 focus:border-red-400"
+              : "border-white/10 focus:border-indigo-400"
+          }`}
+        />
+
+        <button
+          type="button"
+          onClick={onToggle}
+          disabled={disabled}
+          className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-500 transition hover:bg-white/[0.05] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={show ? `Hide ${label}` : `Show ${label}`}
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            {show ? "visibility_off" : "visibility"}
+          </span>
+        </button>
+      </div>
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">
+          {error}
+        </p>
+      )}
+    </label>
   );
 }
 
@@ -373,6 +842,245 @@ function CertificateItem({ certificate, index }) {
       )}
     </a>
   );
+}
+
+function ReviewRatingOverview({ summary }) {
+  return (
+    <div className="mb-5 overflow-hidden rounded-2xl border border-yellow-300/20 bg-gradient-to-br from-yellow-300/[0.10] via-white/[0.025] to-transparent p-5">
+      <div className="grid gap-5 md:grid-cols-[210px_1fr] md:items-center">
+        <div className="text-center md:border-r md:border-white/10 md:pr-5">
+          <p className="text-[11px] font-black uppercase tracking-[0.16em] text-yellow-200/70">
+            Average Rating
+          </p>
+
+          <div className="mt-2 flex items-end justify-center gap-1.5">
+            <span className="text-4xl font-black leading-none text-white">
+              {summary.averageText}
+            </span>
+            <span className="pb-1 text-sm font-bold text-gray-500">/ 5</span>
+          </div>
+
+          <div className="mt-3 flex justify-center">
+            <AverageStars rating={summary.average} />
+          </div>
+
+          <p className="mt-2 text-xs text-gray-500">
+            Based on {summary.total} client review{summary.total === 1 ? "" : "s"}
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {[5, 4, 3, 2, 1].map((star) => {
+            const count = summary.distribution[star] || 0;
+            const percentage = summary.total > 0
+              ? Math.round((count / summary.total) * 100)
+              : 0;
+
+            return (
+              <div key={star} className="grid grid-cols-[30px_1fr_34px] items-center gap-2">
+                <span className="text-xs font-bold text-gray-400">
+                  {star}★
+                </span>
+
+                <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                  <div
+                    className="h-full rounded-full bg-yellow-300 transition-all"
+                    style={{ width: `${percentage}%` }}
+                  />
+                </div>
+
+                <span className="text-right text-xs font-semibold text-gray-500">
+                  {count}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3 border-t border-white/10 pt-4">
+        <div className="rounded-xl bg-black/10 p-3 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+            Total Reviews
+          </p>
+          <p className="mt-1 text-lg font-black text-white">{summary.total}</p>
+        </div>
+
+        <div className="rounded-xl bg-black/10 p-3 text-center">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-600">
+            5-Star Reviews
+          </p>
+          <p className="mt-1 text-lg font-black text-white">
+            {summary.fiveStarCount}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AverageStars({ rating }) {
+  const safeRating = Math.max(0, Math.min(5, Number(rating || 0)));
+  const fillPercentage = `${(safeRating / 5) * 100}%`;
+
+  return (
+    <div className="relative inline-flex" aria-label={`${safeRating.toFixed(1)} out of 5 stars`}>
+      <div className="flex text-gray-700">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <span key={index} className="material-symbols-outlined text-[23px]">
+            star
+          </span>
+        ))}
+      </div>
+
+      <div
+        className="absolute inset-y-0 left-0 overflow-hidden text-yellow-300"
+        style={{ width: fillPercentage }}
+      >
+        <div className="flex w-max">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <span key={index} className="material-symbols-outlined text-[23px]">
+              star
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewItem({ review }) {
+  const rating = Math.max(0, Math.min(5, Number(review?.rating || 0)));
+
+  return (
+    <article className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <ReviewAvatar
+              name={review?.reviewerName}
+              avatarUrl={review?.reviewerAvatarUrl}
+            />
+
+            <div className="min-w-0">
+              <p className="truncate font-bold text-white">
+                {review?.reviewerName || "Client"}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-gray-500">
+                {review?.projectTitle || "Completed project"}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="shrink-0 text-left sm:text-right">
+          <div className="flex items-center gap-1 sm:justify-end">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <span
+                key={index}
+                className={`material-symbols-outlined text-[18px] ${
+                  index < rating ? "text-yellow-300" : "text-gray-700"
+                }`}
+              >
+                star
+              </span>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-gray-600">
+            {formatReviewDate(review?.createdAt)}
+          </p>
+        </div>
+      </div>
+
+      {review?.comment ? (
+        <p className="mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
+          {review.comment}
+        </p>
+      ) : (
+        <p className="mt-4 text-sm italic text-gray-600">
+          No written feedback was provided.
+        </p>
+      )}
+    </article>
+  );
+}
+
+function ReviewAvatar({ name, avatarUrl }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name || "Client"}
+        className="h-10 w-10 shrink-0 rounded-full border border-white/10 object-cover"
+      />
+    );
+  }
+
+  return (
+    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-cyan-400/20 bg-cyan-400/10 text-sm font-black text-cyan-300">
+      {getReviewInitials(name)}
+    </div>
+  );
+}
+
+function buildReviewSummary(reviews = []) {
+  const list = Array.isArray(reviews) ? reviews : [];
+
+  const validRatings = list
+    .map((review) => Number(review?.rating))
+    .filter((rating) => Number.isFinite(rating) && rating >= 1 && rating <= 5);
+
+  const total = validRatings.length;
+  const distribution = {
+    1: 0,
+    2: 0,
+    3: 0,
+    4: 0,
+    5: 0,
+  };
+
+  validRatings.forEach((rating) => {
+    const normalizedStar = Math.max(1, Math.min(5, Math.round(rating)));
+    distribution[normalizedStar] += 1;
+  });
+
+  if (total === 0) {
+    return {
+      total: 0,
+      average: 0,
+      averageText: "0.0",
+      fiveStarCount: 0,
+      distribution,
+    };
+  }
+
+  const ratingTotal = validRatings.reduce((sum, rating) => sum + rating, 0);
+  const average = ratingTotal / total;
+
+  return {
+    total,
+    average,
+    averageText: average.toFixed(1),
+    fiveStarCount: distribution[5],
+    distribution,
+  };
+}
+
+function getReviewInitials(name) {
+  if (!name) return "CL";
+
+  return String(name)
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((item) => item[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
+function formatReviewDate(value) {
+  return formatDateTime(value, "No date");
 }
 
 function buildProfileFeedback(profile) {
@@ -623,6 +1331,13 @@ function getCertificateBadge(status) {
     };
   }
 
+  if (value === "INVALID") {
+    return {
+      label: "Invalid",
+      className: "border-red-400/30 bg-red-400/10 text-red-300",
+    };
+  }
+
   return {
     label: "Not verified",
     className: "border-white/10 bg-white/[0.04] text-gray-300",
@@ -634,14 +1349,14 @@ function getFriendlyProfileMessage(profile) {
   const userStatus = getUserStatus(profile);
 
   if (reviewStatus === "APPROVED" || userStatus === "ACTIVE") {
-    return "Your profile is ready. Keep your information updated so clients can trust your expertise.";
+    return "Your profile is live and visible to clients.";
   }
 
   if (reviewStatus === "NEEDS_CORRECTION" || reviewStatus === "REJECTED") {
-    return "Your profile needs a few improvements before it can be approved.";
+    return "Update the highlighted areas before resubmitting.";
   }
 
-  return "Your profile is being reviewed. You can still keep your information up to date.";
+  return "Your profile is currently under review.";
 }
 
 function getReviewStatus(profile) {
@@ -691,6 +1406,47 @@ function getMissingInformation(profile) {
   return String(value || "");
 }
 
+function formatExpertCategory(value) {
+  const map = {
+    AI_AUTOMATION: "AI Automation",
+    AI: "AI",
+    DATA_AI: "Data & AI",
+    DATA_SCIENCE: "Data Science",
+    MACHINE_LEARNING: "Machine Learning",
+    CHATBOT: "Chatbot",
+    COMPUTER_VISION: "Computer Vision",
+    NLP: "NLP",
+    OTHER: "Other",
+  };
+
+  return map[value] || formatEnumText(value) || "N/A";
+}
+
+function formatExpertLevel(value) {
+  const map = {
+    INTERN: "Intern",
+    FRESHER: "Fresher",
+    JUNIOR: "Junior",
+    MIDDLE: "Middle",
+    MID: "Middle",
+    SENIOR: "Senior",
+    EXPERT: "Expert",
+  };
+
+  return map[value] || formatEnumText(value) || "N/A";
+}
+
+function formatEnumText(value) {
+  if (!value) return "";
+
+  return String(value)
+    .trim()
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
 function updateLocalUserStatus(status) {
   if (!status) return;
 
@@ -720,13 +1476,36 @@ function toArray(value) {
     .filter(Boolean);
 }
 
-function unwrapData(result) {
-  if (!result) return result;
+function unwrapProfileData(result) {
+  if (!result) return null;
 
-  if (result.data?.data) return result.data.data;
-  if (result.data) return result.data;
+  if (result?.expertProfileId) return result;
+
+  if (result?.success === true && result?.data) return result.data;
+
+  if (result?.data?.expertProfileId) return result.data;
+
+  if (result?.data?.success === true && result?.data?.data) {
+    return result.data.data;
+  }
+
+  if (result?.data?.data?.expertProfileId) return result.data.data;
 
   return result;
+}
+
+function getFriendlyError(error, fallback = "Something went wrong.") {
+  const data = error?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  return (
+    data?.message ||
+    data?.title ||
+    data?.detail ||
+    error?.message ||
+    fallback
+  );
 }
 
 function getRawPayload(error) {

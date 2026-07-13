@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminPolicyService from "../../../services/adminPolicy.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_FORM = {
   individualClientFeeRate: 0,
   businessClientFeeRate: 0,
@@ -18,6 +19,7 @@ export default function AdminPlatformFeePolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
   const hasChanged = useMemo(() => {
@@ -32,6 +34,16 @@ export default function AdminPlatformFeePolicyPage() {
       String(form.reason || "").trim() !== ""
     );
   }, [form, policy]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadPolicy();
@@ -94,8 +106,23 @@ export default function AdminPlatformFeePolicyPage() {
     setFieldErrors({});
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
+
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setError("");
+    setFieldErrors({});
+    setShowSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
 
     const validation = validateForm(form);
 
@@ -127,7 +154,7 @@ export default function AdminPlatformFeePolicyPage() {
         reason: "",
       });
 
-      setSuccess("Platform fee policy has been updated successfully.");
+      setSuccess("Platform fees has been updated successfully.");
     } catch (err) {
       console.error("UPDATE PLATFORM FEE POLICY ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot update platform fee policy."));
@@ -141,17 +168,16 @@ export default function AdminPlatformFeePolicyPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Policy Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Fees
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Platform fee policy
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Platform fees
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure fee rates for individual clients, business clients, and
-              experts. Each update requires an admin reason.
+              Manage fee rates for clients and experts.
             </p>
           </div>
 
@@ -174,42 +200,29 @@ export default function AdminPlatformFeePolicyPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Success"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading platform fee policy...
-          </div>
+          <PageSkeleton cards={4} />
         ) : (
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
             <form
               onSubmit={handleSubmit}
-              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
             >
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-white">
-                  Update fee rates
+                  Fee configuration
                 </h2>
 
                 <p className="mt-2 text-sm leading-6 text-gray-400">
-                  Enter rates using the same unit expected by backend. For
-                  decimal rate systems, use 0.1 for 10%.
+                  Enter fee rates clearly. Use 0.1 for 10% when the system uses decimal rates.
                 </p>
               </div>
 
               <div className="space-y-5">
                 <NumberInput
-                  label="Individual Client Fee Rate"
+                  label="Individual client fee"
                   value={form.individualClientFeeRate}
                   required
                   error={fieldErrors.individualClientFeeRate}
@@ -220,7 +233,7 @@ export default function AdminPlatformFeePolicyPage() {
                 />
 
                 <NumberInput
-                  label="Business Client Fee Rate"
+                  label="Business client fee"
                   value={form.businessClientFeeRate}
                   required
                   error={fieldErrors.businessClientFeeRate}
@@ -231,7 +244,7 @@ export default function AdminPlatformFeePolicyPage() {
                 />
 
                 <NumberInput
-                  label="Expert Fee Rate"
+                  label="Expert fee"
                   value={form.expertFeeRate}
                   required
                   error={fieldErrors.expertFeeRate}
@@ -264,16 +277,25 @@ export default function AdminPlatformFeePolicyPage() {
                   disabled={saving || !hasChanged}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Save Policy"}
+                  {saving ? "Saving..." : "Save changes"}
                 </button>
               </div>
             </form>
 
             <aside className="space-y-6">
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                 <h2 className="mb-5 text-xl font-bold text-white">
-                  Current policy
+                  Current fees
                 </h2>
+
+                <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Last Updated
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-white">
+                    {formatDateTime(policy?.updatedAt || policy?.createdAt, "N/A")}
+                  </p>
+                </div>
 
                 <div className="space-y-4">
                   <PolicyValue
@@ -298,32 +320,136 @@ export default function AdminPlatformFeePolicyPage() {
                   />
                 </div>
               </section>
-
-              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                <h2 className="mb-5 text-xl font-bold text-white">
-                  Metadata
-                </h2>
-
-                <div className="space-y-4">
-                  <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
-                  <InfoBox
-                    label="Created At"
-                    value={formatDateTime(policy?.createdAt)}
-                  />
-                  <InfoBox
-                    label="Updated At"
-                    value={formatDateTime(policy?.updatedAt)}
-                  />
-                  <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
-                </div>
-              </section>
             </aside>
           </div>
+        )}
+        {showSaveConfirm && (
+          <ConfirmActionModal
+            title="Save fee changes?"
+            message={`This update changes fees applied to future platform transactions. Individual client fee: ${form.individualClientFeeRate} · Business client fee: ${form.businessClientFeeRate} · Expert fee: ${form.expertFeeRate}. Reason: ${form.reason.trim()}.`}
+            confirmLabel="Confirm Save"
+            loading={saving}
+            onCancel={() => !saving && setShowSaveConfirm(false)}
+            onConfirm={() => {
+              setShowSaveConfirm(false);
+              executeSave();
+            }}
+          />
         )}
       </div>
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4 }) {
+  return (
+    <div className="animate-pulse">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
+        <div className="h-4 w-36 rounded bg-cyan-400/10" />
+        <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: cards }).map((_, index) => (
+          <div
+            key={index}
+            className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+          />
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="h-[520px] rounded-2xl border border-white/10 bg-[#151a22]" />
+        <div className="h-[360px] rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "policy"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function NumberInput({
   label,
@@ -417,8 +543,6 @@ function PolicyValue({ icon, label, value, tone = "cyan" }) {
       </div>
 
       <p className="text-3xl font-black text-white">{formatRate(value)}</p>
-
-      <p className="mt-1 text-xs text-gray-500">Raw value: {value ?? 0}</p>
     </div>
   );
 }
@@ -510,23 +634,8 @@ function formatRate(value) {
   }
 
   return `${number}`;
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";
@@ -551,7 +660,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Platform fee policy API was not found. Please check backend route.";
+    return "Platform fees API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;

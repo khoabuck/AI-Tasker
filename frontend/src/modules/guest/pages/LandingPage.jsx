@@ -213,12 +213,6 @@ function ExpertsFromApi({ onExpertClick }) {
 export default function LandingPage() {
   const navigate = useNavigate();
 
-  useEffect(() => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
-  }, []);
 
   // Ép dark mode cố định (đã bỏ nút toggle sáng/tối).
   useEffect(() => {

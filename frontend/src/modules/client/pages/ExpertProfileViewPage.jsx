@@ -51,6 +51,11 @@ function SocialLink({ icon, label, url }) {
 }
 
 export default function ExpertProfileViewPage() {
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+  
   const { expertProfileId } = useParams();
   const navigate = useNavigate();
 
@@ -78,6 +83,8 @@ export default function ExpertProfileViewPage() {
       setLoading(false);
     }
   }, [expertProfileId]);
+
+  
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,11 +131,11 @@ export default function ExpertProfileViewPage() {
   if (error || !expert) {
     return (
       <ClientLayout>
-        <div className="flex flex-col items-center justify-center px-6 py-32 text-center">
-          <span className="material-symbols-outlined mb-3 text-5xl text-red-400">error_outline</span>
-          <p className="mb-5 text-[15px] text-red-400">{error || "Profile not found."}</p>
-          <button onClick={() => navigate("/client/experts")}
-            className="rounded-lg bg-cyan-400 px-6 py-2.5 font-bold text-[#101319] transition hover:brightness-110">
+        <div className="flex items-center justify-center px-6 py-32">
+          <button
+            onClick={() => navigate("/client/experts")}
+            className="rounded-lg bg-cyan-400 px-6 py-2.5 font-bold text-[#101319] transition hover:brightness-110"
+          >
             Back to search
           </button>
         </div>
@@ -140,9 +147,7 @@ export default function ExpertProfileViewPage() {
   const isVerified = expert.experienceVerificationStatus === "VERIFIED";
   const expertSkills = Array.isArray(expert.expertSkills) ? expert.expertSkills : [];
   const certificates = Array.isArray(expert.certificates) ? expert.certificates : [];
-  const verifiedAt = expert.verifiedAt
-    ? new Date(expert.verifiedAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
-    : null;
+ 
 
   return (
     <ClientLayout>
@@ -253,21 +258,6 @@ export default function ExpertProfileViewPage() {
                 </div>
               </div>
 
-              <div className={`flex items-center gap-2 ${expert.experienceVerificationNote ? "mb-3" : ""}`}>
-                <span className={`material-symbols-outlined text-[16px] ${isVerified ? "text-green-400" : "text-gray-400"}`}>
-                  {isVerified ? "verified" : "schedule"}
-                </span>
-                <span className={`text-xs font-semibold ${isVerified ? "text-green-400" : "text-gray-400"}`}>
-                  {expert.experienceVerificationStatus}
-                </span>
-                {verifiedAt && <span className="text-[11px] text-gray-500">· {verifiedAt}</span>}
-              </div>
-
-              {expert.experienceVerificationNote && (
-                <p className="text-xs italic leading-relaxed text-gray-400">
-                  "{expert.experienceVerificationNote}"
-                </p>
-              )}
             </div>
 
             {/* Certificates */}

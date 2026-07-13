@@ -45,10 +45,17 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [disputedAmount, setDisputedAmount] = useState(milestone?.amount ?? project?.totalAmount ?? "");
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
+  const [evidenceImageUrl, setEvidenceImageUrl] = useState("");
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [submitted, setSubmitted] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const respondentUserId =
     project?.expertUserId ??
@@ -56,6 +63,45 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
     project?.expert?.expertUserId ??
     project?.expertProfile?.userId ??
     project?.expertProfile?.expertUserId;
+
+    const getFieldStyle = (fieldName) => ({
+      border: `1px solid ${fieldErrors[fieldName] ? "#ef4444" : "rgba(255,255,255,0.12)"}`,
+    });
+
+    const renderFieldError = (fieldName) => {
+      if (!fieldErrors[fieldName]) return null;
+
+      return (
+        <p style={{ fontSize: 12, color: "#f87171", marginTop: 6, marginBottom: 0 }}>
+          {fieldErrors[fieldName]}
+        </p>
+      );
+    };
+
+    const handleSelectImages = (files) => {
+      if (!files?.length) return;
+
+      const validFiles = Array.from(files).filter((file) =>
+        file.type.startsWith("image/")
+      );
+
+      if (!validFiles.length) {
+        setError("Please select valid image files.");
+        return;
+      }
+
+      const previews = validFiles.map((file) =>
+        URL.createObjectURL(file)
+      );
+
+      setImageFiles((prev) => [...prev, ...validFiles]);
+      setImagePreviewUrls((prev) => [...prev, ...previews]);
+
+      setFieldErrors((prev) => ({
+        ...prev,
+        imageFile: "",
+      }));
+    };
 
   // BE chỉ có /uploads/images — chỉ hỗ trợ ảnh làm bằng chứng (screenshot, ảnh chụp
   // sản phẩm lỗi...). Không có endpoint upload PDF/file thường, nên ô input giới
@@ -89,51 +135,119 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   };
 
   const handleSubmit = async () => {
-    if (!reason.trim()) {
-      setError("Please enter the reason for your complaint.");
-      return;
-    }
+    const errors = {};
 
     if (!Number(project?.projectId ?? project?.id)) {
-      setError("Project not identified. Please reload the page.");
-      return;
+      errors.projectId = "Project is required.";
+    }
+
+    if (milestone && !Number(milestone.milestoneId ?? milestone.id)) {
+      errors.milestoneId = "Milestone is required.";
     }
 
     if (!Number(respondentUserId)) {
-      setError("Expert not identified. Please reload the page.");
+      errors.respondentUserId = "Respondent expert is required.";
+    }
+
+    if (!disputedAmount || !Number(disputedAmount) || Number(disputedAmount) <= 0) {
+      errors.disputedAmount = "Disputed amount must be greater than 0.";
+    }
+
+    if (!reason.trim()) {
+      errors.reason = "Reason is required.";
+    }
+
+    if (!evidenceText.trim()) {
+      errors.evidenceText = "Evidence description is required.";
+    }
+
+    
+
+    if (
+      !evidenceFileUrl.trim() &&
+      imageFiles.length === 0
+    ) {
+      errors.imageFile =
+        "Provide a proof link or upload at least one image.";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      setError("Please complete all required fields.");
       return;
     }
 
-    if (!Number(disputedAmount) || Number(disputedAmount) <= 0) {
-      setError("The amount in dispute must be greater than 0.");
-      return;
-    }
+    setFieldErrors({});
 
     setSubmitting(true);
     setError("");
     try {
-      const payload = {
-        projectId: Number(project.projectId ?? project.id),
-        milestoneId: milestone
-          ? Number(milestone.milestoneId ?? milestone.id)
-          : null,
-        respondentUserId: Number(respondentUserId),
-        disputedAmount: Number(disputedAmount) || 0,
-        reason: reason.trim(),
-        evidenceText: evidenceText.trim() || "",
-        evidenceFileUrl: String(evidenceFileUrl || ""),
-      };
+      const formData = new FormData();
 
-      console.log("DISPUTE_PAYLOAD:");
-      console.log(JSON.stringify(payload, null, 2));
+      formData.append(
+        "ProjectId",
+        Number(project.projectId ?? project.id)
+      );
 
-      await axiosInstance.post("/disputes", payload);
+      if (milestone) {
+        formData.append(
+          "MilestoneId",
+          Number(milestone.milestoneId ?? milestone.id)
+        );
+      }
+
+      formData.append(
+        "RespondentUserId",
+        Number(respondentUserId)
+      );
+
+      formData.append(
+        "DisputedAmount",
+        Number(disputedAmount) || 0
+      );
+
+      formData.append(
+        "Reason",
+        reason.trim()
+      );
+
+      formData.append(
+        "EvidenceText",
+        evidenceText.trim() || ""
+      );
+
+      formData.append(
+        "EvidenceFileUrl",
+        evidenceFileUrl || ""
+      );
+
+      formData.append(
+        "EvidenceImageUrl",
+        evidenceImageUrl || ""
+      );
+
+      imageFiles.forEach((file) => {
+        formData.append("Images", file);
+      });
+
+      await axiosInstance.post(
+        "/disputes",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+
+      setSubmitted(true);
       onSubmitted();
-      onClose();
-    } catch (err) {
-        console.log("DISPUTE_ERROR_STATUS:", err?.response?.status);
-        console.log("DISPUTE_ERROR_DATA:", err?.response?.data);
 
+      setTimeout(() => {
+        onClose();
+      }, 800);
+
+    } catch (err) {
         setError(
           err?.response?.data?.message ||
           err?.response?.data?.title ||
@@ -166,26 +280,60 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
               Amount in dispute (VND)
             </label>
-            <input type="number" value={disputedAmount} onChange={(e) => setDisputedAmount(e.target.value)}
-              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "JetBrains Mono, monospace", fontSize: 14, boxSizing: "border-box" }} />
+            <input
+              type="text"
+              value={Number(disputedAmount || 0).toLocaleString()}
+              readOnly
+              style={{
+                width: "100%",
+                background: "#161a20",
+                border: getFieldStyle("disputedAmount").border,
+                borderRadius: 10,
+                padding: "12px 14px",
+                color: "#8c90a0",
+                outline: "none",
+                cursor: "not-allowed",
+                boxSizing: "border-box",
+              }}
+            />
+            {renderFieldError("disputedAmount")}
           </div>
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
               Reason for complaint <span style={{ color: "#f87171" }}>*</span>
             </label>
-            <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
+            <textarea
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setFieldErrors((prev) => ({ ...prev, reason: "" }));
+              }}
+              rows={3}
               placeholder="Example: The delivered product does not meet the agreed-upon requirements..."
-              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+              style={{ width: "100%", background: "#1d2026", border: getFieldStyle("reason").border, borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+              {renderFieldError("reason")}
           </div>
+
+          
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
               Evidence (further description)
             </label>
-            <textarea value={evidenceText} onChange={(e) => setEvidenceText(e.target.value)} rows={3}
+            <textarea
+              value={evidenceText}
+              onChange={(e) => {
+                setEvidenceText(e.target.value);
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  evidenceText: "",
+                }));
+              }}
+              rows={3}
               placeholder="Provide detailed evidence, including links to documents, screenshots of messages, etc."
-              style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+              style={{ width: "100%", background: "#1d2026", border: getFieldStyle("evidenceText").border, borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }} />
+              {renderFieldError("evidenceText")}
           </div>
 
           {/* Upload ảnh bằng chứng — chỉ hỗ trợ ảnh vì BE chỉ có /uploads/images */}
@@ -207,12 +355,18 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             <input
               type="url"
               value={evidenceFileUrl}
-              onChange={(e) => setEvidenceFileUrl(e.target.value)}
+              onChange={(e) => {
+                setEvidenceFileUrl(e.target.value);
+                setFieldErrors((prev) => ({
+                  ...prev,
+                  evidenceFileUrl: "",
+                }));
+              }}
               placeholder="https://drive.google.com/... or https://example.com/file.pdf"
               style={{
                 width: "100%",
                 background: "#1d2026",
-                border: "1px solid rgba(255,255,255,0.12)",
+                border: getFieldStyle("evidenceFileUrl").border,
                 borderRadius: 10,
                 padding: "12px 14px",
                 color: "#e1e2eb",
@@ -221,7 +375,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
                 boxSizing: "border-box",
               }}
             />
-
+            {renderFieldError("evidenceFileUrl")}
             <p
               style={{
                 marginTop: 8,
@@ -241,23 +395,345 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
             </p>
           </div>
 
+
+          <div>
+            <label
+              style={{
+                display: "block",
+                fontFamily: "JetBrains Mono, monospace",
+                fontSize: 10,
+                textTransform: "uppercase",
+                letterSpacing: "0.1em",
+                color: "#8c90a0",
+                marginBottom: 8,
+              }}
+            >
+              Evidence Image
+            </label>
+
+            <div>
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  background: "#1d2026",
+                  border: getFieldStyle("imageFile").border,
+                  borderRadius: 10,
+                  padding: "12px 14px",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    overflow: "hidden",
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      color: "#00F0FF",
+                      fontSize: 20,
+                    }}
+                  >
+                    image
+                  </span>
+
+                  <span
+                    style={{
+                      color: imageFiles.length > 0 ? "#e1e2eb" : "#8c90a0",
+                      fontSize: 13,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      maxWidth: "250px",
+                    }}
+                  >
+                    {imageFiles.length > 0
+                      ? `${imageFiles.length} image(s) selected`
+                      : "Choose evidence images"}
+                  </span>
+                </div>
+
+                <div
+                  style={{
+                    background: "rgba(0,240,255,0.12)",
+                    border: "1px solid rgba(0,240,255,0.25)",
+                    color: "#00F0FF",
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 600,
+                  }}
+                >
+                  Browse
+                </div>
+
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  style={{ display: "none" }}
+                  onChange={(e) =>
+                    handleSelectImages(
+                      e.target.files
+                    )
+                  }
+                />
+              </label>
+
+              {imageFiles.length > 0 && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 12,
+                    color: "#22c55e",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16 }}
+                  >
+                    check_circle
+                  </span>
+                  Image selected successfully
+                </div>
+              )}
+
+              {renderFieldError("imageFile")}
+
+              {imagePreviewUrls.length > 0 && (
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginTop: 12,
+                  }}
+                >
+                  {imagePreviewUrls.map((url, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        position: "relative",
+                      }}
+                    >
+                      <img
+                        src={url}
+                        alt={`Evidence ${index + 1}`}
+                        onClick={() => {
+                          setPreviewImageUrl(url);
+                          setPreviewOpen(true);
+                        }}
+                        style={{
+                          width: 120,
+                          height: 120,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          cursor: "zoom-in",
+                          transition: "transform 0.2s ease, border-color 0.2s ease",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.transform = "scale(1.04)";
+                          e.currentTarget.style.borderColor = "rgba(0,240,255,0.55)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.transform = "scale(1)";
+                          e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)";
+                        }}
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newFiles = [...imageFiles];
+                          const newPreviews = [...imagePreviewUrls];
+
+                          newFiles.splice(index, 1);
+                          newPreviews.splice(index, 1);
+
+                          setImageFiles(newFiles);
+                          setImagePreviewUrls(newPreviews);
+                        }}
+                        style={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          width: 24,
+                          height: 24,
+                          borderRadius: "50%",
+                          border: "none",
+                          background: "rgba(0,0,0,0.75)",
+                          color: "#fff",
+                          cursor: "pointer",
+                        }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+            </div>
+          </div>
+
           {error && (
             <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13 }}>{error}</div>
           )}
 
-          <div style={{ display: "flex", gap: 10 }}>
-            <button onClick={onClose} style={{ flex: 1, padding: "12px", background: "transparent", color: "#c2c6d6", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, fontSize: 14, cursor: "pointer" }}>
+                    <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                flex: 1,
+                padding: "12px",
+                background: "transparent",
+                color: "#c2c6d6",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
               Cancel
             </button>
-            <button onClick={handleSubmit} disabled={submitting || uploading}
-              style={{ flex: 2, padding: "12px", background: submitting ? "#1d2026" : "#f97316", color: submitting ? "#8c90a0" : "#1a0a00", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: submitting || uploading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-              {submitting
-                ? <><span className="material-symbols-outlined" style={{ fontSize: 16, animation: "spin 1s linear infinite" }}>autorenew</span>Sending...</>
-                : <><span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>Submit a complaint</>}
+
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitting || uploading}
+              style={{
+                flex: 2,
+                padding: "12px",
+                background:
+                  submitting || uploading ? "#1d2026" : "#f97316",
+                color:
+                  submitting || uploading ? "#8c90a0" : "#1a0a00",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor:
+                  submitting || uploading ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {submitting ? (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 16,
+                      animation: "spin 1s linear infinite",
+                    }}
+                  >
+                    autorenew
+                  </span>
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16 }}
+                  >
+                    gavel
+                  </span>
+                  Submit a complaint
+                </>
+              )}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Popup xem ảnh bằng chứng kích thước lớn */}
+      {previewOpen && previewImageUrl && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setPreviewOpen(false);
+            setPreviewImageUrl("");
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 2000,
+            background: "rgba(0,0,0,0.9)",
+            backdropFilter: "blur(6px)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+            boxSizing: "border-box",
+            cursor: "zoom-out",
+          }}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewOpen(false);
+              setPreviewImageUrl("");
+            }}
+            style={{
+              position: "fixed",
+              top: 20,
+              right: 24,
+              width: 42,
+              height: 42,
+              borderRadius: "50%",
+              border: "1px solid rgba(255,255,255,0.25)",
+              background: "rgba(0,0,0,0.7)",
+              color: "#ffffff",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 2001,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 24 }}
+            >
+              close
+            </span>
+          </button>
+
+          <img
+            src={previewImageUrl}
+            alt="Evidence preview"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              display: "block",
+              maxWidth: "95vw",
+              maxHeight: "90vh",
+              width: "auto",
+              height: "auto",
+              objectFit: "contain",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.15)",
+              boxShadow: "0 20px 70px rgba(0,0,0,0.8)",
+              cursor: "default",
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -283,9 +759,8 @@ export default function ClientProjectDetailPage() {
   const fetchData = useCallback(async (signal, silent = false) => {
     if (!silent) {
       setLoading(true);
+      setError("");
     }
-
-    setError("");
 
     try {
       const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
@@ -326,7 +801,20 @@ export default function ClientProjectDetailPage() {
     return () => clearInterval(intervalId);
   }, [fetchData]);
 
-  if (loading) {
+  useEffect(() => {
+    if (
+      project?.status === "COMPLETED" &&
+      location.state?.successMsg !== "Review submitted successfully."
+    ) {
+      navigate(`/client/projects/${projectId}/review`, {
+        replace: true,
+      });
+    }
+  }, [project?.status, projectId, navigate, location.state]);
+
+  const showFullLoading = loading && !project;
+
+  if (showFullLoading) {
     return (
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
@@ -338,12 +826,12 @@ export default function ClientProjectDetailPage() {
     );
   }
 
-  if (error || !project) {
+  if (error && !project) {
     return (
       <ClientLayout>
         <div style={{ textAlign: "center", padding: "120px 24px" }}>
           <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Project not found."}</p>
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
           <button onClick={() => navigate("/client/projects")}
             style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
             Back to list
@@ -352,6 +840,8 @@ export default function ClientProjectDetailPage() {
       </ClientLayout>
     );
   }
+
+if (!project) return null;
 
   const statusCfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
@@ -388,8 +878,14 @@ export default function ClientProjectDetailPage() {
 
           {/* Expert info */}
           <div style={{ paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-            <img src={project.expertAvatar || `https://i.pravatar.cc/80?u=${project.expertId}`} alt={expertName}
-              style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }} />
+            <img
+                src={
+                  project.expertAvatarUrl ||
+                  `https://i.pravatar.cc/80?u=${project.expertProfileId || project.expertUserId || project.projectId}`
+                }
+                alt={expertName}
+                style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }}
+              />
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: "0 0 2px", fontFamily: "Hanken Grotesk, sans-serif" }}>{expertName}</p>
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
@@ -444,20 +940,11 @@ export default function ClientProjectDetailPage() {
             </button>
 
             {project.status === "COMPLETED" && (
-              <>
-                <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
-                  Leave Review
-                </button>
-
-                {/* Open Dispute cho toàn project — chỉ khi đã COMPLETED, không gắn milestone cụ thể */}
-                <button onClick={() => setDisputeModal({ milestone: null })}
-                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>gavel</span>
-                  Open Dispute
-                </button>
-              </>
+              <button onClick={() => navigate(`/client/projects/${projectId}/review`)}
+                style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 16px", background: "rgba(250,204,21,0.08)", color: "#facc15", border: "1px solid rgba(250,204,21,0.25)", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>star</span>
+                Leave Review
+              </button>
             )}
 
             {project.status === "DISPUTED" && (
@@ -522,10 +1009,16 @@ export default function ClientProjectDetailPage() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
-                const normalizedStatus = (m.status || "").toUpperCase();
-                const mCfg = MILESTONE_STATUS[m.status] || MILESTONE_STATUS.PENDING;
+                const normalizedStatus = String(m.status || "").toUpperCase();
+                const mCfg = MILESTONE_STATUS[normalizedStatus] || MILESTONE_STATUS.PENDING;
                 const isCurrent = index === currentMilestoneIndex;
-                const hasSubmittedDeliverable = m.status === "SUBMITTED";
+
+                const canOpenDeliverable = ["SUBMITTED", "APPROVED", "REJECTED"].includes(
+                  normalizedStatus
+                );
+
+                const deliverableButtonLabel =
+                  normalizedStatus === "SUBMITTED" ? "Preview" : "View";
 
                 return (
                   <div key={m.milestoneId ?? index}
@@ -550,22 +1043,43 @@ export default function ClientProjectDetailPage() {
                       <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: mCfg.color, background: mCfg.color + "15", border: `1px solid ${mCfg.color}40` }}>
                         {mCfg.label}
                       </span>
-                      {hasSubmittedDeliverable && (
+                      {canOpenDeliverable && (
                         <button onClick={() => navigate(`/client/milestones/${m.milestoneId}/deliverables`)}
                           style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(192,193,255,0.1)", color: "#c0c1ff", border: "1px solid rgba(192,193,255,0.3)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
-                          Review
+                          {deliverableButtonLabel}
                         </button>
                       )}
 
                       {/* Open Dispute gắn theo milestone — chỉ khi project còn ACTIVE.
                           Khi đã COMPLETED, dispute chỉ mở ở cấp project (nút header phía trên). */}
-                      {project.status === "ACTIVE" && (
-                        <button onClick={() => setDisputeModal({ milestone: m })}
-                          style={{ display: "flex", alignItems: "center", gap: 5, padding: "6px 12px", background: "rgba(249,115,22,0.08)", color: "#f97316", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-                          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>gavel</span>
-                          Dispute
-                        </button>
+                      {project.status === "ACTIVE" &&
+                        ["SUBMITTED", "REJECTED"].includes(normalizedStatus) && (
+                          <button
+                            onClick={() => setDisputeModal({ milestone: m })}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 5,
+                              padding: "6px 12px",
+                              background: "rgba(249,115,22,0.08)",
+                              color: "#f97316",
+                              border: "1px solid rgba(249,115,22,0.25)",
+                              borderRadius: 8,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: "pointer",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span
+                              className="material-symbols-outlined"
+                              style={{ fontSize: 14 }}
+                            >
+                              gavel
+                            </span>
+                            Dispute
+                          </button>
                       )}
                     </div>
                   </div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminJobPostingAiPolicyService from "../../../services/adminJobPostingAiPolicy.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_FORM = {
   initialFreeJobPostCredits: 0,
   initialFreeAiGenerationCredits: 0,
@@ -80,6 +81,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
   const hasChanged = useMemo(() => {
@@ -93,6 +95,16 @@ export default function AdminJobPostingAiPolicyPage() {
 
     return changedField || String(form.reason || "").trim() !== "";
   }, [form, policy]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadPolicy();
@@ -138,8 +150,23 @@ export default function AdminJobPostingAiPolicyPage() {
     setFieldErrors({});
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
+
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setError("");
+    setFieldErrors({});
+    setShowSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
 
     const validation = validateForm(form);
 
@@ -161,7 +188,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
       setPolicy(updated);
       setForm(toFormState(updated));
-      setSuccess("Job posting AI policy has been updated successfully.");
+      setSuccess("Job posting AI has been updated successfully.");
     } catch (err) {
       console.error("UPDATE JOB AI POLICY ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot update job posting AI policy."));
@@ -175,17 +202,16 @@ export default function AdminJobPostingAiPolicyPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Policy Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Job AI
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Job posting AI policy
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Job posting AI
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Control free credits, draft limits, skill suggestions, and AI
-              recommendation quality for the client job posting flow.
+              Manage AI credits, draft limits, and recommendation thresholds.
             </p>
           </div>
 
@@ -208,28 +234,16 @@ export default function AdminJobPostingAiPolicyPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Policy updated"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading job posting AI policy...
-          </div>
+          <PageSkeleton cards={4} />
         ) : (
           <>
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <TopMetricCard
                 icon="work"
-                label="Job Credits"
+                label="Job credits"
                 value={formatNumber(form.initialFreeJobPostCredits)}
                 helper="Free credits for new clients"
                 tone="cyan"
@@ -237,7 +251,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
               <TopMetricCard
                 icon="smart_toy"
-                label="AI Credits"
+                label="AI credits"
                 value={formatNumber(form.initialFreeAiGenerationCredits)}
                 helper="Free AI generations"
                 tone="purple"
@@ -245,7 +259,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
               <TopMetricCard
                 icon="inventory_2"
-                label="Draft Limit"
+                label="Draft limit"
                 value={formatNumber(form.maxDraftJobsPerClient)}
                 helper="Draft jobs per client"
                 tone="yellow"
@@ -263,11 +277,11 @@ export default function AdminJobPostingAiPolicyPage() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
               <form
                 onSubmit={handleSubmit}
-                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
               >
                 <div className="mb-6 border-b border-white/10 pb-5">
                   <h2 className="text-xl font-bold text-white">
-                    AI policy configuration
+                    AI rules
                   </h2>
 
                   <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -278,7 +292,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
                 <PolicySection
                   icon="redeem"
-                  title="Initial Credits"
+                  title="Free credits"
                   description="Credits automatically granted to new clients."
                   fields={CREDIT_FIELDS}
                   form={form}
@@ -288,7 +302,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
                 <PolicySection
                   icon="tune"
-                  title="Job Posting Limits"
+                  title="Job limits"
                   description="Limits for draft jobs, job skills, suggested skills, and recommendation results."
                   fields={LIMIT_FIELDS}
                   form={form}
@@ -298,7 +312,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
                 <PolicySection
                   icon="analytics"
-                  title="AI Quality Thresholds"
+                  title="Quality thresholds"
                   description="Minimum scores required before AI suggestions or recommendations are accepted."
                   fields={SCORE_FIELDS}
                   form={form}
@@ -322,7 +336,7 @@ export default function AdminJobPostingAiPolicyPage() {
                     disabled={saving}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Reset Changes
+                    Reset
                   </button>
 
                   <button
@@ -330,21 +344,30 @@ export default function AdminJobPostingAiPolicyPage() {
                     disabled={saving || !hasChanged}
                     className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {saving ? "Saving..." : "Save Policy"}
+                    {saving ? "Saving..." : "Save changes"}
                   </button>
                 </div>
               </form>
 
               <aside className="space-y-6">
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                   <h2 className="mb-5 text-xl font-bold text-white">
-                    Current Summary
+                    Current settings
                   </h2>
+
+                  <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Last Updated
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-white">
+                      {formatDateTime(policy?.updatedAt || policy?.createdAt, "N/A")}
+                    </p>
+                  </div>
 
                   <div className="space-y-4">
                     <SummaryCard
                       icon="work"
-                      label="Free Job Credits"
+                      label="Free Job credits"
                       value={form.initialFreeJobPostCredits}
                       description="Initial job post credits"
                       tone="cyan"
@@ -352,7 +375,7 @@ export default function AdminJobPostingAiPolicyPage() {
 
                     <SummaryCard
                       icon="smart_toy"
-                      label="Free AI Credits"
+                      label="Free AI credits"
                       value={form.initialFreeAiGenerationCredits}
                       description="Initial AI generation credits"
                       tone="purple"
@@ -375,42 +398,137 @@ export default function AdminJobPostingAiPolicyPage() {
                     />
                   </div>
                 </section>
-
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                  <h2 className="mb-5 text-xl font-bold text-white">
-                    Policy Metadata
-                  </h2>
-
-                  <div className="space-y-4">
-                    <InfoBox label="Policy ID" value={getPolicyId(policy)} />
-                    <InfoBox
-                      label="Created At"
-                      value={formatDateTime(policy?.createdAt)}
-                    />
-                    <InfoBox
-                      label="Updated At"
-                      value={formatDateTime(policy?.updatedAt)}
-                    />
-                    <InfoBox
-                      label="Updated By"
-                      value={
-                        policy?.updatedByAdminEmail ||
-                        policy?.updatedByAdminFullName ||
-                        policy?.raw?.UpdatedByAdminEmail ||
-                        policy?.raw?.UpdatedByAdminFullName ||
-                        "N/A"
-                      }
-                    />
-                  </div>
-                </section>
               </aside>
             </div>
           </>
+        )}
+        {showSaveConfirm && (
+          <ConfirmActionModal
+            title="Save AI policy changes?"
+            message={`This update changes the client job-posting flow. Free job credits: ${form.initialFreeJobPostCredits} · Free AI credits: ${form.initialFreeAiGenerationCredits} · Draft limit: ${form.maxDraftJobsPerClient} · Minimum match score: ${form.minimumRecommendationMatchScore}. Reason: ${form.reason.trim()}.`}
+            confirmLabel="Confirm Save"
+            loading={saving}
+            onCancel={() => !saving && setShowSaveConfirm(false)}
+            onConfirm={() => {
+              setShowSaveConfirm(false);
+              executeSave();
+            }}
+          />
         )}
       </div>
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4 }) {
+  return (
+    <div className="animate-pulse">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
+        <div className="h-4 w-36 rounded bg-cyan-400/10" />
+        <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: cards }).map((_, index) => (
+          <div
+            key={index}
+            className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+          />
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="h-[520px] rounded-2xl border border-white/10 bg-[#151a22]" />
+        <div className="h-[360px] rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "policy"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function PolicySection({
   icon,
@@ -534,7 +652,7 @@ function TopMetricCard({ icon, label, value, helper, tone = "cyan" }) {
   };
 
   return (
-    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="flex min-h-[165px] flex-col rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
           toneClass[tone] || toneClass.cyan
@@ -708,26 +826,11 @@ function getPolicyId(policy) {
 function formatNumber(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US").format(
+  return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function formatLabel(value) {
   if (!value) return "N/A";
@@ -752,7 +855,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Job posting AI policy API was not found. Please check backend route.";
+    return "Job posting AI API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;

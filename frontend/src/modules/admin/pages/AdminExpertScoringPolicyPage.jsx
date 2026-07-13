@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminPolicyService from "../../../services/adminPolicy.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const EMPTY_FORM = {
   passThreshold: 0,
   maxReviewSubmissions: 0,
@@ -72,12 +73,12 @@ const RULE_FIELDS = [
   },
   {
     name: "maxReviewSubmissions",
-    label: "Max Review Attempts",
+    label: "Max Attempts",
     helper: "Maximum number of times an expert can resubmit for review.",
   },
   {
     name: "reviewLockDurationHours",
-    label: "Review Lock Duration",
+    label: "Review Lock time",
     helper: "How long the expert is locked after exceeding review attempts.",
     suffix: "hours",
   },
@@ -114,6 +115,7 @@ export default function AdminExpertScoringPolicyPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
   const totalMaxScore = useMemo(() => {
@@ -133,6 +135,16 @@ export default function AdminExpertScoringPolicyPage() {
 
     return changedField || String(form.reason || "").trim() !== "";
   }, [form, policy]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadPolicy();
@@ -181,8 +193,23 @@ export default function AdminExpertScoringPolicyPage() {
     setFieldErrors({});
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
+
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setError("");
+    setFieldErrors({});
+    setShowSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
 
     const validation = validateForm(form);
 
@@ -204,7 +231,7 @@ export default function AdminExpertScoringPolicyPage() {
 
       setPolicy(updated);
       setForm(toFormState(updated));
-      setSuccess("Expert scoring policy has been updated successfully.");
+      setSuccess("Expert scoring has been updated successfully.");
     } catch (err) {
       console.error(
         "UPDATE EXPERT SCORING POLICY ERROR:",
@@ -221,17 +248,16 @@ export default function AdminExpertScoringPolicyPage() {
       <div className="mx-auto max-w-7xl">
         <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Policy Management
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Expert Policy
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Expert scoring policy
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Expert scoring
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Configure how expert profiles are reviewed, scored, and approved.
-              This policy affects expert onboarding and resubmission rules.
+              Manage expert review scores, thresholds, and resubmission limits.
             </p>
           </div>
 
@@ -254,22 +280,10 @@ export default function AdminExpertScoringPolicyPage() {
           />
         )}
 
-        {success && (
-          <Alert
-            type="success"
-            title="Policy updated"
-            message={success}
-            onClose={() => setSuccess("")}
-          />
-        )}
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
 
         {loading ? (
-          <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-12 text-center text-gray-400 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-            <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-              hourglass_empty
-            </span>
-            Loading expert scoring policy...
-          </div>
+          <PageSkeleton cards={4} />
         ) : (
           <>
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -283,7 +297,7 @@ export default function AdminExpertScoringPolicyPage() {
 
               <TopMetricCard
                 icon="score"
-                label="Total Max Score"
+                label="Maximum score"
                 value={formatNumber(totalMaxScore)}
                 helper="Sum of all score weights"
                 tone="purple"
@@ -291,7 +305,7 @@ export default function AdminExpertScoringPolicyPage() {
 
               <TopMetricCard
                 icon="replay"
-                label="Review Attempts"
+                label="Attempts"
                 value={formatNumber(form.maxReviewSubmissions)}
                 helper="Maximum resubmissions"
                 tone="green"
@@ -299,7 +313,7 @@ export default function AdminExpertScoringPolicyPage() {
 
               <TopMetricCard
                 icon="lock_clock"
-                label="Lock Duration"
+                label="Lock time"
                 value={`${formatNumber(form.reviewLockDurationHours)}h`}
                 helper="After reaching limit"
                 tone="yellow"
@@ -309,12 +323,12 @@ export default function AdminExpertScoringPolicyPage() {
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
               <form
                 onSubmit={handleSubmit}
-                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]"
+                className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
               >
                 <div className="mb-6 border-b border-white/10 pb-5">
                   <div>
                     <h2 className="text-xl font-bold text-white">
-                      Scoring configuration
+                      Scoring rules
                     </h2>
 
                     <p className="mt-2 text-sm leading-6 text-gray-400">
@@ -329,7 +343,7 @@ export default function AdminExpertScoringPolicyPage() {
                 <section className="mb-8">
                   <SectionHeader
                     icon="tune"
-                    title="Review Rules"
+                    title="Review limits"
                     description="Controls how many times an expert can submit and what minimum requirements are checked."
                   />
 
@@ -352,11 +366,11 @@ export default function AdminExpertScoringPolicyPage() {
                 <section className="mb-8">
                   <SectionHeader
                     icon="analytics"
-                    title="Score Weights"
+                    title="Score weights"
                     description="Each item contributes to the expert's final review score. Trust Score is counted as a positive credibility score."
                     rightContent={
                       <div className="flex min-w-[160px] flex-col items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-6 py-4">
-                        <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">
+                        <p className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
                           Total Score
                         </p>
 
@@ -398,7 +412,7 @@ export default function AdminExpertScoringPolicyPage() {
                     disabled={saving}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    Reset Changes
+                    Reset
                   </button>
 
                   <button
@@ -406,16 +420,25 @@ export default function AdminExpertScoringPolicyPage() {
                     disabled={saving || !hasChanged}
                     className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {saving ? "Saving..." : "Save Policy"}
+                    {saving ? "Saving..." : "Save changes"}
                   </button>
                 </div>
               </form>
 
               <aside className="space-y-6">
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
                   <h2 className="mb-5 text-xl font-bold text-white">
-                    Score Breakdown
+                    Score summary
                   </h2>
+
+                  <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                    <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                      Last Updated
+                    </p>
+                    <p className="mt-2 text-sm font-bold text-white">
+                      {formatDateTime(policy?.updatedAt || policy?.createdAt, "N/A")}
+                    </p>
+                  </div>
 
                   <div className="space-y-3">
                     {SCORE_FIELDS.map((field) => (
@@ -428,33 +451,137 @@ export default function AdminExpertScoringPolicyPage() {
                     ))}
                   </div>
                 </section>
-
-                <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
-                  <h2 className="mb-5 text-xl font-bold text-white">
-                    Policy Metadata
-                  </h2>
-
-                  <div className="space-y-4">
-                    <InfoBox label="Policy ID" value={policy?.policyId || "N/A"} />
-                    <InfoBox
-                      label="Created At"
-                      value={formatDateTime(policy?.createdAt)}
-                    />
-                    <InfoBox
-                      label="Updated At"
-                      value={formatDateTime(policy?.updatedAt)}
-                    />
-                    <InfoBox label="Last Reason" value={policy?.reason || "N/A"} />
-                  </div>
-                </section>
               </aside>
             </div>
           </>
+        )}
+        {showSaveConfirm && (
+          <ConfirmActionModal
+            title="Save scoring changes?"
+            message={`This update changes expert profile review rules. Pass threshold: ${form.passThreshold} · Total maximum score: ${totalMaxScore} · Review attempts: ${form.maxReviewSubmissions} · Lock duration: ${form.reviewLockDurationHours} hours. Reason: ${form.reason.trim()}.`}
+            confirmLabel="Confirm Save"
+            loading={saving}
+            onCancel={() => !saving && setShowSaveConfirm(false)}
+            onConfirm={() => {
+              setShowSaveConfirm(false);
+              executeSave();
+            }}
+          />
         )}
       </div>
     </AdminLayout>
   );
 }
+
+
+function PageSkeleton({ cards = 4 }) {
+  return (
+    <div className="animate-pulse">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
+        <div className="h-4 w-36 rounded bg-cyan-400/10" />
+        <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: cards }).map((_, index) => (
+          <div
+            key={index}
+            className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+          />
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="h-[520px] rounded-2xl border border-white/10 bg-[#151a22]" />
+        <div className="h-[360px] rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "policy"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function SectionHeader({ icon, title, description, rightContent }) {
   return (
@@ -561,7 +688,7 @@ function TopMetricCard({ icon, label, value, helper, tone = "cyan" }) {
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_18px_50px_rgba(0,0,0,0.3)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
       <div
         className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass[tone] || toneClass.cyan
           }`}
@@ -734,7 +861,7 @@ function validateForm(form) {
 function formatNumber(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US").format(
+  return new Intl.NumberFormat("vi-VN").format(
     Number.isNaN(number) ? 0 : number
   );
 }
@@ -748,23 +875,8 @@ function formatLabel(value) {
     .trim()
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
-}
+};
 
-function formatDateTime(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;
@@ -778,7 +890,7 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   if (status === 404) {
-    return "Expert scoring policy API was not found. Please check backend route.";
+    return "Expert scoring API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;
