@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import proposalService, {
@@ -17,6 +17,7 @@ export default function ProposalDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   const status = getProposalStatus(proposal);
   const statusGroup = getProposalStatusGroup(status);
@@ -49,20 +50,76 @@ export default function ProposalDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
-  const loadProposal = async () => {
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (refreshInFlightRef.current || actionLoading) return;
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadProposal({
+          silent: true,
+          preserveMessage: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 5000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposalId, actionLoading]);
+
+  const loadProposal = async ({
+    silent = false,
+    preserveMessage = false,
+  } = {}) => {
     try {
-      setLoading(true);
-      setError("");
-      setMessage("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+
+        if (!preserveMessage) {
+          setMessage("");
+        }
+      }
 
       const data = await proposalService.getProposalById(proposalId);
       setProposal(data);
+
+      if (silent) {
+        setError("");
+      }
     } catch (err) {
-      console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyProposalError(err, "Cannot load proposal detail."));
-      setProposal(null);
+      if (!silent) {
+        console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
+        setError(getFriendlyProposalError(err, "Cannot load proposal detail."));
+        setProposal(null);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 

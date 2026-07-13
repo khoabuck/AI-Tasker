@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import projectService from "../../../services/project.service";
+import contractService from "../../../services/contract.service";
 import { PROJECT_STATUS_LABEL } from "../../../constants/projectStatus";
 
 import { formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
@@ -11,6 +12,7 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
+  const [contractFinance, setContractFinance] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [milestoneLoading, setMilestoneLoading] = useState(false);
@@ -21,6 +23,7 @@ export default function ProjectDetailPage() {
   const [message, setMessage] = useState("");
   const [showWalletAction, setShowWalletAction] = useState(false);
   const [showCompletionConfirm, setShowCompletionConfirm] = useState(false);
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!message) return;
@@ -36,6 +39,84 @@ export default function ProjectDetailPage() {
     loadProject();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadContractFinance = async () => {
+      const contractId = getProjectContractId(project);
+
+      if (!contractId) {
+        setContractFinance(null);
+        return;
+      }
+
+      try {
+        const data = await contractService.getContractById(contractId);
+
+        if (!cancelled) {
+          setContractFinance(data || null);
+        }
+      } catch {
+        if (!cancelled) {
+          setContractFinance(null);
+        }
+      }
+    };
+
+    loadContractFinance();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [project]);
+
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      if (
+        refreshInFlightRef.current ||
+        completionChecking ||
+        showCompletionConfirm
+      ) {
+        return;
+      }
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadProject({
+          silent: true,
+          preserveMessage: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 5000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, completionChecking, showCompletionConfirm]);
 
   const displayedMilestones = useMemo(() => {
     if (Array.isArray(milestones) && milestones.length > 0) {
@@ -53,13 +134,24 @@ export default function ProjectDetailPage() {
     return getCompletionSummary(displayedMilestones);
   }, [displayedMilestones]);
 
-  const loadProject = async ({ preserveMessage = false } = {}) => {
+  const financialSource = contractFinance || project;
+
+  const loadProject = async ({
+    preserveMessage = false,
+    silent = false,
+  } = {}) => {
     try {
-      setLoading(true);
-      setError("");
-      if (!preserveMessage) setMessage("");
-      setMilestoneError("");
-      setMilestones([]);
+      if (!silent) {
+        setLoading(true);
+        setError("");
+
+        if (!preserveMessage) {
+          setMessage("");
+        }
+
+        setMilestoneError("");
+        setMilestones([]);
+      }
 
       const data = await projectService.getProjectById(projectId);
 
@@ -72,39 +164,59 @@ export default function ProjectDetailPage() {
       const realProjectId = getProjectId(data) || projectId;
 
       if (realProjectId) {
-        await loadProjectMilestones(realProjectId);
+        await loadProjectMilestones(realProjectId, {
+          silent,
+        });
+      }
+
+      if (silent) {
+        setError("");
+        setMilestoneError("");
       }
     } catch (err) {
-      console.error("LOAD PROJECT DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load project detail."));
-      setProject(null);
-      setMilestones([]);
+      if (!silent) {
+        console.error("LOAD PROJECT DETAIL ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot load project detail."));
+        setProject(null);
+        setMilestones([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
-  const loadProjectMilestones = async (targetProjectId) => {
+  const loadProjectMilestones = async (
+    targetProjectId,
+    { silent = false } = {}
+  ) => {
     if (!targetProjectId) return;
 
     try {
-      setMilestoneLoading(true);
-      setMilestoneError("");
+      if (!silent) {
+        setMilestoneLoading(true);
+        setMilestoneError("");
+      }
 
       const data = await projectService.getProjectMilestones(targetProjectId);
 
       setMilestones(Array.isArray(data) ? data : []);
     } catch (err) {
-      console.error(
-        "LOAD PROJECT MILESTONES ERROR:",
-        err?.response?.data || err
-      );
+      if (!silent) {
+        console.error(
+          "LOAD PROJECT MILESTONES ERROR:",
+          err?.response?.data || err
+        );
 
-      setMilestoneError(
-        getFriendlyError(err, "Cannot load project milestones.")
-      );
+        setMilestoneError(
+          getFriendlyError(err, "Cannot load project milestones.")
+        );
+      }
     } finally {
-      setMilestoneLoading(false);
+      if (!silent) {
+        setMilestoneLoading(false);
+      }
     }
   };
 
@@ -230,7 +342,12 @@ export default function ProjectDetailPage() {
 
                   <InfoPill
                     icon="payments"
-                    label={`You receive ${formatMoney(getProjectNetEarning(project, displayedMilestones))}`}
+                    label={`You receive ${formatMoney(
+                      getProjectNetEarning(
+                        financialSource,
+                        displayedMilestones
+                      )
+                    )}`}
                     variant="success"
                   />
 
@@ -359,9 +476,33 @@ export default function ProjectDetailPage() {
             <aside className="space-y-6">
               <Card title="Project summary" icon="monitoring">
                 <Info label="Status" value={getProjectStatusLabel(status)} />
-                <Info label="Contract Amount" value={formatMoney(getProjectGrossAmount(project, displayedMilestones))} />
-                <Info label="Service fee" value={`-${formatMoney(getProjectServiceFee(project, displayedMilestones))}`} />
-                <Info label="Your earnings" value={formatMoney(getProjectNetEarning(project, displayedMilestones))} />
+                <Info
+                  label="Contract Amount"
+                  value={formatMoney(
+                    getProjectGrossAmount(
+                      financialSource,
+                      displayedMilestones
+                    )
+                  )}
+                />
+                <Info
+                  label="Service fee"
+                  value={formatServiceFee(
+                    getProjectServiceFee(
+                      financialSource,
+                      displayedMilestones
+                    )
+                  )}
+                />
+                <Info
+                  label="Your earnings"
+                  value={formatMoney(
+                    getProjectNetEarning(
+                      financialSource,
+                      displayedMilestones
+                    )
+                  )}
+                />
                 <Info label="Milestones" value={displayedMilestones.length} />
                 <Info
                   label="Start Date"
@@ -513,7 +654,7 @@ function ConfirmActionModal({
 
 function MilestoneCard({ milestone, onOpen }) {
   const status = String(milestone.status || "PENDING").toUpperCase();
-  const completed = isMilestoneCompleted(milestone);
+  const readOnly = isMilestoneReadOnly(milestone);
 
   return (
     <article className="rounded-xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/40">
@@ -545,12 +686,13 @@ function MilestoneCard({ milestone, onOpen }) {
         <button
           type="button"
           onClick={onOpen}
-          className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${completed
+          className={`shrink-0 rounded-lg border px-4 py-2 text-sm font-semibold transition ${
+            readOnly
               ? "border-white/10 bg-white/[0.04] text-gray-300 hover:text-white"
               : "border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black"
-            }`}
+          }`}
         >
-          {completed ? "View Details" : "Open Milestone"}
+          {readOnly ? "View Details" : "Open Milestone"}
         </button>
       </div>
     </article>
@@ -857,6 +999,21 @@ function getProjectId(project) {
   );
 }
 
+function getProjectContractId(project) {
+  return (
+    project?.contractId ||
+    project?.ContractId ||
+    project?.contractID ||
+    project?.ContractID ||
+    project?.contract?.contractId ||
+    project?.contract?.ContractId ||
+    project?.Contract?.ContractId ||
+    project?.raw?.contractId ||
+    project?.raw?.ContractId ||
+    ""
+  );
+}
+
 function getMilestoneId(milestone) {
   return (
     milestone?.milestoneId ||
@@ -952,6 +1109,78 @@ function getMilestoneStepState(milestone, index, currentIndex) {
   return "UPCOMING";
 }
 
+function isMilestoneReadOnly(milestone) {
+  const milestoneStatus = String(
+    milestone?.status ||
+      milestone?.Status ||
+      milestone?.raw?.status ||
+      milestone?.raw?.Status ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const disputeStatus = String(
+    milestone?.disputeStatus ||
+      milestone?.DisputeStatus ||
+      milestone?.latestDisputeStatus ||
+      milestone?.LatestDisputeStatus ||
+      milestone?.raw?.disputeStatus ||
+      milestone?.raw?.DisputeStatus ||
+      milestone?.raw?.latestDisputeStatus ||
+      milestone?.raw?.LatestDisputeStatus ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const hasResolvedDispute = Boolean(
+    milestone?.hasResolvedDispute ||
+      milestone?.HasResolvedDispute ||
+      milestone?.disputeResolved ||
+      milestone?.DisputeResolved ||
+      milestone?.resolvedDisputeId ||
+      milestone?.ResolvedDisputeId ||
+      milestone?.raw?.hasResolvedDispute ||
+      milestone?.raw?.HasResolvedDispute ||
+      milestone?.raw?.disputeResolved ||
+      milestone?.raw?.DisputeResolved ||
+      milestone?.raw?.resolvedDisputeId ||
+      milestone?.raw?.ResolvedDisputeId
+  );
+
+  const readOnlyMilestoneStatuses = [
+    "COMPLETED",
+    "DONE",
+    "FINISHED",
+    "APPROVED",
+    "PAID",
+    "RELEASED",
+    "RESOLVED",
+    "REFUNDED",
+    "CLOSED",
+    "CANCELLED",
+    "CANCELED",
+    "VOID",
+    "DISPUTED",
+    "REJECTED",
+  ];
+
+  const resolvedDisputeStatuses = [
+    "RESOLVED",
+    "CLOSED",
+    "COMPLETED",
+    "RELEASED",
+    "REFUNDED",
+  ];
+
+  return (
+    hasResolvedDispute ||
+    readOnlyMilestoneStatuses.includes(milestoneStatus) ||
+    resolvedDisputeStatuses.includes(disputeStatus)
+  );
+}
+
 function isMilestoneCompleted(milestone) {
   const status = String(milestone?.status || "").toUpperCase();
 
@@ -1012,16 +1241,24 @@ function getProjectStatusLabel(status) {
   return PROJECT_STATUS_LABEL?.[status] || formatStatusLabel(status || "ACTIVE");
 }
 
-function getProjectGrossAmount(project, milestones = []) {
+function getProjectGrossAmount(entity, milestones = []) {
   const direct = firstPositiveNumber(
-    project?.totalBudget,
-    project?.TotalBudget,
-    project?.contractAmount,
-    project?.ContractAmount,
-    project?.finalPrice,
-    project?.FinalPrice,
-    project?.raw?.totalBudget,
-    project?.raw?.TotalBudget,
+    entity?.finalPrice,
+    entity?.FinalPrice,
+    entity?.contractAmount,
+    entity?.ContractAmount,
+    entity?.totalBudget,
+    entity?.TotalBudget,
+    entity?.totalAmount,
+    entity?.TotalAmount,
+    entity?.grossAmount,
+    entity?.GrossAmount,
+    entity?.raw?.finalPrice,
+    entity?.raw?.FinalPrice,
+    entity?.raw?.contractAmount,
+    entity?.raw?.ContractAmount,
+    entity?.raw?.totalBudget,
+    entity?.raw?.TotalBudget,
     0
   );
 
@@ -1037,22 +1274,47 @@ function getExpertFeeRate(entity) {
   return firstPositiveNumber(
     entity?.expertFeeRate,
     entity?.ExpertFeeRate,
+    entity?.expertServiceFeeRate,
+    entity?.ExpertServiceFeeRate,
+    entity?.platformFeeRate,
+    entity?.PlatformFeeRate,
+    entity?.serviceFeeRate,
+    entity?.ServiceFeeRate,
     entity?.contract?.expertFeeRate,
+    entity?.contract?.ExpertFeeRate,
+    entity?.contract?.expertServiceFeeRate,
+    entity?.contract?.ExpertServiceFeeRate,
+    entity?.contract?.platformFeeRate,
+    entity?.contract?.PlatformFeeRate,
     entity?.Contract?.ExpertFeeRate,
+    entity?.Contract?.ExpertServiceFeeRate,
+    entity?.Contract?.PlatformFeeRate,
     entity?.raw?.expertFeeRate,
     entity?.raw?.ExpertFeeRate,
+    entity?.raw?.expertServiceFeeRate,
+    entity?.raw?.ExpertServiceFeeRate,
+    entity?.raw?.platformFeeRate,
+    entity?.raw?.PlatformFeeRate,
     0
   );
 }
 
-function getProjectServiceFee(project, milestones = []) {
+function getProjectServiceFee(entity, milestones = []) {
   const direct = firstPositiveNumber(
-    project?.expertFeeAmount,
-    project?.ExpertFeeAmount,
-    project?.expertServiceFeeAmount,
-    project?.ExpertServiceFeeAmount,
-    project?.raw?.expertFeeAmount,
-    project?.raw?.ExpertFeeAmount,
+    entity?.expertFeeAmount,
+    entity?.ExpertFeeAmount,
+    entity?.expertServiceFeeAmount,
+    entity?.ExpertServiceFeeAmount,
+    entity?.platformFeeAmount,
+    entity?.PlatformFeeAmount,
+    entity?.serviceFeeAmount,
+    entity?.ServiceFeeAmount,
+    entity?.raw?.expertFeeAmount,
+    entity?.raw?.ExpertFeeAmount,
+    entity?.raw?.expertServiceFeeAmount,
+    entity?.raw?.ExpertServiceFeeAmount,
+    entity?.raw?.platformFeeAmount,
+    entity?.raw?.PlatformFeeAmount,
     0
   );
 
@@ -1065,28 +1327,45 @@ function getProjectServiceFee(project, milestones = []) {
 
   if (milestoneFees > 0) return milestoneFees;
 
-  const rate = getExpertFeeRate(project);
-  return rate > 0 ? (getProjectGrossAmount(project, milestones) * rate) / 100 : 0;
+  const rate = getExpertFeeRate(entity);
+  const grossAmount = getProjectGrossAmount(entity, milestones);
+
+  return rate > 0 && grossAmount > 0
+    ? (grossAmount * rate) / 100
+    : 0;
 }
 
-function getProjectNetEarning(project, milestones = []) {
+function getProjectNetEarning(entity, milestones = []) {
   const direct = firstPositiveNumber(
-    project?.expertReceivableAmount,
-    project?.ExpertReceivableAmount,
-    project?.netAmount,
-    project?.NetAmount,
-    project?.raw?.expertReceivableAmount,
-    project?.raw?.ExpertReceivableAmount,
+    entity?.expertReceivableAmount,
+    entity?.ExpertReceivableAmount,
+    entity?.expertNetAmount,
+    entity?.ExpertNetAmount,
+    entity?.netAmount,
+    entity?.NetAmount,
+    entity?.raw?.expertReceivableAmount,
+    entity?.raw?.ExpertReceivableAmount,
+    entity?.raw?.expertNetAmount,
+    entity?.raw?.ExpertNetAmount,
     0
   );
 
   if (direct > 0) return direct;
 
-  return Math.max(getProjectGrossAmount(project, milestones) - getProjectServiceFee(project, milestones), 0);
+  const grossAmount = getProjectGrossAmount(entity, milestones);
+  const serviceFee = getProjectServiceFee(entity, milestones);
+
+  return Math.max(grossAmount - serviceFee, 0);
 }
 
 function getMilestoneAmount(milestone) {
-  return firstPositiveNumber(milestone?.amount, milestone?.Amount, milestone?.raw?.amount, milestone?.raw?.Amount, 0);
+  return firstPositiveNumber(
+    milestone?.amount,
+    milestone?.Amount,
+    milestone?.raw?.amount,
+    milestone?.raw?.Amount,
+    0
+  );
 }
 
 function getMilestoneServiceFee(milestone) {
@@ -1095,15 +1374,27 @@ function getMilestoneServiceFee(milestone) {
     milestone?.ExpertFeeAmount,
     milestone?.expertServiceFeeAmount,
     milestone?.ExpertServiceFeeAmount,
+    milestone?.platformFeeAmount,
+    milestone?.PlatformFeeAmount,
+    milestone?.serviceFeeAmount,
+    milestone?.ServiceFeeAmount,
     milestone?.raw?.expertFeeAmount,
     milestone?.raw?.ExpertFeeAmount,
+    milestone?.raw?.expertServiceFeeAmount,
+    milestone?.raw?.ExpertServiceFeeAmount,
+    milestone?.raw?.platformFeeAmount,
+    milestone?.raw?.PlatformFeeAmount,
     0
   );
 
   if (direct > 0) return direct;
 
   const rate = getExpertFeeRate(milestone);
-  return rate > 0 ? (getMilestoneAmount(milestone) * rate) / 100 : 0;
+  const amount = getMilestoneAmount(milestone);
+
+  return rate > 0 && amount > 0
+    ? (amount * rate) / 100
+    : 0;
 }
 
 function firstPositiveNumber(...values) {
@@ -1269,6 +1560,16 @@ function formatMoney(value) {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function formatServiceFee(value) {
+  const amount = Number(value || 0);
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return formatMoney(0);
+  }
+
+  return `-${formatMoney(amount)}`;
 }
 
 function formatDate(value) {

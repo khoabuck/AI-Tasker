@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import milestoneService from "../../../services/milestone.service";
@@ -32,6 +32,7 @@ export default function MilestoneDetailPage() {
   const [project, setProject] = useState(null);
   const [submissions, setSubmissions] = useState([]);
   const [activeDispute, setActiveDispute] = useState(null);
+  const [resolvedDispute, setResolvedDispute] = useState(null);
   const [submissionForm, setSubmissionForm] = useState(emptySubmissionForm);
 
   const [showDisputeModal, setShowDisputeModal] = useState(false);
@@ -50,6 +51,7 @@ export default function MilestoneDetailPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [submissionError, setSubmissionError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     if (!message) return;
@@ -66,12 +68,80 @@ export default function MilestoneDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [milestoneId]);
 
-  const loadMilestone = async () => {
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      if (
+        refreshInFlightRef.current ||
+        submitting ||
+        creatingDispute ||
+        showSubmissionConfirm ||
+        showDisputeConfirm ||
+        showDisputeModal
+      ) {
+        return;
+      }
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadMilestone({
+          silent: true,
+          preserveForm: true,
+          preserveMessage: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 5000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    milestoneId,
+    submitting,
+    creatingDispute,
+    showSubmissionConfirm,
+    showDisputeConfirm,
+    showDisputeModal,
+  ]);
+
+  const loadMilestone = async ({
+    silent = false,
+    preserveForm = false,
+    preserveMessage = false,
+  } = {}) => {
     try {
-      setLoading(true);
-      setError("");
-      setMessage("");
-      setSubmissionError("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+
+        if (!preserveMessage) {
+          setMessage("");
+        }
+
+        setSubmissionError("");
+      }
 
       const data = await milestoneService.getMilestoneById(milestoneId);
       setMilestone(data);
@@ -84,49 +154,64 @@ export default function MilestoneDetailPage() {
           const projectData = await projectService.getProjectById(projectId);
           setProject(projectData);
         } catch (projectError) {
-          console.warn(
-            "LOAD PROJECT STATUS ERROR:",
-            projectError?.response?.data || projectError
-          );
-          setProject(null);
+          if (!silent) {
+            console.warn(
+              "LOAD PROJECT STATUS ERROR:",
+              projectError?.response?.data || projectError
+            );
+          }
         }
       } else {
         setProject(null);
       }
 
       if (projectId && realMilestoneId) {
-        await loadActiveDispute(projectId, realMilestoneId);
+        await loadActiveDispute(projectId, realMilestoneId, {
+          silent,
+        });
       } else {
         setActiveDispute(null);
+        setResolvedDispute(null);
       }
 
       if (realMilestoneId) {
-        await loadSubmissions(realMilestoneId);
+        await loadSubmissions(realMilestoneId, {
+          silent,
+          preserveForm,
+        });
+      }
+
+      if (silent) {
+        setError("");
+        setSubmissionError("");
       }
     } catch (err) {
-      console.error("LOAD MILESTONE DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load milestone."));
-      setMilestone(null);
-      setProject(null);
-      setActiveDispute(null);
-      setSubmissions([]);
+      if (!silent) {
+        console.error("LOAD MILESTONE DETAIL ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot load milestone."));
+        setMilestone(null);
+        setProject(null);
+        setActiveDispute(null);
+        setResolvedDispute(null);
+        setSubmissions([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
-  const loadActiveDispute = async (projectId, realMilestoneId) => {
+  const loadActiveDispute = async (
+    projectId,
+    realMilestoneId,
+    { silent = false } = {}
+  ) => {
     try {
       const disputes = await disputeService.getMyDisputes();
 
-      const found = Array.isArray(disputes)
-        ? disputes.find((item) => {
-            const status = String(item.status || "")
-              .trim()
-              .toUpperCase();
-
-            const isActive = status === "OPEN";
-
+      const matchingDisputes = Array.isArray(disputes)
+        ? disputes.filter((item) => {
             const disputeProjectId =
               item?.projectId ||
               item?.ProjectId ||
@@ -144,32 +229,52 @@ export default function MilestoneDetailPage() {
             const sameProject =
               String(disputeProjectId) === String(projectId);
 
-            /*
-             * Chỉ xem dispute là của milestone hiện tại khi Backend trả đúng
-             * milestoneId. Project-level dispute không được tự động khóa tất
-             * cả milestone trong cùng project.
-             */
             const sameMilestone =
               Boolean(disputeMilestoneId) &&
               String(disputeMilestoneId) === String(realMilestoneId);
 
-            return isActive && sameProject && sameMilestone;
+            return sameProject && sameMilestone;
           })
-        : null;
+        : [];
 
-      setActiveDispute(found || null);
+      const orderedDisputes = [...matchingDisputes].sort((a, b) =>
+        compareDateDesc(
+          a?.resolvedAt || a?.updatedAt || a?.createdAt,
+          b?.resolvedAt || b?.updatedAt || b?.createdAt
+        )
+      );
+
+      const active = orderedDisputes.find((item) =>
+        isActiveDisputeStatus(item?.status)
+      );
+
+      const resolved = orderedDisputes.find((item) =>
+        isResolvedDisputeStatus(item?.status)
+      );
+
+      setActiveDispute(active || null);
+      setResolvedDispute(resolved || null);
     } catch (err) {
-      console.warn("LOAD ACTIVE DISPUTE ERROR:", err?.response?.data || err);
-      setActiveDispute(null);
+      if (!silent) {
+        console.warn("LOAD DISPUTE STATUS ERROR:", err?.response?.data || err);
+      }
     }
   };
 
-  const loadSubmissions = async (targetMilestoneId = milestoneId) => {
+  const loadSubmissions = async (
+    targetMilestoneId = milestoneId,
+    {
+      silent = false,
+      preserveForm = false,
+    } = {}
+  ) => {
     if (!targetMilestoneId) return;
 
     try {
-      setSubmissionLoading(true);
-      setSubmissionError("");
+      if (!silent) {
+        setSubmissionLoading(true);
+        setSubmissionError("");
+      }
 
       const data = await deliverableService.getDeliverablesByMilestone(
         targetMilestoneId
@@ -180,17 +285,27 @@ export default function MilestoneDetailPage() {
 
       setSubmissions(list);
 
-      if (latest && isChangeRequested(latest.status)) {
-        setSubmissionForm(buildFormFromSubmission(latest));
-      } else if (!latest) {
-        setSubmissionForm({ ...emptySubmissionForm });
+      if (!preserveForm) {
+        if (latest && isChangeRequested(latest.status)) {
+          setSubmissionForm(buildFormFromSubmission(latest));
+        } else if (!latest) {
+          setSubmissionForm({ ...emptySubmissionForm });
+        }
+      }
+
+      if (silent) {
+        setSubmissionError("");
       }
     } catch (err) {
-      console.error("LOAD SUBMISSIONS ERROR:", err?.response?.data || err);
-      setSubmissionError(getFriendlyError(err, "Cannot load submissions."));
-      setSubmissions([]);
+      if (!silent) {
+        console.error("LOAD SUBMISSIONS ERROR:", err?.response?.data || err);
+        setSubmissionError(getFriendlyError(err, "Cannot load submissions."));
+        setSubmissions([]);
+      }
     } finally {
-      setSubmissionLoading(false);
+      if (!silent) {
+        setSubmissionLoading(false);
+      }
     }
   };
 
@@ -684,6 +799,8 @@ export default function MilestoneDetailPage() {
   const latestSubmission = getLatestSubmission(submissions);
   const hasSubmission = Boolean(getSubmissionId(latestSubmission));
   const activeDisputeId = getDisputeId(activeDispute);
+  const resolvedDisputeId = getDisputeId(resolvedDispute);
+  const disputeResolved = Boolean(resolvedDisputeId);
 
   const needsResubmission =
     hasSubmission &&
@@ -693,6 +810,7 @@ export default function MilestoneDetailPage() {
   const canSubmit =
     !projectCompleted &&
     !activeDisputeId &&
+    !disputeResolved &&
     canSubmitWorkForMilestone(milestoneStatus) &&
     (!hasSubmission || needsResubmission) &&
     !submissionLoading;
@@ -707,12 +825,16 @@ export default function MilestoneDetailPage() {
 
   const formTitle = projectCompleted
     ? "Milestone Closed"
+    : disputeResolved
+    ? "Dispute Resolved"
     : needsResubmission
     ? "Resubmit delivery"
     : "Submit delivery";
 
   const formDescription = projectCompleted
     ? "This project is completed. You can review previous submissions, but no new work or dispute can be submitted."
+    : disputeResolved
+    ? "The administrator has resolved this dispute. New submissions are closed for this milestone."
     : needsResubmission
     ? "Update the delivery based on client feedback."
     : "Send completed work to the client.";
@@ -720,10 +842,12 @@ export default function MilestoneDetailPage() {
   const latestClientFeedback = getClientFeedback(latestSubmission);
   const canOpenDispute =
     !projectCompleted &&
+    !disputeResolved &&
     canOpenMilestoneDispute(milestoneStatus, latestSubmission);
 
   const shouldShowOpenDispute = canOpenDispute && !activeDisputeId;
   const shouldShowViewDispute = Boolean(activeDisputeId);
+  const orderedSubmissions = getSubmissionsOldestFirst(submissions);
 
   return (
     <ExpertLayout>
@@ -745,6 +869,15 @@ export default function MilestoneDetailPage() {
               type="danger"
               title="Active dispute found"
               message="This milestone already has an active dispute. You can view the current dispute detail instead of opening a new one."
+            />
+          )}
+
+          {disputeResolved && (
+            <ResolvedDisputeNotice
+              dispute={resolvedDispute}
+              onView={() =>
+                navigate(`/expert/disputes/${resolvedDisputeId}`)
+              }
             />
           )}
 
@@ -915,13 +1048,21 @@ export default function MilestoneDetailPage() {
                   </div>
                 )}
 
+                {disputeResolved && !projectCompleted && (
+                  <div className="mb-4 rounded-2xl border border-green-400/30 bg-green-400/10 p-4 text-sm leading-6 text-green-100">
+                    This dispute has been resolved by the administrator. Submission and resubmission are closed for this milestone.
+                  </div>
+                )}
+
                 {activeDisputeId && (
                   <div className="mb-4 rounded-2xl border border-red-400/30 bg-red-400/10 p-4 text-sm leading-6 text-red-100">
                     This milestone is currently in dispute.
                   </div>
                 )}
 
-                {!projectCompleted && !canSubmitWorkForMilestone(milestoneStatus) && (
+                {!projectCompleted &&
+                  !disputeResolved &&
+                  !canSubmitWorkForMilestone(milestoneStatus) && (
                   <div className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     This milestone is currently closed for submission.
                   </div>
@@ -934,7 +1075,7 @@ export default function MilestoneDetailPage() {
                   />
                 )}
 
-                {!projectCompleted && needsResubmission && (
+                {!projectCompleted && !disputeResolved && needsResubmission && (
                   <div className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100">
                     <div className="flex gap-3">
                       <span className="material-symbols-outlined text-yellow-300">
@@ -1195,10 +1336,14 @@ export default function MilestoneDetailPage() {
                   />
                 ) : (
                   <div className="space-y-3">
-                    {submissions.map((item, index) => (
+                    {orderedSubmissions.map((item, index) => (
                       <SubmissionCard
                         key={getSubmissionId(item) || index}
                         submission={item}
+                        submissionNumber={getSubmissionDisplayNumber(
+                          item,
+                          index
+                        )}
                         onDetail={() => openSubmissionDetail(item)}
                       />
                     ))}
@@ -1216,15 +1361,20 @@ export default function MilestoneDetailPage() {
                 canSubmit={canSubmit}
                 needsResubmission={needsResubmission}
                 activeDisputeId={activeDisputeId}
+                resolvedDisputeId={resolvedDisputeId}
                 onSubmitFocus={() =>
                   document
                     .getElementById("milestone-submission-form")
                     ?.scrollIntoView({ behavior: "smooth", block: "start" })
                 }
-                onViewDispute={() =>
-                  activeDisputeId &&
-                  navigate(`/expert/disputes/${activeDisputeId}`)
-                }
+                onViewDispute={() => {
+                  const targetDisputeId =
+                    activeDisputeId || resolvedDisputeId;
+
+                  if (targetDisputeId) {
+                    navigate(`/expert/disputes/${targetDisputeId}`);
+                  }
+                }}
               />
             </aside>
           </div>
@@ -1339,6 +1489,89 @@ function SuccessToast({ message, onClose }) {
   );
 }
 
+
+function ResolvedDisputeNotice({ dispute, onView }) {
+  const decision = getDisputeResolutionLabel(dispute);
+
+  return (
+    <div className="mb-5 rounded-2xl border border-green-400/30 bg-green-400/10 p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+            <span className="material-symbols-outlined">gavel</span>
+          </div>
+
+          <div>
+            <p className="font-black text-white">Dispute resolved</p>
+            <p className="mt-1 text-sm leading-6 text-green-100/80">
+              {decision
+                ? `Admin decision: ${decision}.`
+                : "The administrator has completed the dispute review."}{" "}
+              New submissions are no longer available for this milestone.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={onView}
+          className="shrink-0 rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2.5 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+        >
+          View Resolution
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function getDisputeResolutionLabel(dispute) {
+  const value = String(
+    dispute?.resolutionType ||
+      dispute?.ResolutionType ||
+      dispute?.decision ||
+      dispute?.Decision ||
+      dispute?.resolution ||
+      dispute?.Resolution ||
+      dispute?.raw?.resolutionType ||
+      dispute?.raw?.ResolutionType ||
+      dispute?.raw?.decision ||
+      dispute?.raw?.Decision ||
+      ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (value === "RELEASE_TO_EXPERT") {
+    return "Payment released to expert";
+  }
+
+  if (value === "REFUND_TO_CLIENT") {
+    return "Payment refunded to client";
+  }
+
+  return value
+    ? value
+        .replaceAll("_", " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (char) => char.toUpperCase())
+    : "";
+}
+
+function isActiveDisputeStatus(status) {
+  return ["OPEN", "PENDING", "UNDER_REVIEW", "IN_REVIEW"].includes(
+    String(status || "").trim().toUpperCase()
+  );
+}
+
+function isResolvedDisputeStatus(status) {
+  return [
+    "RESOLVED",
+    "CLOSED",
+    "COMPLETED",
+    "RELEASED",
+    "REFUNDED",
+  ].includes(String(status || "").trim().toUpperCase());
+}
 
 function DisputeModal({
   formData,
@@ -1812,7 +2045,7 @@ function SubmittedNotice({ submission, onOpen }) {
   );
 }
 
-function SubmissionCard({ submission, onDetail }) {
+function SubmissionCard({ submission, submissionNumber, onDetail }) {
   const ui = getSubmissionUiStatus(submission.status);
 
   return (
@@ -1830,7 +2063,7 @@ function SubmissionCard({ submission, onDetail }) {
           </div>
 
           <h3 className="font-bold text-white">
-            {submission.title || "Submitted Work"}
+            Submission {submissionNumber}
           </h3>
 
           <p className="mt-2 line-clamp-2 text-sm leading-6 text-gray-400">
@@ -1890,6 +2123,7 @@ function MarketplaceSidebar({
   canSubmit,
   needsResubmission,
   activeDisputeId,
+  resolvedDisputeId,
   onSubmitFocus,
   onViewDispute,
 }) {
@@ -1915,14 +2149,14 @@ function MarketplaceSidebar({
         </div>
 
         <div className="p-4">
-          {activeDisputeId ? (
+          {activeDisputeId || resolvedDisputeId ? (
             <button
               type="button"
               onClick={onViewDispute}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black"
             >
               <span className="material-symbols-outlined text-[18px]">gavel</span>
-              View Active Dispute
+              {activeDisputeId ? "View Active Dispute" : "View Resolved Dispute"}
             </button>
           ) : canSubmit ? (
             <button
@@ -2196,6 +2430,74 @@ function getSubmissionId(submission) {
     submission?.raw?.Id ||
     ""
   );
+}
+
+function getSubmissionsOldestFirst(submissions) {
+  if (!Array.isArray(submissions)) return [];
+
+  return [...submissions].sort((a, b) => {
+    const timeA = getSubmissionTime(a);
+    const timeB = getSubmissionTime(b);
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    const versionA = Number(
+      a?.versionNumber ||
+        a?.VersionNumber ||
+        a?.raw?.versionNumber ||
+        a?.raw?.VersionNumber ||
+        0
+    );
+
+    const versionB = Number(
+      b?.versionNumber ||
+        b?.VersionNumber ||
+        b?.raw?.versionNumber ||
+        b?.raw?.VersionNumber ||
+        0
+    );
+
+    return versionA - versionB;
+  });
+}
+
+function getSubmissionDisplayNumber(submission, index) {
+  const explicitVersion = Number(
+    submission?.versionNumber ||
+      submission?.VersionNumber ||
+      submission?.submissionNumber ||
+      submission?.SubmissionNumber ||
+      submission?.raw?.versionNumber ||
+      submission?.raw?.VersionNumber ||
+      submission?.raw?.submissionNumber ||
+      submission?.raw?.SubmissionNumber ||
+      0
+  );
+
+  if (Number.isInteger(explicitVersion) && explicitVersion > 0) {
+    return explicitVersion;
+  }
+
+  return index + 1;
+}
+
+function getSubmissionTime(submission) {
+  const value =
+    submission?.submittedAt ||
+    submission?.SubmittedAt ||
+    submission?.createdAt ||
+    submission?.CreatedAt ||
+    submission?.raw?.submittedAt ||
+    submission?.raw?.SubmittedAt ||
+    submission?.raw?.createdAt ||
+    submission?.raw?.CreatedAt ||
+    "";
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 function getLatestSubmission(submissions) {

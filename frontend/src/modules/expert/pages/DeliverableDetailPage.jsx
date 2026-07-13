@@ -9,6 +9,7 @@ export default function DeliverableDetailPage() {
   const navigate = useNavigate();
 
   const [submission, setSubmission] = useState(null);
+  const [submissionNumber, setSubmissionNumber] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -25,10 +26,34 @@ export default function DeliverableDetailPage() {
       const data = await deliverableService.getDeliverableById(deliverableId);
 
       setSubmission(data);
+
+      const milestoneId = getMilestoneIdFromSubmission(data);
+      const explicitNumber = getExplicitSubmissionNumber(data);
+
+      if (milestoneId) {
+        try {
+          const milestoneSubmissions =
+            await deliverableService.getDeliverablesByMilestone(milestoneId);
+
+          setSubmissionNumber(
+            getSubmissionNumberFromList(
+              Array.isArray(milestoneSubmissions)
+                ? milestoneSubmissions
+                : [],
+              data
+            ) || explicitNumber || 1
+          );
+        } catch {
+          setSubmissionNumber(explicitNumber || 1);
+        }
+      } else {
+        setSubmissionNumber(explicitNumber || 1);
+      }
     } catch (err) {
       console.error("LOAD SUBMISSION DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load submission detail."));
       setSubmission(null);
+      setSubmissionNumber(1);
     } finally {
       setLoading(false);
     }
@@ -106,7 +131,7 @@ export default function DeliverableDetailPage() {
                   </p>
 
                   <h1 className="break-words text-2xl font-black leading-tight text-white md:text-3xl">
-                    {submission.title || "Delivery details"}
+                    Submission {submissionNumber}
                   </h1>
 
                   <p className="mt-2 max-w-2xl break-words text-sm leading-5 text-gray-400">
@@ -401,6 +426,85 @@ function Alert({ type, title, message }) {
       <p className="mt-1">{message}</p>
     </div>
   );
+}
+
+function getSubmissionId(submission) {
+  return (
+    submission?.deliverableId ||
+    submission?.DeliverableId ||
+    submission?.submissionId ||
+    submission?.SubmissionId ||
+    submission?.id ||
+    submission?.Id ||
+    submission?.raw?.deliverableId ||
+    submission?.raw?.DeliverableId ||
+    submission?.raw?.submissionId ||
+    submission?.raw?.SubmissionId ||
+    submission?.raw?.id ||
+    submission?.raw?.Id ||
+    ""
+  );
+}
+
+function getExplicitSubmissionNumber(submission) {
+  const number = Number(
+    submission?.versionNumber ||
+      submission?.VersionNumber ||
+      submission?.submissionNumber ||
+      submission?.SubmissionNumber ||
+      submission?.raw?.versionNumber ||
+      submission?.raw?.VersionNumber ||
+      submission?.raw?.submissionNumber ||
+      submission?.raw?.SubmissionNumber ||
+      0
+  );
+
+  return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function getSubmissionNumberFromList(submissions, currentSubmission) {
+  if (!Array.isArray(submissions) || submissions.length === 0) {
+    return 0;
+  }
+
+  const currentId = String(getSubmissionId(currentSubmission) || "");
+
+  const ordered = [...submissions].sort((a, b) => {
+    const timeA = getSubmissionTime(a);
+    const timeB = getSubmissionTime(b);
+
+    if (timeA !== timeB) {
+      return timeA - timeB;
+    }
+
+    return (
+      getExplicitSubmissionNumber(a) -
+      getExplicitSubmissionNumber(b)
+    );
+  });
+
+  const index = ordered.findIndex(
+    (item) => String(getSubmissionId(item) || "") === currentId
+  );
+
+  return index >= 0 ? index + 1 : 0;
+}
+
+function getSubmissionTime(submission) {
+  const value =
+    submission?.submittedAt ||
+    submission?.SubmittedAt ||
+    submission?.createdAt ||
+    submission?.CreatedAt ||
+    submission?.raw?.submittedAt ||
+    submission?.raw?.SubmittedAt ||
+    submission?.raw?.createdAt ||
+    submission?.raw?.CreatedAt ||
+    "";
+
+  const time = new Date(value).getTime();
+
+  return Number.isFinite(time) ? time : 0;
 }
 
 function getMilestoneIdFromSubmission(submission) {

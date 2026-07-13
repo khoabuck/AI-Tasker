@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import contractService from "../../../services/contract.service";
@@ -21,6 +21,7 @@ export default function ContractDetailPage() {
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   const realContractId = getContractId(contract) || contractId;
   const realProposalId = getProposalId(contract) || proposalId;
@@ -137,11 +138,73 @@ export default function ContractDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractId, proposalId]);
 
-  const loadContract = async () => {
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+
+      if (
+        refreshInFlightRef.current ||
+        Boolean(actionLoading) ||
+        Boolean(confirmAction) ||
+        showDeclineBox
+      ) {
+        return;
+      }
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadContract({
+          silent: true,
+          preserveMessage: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 5000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    contractId,
+    proposalId,
+    actionLoading,
+    confirmAction,
+    showDeclineBox,
+  ]);
+
+  const loadContract = async ({
+    silent = false,
+    preserveMessage = false,
+  } = {}) => {
     try {
-      setLoading(true);
-      setError("");
-      setMessage("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+
+        if (!preserveMessage) {
+          setMessage("");
+        }
+      }
 
       let contractData = null;
 
@@ -159,24 +222,38 @@ export default function ContractDetailPage() {
       const fallbackMilestones = getMilestonesFromContract(contractData);
 
       if (id) {
-        const apiMilestones = await loadMilestoneDrafts(id);
+        const apiMilestones = await loadMilestoneDrafts(id, {
+          silent,
+        });
+
         setMilestoneDrafts(
           apiMilestones.length > 0 ? apiMilestones : fallbackMilestones
         );
       } else {
         setMilestoneDrafts(fallbackMilestones);
       }
+
+      if (silent) {
+        setError("");
+      }
     } catch (err) {
-      console.error("LOAD CONTRACT ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load contract detail."));
-      setContract(null);
-      setMilestoneDrafts([]);
+      if (!silent) {
+        console.error("LOAD CONTRACT ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot load contract detail."));
+        setContract(null);
+        setMilestoneDrafts([]);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
-  const loadMilestoneDrafts = async (id) => {
+  const loadMilestoneDrafts = async (
+    id,
+    { silent = false } = {}
+  ) => {
     try {
       if (!id) return [];
 
@@ -186,7 +263,13 @@ export default function ContractDetailPage() {
         ? data.map((item, index) => normalizeMilestone(item, index))
         : [];
     } catch (err) {
-      console.warn("LOAD MILESTONE DRAFTS WARNING:", err?.response?.data || err);
+      if (!silent) {
+        console.warn(
+          "LOAD MILESTONE DRAFTS WARNING:",
+          err?.response?.data || err
+        );
+      }
+
       return [];
     }
   };

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import projectService from "../../../services/project.service";
@@ -17,16 +17,58 @@ export default function ProjectMilestonesPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  const loadData = async () => {
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (refreshInFlightRef.current) return;
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadData({
+          silent: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 8000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  const loadData = async ({ silent = false } = {}) => {
     try {
-      setLoading(true);
-      setError("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+      }
 
       const [projectData, milestoneData] = await Promise.all([
         projectService.getProjectById(projectId),
@@ -35,11 +77,22 @@ export default function ProjectMilestonesPage() {
 
       setProject(projectData);
       setMilestones(Array.isArray(milestoneData) ? milestoneData : []);
+
+      if (silent) {
+        setError("");
+      }
     } catch (err) {
-      console.error("LOAD PROJECT MILESTONES ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load project milestones."));
+      if (!silent) {
+        console.error(
+          "LOAD PROJECT MILESTONES ERROR:",
+          err?.response?.data || err
+        );
+        setError(getFriendlyError(err, "Cannot load project milestones."));
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
