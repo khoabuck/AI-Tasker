@@ -10,6 +10,7 @@ const ROUTES = {
   EXPERT_EDIT: "/expert/profile/edit",
   EXPERT_LOCKED: "/expert/profile-locked",
   EXPERT_DASHBOARD: "/expert/dashboard",
+  CLIENT_DASHBOARD: "/client/dashboard",
   ADMIN_DASHBOARD: "/admin/dashboard",
 };
 
@@ -32,17 +33,16 @@ const LEGACY_PROFILE_STATUSES = new Set([
   "PROFILE_LOCKED",
 ]);
 
-export default function ProtectedRoute({ children, allowedRoles }) {
+export default function ProtectedRoute({
+  children,
+  allowedRoles,
+}) {
   const { isAuthenticated, loading, user } = useAuth();
   const location = useLocation();
 
   if (loading) {
     return (
-<<<<<<< HEAD
       <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">
-=======
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
->>>>>>> origin/fe/minh
         Loading...
       </div>
     );
@@ -53,7 +53,9 @@ export default function ProtectedRoute({ children, allowedRoles }) {
       <Navigate
         to={ROUTES.LOGIN}
         replace
-        state={{ from: location.pathname }}
+        state={{
+          from: location.pathname,
+        }}
       />
     );
   }
@@ -66,7 +68,9 @@ export default function ProtectedRoute({ children, allowedRoles }) {
       user?.AccountStatus ||
       user?.userStatus ||
       user?.UserStatus ||
-      (LEGACY_PROFILE_STATUSES.has(legacyStatus) ? "ACTIVE" : legacyStatus)
+      (LEGACY_PROFILE_STATUSES.has(legacyStatus)
+        ? "ACTIVE"
+        : legacyStatus)
   );
 
   const expertProfileStatus = normalizeStatus(
@@ -74,15 +78,24 @@ export default function ProtectedRoute({ children, allowedRoles }) {
       user?.ExpertProfileStatus ||
       user?.profileStatus ||
       user?.ProfileStatus ||
-      (LEGACY_PROFILE_STATUSES.has(legacyStatus) ? legacyStatus : "")
+      (LEGACY_PROFILE_STATUSES.has(legacyStatus)
+        ? legacyStatus
+        : "")
   );
 
   const pathname = location.pathname;
 
-  const isClientSetupPage = pathname === ROUTES.CLIENT_SETUP;
-  const isExpertSetupPage = pathname === ROUTES.EXPERT_SETUP;
-  const isExpertEditPage = pathname === ROUTES.EXPERT_EDIT;
-  const isExpertLockedPage = pathname === ROUTES.EXPERT_LOCKED;
+  const isClientSetupPage =
+    pathname === ROUTES.CLIENT_SETUP;
+
+  const isExpertSetupPage =
+    pathname === ROUTES.EXPERT_SETUP;
+
+  const isExpertEditPage =
+    pathname === ROUTES.EXPERT_EDIT;
+
+  const isExpertLockedPage =
+    pathname === ROUTES.EXPERT_LOCKED;
 
   const isExpertProfileReviewPage = [
     ROUTES.EXPERT_SETUP,
@@ -90,15 +103,20 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     ROUTES.EXPERT_LOCKED,
   ].includes(pathname);
 
-<<<<<<< HEAD
-  if (legacyStatus === "PENDING_ROLE" || accountStatus === "PENDING_ROLE") {
-    if (pathname === ROUTES.SELECT_ROLE) return children;
-    return <Navigate to={ROUTES.SELECT_ROLE} replace />;
-=======
+  if (
+    legacyStatus === "PENDING_ROLE" ||
+    accountStatus === "PENDING_ROLE"
+  ) {
+    if (pathname === ROUTES.SELECT_ROLE) {
+      return children;
+    }
 
-  if (status === "PENDING_ROLE") {
-    return <Navigate to="/select-role" replace />;
->>>>>>> origin/fe/minh
+    return (
+      <Navigate
+        to={ROUTES.SELECT_ROLE}
+        replace
+      />
+    );
   }
 
   if (ACCOUNT_BLOCKED_STATUSES.has(accountStatus)) {
@@ -115,63 +133,150 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     );
   }
 
-  if (role === "CLIENT" && isPendingProfileStatus(expertProfileStatus, legacyStatus)) {
-    if (isClientSetupPage) return children;
-    return <Navigate to={ROUTES.CLIENT_SETUP} replace />;
+  if (
+    role === "CLIENT" &&
+    isPendingProfileStatus(
+      expertProfileStatus,
+      legacyStatus
+    )
+  ) {
+    if (isClientSetupPage) {
+      return children;
+    }
+
+    return (
+      <Navigate
+        to={ROUTES.CLIENT_SETUP}
+        replace
+      />
+    );
   }
 
   if (role === "EXPERT") {
-    if (isExpertLockedStatus(expertProfileStatus, legacyStatus)) {
-      if (isExpertProfileReviewPage) return children;
-      return <Navigate to={ROUTES.EXPERT_LOCKED} replace />;
-    }
+    if (
+      isExpertLockedStatus(
+        expertProfileStatus,
+        legacyStatus
+      )
+    ) {
+      if (isExpertProfileReviewPage) {
+        return children;
+      }
 
-    if (isPendingProfileStatus(expertProfileStatus, legacyStatus)) {
-      if (isExpertSetupPage || isExpertEditPage) return children;
-      return <Navigate to={ROUTES.EXPERT_SETUP} replace />;
-    }
-
-    if (isRejectedProfileStatus(expertProfileStatus)) {
-      if (isExpertEditPage || isExpertSetupPage) return children;
-      return <Navigate to={ROUTES.EXPERT_EDIT} replace />;
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_LOCKED}
+          replace
+        />
+      );
     }
 
     if (
-      isApprovedProfileStatus(expertProfileStatus) &&
+      isPendingProfileStatus(
+        expertProfileStatus,
+        legacyStatus
+      )
+    ) {
+      if (isExpertSetupPage || isExpertEditPage) {
+        return children;
+      }
+
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_SETUP}
+          replace
+        />
+      );
+    }
+
+    if (
+      isRejectedProfileStatus(
+        expertProfileStatus
+      )
+    ) {
+      if (isExpertEditPage || isExpertSetupPage) {
+        return children;
+      }
+
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_EDIT}
+          replace
+        />
+      );
+    }
+
+    if (
+      isApprovedProfileStatus(
+        expertProfileStatus
+      ) &&
       isExpertProfileReviewPage &&
       !isExpertLockedPage
     ) {
-      return <Navigate to={ROUTES.EXPERT_DASHBOARD} replace />;
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_DASHBOARD}
+          replace
+        />
+      );
     }
   }
 
-  if (role === "ADMIN" && legacyStatus === "PENDING_PROFILE") {
-    return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />;
+  if (
+    role === "ADMIN" &&
+    legacyStatus === "PENDING_PROFILE"
+  ) {
+    return (
+      <Navigate
+        to={ROUTES.ADMIN_DASHBOARD}
+        replace
+      />
+    );
   }
 
-<<<<<<< HEAD
   const normalizedRoles = Array.isArray(allowedRoles)
-    ? allowedRoles.map(normalizeStatus).filter(Boolean)
+    ? allowedRoles
+        .map(normalizeStatus)
+        .filter(Boolean)
     : [];
 
-  if (normalizedRoles.length > 0 && !normalizedRoles.includes(role)) {
-    return <Navigate to={ROUTES.UNAUTHORIZED} replace />;
-=======
-  if (normalizedRoles?.length && !normalizedRoles.includes(role)) {
+  if (
+    normalizedRoles.length > 0 &&
+    !normalizedRoles.includes(role)
+  ) {
     if (role === "CLIENT") {
-      return <Navigate to="/client/dashboard" replace />;
+      return (
+        <Navigate
+          to={ROUTES.CLIENT_DASHBOARD}
+          replace
+        />
+      );
     }
 
     if (role === "EXPERT") {
-      return <Navigate to="/expert/dashboard" replace />;
+      return (
+        <Navigate
+          to={ROUTES.EXPERT_DASHBOARD}
+          replace
+        />
+      );
     }
 
     if (role === "ADMIN") {
-      return <Navigate to="/admin/dashboard" replace />;
+      return (
+        <Navigate
+          to={ROUTES.ADMIN_DASHBOARD}
+          replace
+        />
+      );
     }
 
-    return <Navigate to="/" replace />;
->>>>>>> origin/fe/minh
+    return (
+      <Navigate
+        to={ROUTES.UNAUTHORIZED}
+        replace
+      />
+    );
   }
 
   return children;
@@ -184,7 +289,10 @@ function normalizeStatus(value) {
     .replace(/[\s-]+/g, "_");
 }
 
-function isPendingProfileStatus(profileStatus, legacyStatus) {
+function isPendingProfileStatus(
+  profileStatus,
+  legacyStatus
+) {
   return [
     "PENDING_PROFILE",
     "PROFILE_PENDING",
@@ -205,7 +313,10 @@ function isRejectedProfileStatus(profileStatus) {
   ].includes(profileStatus);
 }
 
-function isExpertLockedStatus(profileStatus, legacyStatus) {
+function isExpertLockedStatus(
+  profileStatus,
+  legacyStatus
+) {
   return [
     "EXPERT_PROFILE_LOCKED",
     "PROFILE_LOCKED",
@@ -215,5 +326,9 @@ function isExpertLockedStatus(profileStatus, legacyStatus) {
 }
 
 function isApprovedProfileStatus(profileStatus) {
-  return ["APPROVED", "ACTIVE", "VERIFIED"].includes(profileStatus);
+  return [
+    "APPROVED",
+    "ACTIVE",
+    "VERIFIED",
+  ].includes(profileStatus);
 }
