@@ -112,16 +112,19 @@ export default function SetupProfilePage() {
         const data = res.data;
 
         if (data?.userStatus === "ACTIVE") {
-          const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+          const meRes = await axiosInstance.get("/auth/me");
+          const meData = meRes?.data;
 
-          const updatedUser = {
-            ...currentUser,
-            role: "CLIENT",
-            status: "ACTIVE",
-          };
+          const freshUser =
+            meData?.data?.user ||
+            meData?.data?.User ||
+            meData?.data ||
+            meData?.user ||
+            meData?.User ||
+            meData;
 
           handleLoginSuccess({
-            user: updatedUser,
+            user: freshUser,
           });
 
           navigate("/client/dashboard", { replace: true });
@@ -242,7 +245,13 @@ export default function SetupProfilePage() {
 
   const handleBusinessChange = (e) => {
     const { name, value } = e.target;
-    setBusiness((prev) => ({ ...prev, [name]: value }));
+
+    const nextValue =
+      name === "taxCode" || name === "businessPhone"
+        ? value.replace(/\D/g, "").slice(0, 10)
+        : value;
+
+    setBusiness((prev) => ({ ...prev, [name]: nextValue }));
     clearError(name);
     clearVerifiedBusiness();
   };
@@ -268,12 +277,12 @@ export default function SetupProfilePage() {
     }
 
     if (clientType === "business") {
-      const taxClean = business.taxCode.replace(/-/g, "");
+      const taxClean = business.taxCode.trim();
 
-      if (!business.taxCode.trim()) {
+      if (!taxClean) {
         errors.taxCode = "Tax code is required.";
-      } else if (!/^\d{10}$/.test(taxClean) && !/^\d{13}$/.test(taxClean)) {
-        errors.taxCode = "Tax code must have 10 or 13 digits.";
+      } else if (!/^\d{10}$/.test(taxClean)) {
+        errors.taxCode = "Tax code must have exactly 10 digits.";
       }
 
       if (!business.industry.trim()) {
@@ -290,17 +299,14 @@ export default function SetupProfilePage() {
         errors.businessEmail = "Invalid email format.";
       }
 
-      const bizPhoneClean = business.businessPhone.replace(/[\s-.]/g, "");
+      const bizPhoneClean = business.businessPhone.replace(/\D/g, "");
 
-      if (!business.businessPhone.trim()) {
-        errors.businessPhone = "Business phone is required.";
-      } else if (
-        !/^(0[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(\+84[2-9]\d{8,9})$/.test(bizPhoneClean) &&
-        !/^(84[2-9]\d{8,9})$/.test(bizPhoneClean)
-      ) {
-        errors.businessPhone = "Invalid business phone.";
-      }
+    if (!bizPhoneClean) {
+      errors.businessPhone = "Company phone number is required.";
+    } else if (!/^0\d{9}$/.test(bizPhoneClean)) {
+      errors.businessPhone =
+        "Company phone number must have exactly 10 digits. Example: 0912345678.";
+    }
     }
 
     return errors;
@@ -411,10 +417,10 @@ export default function SetupProfilePage() {
       const payload = {
         phoneNumber: business.phoneNumber.trim(),
         address: business.address.trim(),
-        taxCode: business.taxCode.trim(),
+        taxCode: business.taxCode.replace(/\D/g, "").slice(0, 10),
         industry: business.industry.trim(),
         businessEmail: business.businessEmail.trim(),
-        businessPhone: business.businessPhone.trim(),
+        businessPhone: business.businessPhone.replace(/\D/g, "").slice(0, 10),
       };
 
       const shouldResubmit = ["NEEDS_CORRECTION", "REJECTED", "FAILED"].includes(
@@ -655,17 +661,19 @@ export default function SetupProfilePage() {
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-[#12151B]/85 p-6 shadow-2xl backdrop-blur-xl md:p-10">
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} autoComplete="off" className="space-y-5">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                    Phone Number
-                  </label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Phone Number</label>
                   <input
                     name="phoneNumber"
                     value={form.phoneNumber}
                     onChange={handleChange}
                     placeholder="0912345678"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={Boolean(verifiedBusiness) || locked}
                     className={inputClass("phoneNumber")}
                   />
@@ -673,14 +681,16 @@ export default function SetupProfilePage() {
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                    Personal Address
-                  </label>
+                  <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Personal Address</label>
                   <input
                     name="address"
                     value={form.address}
                     onChange={handleChange}
-                    placeholder="Đà Nẵng"
+                    placeholder="Ha Noi"
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
                     disabled={Boolean(verifiedBusiness) || locked}
                     className={inputClass("address")}
                   />
@@ -700,14 +710,18 @@ export default function SetupProfilePage() {
 
                   <div className="space-y-4">
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                        Tax Code
-                      </label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Tax Code</label>
                       <input
                         name="taxCode"
                         value={business.taxCode}
                         onChange={handleBusinessChange}
                         placeholder="0101243150"
+                        inputMode="numeric"
+                        maxLength={10}
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         disabled={locked || Boolean(verifiedBusiness)}
                         className={inputClass("taxCode")}
                       />
@@ -715,14 +729,16 @@ export default function SetupProfilePage() {
                     </div>
 
                     <div>
-                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                        Industry
-                      </label>
+                      <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Industry</label>
                       <input
                         name="industry"
                         value={business.industry}
                         onChange={handleBusinessChange}
-                        placeholder="Software Development"
+                        placeholder="Industry"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
                         disabled={locked || Boolean(verifiedBusiness)}
                         className={inputClass("industry")}
                       />
@@ -731,40 +747,40 @@ export default function SetupProfilePage() {
 
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div>
-                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                          Business Email
-                        </label>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Business Email</label>
                         <input
                           name="businessEmail"
                           type="email"
                           value={business.businessEmail}
                           onChange={handleBusinessChange}
                           placeholder="business@example.com"
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                           disabled={locked || Boolean(verifiedBusiness)}
                           className={inputClass("businessEmail")}
                         />
-                        <FieldError
-                          name="businessEmail"
-                          errors={fieldErrors}
-                        />
+                        <FieldError name="businessEmail" errors={fieldErrors} />
                       </div>
 
                       <div>
-                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">
-                          Business Phone
-                        </label>
+                        <label className="mb-1 block text-xs font-semibold uppercase tracking-widest text-gray-400">Company Phone Number</label>
                         <input
                           name="businessPhone"
                           value={business.businessPhone}
                           onChange={handleBusinessChange}
-                          placeholder="0243768900"
+                          placeholder="0912345678"
+                          inputMode="numeric"
+                          maxLength={10}
+                          autoComplete="off"
+                          autoCorrect="off"
+                          autoCapitalize="off"
+                          spellCheck={false}
                           disabled={locked || Boolean(verifiedBusiness)}
                           className={inputClass("businessPhone")}
                         />
-                        <FieldError
-                          name="businessPhone"
-                          errors={fieldErrors}
-                        />
+                        <FieldError name="businessPhone" errors={fieldErrors} />
                       </div>
                     </div>
 

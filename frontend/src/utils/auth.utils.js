@@ -1,4 +1,9 @@
-const LEGACY_TOKEN_KEYS = ["accessToken", "token", "authToken"];
+const LEGACY_TOKEN_KEYS = [
+  "accessToken",
+  "token",
+  "authToken",
+  "refreshToken",
+];
 
 const clearLegacyTokens = () => {
   LEGACY_TOKEN_KEYS.forEach((key) => {
@@ -6,17 +11,28 @@ const clearLegacyTokens = () => {
   });
 };
 
+/*
+ * Chỉ lưu thông tin user để phục vụ hiển thị UI.
+ * Phiên đăng nhập thực tế nằm trong HttpOnly cookie do backend quản lý.
+ */
 export const saveAuth = (authData) => {
   if (!authData) return;
 
-  // Dọn token cũ còn sót lại từ phiên bản trước.
+  // Dọn dữ liệu token cũ còn sót lại từ cơ chế Bearer token trước đây.
   clearLegacyTokens();
 
   if (authData.user) {
-    localStorage.setItem("user", JSON.stringify(authData.user));
+    localStorage.setItem(
+      "user",
+      JSON.stringify(authData.user)
+    );
   }
 };
 
+/*
+ * Chỉ kiểm tra xem frontend có user cache hay không.
+ * Không dùng hàm này làm kiểm tra bảo mật hoặc phân quyền.
+ */
 export const hasAuthSession = () => {
   return Boolean(localStorage.getItem("user"));
 };
@@ -46,17 +62,26 @@ export const clearAuth = () => {
 };
 
 export const getErrorMessage = (error) => {
-  const data = error?.response?.data;
+  const responseData = error?.response?.data;
 
-  if (typeof data === "string") {
-    return data;
+  if (typeof responseData === "string") {
+    return responseData;
   }
 
   return (
-    data?.message ||
-    data?.title ||
-    data?.detail ||
+    responseData?.message ||
+    responseData?.Message ||
+    responseData?.title ||
+    responseData?.Title ||
+    responseData?.detail ||
+    responseData?.Detail ||
+    responseData?.data?.message ||
+    responseData?.data?.Message ||
+    responseData?.data?.title ||
+    responseData?.data?.Title ||
+    responseData?.data?.detail ||
+    responseData?.data?.Detail ||
     error?.message ||
-    "Đã có lỗi xảy ra."
+    "An error has occurred."
   );
 };

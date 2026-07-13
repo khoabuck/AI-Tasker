@@ -38,7 +38,11 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (loading) {
     return (
+<<<<<<< HEAD
       <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">
+=======
+      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
+>>>>>>> origin/fe/minh
         Loading...
       </div>
     );
@@ -86,9 +90,15 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     ROUTES.EXPERT_LOCKED,
   ].includes(pathname);
 
+<<<<<<< HEAD
   if (legacyStatus === "PENDING_ROLE" || accountStatus === "PENDING_ROLE") {
     if (pathname === ROUTES.SELECT_ROLE) return children;
     return <Navigate to={ROUTES.SELECT_ROLE} replace />;
+=======
+
+  if (status === "PENDING_ROLE") {
+    return <Navigate to="/select-role" replace />;
+>>>>>>> origin/fe/minh
   }
 
   if (ACCOUNT_BLOCKED_STATUSES.has(accountStatus)) {
@@ -139,12 +149,29 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to={ROUTES.ADMIN_DASHBOARD} replace />;
   }
 
+<<<<<<< HEAD
   const normalizedRoles = Array.isArray(allowedRoles)
     ? allowedRoles.map(normalizeStatus).filter(Boolean)
     : [];
 
   if (normalizedRoles.length > 0 && !normalizedRoles.includes(role)) {
     return <Navigate to={ROUTES.UNAUTHORIZED} replace />;
+=======
+  if (normalizedRoles?.length && !normalizedRoles.includes(role)) {
+    if (role === "CLIENT") {
+      return <Navigate to="/client/dashboard" replace />;
+    }
+
+    if (role === "EXPERT") {
+      return <Navigate to="/expert/dashboard" replace />;
+    }
+
+    if (role === "ADMIN") {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+
+    return <Navigate to="/" replace />;
+>>>>>>> origin/fe/minh
   }
 
   return children;

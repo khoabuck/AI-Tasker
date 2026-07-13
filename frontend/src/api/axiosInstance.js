@@ -1,15 +1,23 @@
 import axios from "axios";
 
-const cleanUrl = (url) => String(url || "").trim().replace(/\/+$/, "");
-
 const getApiBaseUrl = () => {
-  const apiBaseUrl = cleanUrl(import.meta.env.VITE_API_BASE_URL);
+  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
 
-  if (!apiBaseUrl) {
-    throw new Error("Missing VITE_API_BASE_URL");
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/+$/, "");
   }
 
-  return apiBaseUrl;
+  const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
+
+  if (backendBaseUrl) {
+    return `${backendBaseUrl.replace(/\/+$/, "")}/api`;
+  }
+
+  if (import.meta.env.DEV) {
+    return "http://localhost:5070/api";
+  }
+
+  return "";
 };
 
 const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";
@@ -64,14 +72,12 @@ const isFormDataRequest = (data) => {
 const removeContentTypeHeader = (headers) => {
   if (!headers) return;
 
-  // AxiosHeaders in Axios 1.x
   if (typeof headers.delete === "function") {
     headers.delete("Content-Type");
     headers.delete("content-type");
     return;
   }
 
-  // Plain object fallback
   delete headers["Content-Type"];
   delete headers["content-type"];
 };
@@ -87,12 +93,8 @@ const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     /*
-     * Never force application/json for FormData.
-     * The browser must generate:
-     * multipart/form-data; boundary=----WebKitFormBoundary...
-     *
-     * Setting multipart/form-data manually without the boundary can also cause
-     * ASP.NET Core to return HTTP 415.
+     * Không ép application/json cho FormData.
+     * Trình duyệt phải tự tạo multipart boundary.
      */
     if (isFormDataRequest(config.data)) {
       removeContentTypeHeader(config.headers);

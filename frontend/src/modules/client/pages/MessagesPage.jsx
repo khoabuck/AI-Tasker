@@ -25,15 +25,20 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function formatMessageTime(dateStr) {
-  if (!dateStr) return "";
+function formatMessageTime(value) {
+  if (!value) return "";
 
-  const date = new Date(dateStr);
+  const date = value instanceof Date ? value : new Date(value);
 
-  return date.toLocaleTimeString("en-US", {
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toLocaleTimeString("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
     hour12: false,
+    timeZone: "Asia/Ho_Chi_Minh",
   });
 }
 
@@ -211,8 +216,7 @@ export default function MessagesPage() {
   const fetchConversations = useCallback(async () => {
     try {
       const res = await axiosInstance.get("/conversations/me");
-      console.log("CURRENT USER", currentUser);
-      console.log("CONVERSATIONS RESPONSE", res.data);
+      
       const raw = res.data?.data ?? res.data;
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
@@ -321,7 +325,7 @@ export default function MessagesPage() {
           : (m.isMine ?? m.senderType === "CLIENT" ?? false);
 
       return {
-        id: m.messageId ?? m.id,
+        id: m.conversationMessageId ?? m.messageId ?? m.id,
         text: m.content,
         isMe,
         time: formatMessageTime(m.createdAt),

@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// src/modules/auth/pages/SelectRolePage.jsx
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
@@ -35,18 +36,36 @@ const ROLES = [
 
 export default function SelectRolePage() {
   const navigate = useNavigate();
-  const { user, refreshUser, handleLoginSuccess } = useAuth();
+  const { user, handleLoginSuccess, refreshUser } = useAuth();
 
   const [selected, setSelected] = useState(null);
+  const [lockedRole, setLockedRole] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const currentUser = user || getStoredUser();
+    if (!user) return;
 
-    if (!currentUser) return;
+    const role = String(user?.role || "").trim().toUpperCase();
+    const status = String(user?.status || "").trim().toUpperCase();
 
-    redirectUserByStatus(currentUser, navigate);
+    if (status === "PENDING_ROLE" || !role) {
+      setLockedRole(null);
+      return;
+    }
+
+    if (status === "PENDING_PROFILE") {
+      setSelected(role);
+      setLockedRole(role);
+      return;
+    }
+
+    if (status === "ACTIVE") {
+      if (role === "CLIENT") navigate("/client/dashboard", { replace: true });
+      else if (role === "EXPERT") navigate("/expert/dashboard", { replace: true });
+      else if (role === "ADMIN") navigate("/admin/dashboard", { replace: true });
+      else navigate("/", { replace: true });
+    }
   }, [navigate, user]);
 
   const redirectAfterRoleSelected = (role) => {
@@ -64,11 +83,64 @@ export default function SelectRolePage() {
       return;
     }
 
-    navigate("/select-role", { replace: true });
+    navigate("/setup-profile", { replace: true });
   };
+
+  const redirectExistingUser = async () => {
+  let latestUser = user;
+
+  try {
+    const refreshedUser = await refreshUser();
+    if (refreshedUser) latestUser = refreshedUser;
+  } catch {
+    // Nếu refresh lỗi thì dùng user hiện tại trong context.
+  }
+
+  const role = String(latestUser?.role || "").trim().toUpperCase();
+  const status = String(latestUser?.status || "").trim().toUpperCase();
+
+  if (status === "ACTIVE") {
+    if (role === "CLIENT") {
+      navigate("/client/dashboard", { replace: true });
+      return;
+    }
+
+    if (role === "EXPERT") {
+      navigate("/expert/dashboard", { replace: true });
+      return;
+    }
+
+    if (role === "ADMIN") {
+      navigate("/admin/dashboard", { replace: true });
+      return;
+    }
+
+    navigate("/", { replace: true });
+    return;
+  }
+
+  if (status === "PENDING_PROFILE") {
+    if (role === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
+      return;
+    }
+
+    navigate("/setup-profile", { replace: true });
+    return;
+  }
+
+  navigate("/setup-profile", { replace: true });
+};
 
   const handleConfirm = async () => {
     if (!selected || loading) return;
+
+    // Nếu role đã được chọn trước đó rồi thì không gọi API select-role nữa.
+    // Chỉ cho user tiếp tục về đúng trang setup profile.
+    if (lockedRole) {
+      redirectAfterRoleSelected(lockedRole);
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -81,31 +153,28 @@ export default function SelectRolePage() {
       const responseUser = extractUserFromResponse(selectResponse);
       let freshUser = null;
 
-      try {
-        freshUser = await refreshUser();
-      } catch {
-        freshUser = null;
-      }
+      const userFromResponse =
+        responseData.user ||
+        responseData.User ||
+        responseData.data?.user ||
+        responseData.data?.User ||
+        responseData.data ||
+        responseData;
 
-      const nextUser =
-        freshUser ||
-        normalizeUser(
-          {
-            ...getStoredUser(),
-            ...responseUser,
-            role: selected,
-            status:
-              responseUser?.status ||
-              responseUser?.Status ||
-              "PENDING_PROFILE",
-          },
-          selected
-        );
+      const selectedUser = authService.normalizeUser({
+        ...(user || {}),
+        ...userFromResponse,
+        role: selected,
+        status:
+          userFromResponse?.status ||
+          userFromResponse?.Status ||
+          "PENDING_PROFILE",
+      });
 
-      if (!nextUser) {
-        throw new Error(
-          "Role was selected, but user information could not be loaded."
-        );
+      if (handleLoginSuccess) {
+        handleLoginSuccess({
+          user: selectedUser,
+        });
       }
 
       handleLoginSuccess({
@@ -130,25 +199,9 @@ export default function SelectRolePage() {
         err?.message ||
         "An error occurred during role selection.";
 
-      if (
-        String(message).toLowerCase().includes(
-          "user is not in pending role status"
-        )
-      ) {
-        try {
-          const freshUser = await refreshUser();
-
-          if (freshUser) {
-            handleLoginSuccess({
-              user: freshUser,
-            });
-
-            redirectUserByStatus(freshUser, navigate);
-            return;
-          }
-        } catch {
-          // Hiển thị lỗi gốc nếu không thể refresh user.
-        }
+      if (message === "User is not in pending role status.") {
+        await redirectExistingUser();
+        return;
       }
 
       setError(message);
@@ -242,6 +295,7 @@ export default function SelectRolePage() {
           >
             {ROLES.map((role) => {
               const isSelected = selected === role.key;
+              const isLockedOtherRole = lockedRole && role.key !== lockedRole;
 
               return (
                 <button
@@ -249,6 +303,13 @@ export default function SelectRolePage() {
                   type="button"
                   disabled={loading}
                   onClick={() => {
+                    if (loading) return;
+
+                    if (isLockedOtherRole) {
+                      setError("You already selected a role. Please continue with your current role.");
+                      return;
+                    }
+
                     setSelected(role.key);
                     setError("");
                   }}
@@ -266,7 +327,8 @@ export default function SelectRolePage() {
                     }`,
                     borderRadius: 16,
                     padding: 32,
-                    cursor: loading ? "not-allowed" : "pointer",
+                    cursor: loading || isLockedOtherRole ? "not-allowed" : "pointer",
+                    opacity: isLockedOtherRole ? 0.45 : 1,
                     transition: "all 0.2s",
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`

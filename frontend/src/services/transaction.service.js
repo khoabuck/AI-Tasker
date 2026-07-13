@@ -31,24 +31,60 @@ export const transactionService = {
 
     return [...list].sort((a, b) =>
       compareDateDesc(
-        a?.updatedAt || a?.processedAt || a?.paidAt || a?.createdAt,
-        b?.updatedAt || b?.processedAt || b?.paidAt || b?.createdAt
+        a?.updatedAt ||
+          a?.processedAt ||
+          a?.paidAt ||
+          a?.createdAt,
+
+        b?.updatedAt ||
+          b?.processedAt ||
+          b?.paidAt ||
+          b?.createdAt
       )
     );
   },
 
   async getTransactionById(id, signal) {
-    if (id === undefined || id === null || id === "") {
+    if (
+      id === undefined ||
+      id === null ||
+      id === ""
+    ) {
       throw new Error("Transaction id is required.");
     }
 
-    const list = await this.getMyTransactions({ signal });
+    const list = await this.getMyTransactions({
+      signal,
+    });
 
     return (
       list.find(
         (transaction) =>
-          String(getTransactionId(transaction)) === String(id)
+          String(getTransactionId(transaction)) ===
+          String(id)
       ) || null
     );
+  },
+
+  async getProjectMilestones(projectId, signal) {
+    if (
+      projectId === undefined ||
+      projectId === null ||
+      projectId === ""
+    ) {
+      throw new Error("Project id is required.");
+    }
+
+    const response =
+      await transactionApi.getProjectMilestones(
+        projectId,
+        {
+          signal,
+        }
+      );
+
+    const raw = unwrap(response);
+
+    return normalizeList(raw);
   },
 };

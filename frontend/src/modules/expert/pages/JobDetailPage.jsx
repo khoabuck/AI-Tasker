@@ -626,7 +626,7 @@ function BackButton({ onClick }) {
       className="mb-4 inline-flex items-center gap-2 text-sm font-bold text-gray-400 transition hover:text-cyan-300"
     >
       <span className="material-symbols-outlined text-[18px]">arrow_back</span>
-      Back to jobs
+      Back 
     </button>
   );
 }

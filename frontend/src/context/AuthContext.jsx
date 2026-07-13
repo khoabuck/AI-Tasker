@@ -1,10 +1,24 @@
-import { createContext, useContext, useEffect, useRef, useState } from "react";
-import { getMeApi, logoutApi } from "../api/auth.api";
-import { saveAuth, clearAuth, getUserFromStorage } from "../utils/auth.utils";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { getMeApi } from "../api/auth.api";
 import {
   ACCOUNT_BLOCKED_EVENT,
   AUTH_ERROR_EVENT,
 } from "../api/axiosInstance";
+
+import authService from "../services/auth.service";
+
+import {
+  clearAuth,
+  saveAuth,
+} from "../utils/auth.utils";
+
 import { formatDateTime } from "../utils/dateTime.utils";
 
 const AuthContext = createContext(null);
@@ -35,12 +49,53 @@ const BLOCKED_STATUSES = [
   "BLOCKED",
 ];
 
+let restoreSessionPromise = null;
+
+const getRestoreSessionPromise = () => {
+  if (!restoreSessionPromise) {
+    restoreSessionPromise = getMeApi().finally(() => {
+      restoreSessionPromise = null;
+    });
+  }
+
+  return restoreSessionPromise;
+};
+
 function isPublicAuthPage() {
   if (typeof window === "undefined") return false;
 
-  const pathname = window.location.pathname;
+  return PUBLIC_AUTH_PATHS.includes(window.location.pathname);
+}
 
-  return PUBLIC_AUTH_PATHS.includes(pathname);
+function extractUser(response) {
+  const data = response?.data ?? response;
+
+  return (
+    data?.data?.user ||
+    data?.data?.User ||
+    data?.data ||
+    data?.user ||
+    data?.User ||
+    data
+  );
+}
+
+function isValidUser(user) {
+  const userId = Number(
+    user?.userId ??
+      user?.UserId ??
+      user?.id ??
+      user?.Id ??
+      0
+  );
+
+  const email = String(
+    user?.email ??
+      user?.Email ??
+      ""
+  ).trim();
+
+  return userId > 0 && Boolean(email);
 }
 
 function getUserStatus(user) {
@@ -122,7 +177,8 @@ function getBlockedStatusPayload(user) {
 function getSessionExpiredPayload() {
   return {
     title: "Session expired",
-    description: "Your session is no longer valid. Please login again.",
+    description:
+      "Your session is no longer valid. Please login again.",
     reason: "",
     until: "",
   };
@@ -293,20 +349,18 @@ function dispatchSessionExpiredEvent() {
   dispatchAccountEvent(getSessionExpiredPayload());
 }
 
-function unwrapMeResponse(response) {
-  return (
-    response?.data?.data?.user ||
-    response?.data?.user ||
-    response?.data?.data ||
-    response?.data ||
-    response
-  );
-}
-
 function clearLocalDrafts() {
-  localStorage.removeItem("aitasker_expert_profile_setup_draft");
-  localStorage.removeItem("aitasker_expert_profile_edit_draft");
-  localStorage.removeItem("aitasker_expert_profile_correction_draft");
+  localStorage.removeItem(
+    "aitasker_expert_profile_setup_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_edit_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_correction_draft"
+  );
 }
 
 export function AuthProvider({ children }) {
@@ -330,6 +384,7 @@ export function AuthProvider({ children }) {
 
   const clearCurrentSession = () => {
     clearAuth();
+
     setUser(null);
     userRef.current = null;
   };
@@ -370,6 +425,7 @@ export function AuthProvider({ children }) {
     }
 
     clearCurrentSession();
+
     return true;
   };
 
@@ -378,11 +434,19 @@ export function AuthProvider({ children }) {
 
     checkingAuthErrorRef.current = true;
 
-    const hadKnownUser = Boolean(userRef.current || getUserFromStorage());
+    const storedUser = authService.getCurrentUser();
+    const hadKnownUser = Boolean(
+      userRef.current || isValidUser(storedUser)
+    );
 
     try {
-      const response = await getMeApi();
-      const freshUser = unwrapMeResponse(response);
+      const response = await getRestoreSessionPromise();
+      const freshUser = extractUser(response);
+
+      if (!isValidUser(freshUser)) {
+        clearCurrentSession();
+        return;
+      }
 
       if (isBlockedUserStatus(freshUser)) {
         dispatchBlockedEvent(freshUser);
@@ -390,9 +454,10 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      saveAuth({ user: freshUser });
+
       setUser(freshUser);
       userRef.current = freshUser;
-      saveAuth({ user: freshUser });
     } catch (error) {
       processAuthError(error, {
         hadKnownUser,
@@ -405,61 +470,121 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const restore = async () => {
-      const storedUser = getUserFromStorage();
+      const storedUser = authService.getCurrentUser();
+
+      /*
+       * Không có user cache hợp lệ thì không gọi /auth/me.
+       * Việc này tránh request 401 không cần thiết ở trang login.
+       */
+      if (!isValidUser(storedUser)) {
+        clearAuth();
+
+        if (isMounted) {
+          setUser(null);
+          setLoading(false);
+        }
+
+        return;
+      }
 
       const storedStatus = getUserStatus(storedUser);
+
       const isIncompleteOnboarding = [
         "PENDING_ROLE",
         "PENDING_EMAIL_VERIFICATION",
       ].includes(storedStatus);
 
-      if (isIncompleteOnboarding && storedUser) {
-        setUser(storedUser);
-        userRef.current = storedUser;
-        setLoading(false);
+      /*
+       * Các tài khoản đang trong onboarding chưa chắc đã có
+       * cookie đăng nhập hoàn chỉnh, nên giữ user cache hiện tại.
+       */
+      if (isIncompleteOnboarding) {
+        if (isMounted) {
+          setUser(storedUser);
+          userRef.current = storedUser;
+          setLoading(false);
+        }
+
         return;
       }
 
       try {
-        const response = await getMeApi();
-        const freshUser = unwrapMeResponse(response);
+        const response = await getRestoreSessionPromise();
+        const freshUser = extractUser(response);
 
-        if (isBlockedUserStatus(freshUser)) {
-          dispatchBlockedEvent(freshUser);
-          clearCurrentSession();
+        if (!isValidUser(freshUser)) {
+          clearAuth();
+
+          if (isMounted) {
+            setUser(null);
+            userRef.current = null;
+          }
+
           return;
         }
 
-        setUser(freshUser);
-        userRef.current = freshUser;
+        if (isBlockedUserStatus(freshUser)) {
+          dispatchBlockedEvent(freshUser);
+          clearAuth();
+
+          if (isMounted) {
+            setUser(null);
+            userRef.current = null;
+          }
+
+          return;
+        }
+
         saveAuth({ user: freshUser });
+
+        if (isMounted) {
+          setUser(freshUser);
+          userRef.current = freshUser;
+        }
       } catch (error) {
         const status = error?.response?.status;
 
         if (status === 401 || status === 403) {
           processAuthError(error, {
-            hadKnownUser: Boolean(storedUser),
-            allowSessionPopup: Boolean(storedUser) && !isPublicAuthPage(),
-            allowRestrictedPopup: Boolean(storedUser),
+            hadKnownUser: true,
+            allowSessionPopup: !isPublicAuthPage(),
+            allowRestrictedPopup: true,
           });
-        } else if (storedUser) {
-          setUser(storedUser);
-          userRef.current = storedUser;
+        } else {
+          /*
+           * Nếu backend tạm thời lỗi nhưng vẫn có cache hợp lệ,
+           * giữ user để tránh logout sai do lỗi mạng ngắn hạn.
+           */
+          if (isMounted) {
+            setUser(storedUser);
+            userRef.current = storedUser;
+          }
         }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
 
     restore();
+
+    return () => {
+      isMounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const handleAccountBlocked = (event) => {
       setBlockedModal({
         open: true,
-        title: event?.detail?.title || "Account Restricted",
+        title:
+          event?.detail?.title ||
+          "Account Restricted",
         message:
           event?.detail?.description ||
           event?.detail?.message ||
@@ -473,24 +598,44 @@ export function AuthProvider({ children }) {
       verifyAuthErrorWithMe();
     };
 
-    window.addEventListener(ACCOUNT_BLOCKED_EVENT, handleAccountBlocked);
-    window.addEventListener(AUTH_ERROR_EVENT, handleAuthError);
+    window.addEventListener(
+      ACCOUNT_BLOCKED_EVENT,
+      handleAccountBlocked
+    );
+
+    window.addEventListener(
+      AUTH_ERROR_EVENT,
+      handleAuthError
+    );
 
     return () => {
-      window.removeEventListener(ACCOUNT_BLOCKED_EVENT, handleAccountBlocked);
-      window.removeEventListener(AUTH_ERROR_EVENT, handleAuthError);
+      window.removeEventListener(
+        ACCOUNT_BLOCKED_EVENT,
+        handleAccountBlocked
+      );
+
+      window.removeEventListener(
+        AUTH_ERROR_EVENT,
+        handleAuthError
+      );
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) return undefined;
 
     const intervalId = window.setInterval(async () => {
       const hadKnownUser = Boolean(userRef.current);
 
       try {
-        const response = await getMeApi();
-        const freshUser = unwrapMeResponse(response);
+        const response = await getRestoreSessionPromise();
+        const freshUser = extractUser(response);
+
+        if (!isValidUser(freshUser)) {
+          clearCurrentSession();
+          return;
+        }
 
         if (isBlockedUserStatus(freshUser)) {
           dispatchBlockedEvent(freshUser);
@@ -498,9 +643,10 @@ export function AuthProvider({ children }) {
           return;
         }
 
+        saveAuth({ user: freshUser });
+
         setUser(freshUser);
         userRef.current = freshUser;
-        saveAuth({ user: freshUser });
       } catch (error) {
         processAuthError(error, {
           hadKnownUser,
@@ -513,14 +659,19 @@ export function AuthProvider({ children }) {
     return () => {
       window.clearInterval(intervalId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const handleLoginSuccess = (authData) => {
-    const nextUser = authData?.user || null;
+    const nextUser = extractUser(authData?.user || authData);
 
-    if (!nextUser) return;
+    if (!isValidUser(nextUser)) {
+      clearCurrentSession();
+      return;
+    }
 
     saveAuth({ user: nextUser });
+
     setUser(nextUser);
     userRef.current = nextUser;
 
@@ -534,11 +685,20 @@ export function AuthProvider({ children }) {
   };
 
   const refreshUser = async () => {
-    const hadKnownUser = Boolean(userRef.current || getUserFromStorage());
+    const storedUser = authService.getCurrentUser();
+
+    const hadKnownUser = Boolean(
+      userRef.current || isValidUser(storedUser)
+    );
 
     try {
-      const response = await getMeApi();
-      const freshUser = unwrapMeResponse(response);
+      const response = await getRestoreSessionPromise();
+      const freshUser = extractUser(response);
+
+      if (!isValidUser(freshUser)) {
+        clearCurrentSession();
+        return null;
+      }
 
       if (isBlockedUserStatus(freshUser)) {
         dispatchBlockedEvent(freshUser);
@@ -546,27 +706,37 @@ export function AuthProvider({ children }) {
         return null;
       }
 
+      saveAuth({ user: freshUser });
+
       setUser(freshUser);
       userRef.current = freshUser;
-      saveAuth({ user: freshUser });
 
       return freshUser;
     } catch (error) {
-      processAuthError(error, {
-        hadKnownUser,
-        allowSessionPopup: hadKnownUser && !isPublicAuthPage(),
-        allowRestrictedPopup: hadKnownUser,
-      });
+      const status = error?.response?.status;
 
-      return null;
+      if (status === 401 || status === 403) {
+        processAuthError(error, {
+          hadKnownUser,
+          allowSessionPopup:
+            hadKnownUser && !isPublicAuthPage(),
+          allowRestrictedPopup: hadKnownUser,
+        });
+
+        return null;
+      }
+
+      throw error;
     }
   };
 
   const handleLogout = async () => {
     try {
-      await logoutApi();
+      await authService.logout();
     } catch {
-      // Vẫn clear FE nếu API logout lỗi.
+      /*
+       * Vẫn xóa session frontend nếu API logout lỗi.
+       */
     }
 
     clearCurrentSession();
@@ -583,9 +753,11 @@ export function AuthProvider({ children }) {
 
   const handleBlockedModalOk = async () => {
     try {
-      await logoutApi();
+      await authService.logout();
     } catch {
-      // Vẫn clear FE nếu API logout lỗi.
+      /*
+       * Vẫn xóa session frontend nếu API logout lỗi.
+       */
     }
 
     clearCurrentSession();
@@ -632,18 +804,32 @@ export function useAuth() {
   const context = useContext(AuthContext);
 
   if (!context) {
-    throw new Error("useAuth phải dùng bên trong AuthProvider");
+    throw new Error(
+      "useAuth must be used inside AuthProvider"
+    );
   }
 
   return context;
 }
 
-function AccountBlockedModal({ title, message, reason, until, onOk }) {
-  const normalizedTitle = String(title || "").toLowerCase();
+function AccountBlockedModal({
+  title,
+  message,
+  reason,
+  until,
+  onOk,
+}) {
+  const normalizedTitle = String(
+    title || ""
+  ).toLowerCase();
 
-  const isSessionExpired = normalizedTitle.includes("session");
+  const isSessionExpired =
+    normalizedTitle.includes("session");
+
   const isBanned =
-    normalizedTitle.includes("banned") || normalizedTitle.includes("ban");
+    normalizedTitle.includes("banned") ||
+    normalizedTitle.includes("ban");
+
   const isLocked =
     normalizedTitle.includes("locked") ||
     normalizedTitle.includes("temporarily");
@@ -666,11 +852,13 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-2xl">
         <div
           className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl border ${toneClass}`}
         >
-          <span className="material-symbols-outlined text-3xl">{icon}</span>
+          <span className="material-symbols-outlined text-3xl">
+            {icon}
+          </span>
         </div>
 
         <h2 className="text-center text-2xl font-black text-white">
@@ -689,7 +877,10 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
               Reason
             </p>
-            <p className="mt-2 text-sm leading-6 text-gray-200">{reason}</p>
+
+            <p className="mt-2 text-sm leading-6 text-gray-200">
+              {reason}
+            </p>
           </div>
         )}
 
@@ -698,6 +889,7 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
             <p className="text-xs font-bold uppercase tracking-wider text-yellow-300">
               Locked Until
             </p>
+
             <p className="mt-2 text-sm font-semibold text-yellow-100">
               {formatDateTime(until, String(until))}
             </p>
@@ -719,4 +911,3 @@ function AccountBlockedModal({ title, message, reason, until, onOk }) {
     </div>
   );
 }
-

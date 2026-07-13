@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import GuestRoute from "./GuestRoute";
 import ProtectedRoute from "./ProtectedRoute";
-import authService from "../../services/auth.service";
 
 // Auth pages
 import LoginPage from "../../modules/auth/pages/LoginPage";
@@ -26,7 +25,7 @@ import DisputePolicyPage from "../../modules/legal/pages/DisputePolicyPage";
 // Client pages
 import ClientDashboard from "../../modules/client/pages/ClientDashboard";
 import PostJobPage from "../../modules/client/pages/PostJobPage";
-import ProjectsPage from "../../modules/client/pages/ProjectsPage";
+import ProjectsPage from "../../modules/client/pages/ProjectPage";
 import ClientProfilePage from "../../modules/client/pages/ClientProfilePage";
 import EditProfilePage from "../../modules/client/pages/EditProfilePage";
 import ExpertSearchPage from "../../modules/client/pages/ExpertSearchPage";
@@ -120,7 +119,7 @@ const RequireAuth = ({ children }) => {
     );
   }
 
-  if (!user && !authService.isAuthenticated()) {
+  if (!user) {
     return <Navigate to="/login" replace />;
   }
 

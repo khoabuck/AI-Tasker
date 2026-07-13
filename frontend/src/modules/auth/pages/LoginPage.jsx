@@ -4,6 +4,63 @@ import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
 import { clearAuth } from "../../../utils/auth.utils";
 
+const formatCountdown = (totalSeconds) => {
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0"
+  )}`;
+};
+
+const calculateRemainingSeconds = (
+  blockedUntilUtc,
+  fallbackSeconds = 0
+) => {
+  if (blockedUntilUtc) {
+    const blockedUntilTime = new Date(blockedUntilUtc).getTime();
+
+    if (!Number.isNaN(blockedUntilTime)) {
+      return Math.max(
+        0,
+        Math.ceil((blockedUntilTime - Date.now()) / 1000)
+      );
+    }
+  }
+
+  return Math.max(0, Number(fallbackSeconds || 0));
+};
+
+const LOGIN_BLOCK_STORAGE_KEY = "aitasker_login_block";
+
+const resolveBlockedUntilUtc = (
+  blockedUntilUtc,
+  retryAfterSeconds = 0
+) => {
+  if (blockedUntilUtc) {
+    const blockedUntilTime = new Date(blockedUntilUtc).getTime();
+
+    if (!Number.isNaN(blockedUntilTime)) {
+      return new Date(blockedUntilTime).toISOString();
+    }
+  }
+
+  const safeRetryAfterSeconds = Number(retryAfterSeconds || 0);
+
+  if (
+    Number.isFinite(safeRetryAfterSeconds) &&
+    safeRetryAfterSeconds > 0
+  ) {
+    return new Date(
+      Date.now() + safeRetryAfterSeconds * 1000
+    ).toISOString();
+  }
+
+  return null;
+};
+
 export default function LoginPage() {
   const navigate = useNavigate();
   const { handleLoginSuccess } = useAuth();
@@ -11,91 +68,92 @@ export default function LoginPage() {
   const [form, setForm] = useState({
     email: "",
     password: "",
-    remember: false,
   });
 
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [focusField, setFocusField] = useState("");
-  const [rememberedLogins, setRememberedLogins] = useState([]);
-  const [showSavedAccounts, setShowSavedAccounts] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [blockedUntilUtc, setBlockedUntilUtc] = useState(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [showBlockPopup, setShowBlockPopup] = useState(false);
 
   useEffect(() => {
-    const savedLogins = localStorage.getItem("rememberLogins");
+  try {
+    const storedBlock = sessionStorage.getItem(
+      LOGIN_BLOCK_STORAGE_KEY
+    );
 
-    if (!savedLogins) return;
-
-    try {
-      const parsed = JSON.parse(savedLogins);
-      setRememberedLogins(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      localStorage.removeItem("rememberLogins");
+    if (!storedBlock) {
+      return;
     }
-  }, []);
 
-  const clearAuthSession = () => {
-    clearAuth();
-  };
+    const parsedBlock = JSON.parse(storedBlock);
+    const storedBlockedUntilUtc =
+      parsedBlock?.blockedUntilUtc || null;
+
+    const restoredRemainingSeconds =
+      calculateRemainingSeconds(storedBlockedUntilUtc);
+
+    if (restoredRemainingSeconds <= 0) {
+      sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+      return;
+    }
+
+    setBlockedUntilUtc(storedBlockedUntilUtc);
+    setRemainingSeconds(restoredRemainingSeconds);
+    setShowBlockPopup(true);
+  } catch {
+    sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+  }
+}, []);
+
+  useEffect(() => {
+  if (!showBlockPopup || remainingSeconds <= 0) {
+    return undefined;
+  }
+
+  const timerId = window.setTimeout(() => {
+    const nextRemainingSeconds = blockedUntilUtc
+      ? calculateRemainingSeconds(blockedUntilUtc)
+      : Math.max(0, remainingSeconds - 1);
+
+    if (nextRemainingSeconds <= 0) {
+      sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+
+      setRemainingSeconds(0);
+      setBlockedUntilUtc(null);
+      setShowBlockPopup(false);
+      return;
+    }
+
+    setRemainingSeconds(nextRemainingSeconds);
+  }, 1000);
+
+  return () => window.clearTimeout(timerId);
+}, [
+  showBlockPopup,
+  blockedUntilUtc,
+  remainingSeconds,
+]);
 
   const handleChange = (event) => {
-    const { name, value, type, checked } = event.target;
+    const { name, value } = event.target;
 
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]: value,
     }));
 
-    setError("");
-  };
-
-  const selectSavedAccount = (account) => {
-    setForm((prev) => ({
-      ...prev,
-      email: account.email || "",
-      password: "",
-      remember: true,
-    }));
-
-    setShowSavedAccounts(false);
-    setError("");
-  };
-
-  const saveRememberedLogin = () => {
-    const email = form.email.trim();
-
-    if (!form.remember || !email) return;
-
-    const existingRaw = localStorage.getItem("rememberLogins");
-    let existing = [];
-
-    try {
-      existing = existingRaw ? JSON.parse(existingRaw) : [];
-
-      if (!Array.isArray(existing)) {
-        existing = [];
-      }
-    } catch {
-      existing = [];
+    if (remainingSeconds <= 0) {
+      setError("");
     }
-
-    const next = [
-      { email },
-      ...existing.filter((item) => item.email !== email),
-    ];
-
-    localStorage.setItem("rememberLogins", JSON.stringify(next));
-    setRememberedLogins(next);
   };
+
 
   const goNextByRoleAndStatus = ({ role, status, email }) => {
-    const normalizedRole = String(role || "")
-      .trim()
-      .toUpperCase();
-
-    const normalizedStatus = String(status || "")
-      .trim()
-      .toUpperCase();
+    const normalizedRole = String(role || "").toUpperCase();
+    const normalizedStatus = String(status || "").toUpperCase();
 
     if (normalizedStatus === "PENDING_EMAIL_VERIFICATION") {
       navigate("/verify-email-notice", {
@@ -164,58 +222,99 @@ export default function LoginPage() {
       return;
     }
 
-    setError("Unable to determine the next page for this account.");
+    navigate("/select-role", {
+      replace: true,
+      state: { email },
+    });
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+  event.preventDefault();
 
-    if (loading) return;
+  if (loading || remainingSeconds > 0) {
+    return;
+  }
 
-    setLoading(true);
-    setError("");
+  setLoading(true);
+  setError("");
 
-    try {
-      const result = await authService.login({
-        email: form.email.trim(),
-        password: form.password,
-      });
+  try {
+    const email = form.email.trim();
 
-      if (!result?.success || !result?.user) {
-        setError(result?.message || "Login failed.");
-        return;
-      }
+    const result = await authService.login({
+      email,
+      password: form.password,
+    });
 
-      if (form.remember) {
-        saveRememberedLogin();
-      }
+    if (!result.success) {
+      if (result.code === "LOGIN_TEMPORARILY_BLOCKED") {
+  const resolvedBlockedUntilUtc = resolveBlockedUntilUtc(
+    result.blockedUntilUtc,
+    result.retryAfterSeconds
+  );
 
-      const finalUser = {
-        ...result.user,
-        role: result.user.role || result.role || "",
-        status: result.user.status || result.status || "",
-      };
+  const nextRemainingSeconds = calculateRemainingSeconds(
+    resolvedBlockedUntilUtc,
+    result.retryAfterSeconds
+  );
 
-      handleLoginSuccess({
-        user: finalUser,
-      });
+  if (
+    resolvedBlockedUntilUtc &&
+    nextRemainingSeconds > 0
+  ) {
+    sessionStorage.setItem(
+      LOGIN_BLOCK_STORAGE_KEY,
+      JSON.stringify({
+        blockedUntilUtc: resolvedBlockedUntilUtc,
+      })
+    );
+  }
 
-      goNextByRoleAndStatus({
-        role: finalUser.role,
-        status: finalUser.status,
-        email: form.email.trim(),
-      });
-    } catch (err) {
-      setError(
-        err?.response?.data?.message ||
-          err?.response?.data?.title ||
-          err?.message ||
-          "An error occurred. Please try again."
-      );
-    } finally {
-      setLoading(false);
+  setBlockedUntilUtc(resolvedBlockedUntilUtc);
+  setRemainingSeconds(nextRemainingSeconds);
+  setShowBlockPopup(nextRemainingSeconds > 0);
+  setError("");
+  return;
+}
+
+      setError(result.message || "Login failed.");
+      return;
     }
-  };
+    sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+    setBlockedUntilUtc(null);
+    setRemainingSeconds(0);
+    setShowBlockPopup(false);
+
+    const finalUser = result.user;
+
+    if (!finalUser) {
+      setError("Login response does not contain user information.");
+      return;
+    }
+
+    const finalRole = finalUser.role || result.role;
+    const finalStatus = finalUser.status || result.status;
+
+    handleLoginSuccess({
+      user: {
+        ...finalUser,
+        role: finalRole,
+        status: finalStatus,
+      },
+      expiresAt: result.expiresAt || null,
+    });
+
+    goNextByRoleAndStatus({
+      role: finalRole,
+      status: finalStatus,
+      email,
+    });
+  } catch {
+    setError("An error occurred. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGoogleLogin = () => {
     const backendUrl = String(
@@ -235,6 +334,20 @@ export default function LoginPage() {
       className="min-h-screen bg-surface-dark text-on-surface selection:bg-neon-cyan/30"
       style={{ fontFamily: "Inter, sans-serif" }}
     >
+      <style>{`
+      input:-webkit-autofill,
+      input:-webkit-autofill:hover,
+      input:-webkit-autofill:focus,
+      input:-webkit-autofill:active {
+        -webkit-box-shadow: 0 0 0 1000px #191c22 inset !important;
+        box-shadow: 0 0 0 1000px #191c22 inset !important;
+        -webkit-text-fill-color: #e1e2eb !important;
+        caret-color: #e1e2eb !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        transition: background-color 9999s ease-in-out 0s;
+      }
+    `}</style>
+
       <header className="fixed top-0 z-50 w-full border-b border-glass-border bg-surface-dark/80 backdrop-blur-md">
         <nav className="mx-auto flex h-20 max-w-[1280px] items-center justify-between px-12">
           <Link
@@ -288,7 +401,7 @@ export default function LoginPage() {
             </div>
           </header>
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} autoComplete="on" className="space-y-6">
             <div className="space-y-2">
               <label
                 className="block text-xs uppercase tracking-widest text-on-surface-variant"
@@ -315,7 +428,10 @@ export default function LoginPage() {
                 <input
                   type="email"
                   name="email"
-                  autoComplete="email"
+                  spellCheck={false}
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  autoComplete="username"
                   value={form.email}
                   onChange={handleChange}
                   required
@@ -334,40 +450,10 @@ export default function LoginPage() {
                   }}
                   onFocus={() => {
                     setFocusField("email");
-                    setShowSavedAccounts(true);
                   }}
-                  onBlur={() => {
-                    setFocusField("");
-                    setTimeout(() => setShowSavedAccounts(false), 150);
-                  }}
+                  onBlur={() => setFocusField("")}
                 />
 
-                {showSavedAccounts && rememberedLogins.length > 0 && (
-                  <div className="absolute left-0 right-0 top-[52px] z-50 overflow-hidden rounded-xl border border-white/10 bg-[#191c22] shadow-2xl">
-                    {rememberedLogins.map((account) => (
-                      <button
-                        key={account.email}
-                        type="button"
-                        onMouseDown={(event) => {
-                          event.preventDefault();
-                          selectSavedAccount(account);
-                        }}
-                        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.06]"
-                      >
-                        <span className="material-symbols-outlined text-lg text-cyan-300">
-                          account_circle
-                        </span>
-
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium text-white">
-                            {account.email}
-                          </p>
-                          <p className="text-xs text-gray-400">Saved email</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
               </div>
             </div>
 
@@ -419,6 +505,8 @@ export default function LoginPage() {
                         : "rgba(255,255,255,0.12)"
                     }`,
                     color: "#e1e2eb",
+                    WebkitBoxShadow: "0 0 0 1000px #191c22 inset",
+                    WebkitTextFillColor: "#e1e2eb",
                   }}
                   onFocus={() => setFocusField("password")}
                   onBlur={() => setFocusField("")}
@@ -457,24 +545,7 @@ export default function LoginPage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                name="remember"
-                id="remember"
-                checked={form.remember}
-                onChange={handleChange}
-                className="h-4 w-4 rounded"
-                style={{ accentColor: "#00F0FF" }}
-              />
-
-              <label
-                htmlFor="remember"
-                className="cursor-pointer text-sm text-on-surface-variant"
-              >
-                Remember me
-              </label>
-            </div>
+            
 
             {error && (
               <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
@@ -484,25 +555,29 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || remainingSeconds > 0}
               className="w-full rounded-xl py-4 font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background: "#00F0FF",
                 color: "#12151B",
                 boxShadow: "0 0 15px rgba(0,240,255,0.3)",
               }}
-              onMouseEnter={(event) => {
-                if (!loading) {
-                  event.currentTarget.style.boxShadow =
+              onMouseEnter={(e) => {
+                if (!e.currentTarget.disabled) {
+                  e.currentTarget.style.boxShadow =
                     "0 0 25px rgba(0,240,255,0.5)";
                 }
               }}
-              onMouseLeave={(event) => {
-                event.currentTarget.style.boxShadow =
-                  "0 0 15px rgba(0,240,255,0.3)";
-              }}
+              onMouseLeave={(e) =>
+              (e.currentTarget.style.boxShadow =
+                "0 0 15px rgba(0,240,255,0.3)")
+              }
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {remainingSeconds > 0
+                ? `Try again in ${formatCountdown(remainingSeconds)}`
+                : loading
+                  ? "Signing in..."
+                  : "Sign In"}
             </button>
 
             <div className="relative my-2">
@@ -568,15 +643,86 @@ export default function LoginPage() {
               Don&apos;t have an account?{" "}
               <Link
                 to="/register"
-                onClick={clearAuthSession}
                 className="ml-1 font-semibold text-neon-cyan hover:underline"
               >
                 Register
               </Link>
             </p>
           </form>
-        </article>
+                </article>
       </main>
+
+      {showBlockPopup && remainingSeconds > 0 && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+          style={{
+            background: "rgba(0, 0, 0, 0.72)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 text-center shadow-2xl"
+            style={{
+              background: "#191c22",
+              border: "1px solid rgba(239, 68, 68, 0.35)",
+              boxShadow: "0 0 40px rgba(239, 68, 68, 0.15)",
+            }}
+          >
+            <div
+              className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+              style={{
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+              }}
+            >
+              <span
+                className="material-symbols-outlined text-4xl"
+                style={{ color: "#f87171" }}
+              >
+                lock_clock
+              </span>
+            </div>
+
+            <h2 className="mb-2 text-xl font-semibold text-white">
+              Login temporarily blocked
+            </h2>
+
+            <p className="mb-5 text-sm leading-6 text-gray-400">
+              Too many failed login attempts. Please wait until the
+              countdown finishes before trying password login again.
+            </p>
+
+            <div
+              className="mb-5 rounded-xl px-4 py-5"
+              style={{
+                background: "rgba(0, 240, 255, 0.06)",
+                border: "1px solid rgba(0, 240, 255, 0.2)",
+              }}
+            >
+              <p className="mb-1 text-xs uppercase tracking-widest text-gray-400">
+                Try again in
+              </p>
+
+              <p
+                className="text-4xl font-bold tracking-wider"
+                style={{
+                  color: "#00F0FF",
+                  fontFamily: "JetBrains Mono, monospace",
+                  textShadow: "0 0 16px rgba(0, 240, 255, 0.4)",
+                }}
+              >
+                {formatCountdown(remainingSeconds)}
+              </p>
+            </div>
+
+
+            <p className="mt-4 text-xs text-gray-500">
+              Password login will be enabled automatically when the
+              countdown reaches 00:00.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
