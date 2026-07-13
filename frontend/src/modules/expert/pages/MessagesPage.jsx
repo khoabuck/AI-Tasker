@@ -8,9 +8,6 @@ import { formatTime } from "../../../utils/dateTime.utils";
 const MESSAGE_POLL_INTERVAL_MS = 2000;
 const CONVERSATION_POLL_INTERVAL_MS = 6000;
 
-const MESSAGE_POLL_INTERVAL_MS = 2000;
-const CONVERSATION_POLL_INTERVAL_MS = 6000;
-
 export default function MessagesPage() {
   const user = authService.getCurrentUser?.();
   const [searchParams, setSearchParams] = useSearchParams();
