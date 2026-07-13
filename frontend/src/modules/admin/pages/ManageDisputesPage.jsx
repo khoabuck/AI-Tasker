@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminDisputeService from "../../../services/adminDispute.service";
 
-import { formatDateTime } from "../../../utils/dateTime.utils";
+import {
+  compareDateAsc,
+  formatDateTime,
+  parseUtcDate,
+} from "../../../utils/dateTime.utils";
 const STATUS_OPTIONS = ["ALL", "OPEN", "UNDER_REVIEW", "RESOLVED", "CLOSED"];
 
 const RESOLUTION_OPTIONS = [
@@ -733,7 +737,14 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
     status
   );
+
   const evidences = Array.isArray(dispute.evidences) ? dispute.evidences : [];
+  const evidenceSubmissions = groupEvidenceSubmissions(evidences);
+  const totalEvidenceAssets = evidenceSubmissions.reduce(
+    (sum, submission) =>
+      sum + submission.images.length + submission.files.length,
+    0
+  );
 
   if (loading) {
     return (
@@ -747,49 +758,86 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
   }
 
   return (
-    <section className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#10161f]">
-      <div className="flex flex-col gap-3 border-b border-white/10 px-4 py-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
-            Dispute Detail
-          </p>
-          <p className="mt-1 text-sm text-gray-400">
-            Review the case information and evidence directly here.
-          </p>
-        </div>
+    <section className="mt-4 overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#10161f] shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+      <div className="relative overflow-hidden border-b border-white/10 px-4 py-4 md:px-5">
+        <div className="pointer-events-none absolute right-0 top-0 h-40 w-40 rounded-full bg-cyan-400/10 blur-3xl" />
 
-        {canResolve && (
-          <button
-            type="button"
-            onClick={onResolve}
-            className="w-fit rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-xs font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-          >
-            Resolve Dispute
-          </button>
-        )}
+        <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
+                Case Workspace
+              </p>
+
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
+                {evidenceSubmissions.length} submission
+                {evidenceSubmissions.length === 1 ? "" : "s"}
+              </span>
+
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
+                {totalEvidenceAssets} attachment
+                {totalEvidenceAssets === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <h3 className="mt-2 text-lg font-black text-white">
+              Review this dispute case
+            </h3>
+
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-gray-400">
+              Evidence uploaded in the same action is grouped into one
+              submission, so a shared description is shown only once.
+            </p>
+          </div>
+
+          {canResolve && (
+            <button
+              type="button"
+              onClick={onResolve}
+              className="inline-flex w-fit items-center justify-center gap-2 rounded-xl bg-green-400 px-4 py-2.5 text-xs font-black text-black transition hover:bg-green-300"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                task_alt
+              </span>
+              Resolve Dispute
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_290px] lg:p-5">
         <div className="min-w-0 space-y-4">
-          <DetailSection title="Reason" icon="report_problem">
-            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
-              {dispute.reason || dispute.description || "No reason provided."}
-            </p>
+          <DetailSection title="Case Statement" icon="report_problem">
+            <div className="rounded-xl border border-white/10 bg-black/15 p-4">
+              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
+                {dispute.reason || dispute.description || "No reason provided."}
+              </p>
+            </div>
           </DetailSection>
 
           <DetailSection
-            title={`Evidence (${evidences.length})`}
-            icon="fact_check"
+            title={`Evidence Timeline (${evidenceSubmissions.length})`}
+            icon="timeline"
           >
-            {evidences.length === 0 ? (
-              <p className="text-sm text-gray-500">No evidence uploaded.</p>
+            {evidenceSubmissions.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-black/10 p-7 text-center">
+                <span className="material-symbols-outlined text-4xl text-gray-600">
+                  folder_open
+                </span>
+                <p className="mt-2 font-bold text-white">
+                  No additional evidence
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Evidence submitted by either party will appear here.
+                </p>
+              </div>
             ) : (
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                {evidences.map((evidence, index) => (
-                  <EvidenceItem
-                    key={evidence.evidenceId || evidence.id || index}
-                    evidence={evidence}
-                    compact
+              <div className="space-y-4">
+                {evidenceSubmissions.map((submission, index) => (
+                  <EvidenceSubmissionGroup
+                    key={submission.groupKey}
+                    submission={submission}
+                    index={index}
                   />
                 ))}
               </div>
@@ -798,36 +846,67 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
 
           {dispute.adminDecision && (
             <DetailSection title="Admin Decision" icon="gavel" tone="green">
-              <p className="whitespace-pre-wrap break-words text-sm leading-6 text-green-100/80">
-                {dispute.adminDecision}
-              </p>
+              <div className="rounded-xl border border-green-400/20 bg-green-400/[0.06] p-4">
+                <p className="whitespace-pre-wrap break-words text-sm leading-6 text-green-100/80">
+                  {dispute.adminDecision}
+                </p>
+              </div>
             </DetailSection>
           )}
         </div>
 
-        <aside className="space-y-3">
-          <InfoBox label="Status" value={formatLabel(status)} />
-          <InfoBox
-            label="Disputed Amount"
-            value={formatMoney(dispute.disputedAmount)}
-          />
-          <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
-          <InfoBox
-            label="Client"
-            value={dispute.clientName || "Client"}
-          />
-          <InfoBox
-            label="Expert"
-            value={dispute.expertName || "Expert"}
-          />
-          {dispute.milestoneTitle && (
-            <InfoBox label="Milestone" value={dispute.milestoneTitle} />
-          )}
+        <aside className="space-y-3 lg:sticky lg:top-24 lg:self-start">
+          <div className="rounded-2xl border border-white/10 bg-[#151b24] p-4 shadow-[0_14px_45px_rgba(0,0,0,0.24)]">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                <span className="material-symbols-outlined text-[19px]">
+                  summarize
+                </span>
+              </div>
+              <div>
+                <p className="font-black text-white">Case Summary</p>
+                <p className="text-xs text-gray-500">
+                  Key information for review
+                </p>
+              </div>
+            </div>
+
+            <InfoBox label="Status" value={formatLabel(status)} />
+            <InfoBox
+              label="Disputed Amount"
+              value={formatMoney(dispute.disputedAmount)}
+            />
+            <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
+            <InfoBox label="Client" value={dispute.clientName || "Client"} />
+            <InfoBox label="Expert" value={dispute.expertName || "Expert"} />
+
+            {dispute.milestoneTitle && (
+              <InfoBox label="Milestone" value={dispute.milestoneTitle} />
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/[0.05] p-4">
+            <div className="flex gap-3">
+              <span className="material-symbols-outlined mt-0.5 text-cyan-300">
+                verified_user
+              </span>
+              <div>
+                <p className="text-sm font-black text-white">
+                  Review guidance
+                </p>
+                <p className="mt-1 text-xs leading-5 text-gray-400">
+                  Compare the case statement, timestamps, links, and all images
+                  before making the financial decision.
+                </p>
+              </div>
+            </div>
+          </div>
         </aside>
       </div>
     </section>
   );
 }
+
 
 function DetailSection({ title, icon, tone = "default", children }) {
   const toneClass =
@@ -996,104 +1075,310 @@ function InfoBox({ label, value }) {
   );
 }
 
-function EvidenceItem({ evidence, compact = false }) {
-  const title =
-    evidence.title ||
-    evidence.Title ||
-    evidence.uploadedByName ||
-    evidence.UploadedByName ||
-    "Evidence";
-
-  const description =
-    evidence.evidenceText ||
-    evidence.EvidenceText ||
-    evidence.description ||
-    evidence.Description ||
-    evidence.note ||
-    evidence.Note ||
-    "";
-
-  const fileUrl =
-    evidence.fileUrl ||
-    evidence.FileUrl ||
-    evidence.evidenceFileUrl ||
-    evidence.EvidenceFileUrl ||
-    evidence.url ||
-    evidence.Url ||
-    "";
-
-  const imageUrl =
-    evidence.imageUrl ||
-    evidence.ImageUrl ||
-    evidence.evidenceImageUrl ||
-    evidence.EvidenceImageUrl ||
-    "";
+function EvidenceSubmissionGroup({ submission, index }) {
+  const images = Array.isArray(submission.images) ? submission.images : [];
+  const files = Array.isArray(submission.files) ? submission.files : [];
+  const assetCount = images.length + files.length;
 
   return (
-    <article
-      className={`min-w-0 rounded-xl border border-white/10 bg-black/10 ${
-        compact ? "p-3" : "p-4"
-      }`}
-    >
-      <p className="truncate text-sm font-bold text-white">{title}</p>
-
-      {description && (
-        <p
-          className={`mt-2 whitespace-pre-wrap break-words text-sm leading-5 text-gray-400 ${
-            compact ? "line-clamp-4" : ""
-          }`}
-        >
-          {description}
-        </p>
-      )}
-
-      {imageUrl && (
-        <a
-          href={imageUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-3 block overflow-hidden rounded-lg border border-white/10 bg-black/20"
-        >
-          <img
-            src={imageUrl}
-            alt="Evidence"
-            className={`w-full object-contain ${
-              compact ? "max-h-36" : "max-h-72"
-            }`}
-          />
-        </a>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {fileUrl && (
-          <a
-            href={fileUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-          >
-            <span className="material-symbols-outlined text-[15px]">
-              open_in_new
+    <article className="group overflow-hidden rounded-2xl border border-white/10 bg-[#121821] transition hover:border-cyan-400/30">
+      <div className="flex flex-col gap-3 border-b border-white/10 bg-white/[0.025] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+            <span className="material-symbols-outlined text-[19px]">
+              upload_file
             </span>
-            Open File
-          </a>
+          </div>
+
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="truncate text-sm font-black text-white">
+                {submission.uploadedByName || "User"}
+              </p>
+
+              <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-cyan-300">
+                Submission {index + 1}
+              </span>
+            </div>
+
+            <p className="mt-1 text-xs text-gray-500">
+              {assetCount} attachment{assetCount === 1 ? "" : "s"}
+              {images.length > 0
+                ? ` · ${images.length} image${images.length === 1 ? "" : "s"}`
+                : ""}
+              {files.length > 0
+                ? ` · ${files.length} file${files.length === 1 ? "" : "s"}`
+                : ""}
+            </p>
+          </div>
+        </div>
+
+        <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[11px] font-semibold text-gray-500">
+          {formatDate(submission.createdAt)}
+        </span>
+      </div>
+
+      <div className="p-4">
+        {submission.evidenceText ? (
+          <div className="mb-4 rounded-xl border border-white/10 bg-black/15 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-gray-500">
+                notes
+              </span>
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">
+                Shared Description
+              </p>
+            </div>
+
+            <p className="whitespace-pre-wrap break-words text-sm leading-6 text-gray-300">
+              {submission.evidenceText}
+            </p>
+          </div>
+        ) : (
+          <div className="mb-4 rounded-xl border border-dashed border-white/10 bg-black/10 p-3 text-sm text-gray-500">
+            No description was provided for this submission.
+          </div>
         )}
 
-        {imageUrl && (
-          <a
-            href={imageUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 rounded-lg border border-purple-400/40 bg-purple-400/10 px-3 py-1.5 text-xs font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black"
-          >
-            <span className="material-symbols-outlined text-[15px]">
-              image
-            </span>
-            Full Image
-          </a>
+        {files.length > 0 && (
+          <div className="mb-4">
+            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">
+              Supporting Files
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {files.map((fileUrl, fileIndex) => (
+                <a
+                  key={`${fileUrl}-${fileIndex}`}
+                  href={fileUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    attach_file
+                  </span>
+                  Open File{files.length > 1 ? ` ${fileIndex + 1}` : ""}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {images.length > 0 && (
+          <div>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.14em] text-gray-500">
+                Image Gallery
+              </p>
+              <span className="text-xs font-bold text-gray-600">
+                {images.length} image{images.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            <div
+              className={`grid gap-3 ${
+                images.length === 1
+                  ? "grid-cols-1"
+                  : images.length === 2
+                    ? "grid-cols-1 sm:grid-cols-2"
+                    : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3"
+              }`}
+            >
+              {images.map((imageUrl, imageIndex) => (
+                <a
+                  key={`${imageUrl}-${imageIndex}`}
+                  href={imageUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="group/image overflow-hidden rounded-xl border border-white/10 bg-black/25 p-2 transition hover:border-purple-400/40"
+                >
+                  <div className="relative overflow-hidden rounded-lg bg-black/30">
+                    <img
+                      src={imageUrl}
+                      alt={`Evidence submission ${index + 1}, image ${
+                        imageIndex + 1
+                      }`}
+                      className="h-44 w-full object-contain transition duration-300 group-hover/image:scale-[1.02]"
+                    />
+
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/0 opacity-0 transition group-hover/image:bg-black/30 group-hover/image:opacity-100">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-black">
+                        <span className="material-symbols-outlined text-[20px]">
+                          open_in_full
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 px-1 pb-1 pt-2">
+                    <span className="text-xs font-semibold text-gray-400">
+                      Image {imageIndex + 1}
+                    </span>
+                    <span className="text-[11px] font-bold text-purple-300">
+                      View full size
+                    </span>
+                  </div>
+                </a>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </article>
+  );
+}
+
+function groupEvidenceSubmissions(evidences = []) {
+  const sorted = [...evidences].sort((a, b) =>
+    compareDateAsc(
+      getEvidenceCreatedAt(a),
+      getEvidenceCreatedAt(b)
+    )
+  );
+
+  const groups = [];
+  const MAX_GROUP_GAP_MS = 2 * 60 * 1000;
+
+  sorted.forEach((evidence, index) => {
+    const evidenceText = getEvidenceText(evidence);
+    const uploadedByUserId = getEvidenceUploaderId(evidence);
+    const uploadedByName = getEvidenceUploaderName(evidence);
+    const createdAt = getEvidenceCreatedAt(evidence);
+    const createdTime = parseUtcDate(createdAt)?.getTime() ?? Number.NaN;
+    const imageUrl = getEvidenceImageUrl(evidence);
+    const fileUrl = getEvidenceFileUrl(evidence);
+
+    const previousGroup = groups[groups.length - 1];
+    const previousTime = previousGroup
+      ? parseUtcDate(previousGroup.lastCreatedAt)?.getTime() ?? Number.NaN
+      : Number.NaN;
+
+    const sameDescription =
+      previousGroup &&
+      String(previousGroup.evidenceText || "").trim() === evidenceText;
+
+    const sameUploader =
+      previousGroup &&
+      String(previousGroup.uploadedByUserId || "") === uploadedByUserId &&
+      String(previousGroup.uploadedByName || "").trim() === uploadedByName;
+
+    const closeInTime =
+      previousGroup &&
+      Number.isFinite(createdTime) &&
+      Number.isFinite(previousTime) &&
+      Math.abs(createdTime - previousTime) <= MAX_GROUP_GAP_MS;
+
+    /*
+     * The backend stores one row for each uploaded image.
+     * Images from one multipart request share uploader, description, and
+     * nearly identical timestamps. Group those rows into one UI submission.
+     */
+    if (sameDescription && sameUploader && closeInTime) {
+      if (imageUrl && !previousGroup.images.includes(imageUrl)) {
+        previousGroup.images.push(imageUrl);
+      }
+
+      if (fileUrl && !previousGroup.files.includes(fileUrl)) {
+        previousGroup.files.push(fileUrl);
+      }
+
+      previousGroup.lastCreatedAt = createdAt || previousGroup.lastCreatedAt;
+      previousGroup.evidenceIds.push(getEvidenceId(evidence) || index);
+      return;
+    }
+
+    groups.push({
+      groupKey: [
+        getEvidenceId(evidence) || index,
+        uploadedByUserId || uploadedByName,
+        createdTime || index,
+      ].join("-"),
+      evidenceText,
+      uploadedByUserId,
+      uploadedByName,
+      createdAt,
+      lastCreatedAt: createdAt,
+      images: imageUrl ? [imageUrl] : [],
+      files: fileUrl ? [fileUrl] : [],
+      evidenceIds: [getEvidenceId(evidence) || index],
+    });
+  });
+
+  return groups.reverse();
+}
+
+function getEvidenceId(evidence) {
+  return (
+    evidence?.evidenceId ||
+    evidence?.EvidenceId ||
+    evidence?.id ||
+    evidence?.Id ||
+    ""
+  );
+}
+
+function getEvidenceText(evidence) {
+  return String(
+    evidence?.evidenceText ||
+      evidence?.EvidenceText ||
+      evidence?.description ||
+      evidence?.Description ||
+      evidence?.note ||
+      evidence?.Note ||
+      ""
+  ).trim();
+}
+
+function getEvidenceUploaderId(evidence) {
+  return String(
+    evidence?.uploadedByUserId ||
+      evidence?.UploadedByUserId ||
+      evidence?.userId ||
+      evidence?.UserId ||
+      ""
+  );
+}
+
+function getEvidenceUploaderName(evidence) {
+  return String(
+    evidence?.uploadedByName ||
+      evidence?.UploadedByName ||
+      evidence?.title ||
+      evidence?.Title ||
+      "User"
+  ).trim();
+}
+
+function getEvidenceCreatedAt(evidence) {
+  return (
+    evidence?.createdAt ||
+    evidence?.CreatedAt ||
+    evidence?.uploadedAt ||
+    evidence?.UploadedAt ||
+    ""
+  );
+}
+
+function getEvidenceFileUrl(evidence) {
+  return (
+    evidence?.fileUrl ||
+    evidence?.FileUrl ||
+    evidence?.evidenceFileUrl ||
+    evidence?.EvidenceFileUrl ||
+    evidence?.url ||
+    evidence?.Url ||
+    ""
+  );
+}
+
+function getEvidenceImageUrl(evidence) {
+  return (
+    evidence?.imageUrl ||
+    evidence?.ImageUrl ||
+    evidence?.evidenceImageUrl ||
+    evidence?.EvidenceImageUrl ||
+    ""
   );
 }
 

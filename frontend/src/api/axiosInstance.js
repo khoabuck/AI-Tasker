@@ -44,13 +44,7 @@ const isPublicAuthRequest = (config) => {
 const dispatchAuthErrorEvent = (error) => {
   if (typeof window === "undefined") return;
 
-  // /auth/me được AuthContext tự xử lý để phân biệt:
-  // - chưa đăng nhập
-  // - hết phiên
-  // - bị lock/ban
   if (isAuthMeRequest(error?.config)) return;
-
-  // Không mở modal session cho API public.
   if (isPublicAuthRequest(error?.config)) return;
 
   window.dispatchEvent(
@@ -63,17 +57,59 @@ const dispatchAuthErrorEvent = (error) => {
   );
 };
 
+const isFormDataRequest = (data) => {
+  return typeof FormData !== "undefined" && data instanceof FormData;
+};
+
+const removeContentTypeHeader = (headers) => {
+  if (!headers) return;
+
+  // AxiosHeaders in Axios 1.x
+  if (typeof headers.delete === "function") {
+    headers.delete("Content-Type");
+    headers.delete("content-type");
+    return;
+  }
+
+  // Plain object fallback
+  delete headers["Content-Type"];
+  delete headers["content-type"];
+};
+
 const axiosInstance = axios.create({
   baseURL: getApiBaseUrl(),
   withCredentials: true,
   headers: {
-    "Content-Type": "application/json",
+    Accept: "application/json",
   },
 });
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    if (import.meta.env.DEV) {
+    /*
+     * Never force application/json for FormData.
+     * The browser must generate:
+     * multipart/form-data; boundary=----WebKitFormBoundary...
+     *
+     * Setting multipart/form-data manually without the boundary can also cause
+     * ASP.NET Core to return HTTP 415.
+     */
+    if (isFormDataRequest(config.data)) {
+      removeContentTypeHeader(config.headers);
+    } else if (
+      config.data !== undefined &&
+      config.data !== null &&
+      !config.headers?.["Content-Type"] &&
+      !config.headers?.["content-type"]
+    ) {
+      if (typeof config.headers?.set === "function") {
+        config.headers.set("Content-Type", "application/json");
+      } else {
+        config.headers = {
+          ...(config.headers || {}),
+          "Content-Type": "application/json",
+        };
+      }
     }
 
     return config;

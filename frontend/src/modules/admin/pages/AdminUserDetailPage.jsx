@@ -637,10 +637,6 @@ const requestLockUser = () => {
                         : "Not available"
                     }
                   />
-                  <DetailItem
-                    label="Email Verification"
-                    value={user.isEmailVerified ? "Verified" : "Not Verified"}
-                  />
                 </div>
               </section>
 
@@ -1396,4 +1392,4 @@ function getFriendlyError(err, fallback = "Something went wrong.") {
   }
 
   return err?.message || fallback;
-}
+} 

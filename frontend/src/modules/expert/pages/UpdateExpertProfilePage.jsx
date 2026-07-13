@@ -37,8 +37,6 @@ export default function UpdateExpertProfilePage() {
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("basic");
-  const [profileSnapshot, setProfileSnapshot] = useState(null);
-
   const [basicForm, setBasicForm] = useState(emptyBasicForm);
   const [verificationForm, setVerificationForm] = useState(
     emptyVerificationForm
@@ -79,7 +77,6 @@ export default function UpdateExpertProfilePage() {
       const result = await expertProfileService.getMyExpertProfile();
       const profile = unwrapData(result);
 
-      setProfileSnapshot(profile);
       setBasicForm(buildBasicFormFromProfile(profile));
       setVerificationForm(buildVerificationFormFromProfile(profile));
     } catch (err) {
@@ -228,17 +225,7 @@ export default function UpdateExpertProfilePage() {
 
       const payload = buildBasicPayload(basicForm);
 
-      if (typeof expertProfileService.updateBasicExpertProfile === "function") {
-        await expertProfileService.updateBasicExpertProfile(payload);
-      } else {
-        await expertProfileService.updateExpertProfile(
-          buildCombinedPayload({
-            profileSnapshot,
-            basicForm,
-            verificationForm,
-          })
-        );
-      }
+      await expertProfileService.updateBasicExpertProfile(payload);
 
       if (payload.avatarUrl && typeof authService.updateMyAvatar === "function") {
         try {
@@ -294,21 +281,8 @@ export default function UpdateExpertProfilePage() {
 
       let result;
 
-      if (
-        typeof expertProfileService.updateVerificationExpertProfile ===
-        "function"
-      ) {
-        result =
-          await expertProfileService.updateVerificationExpertProfile(payload);
-      } else {
-        result = await expertProfileService.updateExpertProfile(
-          buildCombinedPayload({
-            profileSnapshot,
-            basicForm,
-            verificationForm,
-          })
-        );
-      }
+      result =
+        await expertProfileService.updateVerificationExpertProfile(payload);
 
       const data = unwrapData(result);
       const applied = Boolean(data?.applied || data?.Applied);
@@ -340,13 +314,13 @@ export default function UpdateExpertProfilePage() {
 
       setModal({
         type: "warning",
-        title: "Verification needs improvement",
+        title: "Improve your verification details",
         message:
-          resultMessage ||
-          "Your verification update needs more evidence before it can be applied.",
-        detail:
-          missingInformation ||
-          "Please improve your skills, public proof links, or certificates and try again.",
+          "Your current profile is still active. The new verification details were not applied yet.",
+        checklist: buildVerificationChecklist({
+          missingInformation,
+          resultMessage,
+        }),
         showBackProfile: true,
         showEditAgain: true,
       });
@@ -394,47 +368,73 @@ export default function UpdateExpertProfilePage() {
             Back to profile
           </button>
 
-          <section className="mb-8 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Update Profile
-            </p>
+          <section className="mb-6 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_20px_70px_rgba(0,0,0,0.28)]">
+            <div className="relative border-b border-white/10 px-5 py-6 md:px-7">
+              <div className="pointer-events-none absolute right-0 top-0 h-44 w-44 rounded-full bg-cyan-400/10 blur-3xl" />
 
-            <h1 className="text-3xl font-extrabold text-white md:text-4xl">
-              Update your expert profile
-            </h1>
+              <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-300">
+                    <span className="material-symbols-outlined text-[15px]">
+                      storefront
+                    </span>
+                    Expert profile
+                  </div>
 
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-gray-400">
-              Basic information is saved directly. Verification information can
-              refresh your profile score after review.
-            </p>
+                  <h1 className="text-2xl font-black text-white md:text-3xl">
+                    Make your profile easier to hire
+                  </h1>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
+                    Keep your public introduction clear and your proof of work up to date.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-green-400/20 bg-green-400/10 text-green-300">
+                    <span className="material-symbols-outlined text-[20px]">
+                      verified
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-gray-500">
+                      Profile status
+                    </p>
+                    <p className="text-sm font-black text-white">Active expert</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-1 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <button
                 type="button"
                 onClick={() => setActiveTab("basic")}
-                className={`rounded-2xl border px-5 py-4 text-left transition ${activeTab === "basic"
-                    ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-200"
-                    : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-                  }`}
+                className={`inline-flex min-w-fit items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
+                  activeTab === "basic"
+                    ? "bg-cyan-400 text-black"
+                    : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+                }`}
               >
-                <p className="font-bold">Basic Information</p>
-                <p className="mt-1 text-xs">
-                  Name, avatar, title, bio and availability.
-                </p>
+                <span className="material-symbols-outlined text-[18px]">
+                  badge
+                </span>
+                Public profile
               </button>
 
               <button
                 type="button"
                 onClick={() => setActiveTab("verification")}
-                className={`rounded-2xl border px-5 py-4 text-left transition ${activeTab === "verification"
-                    ? "border-purple-400/60 bg-purple-400/10 text-purple-200"
-                    : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
-                  }`}
+                className={`inline-flex min-w-fit items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
+                  activeTab === "verification"
+                    ? "bg-purple-400 text-black"
+                    : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+                }`}
               >
-                <p className="font-bold">Verification Information</p>
-                <p className="mt-1 text-xs">
-                  Skills, experience, portfolio, GitHub and certificates.
-                </p>
+                <span className="material-symbols-outlined text-[18px]">
+                  workspace_premium
+                </span>
+                Skills & proof
               </button>
             </div>
           </section>
@@ -499,127 +499,209 @@ function BasicProfileForm({
   onAvatarUpload,
   onCancel,
 }) {
+  const busy = saving || uploadingAvatar || syncingAvatar;
+
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8"
-    >
-      <div className="mb-6">
-        <h2 className="text-2xl font-extrabold text-white">
-          Basic Information
-        </h2>
-
-        <p className="mt-2 text-sm leading-6 text-gray-400">
-          This section updates your public profile directly.
-        </p>
-      </div>
-
-      <div className="mb-8 flex flex-col gap-5 rounded-2xl border border-white/10 bg-white/[0.03] p-5 md:flex-row md:items-center">
-        <div className="h-28 w-28 overflow-hidden rounded-3xl border border-cyan-400/30 bg-cyan-400/10">
-          {formData.avatarUrl ? (
-            <img
-              src={formData.avatarUrl}
-              alt="Avatar"
-              className="h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-cyan-300">
-              <span className="material-symbols-outlined text-5xl">
-                person
+    <form onSubmit={onSubmit}>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+          <div className="mb-6 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+              <span className="material-symbols-outlined text-[20px]">
+                person_edit
               </span>
             </div>
-          )}
-        </div>
 
-        <div className="flex-1">
-          <p className="font-bold text-white">Profile Avatar</p>
+            <div>
+              <h2 className="text-xl font-black text-white">
+                Public profile
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                This is what clients see first.
+              </p>
+            </div>
+          </div>
 
-          <p className="mt-1 text-sm text-gray-400">
-            Upload an image or paste an image URL.
-          </p>
+          <div className="mb-6 flex flex-col gap-5 rounded-2xl border border-white/10 bg-black/15 p-4 sm:flex-row sm:items-center">
+            <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border border-cyan-400/30 bg-cyan-400/10">
+              {formData.avatarUrl ? (
+                <img
+                  src={formData.avatarUrl}
+                  alt="Avatar preview"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-cyan-300">
+                  <span className="material-symbols-outlined text-5xl">
+                    person
+                  </span>
+                </div>
+              )}
+            </div>
 
-          <div className="mt-4 flex flex-col gap-3 md:flex-row">
-            <label className="inline-flex cursor-pointer items-center justify-center rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
-              {uploadingAvatar
-                ? "Uploading..."
-                : syncingAvatar
-                  ? "Updating..."
-                  : "Upload Avatar"}
+            <div className="min-w-0 flex-1">
+              <p className="font-black text-white">Profile photo</p>
+              <p className="mt-1 text-sm leading-5 text-gray-500">
+                Use a clear square photo with a simple background.
+              </p>
 
-              <input
-                type="file"
-                accept="image/*"
-                disabled={saving || uploadingAvatar || syncingAvatar}
-                onChange={onAvatarUpload}
-                className="hidden"
-              />
-            </label>
+              <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-black text-cyan-300 transition hover:bg-cyan-400 hover:text-black">
+                <span className="material-symbols-outlined text-[18px]">
+                  photo_camera
+                </span>
+                {uploadingAvatar
+                  ? "Uploading..."
+                  : syncingAvatar
+                    ? "Updating..."
+                    : "Change photo"}
 
-            <input
-              type="url"
-              value={formData.avatarUrl}
-              disabled={saving || uploadingAvatar || syncingAvatar}
-              onChange={(event) => onChange("avatarUrl", event.target.value)}
-              placeholder="https://avatar-url..."
-              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={busy}
+                  onChange={onAvatarUpload}
+                  className="hidden"
+                />
+              </label>
+
+              <FieldError message={errors.avatarUrl} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            <TextInput
+              label="Full Name"
+              value={formData.fullName}
+              error={errors.fullName}
+              onChange={(value) => onChange("fullName", value)}
+              placeholder="Your full name"
+              required
+            />
+
+            <TextInput
+              label="Professional Title"
+              value={formData.professionalTitle}
+              error={errors.professionalTitle}
+              onChange={(value) => onChange("professionalTitle", value)}
+              placeholder="AI Automation Engineer"
+              required
             />
           </div>
 
-          <FieldError message={errors.avatarUrl} />
-        </div>
-      </div>
+          <div className="mt-5">
+            <TextareaInput
+              label="Bio"
+              value={formData.bio}
+              error={errors.bio}
+              onChange={(value) => onChange("bio", value)}
+              placeholder="Summarize your expertise, strongest outcomes, and the type of work you do best."
+              rows={6}
+              required
+              maxLength={2000}
+              showCount
+            />
+          </div>
 
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <TextInput
-          label="Full Name"
-          value={formData.fullName}
-          error={errors.fullName}
-          onChange={(value) => onChange("fullName", value)}
-          placeholder="Your full name"
-          required
-        />
+          <div className="mt-5">
+            <AvailabilityToggle
+              checked={formData.availableForWork}
+              disabled={busy}
+              onChange={(checked) => onChange("availableForWork", checked)}
+            />
+          </div>
 
-        <TextInput
-          label="Professional Title"
-          value={formData.professionalTitle}
-          error={errors.professionalTitle}
-          onChange={(value) => onChange("professionalTitle", value)}
-          placeholder="AI Automation Engineer"
-          required
-        />
+          <div className="mt-7 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={busy}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            >
+              Cancel
+            </button>
 
+            <button
+              type="submit"
+              disabled={busy}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                save
+              </span>
+              {saving ? "Saving..." : "Save profile"}
+            </button>
+          </div>
+        </section>
 
-      </div>
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.2)]">
+            <div className="h-20 bg-gradient-to-r from-cyan-400/20 via-purple-400/10 to-transparent" />
 
-      <div className="mt-5">
-        <TextareaInput
-          label="Bio"
-          value={formData.bio}
-          error={errors.bio}
-          onChange={(value) => onChange("bio", value)}
-          placeholder="Introduce your expertise, experience, and working style..."
-          rows={7}
-          required
-        />
-      </div>
+            <div className="-mt-10 p-5">
+              <div className="h-20 w-20 overflow-hidden rounded-2xl border-4 border-[#151a22] bg-cyan-400/10">
+                {formData.avatarUrl ? (
+                  <img
+                    src={formData.avatarUrl}
+                    alt="Public profile preview"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-cyan-300">
+                    <span className="material-symbols-outlined text-4xl">
+                      person
+                    </span>
+                  </div>
+                )}
+              </div>
 
-      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={saving || uploadingAvatar || syncingAvatar}
-          className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
-        >
-          Cancel
-        </button>
+              <h3 className="mt-4 break-words text-lg font-black text-white">
+                {formData.fullName || "Your name"}
+              </h3>
 
-        <button
-          type="submit"
-          disabled={saving || uploadingAvatar || syncingAvatar}
-          className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-6 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save Basic Information"}
-        </button>
+              <p className="mt-1 break-words text-sm font-semibold text-cyan-300">
+                {formData.professionalTitle || "Professional title"}
+              </p>
+
+              <p className="mt-4 line-clamp-5 whitespace-pre-wrap text-sm leading-6 text-gray-400">
+                {formData.bio ||
+                  "Your introduction will appear here as clients browse expert profiles."}
+              </p>
+
+              <div className="mt-4 flex items-center gap-2">
+                <span
+                  className={`h-2.5 w-2.5 rounded-full ${
+                    formData.availableForWork
+                      ? "bg-green-400"
+                      : "bg-gray-500"
+                  }`}
+                />
+                <span className="text-xs font-bold text-gray-400">
+                  {formData.availableForWork
+                    ? "Available for work"
+                    : "Not accepting new work"}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+            <p className="text-sm font-black text-white">Profile checklist</p>
+            <div className="mt-3 space-y-2">
+              <ChecklistItem
+                done={Boolean(formData.avatarUrl)}
+                label="Professional photo"
+              />
+              <ChecklistItem
+                done={String(formData.professionalTitle || "").trim().length >= 5}
+                label="Clear professional title"
+              />
+              <ChecklistItem
+                done={String(formData.bio || "").trim().length >= 50}
+                label="Bio with enough detail"
+              />
+            </div>
+          </section>
+        </aside>
       </div>
     </form>
   );
@@ -636,181 +718,421 @@ function VerificationProfileForm({
   onRemoveCertificate,
   onCancel,
 }) {
+  const proofCount = [
+    formData.portfolioUrl,
+    formData.linkedInUrl,
+    formData.gitHubUrl,
+  ].filter((value) => String(value || "").trim()).length;
+
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8"
-    >
-      <div className="mb-6">
-        <h2 className="text-2xl font-extrabold text-white">
-          Verification Information
-        </h2>
+    <form onSubmit={onSubmit}>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="space-y-5">
+          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+            <div className="mb-6 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-purple-400/20 bg-purple-400/10 text-purple-300">
+                <span className="material-symbols-outlined text-[20px]">
+                  psychology
+                </span>
+              </div>
 
-        <p className="mt-2 text-sm leading-6 text-gray-400">
-          Add strong public evidence so clients can trust your expertise.
-        </p>
-      </div>
+              <div>
+                <h2 className="text-xl font-black text-white">
+                  Skills and experience
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Keep the skills focused on services you actively offer.
+                </p>
+              </div>
+            </div>
 
-      <section>
-        <h3 className="mb-4 text-lg font-bold text-white">
-          Skills & Experience
-        </h3>
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_210px]">
+              <TextInput
+                label="Skills"
+                value={formData.skills}
+                error={errors.skills}
+                onChange={(value) => onChange("skills", value)}
+                placeholder="AI Automation, RAG, Chatbot, Python"
+                required
+              />
 
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          <TextInput
-            label="Skills"
-            value={formData.skills}
-            error={errors.skills}
-            onChange={(value) => onChange("skills", value)}
-            placeholder="AI Automation, RAG, Chatbot, Python"
-            required
-          />
+              <ReadonlyNumberInput
+                label="Years Of Experience"
+                value={formData.yearsOfExperience}
+              />
+            </div>
+          </section>
 
-          <ReadonlyNumberInput
-            label="Years Of Experience"
-            value={formData.yearsOfExperience}
-            hint="This field is managed by the system and cannot be edited here."
-          />
-        </div>
-      </section>
-
-      <section className="mt-8 border-t border-white/10 pt-6">
-        <h3 className="mb-2 text-lg font-bold text-white">
-          Public Proof Links
-        </h3>
-
-        <p className="mb-4 text-sm text-gray-500">
-          Portfolio and GitHub are required. LinkedIn is optional.
-        </p>
-
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <TextInput
-            label="Portfolio URL"
-            value={formData.portfolioUrl}
-            error={errors.portfolioUrl}
-            onChange={(value) => onChange("portfolioUrl", value)}
-            placeholder="https://portfolio.com"
-            required
-          />
-
-          <TextInput
-            label="LinkedIn URL"
-            value={formData.linkedInUrl}
-            error={errors.linkedInUrl}
-            onChange={(value) => onChange("linkedInUrl", value)}
-            placeholder="https://linkedin.com/in/..."
-          />
-
-          <TextInput
-            label="GitHub URL"
-            value={formData.gitHubUrl}
-            error={errors.gitHubUrl}
-            onChange={(value) => onChange("gitHubUrl", value)}
-            placeholder="https://github.com/..."
-            required
-          />
-        </div>
-
-        <FieldError message={errors.publicLinks} />
-      </section>
-
-      <section className="mt-8 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-        <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h3 className="text-lg font-bold text-white">Certificates</h3>
-            <p className="mt-1 text-sm text-gray-500">
-              Optional. If you add one, only certificate URL and type are
-              required.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            disabled={saving || (formData.certificates || []).length >= 10}
-            onClick={onAddCertificate}
-            className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-4 py-2 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:opacity-50"
-          >
-            Add Certificate
-          </button>
-        </div>
-
-        <FieldError message={errors.certificates} />
-        <FieldError message={errors.duplicateCertificates} />
-
-        {(formData.certificates || []).length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 p-5 text-sm leading-6 text-gray-400">
-            <p className="font-bold text-gray-300">No certificates added.</p>
-            <p className="mt-1">
-              You can save without certificates. Adding certificates can
-              strengthen your profile.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {formData.certificates.map((certificate, index) => (
-              <div
-                key={index}
-                className="rounded-2xl border border-white/10 bg-black/20 p-4"
-              >
-                <div className="mb-4 flex items-center justify-between gap-3">
-                  <p className="font-bold text-white">Certificate {index + 1}</p>
-
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => onRemoveCertificate(index)}
-                    className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Remove
-                  </button>
+          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
+                  <span className="material-symbols-outlined text-[20px]">
+                    link
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <TextInput
-                    label="Certificate URL"
-                    value={certificate.certificateUrl}
-                    error={errors[`certificateUrl_${index}`]}
-                    onChange={(value) =>
-                      onCertificateChange(index, "certificateUrl", value)
-                    }
-                    placeholder="https://..."
-                  />
-
-                  <SelectInput
-                    label="Certificate Type"
-                    value={certificate.certificateType}
-                    error={errors[`certificateType_${index}`]}
-                    onChange={(value) =>
-                      onCertificateChange(index, "certificateType", value)
-                    }
-                    options={CERTIFICATE_TYPE_OPTIONS}
-                  />
+                <div>
+                  <h2 className="text-xl font-black text-white">
+                    Proof of work
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Add links clients can open and review.
+                  </p>
                 </div>
               </div>
-            ))}
+
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-black text-gray-400">
+                {proofCount}/3 added
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <ProofLinkInput
+                icon="language"
+                label="Portfolio"
+                required
+                value={formData.portfolioUrl}
+                error={errors.portfolioUrl}
+                onChange={(value) => onChange("portfolioUrl", value)}
+                placeholder="https://your-portfolio.com"
+              />
+
+              <ProofLinkInput
+                brand="github"
+                label="GitHub"
+                required
+                value={formData.gitHubUrl}
+                error={errors.gitHubUrl}
+                onChange={(value) => onChange("gitHubUrl", value)}
+                placeholder="https://github.com/your-name"
+              />
+
+              <ProofLinkInput
+                brand="linkedin"
+                label="LinkedIn"
+                value={formData.linkedInUrl}
+                error={errors.linkedInUrl}
+                onChange={(value) => onChange("linkedInUrl", value)}
+                placeholder="https://linkedin.com/in/your-name"
+              />
+            </div>
+
+            <FieldError message={errors.publicLinks} />
+          </section>
+
+          <section className="rounded-3xl border border-white/10 bg-[#151a22] p-5 shadow-[0_16px_45px_rgba(0,0,0,0.2)] md:p-7">
+            <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-300">
+                  <span className="material-symbols-outlined text-[20px]">
+                    workspace_premium
+                  </span>
+                </div>
+
+                <div>
+                  <h2 className="text-xl font-black text-white">
+                    Certificates
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Add only credentials that strengthen your profile.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={saving || (formData.certificates || []).length >= 10}
+                onClick={onAddCertificate}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-purple-400/40 bg-purple-400/10 px-4 py-2.5 text-sm font-black text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  add
+                </span>
+                Add certificate
+              </button>
+            </div>
+
+            <FieldError message={errors.certificates} />
+            <FieldError message={errors.duplicateCertificates} />
+
+            {(formData.certificates || []).length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-white/10 bg-black/15 p-6 text-center">
+                <span className="material-symbols-outlined text-4xl text-gray-600">
+                  workspace_premium
+                </span>
+                <p className="mt-2 font-black text-white">
+                  No certificates added
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                  Certificates are optional.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {formData.certificates.map((certificate, index) => (
+                  <div
+                    key={`${certificate.certificateUrl}-${index}`}
+                    className="rounded-2xl border border-white/10 bg-black/15 p-4"
+                  >
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-300">
+                          <span className="material-symbols-outlined text-[18px]">
+                            verified
+                          </span>
+                        </div>
+
+                        <p className="font-black text-white">
+                          Certificate {index + 1}
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => onRemoveCertificate(index)}
+                        className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-black text-red-300 transition hover:bg-red-400/10"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">
+                          delete
+                        </span>
+                        Remove
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
+                      <TextInput
+                        label="Certificate URL"
+                        value={certificate.certificateUrl}
+                        error={errors[`certificateUrl_${index}`]}
+                        onChange={(value) =>
+                          onCertificateChange(index, "certificateUrl", value)
+                        }
+                        placeholder="https://..."
+                      />
+
+                      <SelectInput
+                        label="Certificate Type"
+                        value={certificate.certificateType}
+                        error={errors[`certificateType_${index}`]}
+                        onChange={(value) =>
+                          onCertificateChange(index, "certificateType", value)
+                        }
+                        options={CERTIFICATE_TYPE_OPTIONS}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <div className="flex flex-col-reverse gap-3 rounded-2xl border border-white/10 bg-[#151a22] p-4 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={saving}
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-purple-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-purple-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-[18px]">
+                verified
+              </span>
+              {saving ? "Reviewing..." : "Save verification"}
+            </button>
           </div>
-        )}
-      </section>
+        </div>
 
-      <div className="mt-8 flex flex-col gap-3 border-t border-white/10 pt-6 sm:flex-row sm:justify-end">
-        <button
-          type="button"
-          onClick={onCancel}
-          disabled={saving}
-          className="rounded-xl border border-white/10 bg-white/[0.04] px-6 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
-        >
-          Cancel
-        </button>
+        <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+          <section className="rounded-3xl border border-purple-400/20 bg-purple-400/[0.06] p-5">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-purple-400/20 bg-purple-400/10 text-purple-300">
+              <span className="material-symbols-outlined">shield_person</span>
+            </div>
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-xl border border-purple-400/60 bg-purple-400/10 px-6 py-3 text-sm font-bold text-purple-200 transition hover:bg-purple-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {saving ? "Saving..." : "Save Verification Information"}
-        </button>
+            <h3 className="mt-4 font-black text-white">
+              Verification review
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-gray-400">
+              Updated proof is reviewed before it replaces the information on your active profile.
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4">
+            <p className="text-sm font-black text-white">Proof checklist</p>
+            <div className="mt-3 space-y-2">
+              <ChecklistItem
+                done={String(formData.skills || "").trim().length >= 10}
+                label="Focused skills"
+              />
+              <ChecklistItem
+                done={Boolean(String(formData.portfolioUrl || "").trim())}
+                label="Portfolio link"
+              />
+              <ChecklistItem
+                done={Boolean(String(formData.gitHubUrl || "").trim())}
+                label="GitHub profile"
+              />
+              <ChecklistItem
+                done={(formData.certificates || []).length > 0}
+                label="Certificate evidence"
+                optional
+              />
+            </div>
+          </section>
+        </aside>
       </div>
     </form>
+  );
+}
+
+function AvailabilityToggle({ checked, disabled, onChange }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${
+            checked
+              ? "border-green-400/20 bg-green-400/10 text-green-300"
+              : "border-white/10 bg-white/[0.04] text-gray-500"
+          }`}
+        >
+          <span className="material-symbols-outlined text-[19px]">
+            work
+          </span>
+        </div>
+
+        <div>
+          <p className="font-black text-white">Available for work</p>
+          <p className="mt-1 text-sm text-gray-500">
+            Let clients know whether you are accepting new projects.
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+          checked ? "bg-green-400" : "bg-gray-700"
+        } disabled:cursor-not-allowed disabled:opacity-50`}
+      >
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${
+            checked ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ChecklistItem({ done, label, optional = false }) {
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span
+        className={`material-symbols-outlined text-[17px] ${
+          done ? "text-green-300" : "text-gray-600"
+        }`}
+      >
+        {done ? "check_circle" : "radio_button_unchecked"}
+      </span>
+      <span className={done ? "text-gray-300" : "text-gray-500"}>
+        {label}
+      </span>
+      {optional && (
+        <span className="ml-auto text-[10px] font-bold uppercase tracking-wider text-gray-600">
+          Optional
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ProofLinkInput({
+  icon,
+  brand,
+  label,
+  required,
+  value,
+  error,
+  onChange,
+  placeholder,
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/15 p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-200">
+          {brand === "github" ? (
+            <GitHubLogo className="h-5 w-5" />
+          ) : brand === "linkedin" ? (
+            <LinkedInLogo className="h-5 w-5" />
+          ) : (
+            <span className="material-symbols-outlined text-[18px]">
+              {icon}
+            </span>
+          )}
+        </div>
+
+        <div>
+          <p className="text-sm font-black text-white">
+            {label} {required && <span className="text-red-300">*</span>}
+          </p>
+          <p className="text-xs text-gray-600">
+            {required ? "Required proof" : "Optional"}
+          </p>
+        </div>
+      </div>
+
+      <input
+        type="url"
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className={`w-full rounded-xl border bg-[#0f141d] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 ${
+          error ? "border-red-400/60" : "border-white/10"
+        }`}
+      />
+
+      <FieldError message={error} />
+    </div>
+  );
+}
+
+function GitHubLogo({ className = "h-5 w-5" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M12 .7C5.7.7.6 5.8.6 12.1c0 5 3.3 9.2 7.8 10.7.6.1.8-.3.8-.6v-2.2c-3.2.7-3.9-1.4-3.9-1.4-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.3 1 .1-.8.4-1.3.8-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.2-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.6 11.6 0 0 1 6 0c2.3-1.6 3.3-1.2 3.3-1.2.6 1.6.2 2.8.1 3.1.8.9 1.2 2 1.2 3.2 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.2c0 .3.2.7.8.6 4.5-1.5 7.8-5.7 7.8-10.7C23.4 5.8 18.3.7 12 .7Z" />
+    </svg>
+  );
+}
+
+function LinkedInLogo({ className = "h-5 w-5" }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+    >
+      <path d="M20.4 3H3.6C3.3 3 3 3.3 3 3.6v16.8c0 .3.3.6.6.6h16.8c.3 0 .6-.3.6-.6V3.6c0-.3-.3-.6-.6-.6ZM8.3 18.3H5.7V9.8h2.6v8.5ZM7 8.6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Zm11.3 9.7h-2.6v-4.1c0-1 0-2.3-1.4-2.3-1.4 0-1.7 1.1-1.7 2.3v4.2H10v-8.6h2.5V11h.1c.4-.7 1.2-1.5 2.5-1.5 2.7 0 3.2 1.8 3.2 4.1v4.7Z" />
+    </svg>
   );
 }
 
@@ -871,23 +1193,24 @@ function NumberInput({
   );
 }
 
-function ReadonlyNumberInput({ label, value, hint }) {
+function ReadonlyNumberInput({ label, value }) {
   return (
-    <label className="block">
+    <div>
       <span className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
         {label}
       </span>
 
-      <input
-        type="number"
-        value={value ?? ""}
-        readOnly
-        disabled
-        className="w-full cursor-not-allowed rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-sm text-gray-400 outline-none opacity-70"
-      />
-
-      {hint && <p className="mt-2 text-xs font-semibold text-gray-500">{hint}</p>}
-    </label>
+      <div className="flex min-h-[46px] items-center justify-between rounded-xl border border-white/10 bg-white/[0.025] px-4">
+        <span className="text-sm font-black text-white">
+          {value === "" || value === null || value === undefined
+            ? "N/A"
+            : `${value} year${Number(value) === 1 ? "" : "s"}`}
+        </span>
+        <span className="material-symbols-outlined text-[17px] text-gray-600">
+          lock
+        </span>
+      </div>
+    </div>
   );
 }
 
@@ -928,6 +1251,8 @@ function TextareaInput({
   placeholder,
   rows = 5,
   required = false,
+  maxLength,
+  showCount = false,
 }) {
   return (
     <label className="block">
@@ -938,11 +1263,18 @@ function TextareaInput({
       <textarea
         rows={rows}
         value={value ?? ""}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${error ? "border-red-400/60" : "border-white/10"
           }`}
       />
+
+      {showCount && maxLength ? (
+        <p className="mt-2 text-right text-xs font-semibold text-gray-600">
+          {String(value || "").length}/{maxLength}
+        </p>
+      ) : null}
 
       <FieldError message={error} />
     </label>
@@ -970,71 +1302,240 @@ function Alert({ type, title, message }) {
 }
 
 function ResultModal({ modal, onClose, onBackProfile }) {
-  const icon =
+  const config =
     modal.type === "success"
-      ? "check_circle"
+      ? {
+          icon: "check_circle",
+          iconClass:
+            "border-green-400/30 bg-green-400/10 text-green-300",
+          badgeClass:
+            "border-green-400/30 bg-green-400/10 text-green-200",
+          badgeLabel: "Updated",
+          primaryClass:
+            "bg-green-400 text-black hover:bg-green-300",
+        }
       : modal.type === "warning"
-        ? "warning"
-        : "error";
+        ? {
+            icon: "tips_and_updates",
+            iconClass:
+              "border-yellow-400/30 bg-yellow-400/10 text-yellow-300",
+            badgeClass:
+              "border-yellow-400/30 bg-yellow-400/10 text-yellow-200",
+            badgeLabel: "Needs Improvement",
+            primaryClass:
+              "bg-yellow-300 text-black hover:bg-yellow-200",
+          }
+        : {
+            icon: "error",
+            iconClass:
+              "border-red-400/30 bg-red-400/10 text-red-300",
+            badgeClass:
+              "border-red-400/30 bg-red-400/10 text-red-200",
+            badgeLabel: "Update Failed",
+            primaryClass:
+              "bg-red-400 text-black hover:bg-red-300",
+          };
 
-  const color =
-    modal.type === "success"
-      ? "text-green-300"
-      : modal.type === "warning"
-        ? "text-yellow-300"
-        : "text-red-300";
+  const checklist = Array.isArray(modal.checklist)
+    ? modal.checklist
+    : [];
 
   return (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-2xl">
-        <div className="mb-5 flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
-            <span className={`material-symbols-outlined text-3xl ${color}`}>
-              {icon}
-            </span>
-          </div>
+    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_32px_110px_rgba(0,0,0,0.72)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        <div className="border-b border-white/10 p-5">
+          <div className="flex items-start gap-4">
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border ${config.iconClass}`}
+            >
+              <span className="material-symbols-outlined text-[26px]">
+                {config.icon}
+              </span>
+            </div>
 
-          <div>
-            <h3 className="text-xl font-extrabold text-white">
-              {modal.title}
-            </h3>
+            <div className="min-w-0 flex-1">
+              <span
+                className={`inline-flex rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] ${config.badgeClass}`}
+              >
+                {config.badgeLabel}
+              </span>
 
-            <p className="mt-2 text-sm leading-6 text-gray-300">
-              {modal.message}
-            </p>
+              <h3 className="mt-3 text-xl font-black text-white">
+                {modal.title}
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-gray-400">
+                {modal.message}
+              </p>
+            </div>
           </div>
         </div>
 
-        {modal.detail && (
-          <div className="mb-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
-            {modal.detail}
+        {checklist.length > 0 && (
+          <div className="space-y-3 p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-gray-500">
+              Recommended updates
+            </p>
+
+            {checklist.map((item, index) => (
+              <div
+                key={`${item.title}-${index}`}
+                className="flex gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-yellow-400/20 bg-yellow-400/10 text-yellow-300">
+                  <span className="material-symbols-outlined text-[18px]">
+                    {item.icon || "checklist"}
+                  </span>
+                </div>
+
+                <div>
+                  <p className="text-sm font-black text-white">
+                    {item.title}
+                  </p>
+
+                  <p className="mt-1 text-xs leading-5 text-gray-400">
+                    {item.description}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-          {modal.showEditAgain && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-xl border border-yellow-300/50 bg-yellow-300/10 px-5 py-3 text-sm font-bold text-yellow-200 transition hover:bg-yellow-300 hover:text-black"
-            >
-              Edit Again
-            </button>
-          )}
+        {modal.detail && checklist.length === 0 && (
+          <div className="p-5">
+            <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-gray-300">
+              {modal.detail}
+            </div>
+          </div>
+        )}
 
+        {modal.type === "warning" && (
+          <div className="mx-5 mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/[0.06] p-4">
+            <div className="flex gap-3">
+              <span className="material-symbols-outlined mt-0.5 text-cyan-300">
+                shield
+              </span>
+
+              <div>
+                <p className="text-sm font-black text-white">
+                  Your current profile is safe
+                </p>
+
+                <p className="mt-1 text-xs leading-5 text-gray-400">
+                  The existing approved profile remains unchanged until the new
+                  verification details pass review.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-col-reverse gap-3 border-t border-white/10 p-5 sm:flex-row sm:justify-end">
           {modal.showBackProfile && (
             <button
               type="button"
               onClick={onBackProfile}
-              className="rounded-xl border border-cyan-300/50 bg-cyan-300/10 px-5 py-3 text-sm font-bold text-cyan-200 transition hover:bg-cyan-300 hover:text-black"
+              className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
             >
               Back to Profile
+            </button>
+          )}
+
+          {modal.showEditAgain && (
+            <button
+              type="button"
+              onClick={onClose}
+              className={`rounded-xl px-4 py-2.5 text-sm font-black transition ${config.primaryClass}`}
+            >
+              Edit Verification
             </button>
           )}
         </div>
       </div>
     </div>
   );
+}
+
+function buildVerificationChecklist({
+  missingInformation,
+  resultMessage,
+}) {
+  const sourceText = `${missingInformation || ""} ${resultMessage || ""}`
+    .trim()
+    .toLowerCase();
+
+  const items = [];
+
+  if (
+    sourceText.includes("portfolio") ||
+    sourceText.includes("project") ||
+    sourceText.includes("repositories")
+  ) {
+    items.push({
+      icon: "work",
+      title: "Add stronger project proof",
+      description:
+        "Use direct links to AI, chatbot, RAG, or automation projects instead of a general homepage.",
+    });
+  }
+
+  if (
+    sourceText.includes("github") ||
+    sourceText.includes("repository")
+  ) {
+    items.push({
+      icon: "code",
+      title: "Improve your GitHub evidence",
+      description:
+        "Link to public repositories with clear README files, project descriptions, and working source code.",
+    });
+  }
+
+  if (sourceText.includes("linkedin")) {
+    items.push({
+      icon: "badge",
+      title: "Add a valid LinkedIn profile",
+      description:
+        "Use a public personal LinkedIn profile URL that can be opened without special access.",
+    });
+  }
+
+  if (
+    sourceText.includes("certificate") ||
+    sourceText.includes("holder") ||
+    sourceText.includes("course")
+  ) {
+    items.push({
+      icon: "workspace_premium",
+      title: "Use verifiable certificate links",
+      description:
+        "Certificate pages should show the holder name, course or certificate title, issuer, and issue details.",
+    });
+  }
+
+  if (items.length === 0) {
+    items.push(
+      {
+        icon: "link",
+        title: "Review your public proof links",
+        description:
+          "Make sure each link is public, accessible, and directly related to your expertise.",
+      },
+      {
+        icon: "verified",
+        title: "Add clearer verification evidence",
+        description:
+          "Provide enough information for clients and the review system to verify your experience.",
+      }
+    );
+  }
+
+  return items.slice(0, 4);
 }
 
 function validateBasicForm(formData) {
@@ -1147,28 +1648,6 @@ function buildVerificationPayload(formData) {
     linkedInUrl: String(formData.linkedInUrl || "").trim(),
     gitHubUrl: String(formData.gitHubUrl || "").trim(),
     certificates: normalizeCertificatesForPayload(formData.certificates),
-  };
-}
-
-function buildCombinedPayload({ profileSnapshot, basicForm, verificationForm }) {
-  return {
-    avatarUrl: String(basicForm.avatarUrl || "").trim(),
-    fullName: String(basicForm.fullName || "").trim(),
-    professionalTitle: String(basicForm.professionalTitle || "").trim(),
-    bio: String(basicForm.bio || "").trim(),
-    availableForWork: Boolean(basicForm.availableForWork),
-
-    skills: String(verificationForm.skills || "").trim(),
-    yearsOfExperience: Number(verificationForm.yearsOfExperience || 0),
-    portfolioUrl: String(verificationForm.portfolioUrl || "").trim(),
-    linkedInUrl: String(verificationForm.linkedInUrl || "").trim(),
-    gitHubUrl: String(verificationForm.gitHubUrl || "").trim(),
-    certificates: normalizeCertificatesForPayload(
-      verificationForm.certificates
-    ),
-
-    expertProfileId:
-      profileSnapshot?.expertProfileId || profileSnapshot?.ExpertProfileId,
   };
 }
 

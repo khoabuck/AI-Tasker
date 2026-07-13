@@ -220,9 +220,7 @@ export default function ExpertProfilePage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading expert profile...
-        </div>
+        <ExpertProfileSkeleton />
       </ExpertLayout>
     );
   }
@@ -543,6 +541,30 @@ export default function ExpertProfilePage() {
         />
       )}
     </ExpertLayout>
+  );
+}
+
+
+function ExpertProfileSkeleton() {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="h-56 rounded-3xl border border-white/10 bg-[#151a22]" />
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+          <div className="space-y-6">
+            <div className="h-44 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-40 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-64 rounded-2xl border border-white/10 bg-[#151a22]" />
+          </div>
+
+          <div className="space-y-6">
+            <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+            <div className="h-48 rounded-2xl border border-white/10 bg-[#151a22]" />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

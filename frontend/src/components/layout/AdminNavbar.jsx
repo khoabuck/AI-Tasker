@@ -100,6 +100,16 @@ export default function AdminNavbar() {
           Workflow Policy
         </NavLink>
 
+        <NavLink
+          to="/admin/login-security-policy"
+          className={navLinkClass}
+        >
+          <span className="material-symbols-outlined text-[20px]">
+            shield_lock
+          </span>
+          Login Security
+        </NavLink>
+
         <NavLink to="/admin/job-posting-ai-policy" className={navLinkClass}>
           <span className="material-symbols-outlined text-[20px]">smart_toy</span>
           Job AI Policy

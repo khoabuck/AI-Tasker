@@ -1,14 +1,11 @@
 import axiosInstance from "./axiosInstance";
 
-const multipartConfig = {
-  headers: {
-    "Content-Type": "multipart/form-data",
-  },
-};
-
 const disputeApi = {
   createDispute(data) {
-    return axiosInstance.post("/disputes", data, multipartConfig);
+    // Do not set Content-Type manually.
+    // axiosInstance removes JSON Content-Type for FormData and lets the browser
+    // attach the multipart boundary required by ASP.NET Core.
+    return axiosInstance.post("/disputes", data);
   },
 
   getMyDisputes() {
@@ -20,16 +17,15 @@ const disputeApi = {
   },
 
   addDisputeEvidence(disputeId, data) {
+    // Backend endpoint consumes JSON CreateDisputeEvidenceRequest.
     return axiosInstance.post(`/disputes/${disputeId}/evidences`, data);
   },
 
   addDisputeImageEvidence(disputeId, data) {
-    /*
-     * Do not set Content-Type manually here.
-     * The browser/Axios must add the multipart boundary automatically.
-     */
+    // Backend endpoint consumes multipart/form-data:
+    // EvidenceText + repeated Images fields.
     return axiosInstance.post(
-      `/disputes/${disputeId}/evidences/image`,
+      `/disputes/${disputeId}/evidences/images`,
       data
     );
   },

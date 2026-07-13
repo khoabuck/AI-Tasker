@@ -10,7 +10,9 @@ import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
 const emptySubmissionForm = {
   fileUrl: "",
   demoUrl: "",
+  demoInstructions: "",
   testResultUrl: "",
+  testSummary: "",
   description: "",
   handoverNotes: "",
 };
@@ -41,6 +43,7 @@ export default function MilestoneDetailPage() {
 
   const [loading, setLoading] = useState(true);
   const [submissionLoading, setSubmissionLoading] = useState(false);
+  const [submissionFieldErrors, setSubmissionFieldErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [showSubmissionConfirm, setShowSubmissionConfirm] = useState(false);
 
@@ -195,6 +198,10 @@ export default function MilestoneDetailPage() {
     setMessage("");
     setError("");
     setSubmissionError("");
+    setSubmissionFieldErrors((prev) => ({
+      ...prev,
+      [name]: "",
+    }));
 
     setSubmissionForm((prev) => ({
       ...prev,
@@ -263,6 +270,7 @@ export default function MilestoneDetailPage() {
     setMessage("");
     setError("");
     setSubmissionError("");
+    setSubmissionFieldErrors({});
     setSubmissionForm({ ...emptySubmissionForm });
   };
 
@@ -305,23 +313,64 @@ export default function MilestoneDetailPage() {
   };
 
   const validateSubmission = () => {
-    if (!submissionForm.description.trim()) {
-      return "Please describe what you delivered.";
+    const fieldErrors = {};
+    const fileUrl = submissionForm.fileUrl.trim();
+    const demoUrl = submissionForm.demoUrl.trim();
+    const demoInstructions = submissionForm.demoInstructions.trim();
+    const testResultUrl = submissionForm.testResultUrl.trim();
+    const testSummary = submissionForm.testSummary.trim();
+    const description = submissionForm.description.trim();
+    const handoverNotes = submissionForm.handoverNotes.trim();
+
+    if (!fileUrl) {
+      fieldErrors.fileUrl =
+        "A public file or repository URL is required for the client to review your work.";
+    } else if (!isValidHttpUrl(fileUrl)) {
+      fieldErrors.fileUrl = "Enter a valid HTTP or HTTPS file URL.";
     }
 
-    if (submissionForm.description.trim().length < 20) {
-      return "Description must be at least 20 characters.";
+    if (demoUrl && !isValidHttpUrl(demoUrl)) {
+      fieldErrors.demoUrl = "Enter a valid HTTP or HTTPS demo URL.";
     }
 
-    if (
-      !submissionForm.fileUrl.trim() &&
-      !submissionForm.demoUrl.trim() &&
-      !submissionForm.testResultUrl.trim()
-    ) {
-      return "Please provide at least File URL, Demo URL, or Test Result URL.";
+    if (demoInstructions.length > 2000) {
+      fieldErrors.demoInstructions =
+        "Demo instructions cannot exceed 2,000 characters.";
     }
 
-    return "";
+    if (testResultUrl && !isValidHttpUrl(testResultUrl)) {
+      fieldErrors.testResultUrl =
+        "Enter a valid HTTP or HTTPS test result URL.";
+    }
+
+    if (testResultUrl && !testSummary) {
+      fieldErrors.testSummary =
+        "Add a short test summary when a test result URL is provided.";
+    }
+
+    if (testSummary.length > 2000) {
+      fieldErrors.testSummary =
+        "Test summary cannot exceed 2,000 characters.";
+    }
+
+    if (!description) {
+      fieldErrors.description = "Please describe what you delivered.";
+    } else if (description.length < 20) {
+      fieldErrors.description =
+        "Description must be at least 20 characters.";
+    } else if (description.length > 4000) {
+      fieldErrors.description =
+        "Description cannot exceed 4,000 characters.";
+    }
+
+    if (handoverNotes.length > 4000) {
+      fieldErrors.handoverNotes =
+        "Handover notes cannot exceed 4,000 characters.";
+    }
+
+    setSubmissionFieldErrors(fieldErrors);
+
+    return Object.values(fieldErrors)[0] || "";
   };
 
   const validateDispute = () => {
@@ -443,6 +492,7 @@ export default function MilestoneDetailPage() {
       );
 
       setSubmissionForm({ ...emptySubmissionForm });
+      setSubmissionFieldErrors({});
 
       await loadSubmissions(realMilestoneId);
     } catch (err) {
@@ -813,8 +863,8 @@ export default function MilestoneDetailPage() {
             <Alert type="danger" title="Milestone error" message={error} />
           )}
 
-          <div className="space-y-4">
-            <main className="space-y-4">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
+            <main className="min-w-0 space-y-5">
               <Card
                 title="Work Brief"
                 subtitle="Review what the client expects before submitting."
@@ -950,91 +1000,186 @@ export default function MilestoneDetailPage() {
                 )}
 
                 {canSubmit && (
-                  <form onSubmit={handleSubmitWork} className="space-y-5">
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  <form
+                    id="milestone-submission-form"
+                    onSubmit={handleSubmitWork}
+                    className="space-y-5"
+                  >
+                    <div className="overflow-hidden rounded-2xl border border-emerald-400/20 bg-gradient-to-br from-emerald-400/[0.09] via-white/[0.025] to-cyan-400/[0.05]">
+                      <div className="grid gap-0 md:grid-cols-[1fr_auto]">
+                        <div className="p-5">
+                          <div className="flex items-center gap-2">
+                            <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-400/15 text-emerald-300">
+                              <span className="material-symbols-outlined text-[18px]">inventory_2</span>
+                            </span>
+                            <p className="text-sm font-black text-white">Deliver work to your client</p>
+                          </div>
+                          <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                            Add the main delivery link first. Demo, testing, and handover notes help the client review faster and reduce revision requests.
+                          </p>
+                        </div>
+                        <div className="flex items-center border-t border-white/10 bg-black/10 px-5 py-4 md:border-l md:border-t-0">
+                          <div>
+                            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-500">Milestone value</p>
+                            <p className="mt-1 text-lg font-black text-emerald-300">{formatMoney(getMilestoneAmount(milestone))}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <SubmissionSection
+                      number="1"
+                      title="Delivery package"
+                    >
                       <SubmitWorkInput
-                        label="File URL"
+                        label="File or Repository URL"
+                        required
                         value={submissionForm.fileUrl}
                         disabled={submitting}
+                        error={submissionFieldErrors.fileUrl}
                         onChange={(value) =>
                           updateSubmissionField("fileUrl", value)
                         }
-                        placeholder="https://drive.google.com/..."
+                        placeholder="https://github.com/your-name/project"
                       />
 
-                      <SubmitWorkInput
-                        label="Demo URL"
-                        value={submissionForm.demoUrl}
+                      <SubmitWorkTextArea
+                        label="What did you deliver?"
+                        required
+                        value={submissionForm.description}
                         disabled={submitting}
+                        error={submissionFieldErrors.description}
+                        maxLength={4000}
                         onChange={(value) =>
-                          updateSubmissionField("demoUrl", value)
+                          updateSubmissionField("description", value)
                         }
-                        placeholder="https://demo.example.com"
+                        placeholder="Example: Completed the dashboard, authentication flow, API integration, and responsive layout required for milestone 1..."
+                        rows={4}
                       />
+                    </SubmissionSection>
 
-                      <SubmitWorkInput
-                        label="Test Result URL"
-                        value={submissionForm.testResultUrl}
+                    <SubmissionSection
+                      number="2"
+                      title="Demo and review instructions"
+                      optional
+                    >
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <SubmitWorkInput
+                          label="Demo URL"
+                          value={submissionForm.demoUrl}
+                          disabled={submitting}
+                          error={submissionFieldErrors.demoUrl}
+                          onChange={(value) =>
+                            updateSubmissionField("demoUrl", value)
+                          }
+                          placeholder="https://your-demo.vercel.app"
+                        />
+
+                        <SubmitWorkTextArea
+                          label="Demo Instructions"
+                          value={submissionForm.demoInstructions}
+                          disabled={submitting}
+                          error={submissionFieldErrors.demoInstructions}
+                          maxLength={2000}
+                          onChange={(value) =>
+                            updateSubmissionField("demoInstructions", value)
+                          }
+                          placeholder="Example: Open the demo, sign in with the provided test account, then navigate to Projects..."
+                          rows={4}
+                        />
+                      </div>
+                    </SubmissionSection>
+
+                    <SubmissionSection
+                      number="3"
+                      title="Testing evidence"
+                      optional
+                    >
+                      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <SubmitWorkInput
+                          label="Test Result URL"
+                          value={submissionForm.testResultUrl}
+                          disabled={submitting}
+                          error={submissionFieldErrors.testResultUrl}
+                          onChange={(value) =>
+                            updateSubmissionField("testResultUrl", value)
+                          }
+                          placeholder="https://github.com/.../actions/runs/..."
+                        />
+
+                        <SubmitWorkTextArea
+                          label="Test Summary"
+                          required={Boolean(
+                            submissionForm.testResultUrl.trim()
+                          )}
+                          value={submissionForm.testSummary}
+                          disabled={submitting}
+                          error={submissionFieldErrors.testSummary}
+                          maxLength={2000}
+                          onChange={(value) =>
+                            updateSubmissionField("testSummary", value)
+                          }
+                          placeholder="Example: 18 automated tests passed. Core user flows were verified with no critical issues..."
+                          rows={4}
+                        />
+                      </div>
+                    </SubmissionSection>
+
+                    <SubmissionSection
+                      number="4"
+                      title="Handover notes"
+                      optional
+                    >
+                      <SubmitWorkTextArea
+                        label="Notes for Client"
+                        value={submissionForm.handoverNotes}
                         disabled={submitting}
+                        error={submissionFieldErrors.handoverNotes}
+                        maxLength={4000}
                         onChange={(value) =>
-                          updateSubmissionField("testResultUrl", value)
+                          updateSubmissionField("handoverNotes", value)
                         }
-                        placeholder="https://docs.google.com/..."
+                        placeholder="Example: Run npm install and npm run dev. The demo account is included in the project README..."
+                        rows={3}
                       />
-                    </div>
+                    </SubmissionSection>
 
-                    <SubmitWorkTextArea
-                      label="What did you deliver?"
-                      required
-                      value={submissionForm.description}
-                      disabled={submitting}
-                      onChange={(value) =>
-                        updateSubmissionField("description", value)
-                      }
-                      placeholder="Describe what you completed, what changed, and how the client can review it..."
-                      rows={4}
-                    />
-
-                    <SubmitWorkTextArea
-                      label="Notes for client"
-                      value={submissionForm.handoverNotes}
-                      disabled={submitting}
-                      onChange={(value) =>
-                        updateSubmissionField("handoverNotes", value)
-                      }
-                      placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
-                      rows={3}
-                    />
-
-                    <div className="flex flex-wrap justify-end gap-3 pt-1">
-                      <button
-                        type="button"
-                        onClick={resetSubmissionForm}
-                        disabled={submitting}
-                        className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        Clear
-                      </button>
-
-                      <button
-                        type="submit"
-                        disabled={submitting}
-                        className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <span className="material-symbols-outlined text-[20px]">
-                          send
+                    <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-black/15 p-4 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-start gap-2 text-xs leading-5 text-gray-500">
+                        <span className="material-symbols-outlined mt-0.5 text-[17px] text-cyan-300">
+                          verified_user
                         </span>
+                      </div>
 
-                        {submitting
-                          ? "Submitting..."
-                          : needsResubmission
-                          ? "Resubmit Work"
-                          : "Submit Work"}
-                      </button>
+                      <div className="flex shrink-0 flex-wrap justify-end gap-3">
+                        <button
+                          type="button"
+                          onClick={resetSubmissionForm}
+                          disabled={submitting}
+                          className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Clear Form
+                        </button>
+
+                        <button
+                          type="submit"
+                          disabled={submitting}
+                          className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[20px]">
+                            send
+                          </span>
+
+                          {submitting
+                            ? "Submitting..."
+                            : needsResubmission
+                            ? "Review and Resubmit"
+                            : "Review and Submit"}
+                        </button>
+                      </div>
                     </div>
                   </form>
-                )}
-              </Card>
+                )}              </Card>
 
               <Card
                 title="Submission History"
@@ -1064,6 +1209,27 @@ export default function MilestoneDetailPage() {
                 )}
               </Card>
             </main>
+
+            <aside className="space-y-4 xl:sticky xl:top-20">
+              <MarketplaceSidebar
+                milestone={milestone}
+                project={project}
+                milestoneUi={milestoneUi}
+                submissions={submissions}
+                canSubmit={canSubmit}
+                needsResubmission={needsResubmission}
+                activeDisputeId={activeDisputeId}
+                onSubmitFocus={() =>
+                  document
+                    .getElementById("milestone-submission-form")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                onViewDispute={() =>
+                  activeDisputeId &&
+                  navigate(`/expert/disputes/${activeDisputeId}`)
+                }
+              />
+            </aside>
           </div>
         </div>
       </div>
@@ -1471,11 +1637,57 @@ function ConfirmDialog({
   );
 }
 
-function SubmitWorkInput({ label, value, disabled, onChange, placeholder }) {
+function SubmissionSection({
+  number,
+  title,
+  description,
+  optional = false,
+  children,
+}) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-[#10151d] p-4 transition hover:border-white/15 md:p-5">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-400/10 text-xs font-black text-cyan-300">
+          {number}
+        </div>
+
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-extrabold text-white">{title}</h3>
+
+            {optional && (
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                Optional
+              </span>
+            )}
+          </div>
+
+          <p className="mt-1 text-sm leading-5 text-gray-500">
+            {description}
+          </p>
+        </div>
+      </div>
+
+      <div className="space-y-4">{children}</div>
+    </section>
+  );
+}
+
+function SubmitWorkInput({
+  label,
+  required = false,
+  value,
+  disabled,
+  error,
+  helper,
+  onChange,
+  placeholder,
+}) {
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+      <span className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-gray-400">
         {label}
+        {required && <span className="text-red-300">*</span>}
       </span>
 
       <input
@@ -1484,35 +1696,90 @@ function SubmitWorkInput({ label, value, disabled, onChange, placeholder }) {
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className="w-full rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className={`w-full rounded-xl border bg-[#0f141d] px-4 py-3 text-sm font-semibold text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400"
+        }`}
       />
+
+      {helper && !error && (
+        <span className="mt-1.5 block text-xs leading-5 text-gray-500">
+          {helper}
+        </span>
+      )}
+
+      {error && (
+        <span className="mt-1.5 flex items-start gap-1.5 text-xs font-semibold leading-5 text-red-300">
+          <span className="material-symbols-outlined mt-0.5 text-[15px]">
+            error
+          </span>
+          {error}
+        </span>
+      )}
     </label>
   );
 }
 
 function SubmitWorkTextArea({
   label,
-  required,
+  required = false,
   value,
   disabled,
+  error,
+  helper,
+  maxLength,
   onChange,
   placeholder,
   rows = 4,
 }) {
+  const currentLength = String(value || "").length;
+
   return (
     <label className="block">
-      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-400">
-        {label} {required && <span className="text-red-300">*</span>}
+      <span className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.16em] text-gray-400">
+        {label}
+        {required && <span className="text-red-300">*</span>}
       </span>
 
       <textarea
         value={value}
         disabled={disabled}
+        maxLength={maxLength}
         onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
-        className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60"
+        className={`w-full resize-none rounded-xl border bg-[#0f141d] px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:bg-[#111823] disabled:cursor-not-allowed disabled:opacity-60 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400"
+        }`}
       />
+
+      <div className="mt-1.5 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {helper && !error && (
+            <span className="block text-xs leading-5 text-gray-500">
+              {helper}
+            </span>
+          )}
+
+          {error && (
+            <span className="flex items-start gap-1.5 text-xs font-semibold leading-5 text-red-300">
+              <span className="material-symbols-outlined mt-0.5 text-[15px]">
+                error
+              </span>
+              {error}
+            </span>
+          )}
+        </div>
+
+        {maxLength && (
+          <span className="shrink-0 text-[11px] font-semibold text-gray-600">
+            {currentLength}/{maxLength}
+          </span>
+        )}
+      </div>
     </label>
   );
 }
@@ -1594,8 +1861,8 @@ function SubmissionCard({ submission, onDetail }) {
 
 function Card({ title, subtitle, icon, children }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.18)]">
-      <div className="mb-3 flex items-start gap-3">
+    <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.22)]">
+      <div className="flex items-start gap-3 border-b border-white/10 bg-white/[0.018] px-5 py-4">
         {icon && (
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
             <span className="material-symbols-outlined text-lg text-cyan-300">
@@ -1613,8 +1880,106 @@ function Card({ title, subtitle, icon, children }) {
         </div>
       </div>
 
-      {children}
+      <div className="p-5">{children}</div>
     </section>
+  );
+}
+
+function MarketplaceSidebar({
+  milestone,
+  project,
+  milestoneUi,
+  submissions,
+  canSubmit,
+  needsResubmission,
+  activeDisputeId,
+  onSubmitFocus,
+  onViewDispute,
+}) {
+  const dueDate = milestone?.dueDate;
+  const projectTitle =
+    project?.title || project?.projectTitle || milestone?.projectTitle || "Current project";
+
+  return (
+    <>
+      <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_16px_45px_rgba(0,0,0,0.22)]">
+        <div className="border-b border-white/10 bg-gradient-to-br from-cyan-400/[0.08] to-transparent p-5">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-300">Order summary</p>
+          <h3 className="mt-2 line-clamp-2 text-base font-black text-white">{projectTitle}</h3>
+          <div className="mt-4">
+            <FriendlyStatusBadge ui={milestoneUi} small />
+          </div>
+        </div>
+
+        <div className="divide-y divide-white/10">
+          <SidebarRow icon="payments" label="Milestone value" value={formatMoney(getMilestoneAmount(milestone))} accent />
+          <SidebarRow icon="calendar_month" label="Delivery due" value={formatDate(dueDate)} />
+          <SidebarRow icon="history" label="Submissions" value={String(submissions.length)} />
+        </div>
+
+        <div className="p-4">
+          {activeDisputeId ? (
+            <button
+              type="button"
+              onClick={onViewDispute}
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-3 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black"
+            >
+              <span className="material-symbols-outlined text-[18px]">gavel</span>
+              View Active Dispute
+            </button>
+          ) : canSubmit ? (
+            <button
+              type="button"
+              onClick={onSubmitFocus}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-black transition hover:bg-emerald-300"
+            >
+              <span className="material-symbols-outlined text-[18px]">{needsResubmission ? "published_with_changes" : "upload"}</span>
+              {needsResubmission ? "Update Delivery" : "Submit Delivery"}
+            </button>
+          ) : (
+            <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-xs leading-5 text-gray-400">
+              Submission actions are unavailable for the current milestone status.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_12px_32px_rgba(0,0,0,0.18)]">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[19px] text-emerald-300">verified</span>
+          <h3 className="text-sm font-black text-white">Delivery checklist</h3>
+        </div>
+        <div className="mt-4 space-y-3">
+          <ChecklistItem text="Main link opens without requesting access" />
+          <ChecklistItem text="Description matches the completed scope" />
+          <ChecklistItem text="Demo and test steps are easy to follow" />
+          <ChecklistItem text="No production passwords are included" />
+        </div>
+      </section>
+    </>
+  );
+}
+
+function SidebarRow({ icon, label, value, accent = false }) {
+  return (
+    <div className="flex items-center gap-3 px-5 py-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-gray-400">
+        <span className="material-symbols-outlined text-[18px]">{icon}</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">{label}</p>
+        <p className={`mt-1 truncate text-sm font-black ${accent ? "text-emerald-300" : "text-white"}`}>{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ChecklistItem({ text }) {
+  return (
+    <div className="flex items-start gap-2.5 text-xs leading-5 text-gray-400">
+      <span className="material-symbols-outlined mt-0.5 text-[16px] text-emerald-300">check_circle</span>
+      <span>{text}</span>
+    </div>
   );
 }
 
@@ -1727,8 +2092,14 @@ function buildFormFromSubmission(submission) {
   return {
     fileUrl: submission?.fileUrl || submission?.raw?.fileUrl || "",
     demoUrl: submission?.demoUrl || submission?.raw?.demoUrl || "",
+    demoInstructions:
+      submission?.demoInstructions ||
+      submission?.raw?.demoInstructions ||
+      "",
     testResultUrl:
       submission?.testResultUrl || submission?.raw?.testResultUrl || "",
+    testSummary:
+      submission?.testSummary || submission?.raw?.testSummary || "",
     description: submission?.description || submission?.raw?.description || "",
     handoverNotes:
       submission?.handoverNotes || submission?.raw?.handoverNotes || "",

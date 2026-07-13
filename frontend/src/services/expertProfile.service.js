@@ -374,23 +374,40 @@ export function buildExpertProfilePayload(formData = {}) {
 
 export function buildBasicExpertProfilePayload(formData = {}) {
   return {
+    fullName: trimString(formData.fullName),
+
     avatarUrl: nullableString(formData.avatarUrl),
+
     professionalTitle: trimString(formData.professionalTitle),
+
     bio: trimString(formData.bio),
-    skills: Array.isArray(formData.skills)
-      ? formData.skills.map((item) => trimString(item)).filter(Boolean).join(", ")
-      : trimString(formData.skills),
-    yearsOfExperience: numberOrZero(formData.yearsOfExperience),
+
     availableForWork: booleanValue(formData.availableForWork),
   };
 }
 
 export function buildVerificationExpertProfilePayload(formData = {}) {
   return {
-    portfolioUrl: trimString(formData.portfolioUrl),
-    linkedInUrl: trimString(formData.linkedInUrl ?? formData.linkedinUrl),
-    gitHubUrl: trimString(formData.gitHubUrl ?? formData.githubUrl),
-    certificates: normalizeCertificatesForPayload(formData.certificates),
+    skills: Array.isArray(formData.skills)
+      ? formData.skills
+          .map((item) => trimString(item))
+          .filter(Boolean)
+          .join(", ")
+      : trimString(formData.skills),
+
+    portfolioUrl: nullableString(formData.portfolioUrl),
+
+    linkedInUrl: nullableString(
+      formData.linkedInUrl ?? formData.linkedinUrl
+    ),
+
+    gitHubUrl: nullableString(
+      formData.gitHubUrl ?? formData.githubUrl
+    ),
+
+    certificates: normalizeCertificatesForPayload(
+      formData.certificates
+    ),
   };
 }
 
@@ -725,18 +742,24 @@ const expertProfileService = {
     }
   },
 
-  async updateVerificationExpertProfile(formData) {
-    try {
-      const payload = buildVerificationExpertProfilePayload(formData);
-      const response = await axiosInstance.put(
-        "/expert-profiles/me/verification",
-        payload
-      );
-      return normalizeExpertProfile(unwrapData(response));
-    } catch (error) {
-      throwFriendlyError(error, "Unable to update verification information.");
-    }
-  },
+async updateVerificationExpertProfile(formData) {
+  try {
+    const payload = buildVerificationExpertProfilePayload(formData);
+
+    const response = await axiosInstance.put(
+      "/expert-profiles/me/verification",
+      payload
+    );
+
+    // Backend trả review result chứ không phải ExpertProfile
+    return unwrapData(response);
+  } catch (error) {
+    throwFriendlyError(
+      error,
+      "Unable to update verification information."
+    );
+  }
+},
 };
 
 export default expertProfileService;
