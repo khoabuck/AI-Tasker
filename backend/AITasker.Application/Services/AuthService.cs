@@ -19,6 +19,7 @@ public class AuthService : IAuthService
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly IEmailSender _emailSender;
+    private readonly ILoginSecurityPolicyService _loginSecurityPolicyService;
     private readonly IConfiguration _configuration;
 
     public AuthService(
@@ -28,6 +29,7 @@ public class AuthService : IAuthService
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService,
         IEmailSender emailSender,
+        ILoginSecurityPolicyService loginSecurityPolicyService,
         IConfiguration configuration)
     {
         _userRepository = userRepository;
@@ -36,6 +38,7 @@ public class AuthService : IAuthService
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
         _emailSender = emailSender;
+        _loginSecurityPolicyService = loginSecurityPolicyService;
         _configuration = configuration;
     }
 
@@ -104,6 +107,13 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("Invalid email or password.");
         }
 
+        await RestoreExpiredSuspensionAsync(user);
+
+        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        {
+            throw new InvalidOperationException("Your account is not allowed to login.");
+        }
+
         if (user.AuthProvider == "LOCAL"
             && user.Status == "PENDING_EMAIL_VERIFICATION")
         {
@@ -115,6 +125,34 @@ public class AuthService : IAuthService
             throw new InvalidOperationException("This account does not use password login.");
         }
 
+        var loginPolicy = await _loginSecurityPolicyService
+            .GetOrCreateActivePolicyEntityAsync();
+
+        if (!loginPolicy.IsEnabled)
+        {
+            if (user.FailedLoginAttempts != 0
+                || user.LoginBlockedUntil.HasValue)
+            {
+                user.FailedLoginAttempts = 0;
+                user.LoginBlockedUntil = null;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                await _userRepository.SaveChangesAsync();
+            }
+        }
+        else
+        {
+            await ClearExpiredLoginBlockAsync(user);
+
+            if (user.LoginBlockedUntil.HasValue
+                && user.LoginBlockedUntil.Value > DateTime.UtcNow)
+            {
+                throw new LoginBlockedException(
+                    user.LoginBlockedUntil.Value
+                );
+            }
+        }
+
         var passwordValid = _passwordHasher.VerifyPassword(
             password,
             user.PasswordHash
@@ -122,14 +160,39 @@ public class AuthService : IAuthService
 
         if (!passwordValid)
         {
+            if (loginPolicy.IsEnabled)
+            {
+                user.FailedLoginAttempts += 1;
+                user.UpdatedAt = DateTime.UtcNow;
+
+                if (user.FailedLoginAttempts >= loginPolicy.MaxFailedLoginAttempts)
+                {
+                    var blockedUntilUtc = DateTime.UtcNow.AddMinutes(
+                        loginPolicy.LockoutDurationMinutes
+                    );
+
+                    user.FailedLoginAttempts = 0;
+                    user.LoginBlockedUntil = blockedUntilUtc;
+
+                    await _userRepository.SaveChangesAsync();
+
+                    throw new LoginBlockedException(blockedUntilUtc);
+                }
+
+                await _userRepository.SaveChangesAsync();
+            }
+
             throw new InvalidOperationException("Invalid email or password.");
         }
 
-        await RestoreExpiredSuspensionAsync(user);
-
-        if (user.Status == "SUSPENDED" || user.Status == "BANNED")
+        if (user.FailedLoginAttempts != 0
+            || user.LoginBlockedUntil.HasValue)
         {
-            throw new InvalidOperationException("Your account is not allowed to login.");
+            user.FailedLoginAttempts = 0;
+            user.LoginBlockedUntil = null;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _userRepository.SaveChangesAsync();
         }
 
         return new AuthResponse
@@ -381,6 +444,8 @@ public class AuthService : IAuthService
         }
 
         user.PasswordHash = _passwordHasher.HashPassword(newPassword);
+        user.FailedLoginAttempts = 0;
+        user.LoginBlockedUntil = null;
         user.UpdatedAt = DateTime.UtcNow;
 
         resetToken.UsedAt = DateTime.UtcNow;
@@ -901,6 +966,21 @@ public class AuthService : IAuthService
         await _userRepository.SaveChangesAsync();
 
         return true;
+    }
+
+    private async Task ClearExpiredLoginBlockAsync(User user)
+    {
+        if (!user.LoginBlockedUntil.HasValue
+            || user.LoginBlockedUntil.Value > DateTime.UtcNow)
+        {
+            return;
+        }
+
+        user.FailedLoginAttempts = 0;
+        user.LoginBlockedUntil = null;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        await _userRepository.SaveChangesAsync();
     }
 
     private static string HashToken(string token)

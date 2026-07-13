@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 
+using AITasker.Application.Common;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.Interfaces;
 
@@ -82,6 +83,19 @@ public class AuthController : ControllerBase
                     user = result.User,
                     expiresAt = result.ExpiresAt
                 }
+            });
+        }
+        catch (LoginBlockedException ex)
+        {
+            Response.Headers["Retry-After"] = ex.RetryAfterSeconds.ToString();
+
+            return StatusCode(StatusCodes.Status429TooManyRequests, new
+            {
+                success = false,
+                code = "LOGIN_TEMPORARILY_BLOCKED",
+                message = ex.Message,
+                blockedUntilUtc = ex.BlockedUntilUtc,
+                retryAfterSeconds = ex.RetryAfterSeconds
             });
         }
         catch (InvalidOperationException ex)

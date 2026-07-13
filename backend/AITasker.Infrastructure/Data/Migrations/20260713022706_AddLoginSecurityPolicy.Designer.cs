@@ -4,6 +4,7 @@ using AITasker.Infrastructure.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace AITasker.Infrastructure.Data.Migrations
 {
     [DbContext(typeof(AITaskerDbContext))]
-    partial class AITaskerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260713022706_AddLoginSecurityPolicy")]
+    partial class AddLoginSecurityPolicy
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -467,6 +470,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ContractMilestoneDraftId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -478,6 +485,14 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<int>("DeadlineOffsetDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");
@@ -646,17 +661,9 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
 
-                    b.Property<string>("DemoInstructions")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
                     b.Property<string>("DemoUrl")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
-
-                    b.Property<string>("DemoValidationStatus")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -698,14 +705,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<string>("TestSummary")
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<string>("TestValidationStatus")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
                     b.Property<int>("VersionNumber")
                         .HasColumnType("int");
 
@@ -726,88 +725,9 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.ToTable("Deliverables", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Deliverables_DemoValidationStatus", "[DemoValidationStatus] IS NULL OR [DemoValidationStatus] IN ('VALID','AUTH_REQUIRED')");
-
                             t.HasCheckConstraint("CK_Deliverables_Status", "[Status] IN ('SUBMITTED','APPROVED','AUTO_APPROVED','REVISION_REQUESTED')");
 
-                            t.HasCheckConstraint("CK_Deliverables_TestValidationStatus", "[TestValidationStatus] IS NULL OR [TestValidationStatus] IN ('VALID','AUTH_REQUIRED')");
-
                             t.HasCheckConstraint("CK_Deliverables_VersionNumber", "[VersionNumber] > 0");
-                        });
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.DeliverableArtifact", b =>
-                {
-                    b.Property<int>("DeliverableArtifactId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("DeliverableArtifactId"));
-
-                    b.Property<string>("AccessLevel")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("ArtifactType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("Checksum")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("CommitHash")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("DeliverableId")
-                        .HasColumnType("int");
-
-                    b.Property<string>("Label")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("Provider")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("Url")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<DateTime?>("ValidatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("ValidationStatus")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("Version")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("DeliverableArtifactId");
-
-                    b.HasIndex("DeliverableId");
-
-                    b.HasIndex("DeliverableId", "Url")
-                        .IsUnique();
-
-                    b.ToTable("DeliverableArtifacts", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_DeliverableArtifacts_AccessLevel", "[AccessLevel] IN ('PUBLIC','RESTRICTED')");
-
-                            t.HasCheckConstraint("CK_DeliverableArtifacts_ArtifactType", "[ArtifactType] IN ('FILE','FOLDER','ARCHIVE','SOURCE_REPOSITORY','DOCUMENTATION','DESIGN','DATASET','MODEL','BUILD','OTHER')");
-
-                            t.HasCheckConstraint("CK_DeliverableArtifacts_ValidationStatus", "[ValidationStatus] IN ('VALID','AUTH_REQUIRED')");
                         });
                 });
 
@@ -923,9 +843,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int?>("DeliverableId")
-                        .HasColumnType("int");
-
                     b.Property<decimal>("DisputedAmount")
                         .HasColumnType("decimal(18,2)");
 
@@ -959,8 +876,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("DisputeId");
-
-                    b.HasIndex("DeliverableId");
 
                     b.HasIndex("OpenedByUserId");
 
@@ -1010,7 +925,8 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("ImageUrl")
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(1000)
+                        .HasColumnType("nvarchar(1000)");
 
                     b.Property<int>("UploadedByUserId")
                         .HasColumnType("int");
@@ -1884,11 +1800,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<int>("DeliverableArtifactLimit")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(10);
-
                     b.Property<int>("DeliverableAutoApproveGraceHours")
                         .HasColumnType("int");
 
@@ -1921,26 +1832,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<decimal>("MinimumWithdrawalAmount")
                         .HasColumnType("decimal(18,2)");
 
-                    b.Property<int>("ProposalCreditLowWarningThreshold")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(3);
-
                     b.Property<int>("ProposalDraftLimit")
                         .HasColumnType("int");
 
                     b.Property<int>("ProposalMilestoneLimit")
                         .HasColumnType("int");
-
-                    b.Property<int>("ProposalResubmitLimit")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("ProposalResubmitWindowHours")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasDefaultValue(0);
 
                     b.Property<int>("ResubmitNoteMaxLength")
                         .HasColumnType("int");
@@ -1972,9 +1868,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("MarketplaceWorkflowPolicyId");
 
-                    b.HasIndex("IsActive")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("UpdatedByAdminId");
 
@@ -1989,6 +1883,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MilestoneId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -1998,8 +1896,16 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Property<DateTime>("Deadline")
                         .HasColumnType("datetime2");
 
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("DurationDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");
@@ -2212,9 +2118,7 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.HasKey("PlatformFeePolicyId");
 
-                    b.HasIndex("IsActive")
-                        .IsUnique()
-                        .HasFilter("[IsActive] = 1");
+                    b.HasIndex("IsActive");
 
                     b.HasIndex("UpdatedByAdminId");
 
@@ -2556,10 +2460,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<string>("StatusReason")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
                     b.Property<string>("WorkingApproach")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -2578,15 +2478,11 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .IsUnique()
                         .HasFilter("[Status] <> 'WITHDRAWN'");
 
-                    b.HasIndex("JobId", "Status", "StatusReason");
-
                     b.ToTable("Proposals", null, t =>
                         {
                             t.HasCheckConstraint("CK_Proposals_Price_Timeline", "[ProposedPrice] > 0 AND [ProposedTimelineDays] > 0");
 
                             t.HasCheckConstraint("CK_Proposals_Status", "[Status] IN ('DRAFT','SUBMITTED','ACCEPTED','REJECTED','WITHDRAWN')");
-
-                            t.HasCheckConstraint("CK_Proposals_StatusReason", "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED')");
                         });
                 });
 
@@ -2732,6 +2628,10 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("ProposalMilestoneDraftId"));
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
@@ -2740,6 +2640,14 @@ namespace AITasker.Infrastructure.Data.Migrations
 
                     b.Property<int>("DeadlineOffsetDays")
                         .HasColumnType("int");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("ExpectedDeliverable")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<int>("OrderIndex")
                         .HasColumnType("int");
@@ -3533,17 +3441,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                     b.Navigation("Expert");
                 });
 
-            modelBuilder.Entity("AITasker.Domain.Entities.DeliverableArtifact", b =>
-                {
-                    b.HasOne("AITasker.Domain.Entities.Deliverable", "Deliverable")
-                        .WithMany("Artifacts")
-                        .HasForeignKey("DeliverableId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Deliverable");
-                });
-
             modelBuilder.Entity("AITasker.Domain.Entities.DepositOrder", b =>
                 {
                     b.HasOne("AITasker.Domain.Entities.User", "User")
@@ -3557,11 +3454,6 @@ namespace AITasker.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
                 {
-                    b.HasOne("AITasker.Domain.Entities.Deliverable", "Deliverable")
-                        .WithMany()
-                        .HasForeignKey("DeliverableId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.HasOne("AITasker.Domain.Entities.Milestone", "Milestone")
                         .WithMany()
                         .HasForeignKey("MilestoneId")
@@ -3584,8 +3476,6 @@ namespace AITasker.Infrastructure.Data.Migrations
                         .HasForeignKey("RespondentUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Deliverable");
 
                     b.Navigation("Milestone");
 
@@ -4121,11 +4011,6 @@ namespace AITasker.Infrastructure.Data.Migrations
             modelBuilder.Entity("AITasker.Domain.Entities.Conversation", b =>
                 {
                     b.Navigation("Messages");
-                });
-
-            modelBuilder.Entity("AITasker.Domain.Entities.Deliverable", b =>
-                {
-                    b.Navigation("Artifacts");
                 });
 
             modelBuilder.Entity("AITasker.Domain.Entities.Dispute", b =>
