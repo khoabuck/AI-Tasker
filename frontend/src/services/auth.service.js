@@ -6,8 +6,6 @@ import {
   updateMyAvatarApi,
 } from "../api/auth.api";
 
-
-
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -36,8 +34,20 @@ const normalizeUser = (user) => {
   if (!user) return null;
 
   return {
-    userId: getValue(user.userId, user.UserId, user.id, user.Id, 0),
-    email: getValue(user.email, user.Email, ""),
+    userId: getValue(
+      user.userId,
+      user.UserId,
+      user.id,
+      user.Id,
+      0
+    ),
+
+    email: getValue(
+      user.email,
+      user.Email,
+      ""
+    ),
+
     fullName: getValue(
       user.fullName,
       user.FullName,
@@ -47,8 +57,19 @@ const normalizeUser = (user) => {
       user.Name,
       ""
     ),
-    role: getValue(user.role, user.Role, ""),
-    status: getValue(user.status, user.Status, ""),
+
+    role: getValue(
+      user.role,
+      user.Role,
+      ""
+    ),
+
+    status: getValue(
+      user.status,
+      user.Status,
+      ""
+    ),
+
     authProvider: getValue(
       user.authProvider,
       user.AuthProvider,
@@ -56,6 +77,7 @@ const normalizeUser = (user) => {
       user.Provider,
       "LOCAL"
     ),
+
     avatarUrl: getValue(
       user.avatarUrl,
       user.AvatarUrl,
@@ -69,15 +91,19 @@ const normalizeUser = (user) => {
 };
 
 const isValidUser = (user) => {
-  return Boolean(Number(user?.userId) > 0 && user?.email);
+  return Boolean(
+    Number(user?.userId) > 0 &&
+    String(user?.email || "").trim()
+  );
 };
-
-
 
 const getCurrentUserFromStorage = () => {
   try {
-    const user = localStorage.getItem("user");
-    return user ? JSON.parse(user) : null;
+    const storedUser = localStorage.getItem("user");
+
+    return storedUser
+      ? JSON.parse(storedUser)
+      : null;
   } catch {
     localStorage.removeItem("user");
     return null;
@@ -94,7 +120,10 @@ const saveUserToLocalStorage = (user) => {
     return null;
   }
 
-  localStorage.setItem("user", JSON.stringify(normalizedUser));
+  localStorage.setItem(
+    "user",
+    JSON.stringify(normalizedUser)
+  );
 
   return normalizedUser;
 };
@@ -111,7 +140,10 @@ const mergeUserToLocalStorage = (newUserData) => {
     return null;
   }
 
-  localStorage.setItem("user", JSON.stringify(mergedUser));
+  localStorage.setItem(
+    "user",
+    JSON.stringify(mergedUser)
+  );
 
   return mergedUser;
 };
@@ -119,106 +151,259 @@ const mergeUserToLocalStorage = (newUserData) => {
 const getFriendlyError = (error, fallback) => {
   const data = error?.response?.data;
 
-  if (typeof data === "string") return data;
+  if (typeof data === "string") {
+    return data;
+  }
 
-  return data?.message || data?.title || error?.message || fallback;
+  return (
+    data?.message ||
+    data?.Message ||
+    data?.title ||
+    data?.Title ||
+    error?.message ||
+    fallback
+  );
+};
+
+const getResponseBody = (response) => {
+  /*
+   * Hỗ trợ cả hai trường hợp:
+   * - auth.api trả thẳng response.data
+   * - auth.api trả nguyên Axios response
+   */
+  if (
+    response?.data &&
+    (
+      typeof response?.status === "number" ||
+      response?.headers ||
+      response?.config
+    )
+  ) {
+    return response.data;
+  }
+
+  return response;
+};
+
+const clearLegacyAuthStorage = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("refreshToken");
 };
 
 const authService = {
   login: async (credentials) => {
-  try {
-    const data = await loginApi(credentials);
+    try {
+      const response = await loginApi(credentials);
+      const body = getResponseBody(response);
 
-    let user = normalizeUser(
-      data?.user ||
-        data?.User ||
-        data?.data?.user ||
-        data?.data?.User ||
-        data?.data ||
-        data
-    );
+      const loginData =
+        body?.data ||
+        body?.Data ||
+        body ||
+        {};
 
-    if (!user?.userId || !user?.email) {
-      try {
-        const meData = await getMeApi();
-        user = normalizeUser(unwrapUserData(meData));
-      } catch {
-        // Nếu user đang PENDING_ROLE/PENDING_EMAIL_VERIFICATION mà /auth/me chưa cho qua,
-        // giữ user từ response login để tiếp tục flow.
+      let user = normalizeUser(
+        loginData?.user ||
+        loginData?.User ||
+        body?.user ||
+        body?.User
+      );
+
+      /*
+       * Nếu response login chưa có đủ user thì kiểm tra lại
+       * phiên HttpOnly cookie bằng /auth/me.
+       */
+      if (!isValidUser(user)) {
+        try {
+          const meResponse = await getMeApi();
+
+          user = normalizeUser(
+            unwrapUserData(
+              getResponseBody(meResponse)
+            )
+          );
+        } catch {
+          /*
+           * Một số trạng thái onboarding như
+           * PENDING_ROLE hoặc PENDING_EMAIL_VERIFICATION
+           * có thể chưa gọi được /auth/me.
+           */
+        }
       }
-    }
 
-    if (!isValidUser(user)) {
+      if (!isValidUser(user)) {
+        localStorage.removeItem("user");
+
+        return {
+          success: false,
+          message:
+            "Login response does not contain valid user information.",
+        };
+      }
+
+      localStorage.setItem(
+        "user",
+        JSON.stringify(user)
+      );
+
+      /*
+       * Dọn token cũ.
+       * Không tạo token giả vì Backend dùng HttpOnly cookie.
+       */
+      clearLegacyAuthStorage();
+
+      return {
+        success: true,
+        user,
+        role: user.role,
+        status: user.status,
+        expiresAt:
+          loginData?.expiresAt ||
+          loginData?.ExpiresAt ||
+          body?.expiresAt ||
+          body?.ExpiresAt ||
+          null,
+      };
+    } catch (error) {
+      const httpStatus = error?.response?.status;
+
+      const responseData =
+        error?.response?.data?.data ||
+        error?.response?.data ||
+        {};
+
+      const errorCode = String(
+        responseData?.code ||
+        responseData?.Code ||
+        ""
+      ).toUpperCase();
+
+      if (
+        httpStatus === 429 &&
+        errorCode === "LOGIN_TEMPORARILY_BLOCKED"
+      ) {
+        const retryAfterHeader =
+          error?.response?.headers?.["retry-after"];
+
+        const retryAfterSeconds = Number(
+          responseData?.retryAfterSeconds ??
+          responseData?.RetryAfterSeconds ??
+          retryAfterHeader ??
+          0
+        );
+
+        return {
+          success: false,
+          code: errorCode,
+
+          message:
+            responseData?.message ||
+            responseData?.Message ||
+            "Too many failed login attempts. Please try again later.",
+
+          blockedUntilUtc:
+            responseData?.blockedUntilUtc ||
+            responseData?.BlockedUntilUtc ||
+            null,
+
+          retryAfterSeconds:
+            Number.isFinite(retryAfterSeconds) &&
+            retryAfterSeconds > 0
+              ? retryAfterSeconds
+              : 0,
+        };
+      }
+
       return {
         success: false,
-        message: "Login response does not contain valid user information.",
+        message: getFriendlyError(
+          error,
+          "Login failed."
+        ),
       };
     }
+  },
 
-    localStorage.setItem("user", JSON.stringify(user));
-
-    return {
-      success: true,
-      user,
-      role: user.role,
-      status: user.status,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      message: getFriendlyError(error, "Login failed."),
-    };
-  }
-},
-
-  loginWithGoogle: async () => {
-    loginWithGoogleApi();
+  loginWithGoogle: () => {
+    return loginWithGoogleApi();
   },
 
   logout: async () => {
     try {
+      /*
+       * Backend phải được gọi để xóa HttpOnly cookie.
+       */
       await logoutApi();
     } catch {
-      // Vẫn xóa local state nếu BE logout lỗi.
+      /*
+       * Dù Backend logout lỗi vẫn phải xóa auth state phía FE.
+       */
+    } finally {
+      localStorage.removeItem("user");
+      localStorage.removeItem("role");
+      localStorage.removeItem("currentUser");
+
+      clearLegacyAuthStorage();
+
+      localStorage.removeItem(
+        "aitasker_expert_profile_setup_draft"
+      );
+
+      localStorage.removeItem(
+        "aitasker_expert_profile_edit_draft"
+      );
+
+      localStorage.removeItem(
+        "aitasker_expert_profile_correction_draft"
+      );
+
+      sessionStorage.clear();
+
+      /*
+       * Báo cho các tab khác biết user đã logout.
+       */
+      localStorage.setItem(
+        "aitasker_logout_at",
+        `${Date.now()}-${Math.random()}`
+      );
     }
-
-    localStorage.removeItem("user");
-    localStorage.removeItem("role");
-    localStorage.removeItem("currentUser");
-
-    localStorage.removeItem("aitasker_expert_profile_setup_draft");
-    localStorage.removeItem("aitasker_expert_profile_edit_draft");
-    localStorage.removeItem("aitasker_expert_profile_correction_draft");
-
-    sessionStorage.clear();
-
-    // Báo cho các tab khác biết user đã logout.
-    localStorage.setItem(
-      "aitasker_logout_at",
-      `${Date.now()}-${Math.random()}`
-    );
   },
 
-    // Chỉ dùng làm UI cache, ví dụ hiển thị tên/avatar.
-    // Không dùng hàm này để phân quyền route.
-    getCurrentUser: () => {
-      return getCurrentUserFromStorage();
-    },
+  /*
+   * Chỉ dùng làm UI cache để hiển thị tên/avatar.
+   * Không dùng localStorage để xác thực hoặc phân quyền.
+   */
+  getCurrentUser: () => {
+    return getCurrentUserFromStorage();
+  },
 
-    getToken: () => {
-      return null;
-    },
+  /*
+   * JWT nằm trong HttpOnly cookie nên JavaScript không đọc được.
+   */
+  getToken: () => {
+    return null;
+  },
 
-    refreshCurrentUser: async () => {
-    const data = await getMeApi();
-    const user = normalizeUser(unwrapUserData(data));
+  refreshCurrentUser: async () => {
+    const response = await getMeApi();
+
+    const user = normalizeUser(
+      unwrapUserData(
+        getResponseBody(response)
+      )
+    );
 
     if (!isValidUser(user)) {
       localStorage.removeItem("user");
       return null;
     }
 
-    localStorage.setItem("user", JSON.stringify(user));
+    localStorage.setItem(
+      "user",
+      JSON.stringify(user)
+    );
 
     return user;
   },
@@ -235,20 +420,29 @@ const authService = {
       throw new Error("Avatar URL is required.");
     }
 
-    const data = await updateMyAvatarApi(payload);
+    const response = await updateMyAvatarApi(payload);
 
-    let updatedUser = normalizeUser(unwrapUserData(data));
+    let updatedUser = normalizeUser(
+      unwrapUserData(
+        getResponseBody(response)
+      )
+    );
 
     if (isValidUser(updatedUser)) {
       return saveUserToLocalStorage(updatedUser);
     }
 
     try {
-      updatedUser = await authService.refreshCurrentUser();
+      updatedUser =
+        await authService.refreshCurrentUser();
 
-      if (updatedUser) return updatedUser;
+      if (updatedUser) {
+        return updatedUser;
+      }
     } catch {
-      // Nếu refresh lỗi thì merge avatarUrl vào user hiện tại.
+      /*
+       * Nếu /auth/me lỗi thì cập nhật avatar vào UI cache hiện tại.
+       */
     }
 
     return mergeUserToLocalStorage({
@@ -256,7 +450,6 @@ const authService = {
     });
   },
 
-  
   normalizeUser,
 };
 

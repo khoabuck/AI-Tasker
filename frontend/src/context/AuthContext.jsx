@@ -31,23 +31,27 @@ const extractUser = (res) => {
 };
 
 const isValidUser = (user) => {
-  return Boolean(user?.userId || user?.UserId || user?.email || user?.Email);
+  const userId = Number(user?.userId ?? user?.UserId ?? 0);
+  const email = String(user?.email ?? user?.Email ?? "").trim();
+
+  return userId > 0 && Boolean(email);
 };
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // localStorage chỉ dùng làm dấu hiệu đã từng đăng nhập.
-// Quyền và phiên đăng nhập thật vẫn được xác minh bằng HttpOnly cookie.
-useEffect(() => {
+ useEffect(() => {
   let isMounted = true;
 
   const restore = async () => {
     const storedUser = authService.getCurrentUser();
 
-    // Chưa đăng nhập hoặc đã logout:
-    // không gọi /auth/me để tránh request 401 không cần thiết.
+    /*
+     * localStorage chỉ là dấu hiệu cho biết trước đây user đã login.
+     * Nếu không có dấu hiệu này thì không gọi /auth/me,
+     * tránh request 401 không cần thiết tại trang Login.
+     */
     if (!isValidUser(storedUser)) {
       clearAuth();
 
@@ -60,6 +64,10 @@ useEffect(() => {
     }
 
     try {
+      /*
+       * Có user cache thì mới xác minh phiên thật bằng HttpOnly cookie.
+       * localStorage không được dùng làm nguồn phân quyền.
+       */
       const res = await getRestoreSessionPromise();
       const freshUser = extractUser(res);
 
@@ -78,7 +86,7 @@ useEffect(() => {
       if (isMounted) {
         setUser(freshUser);
       }
-    } catch (err) {
+    } catch {
       clearAuth();
 
       if (isMounted) {
@@ -138,15 +146,7 @@ useEffect(() => {
 
   const handleLogout = async () => {
     await authService.logout();
-
     clearAuth();
-
-    localStorage.removeItem("aitasker_expert_profile_setup_draft");
-    localStorage.removeItem("aitasker_expert_profile_edit_draft");
-    localStorage.removeItem("aitasker_expert_profile_correction_draft");
-
-    sessionStorage.clear();
-
     setUser(null);
   };
 

@@ -24,14 +24,30 @@ export const clearAuth = () => {
   localStorage.removeItem("user");
   localStorage.removeItem("role");
   localStorage.removeItem("currentUser");
+
+  // Xóa dữ liệu còn sót từ cơ chế Bearer token cũ.
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("refreshToken");
 };
 
 // Lấy message lỗi từ response backend
 // Backend trả { success: false, message: "..." }
 export const getErrorMessage = (error) => {
+  const responseData = error?.response?.data;
+
+  if (typeof responseData === "string") {
+    return responseData;
+  }
+
   return (
-    error?.response?.data?.message ||
-    error?.response?.data?.title ||
+    responseData?.message ||
+    responseData?.Message ||
+    responseData?.title ||
+    responseData?.Title ||
+    responseData?.data?.message ||
+    responseData?.data?.Message ||
     error?.message ||
     "An error has occurred."
   );

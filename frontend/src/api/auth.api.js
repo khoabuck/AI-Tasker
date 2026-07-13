@@ -1,10 +1,27 @@
 import axiosInstance from "./axiosInstance";
 
-const BACKEND_BASE_URL = import.meta.env.VITE_BACKEND_BASE_URL?.replace(/\/+$/, "");
+const getAuthRedirectUrl = (path) => {
+  const configuredApiBaseUrl = String(
+    axiosInstance.defaults.baseURL || ""
+  ).trim();
 
-if (!BACKEND_BASE_URL) {
-  throw new Error("Missing VITE_BACKEND_BASE_URL");
-}
+  if (!configuredApiBaseUrl) {
+    throw new Error("Missing API base URL configuration.");
+  }
+
+  const apiBaseUrl = configuredApiBaseUrl.endsWith("/")
+    ? configuredApiBaseUrl
+    : `${configuredApiBaseUrl}/`;
+
+  const absoluteApiBaseUrl = new URL(
+    apiBaseUrl,
+    window.location.origin
+  );
+
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+
+  return new URL(normalizedPath, absoluteApiBaseUrl).toString();
+};
 
 // POST /api/auth/register
 // Không trả token đăng nhập về frontend — user phải verify email trước
@@ -38,11 +55,10 @@ export const resendVerificationEmailApi = async ({ email }) => {
 
 // POST /api/auth/login
 // Backend set JWT vào HttpOnly cookie.
-export const loginApi = async ({ email, password, rememberMe }) => {
+export const loginApi = async ({ email, password }) => {
   const res = await axiosInstance.post("/auth/login", {
     email,
     password,
-    rememberMe: Boolean(rememberMe),
   });
 
   return res.data;
@@ -56,9 +72,10 @@ export const logoutApi = async () => {
   return res.data;
 };
 
-// GET /api/auth/google-login — redirect browser, không dùng axios
 export const loginWithGoogleApi = () => {
-  window.location.href = `${BACKEND_BASE_URL}/api/auth/google-login`;
+  const redirectUrl = getAuthRedirectUrl("auth/google-login");
+
+  window.location.assign(redirectUrl);
 };
 
 // GET /api/auth/me

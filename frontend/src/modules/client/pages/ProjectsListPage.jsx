@@ -10,7 +10,6 @@ const STATUS_TABS = [
   { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
   { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
   { key: "DISPUTED", label: "Disputed", icon: "gavel", color: "#ef4444" },
-  { key: "CANCELLED", label: "Cancelled", icon: "cancel", color: "#9ca3af" },
 ];
 
 const STATUS_CLASS = {

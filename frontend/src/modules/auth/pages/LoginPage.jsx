@@ -1,7 +1,64 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
+
+const formatCountdown = (totalSeconds) => {
+  const safeSeconds = Math.max(0, Number(totalSeconds || 0));
+  const minutes = Math.floor(safeSeconds / 60);
+  const seconds = safeSeconds % 60;
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(
+    2,
+    "0"
+  )}`;
+};
+
+const calculateRemainingSeconds = (
+  blockedUntilUtc,
+  fallbackSeconds = 0
+) => {
+  if (blockedUntilUtc) {
+    const blockedUntilTime = new Date(blockedUntilUtc).getTime();
+
+    if (!Number.isNaN(blockedUntilTime)) {
+      return Math.max(
+        0,
+        Math.ceil((blockedUntilTime - Date.now()) / 1000)
+      );
+    }
+  }
+
+  return Math.max(0, Number(fallbackSeconds || 0));
+};
+
+const LOGIN_BLOCK_STORAGE_KEY = "aitasker_login_block";
+
+const resolveBlockedUntilUtc = (
+  blockedUntilUtc,
+  retryAfterSeconds = 0
+) => {
+  if (blockedUntilUtc) {
+    const blockedUntilTime = new Date(blockedUntilUtc).getTime();
+
+    if (!Number.isNaN(blockedUntilTime)) {
+      return new Date(blockedUntilTime).toISOString();
+    }
+  }
+
+  const safeRetryAfterSeconds = Number(retryAfterSeconds || 0);
+
+  if (
+    Number.isFinite(safeRetryAfterSeconds) &&
+    safeRetryAfterSeconds > 0
+  ) {
+    return new Date(
+      Date.now() + safeRetryAfterSeconds * 1000
+    ).toISOString();
+  }
+
+  return null;
+};
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,6 +73,68 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [focusField, setFocusField] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [blockedUntilUtc, setBlockedUntilUtc] = useState(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const [showBlockPopup, setShowBlockPopup] = useState(false);
+
+  useEffect(() => {
+  try {
+    const storedBlock = sessionStorage.getItem(
+      LOGIN_BLOCK_STORAGE_KEY
+    );
+
+    if (!storedBlock) {
+      return;
+    }
+
+    const parsedBlock = JSON.parse(storedBlock);
+    const storedBlockedUntilUtc =
+      parsedBlock?.blockedUntilUtc || null;
+
+    const restoredRemainingSeconds =
+      calculateRemainingSeconds(storedBlockedUntilUtc);
+
+    if (restoredRemainingSeconds <= 0) {
+      sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+      return;
+    }
+
+    setBlockedUntilUtc(storedBlockedUntilUtc);
+    setRemainingSeconds(restoredRemainingSeconds);
+    setShowBlockPopup(true);
+  } catch {
+    sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+  }
+}, []);
+
+  useEffect(() => {
+  if (!showBlockPopup || remainingSeconds <= 0) {
+    return undefined;
+  }
+
+  const timerId = window.setTimeout(() => {
+    const nextRemainingSeconds = blockedUntilUtc
+      ? calculateRemainingSeconds(blockedUntilUtc)
+      : Math.max(0, remainingSeconds - 1);
+
+    if (nextRemainingSeconds <= 0) {
+      sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+
+      setRemainingSeconds(0);
+      setBlockedUntilUtc(null);
+      setShowBlockPopup(false);
+      return;
+    }
+
+    setRemainingSeconds(nextRemainingSeconds);
+  }, 1000);
+
+  return () => window.clearTimeout(timerId);
+}, [
+  showBlockPopup,
+  blockedUntilUtc,
+  remainingSeconds,
+]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -25,7 +144,9 @@ export default function LoginPage() {
       [name]: value,
     }));
 
-    setError("");
+    if (remainingSeconds <= 0) {
+      setError("");
+    }
   };
 
 
@@ -103,28 +224,63 @@ export default function LoginPage() {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+  event.preventDefault();
 
-    setLoading(true);
-    setError("");
+  if (loading || remainingSeconds > 0) {
+    return;
+  }
 
-    try {
-      const email = form.email.trim();
+  setLoading(true);
+  setError("");
 
-      const result = await authService.login({
-        email,
-        password: form.password,
-      });
+  try {
+    const email = form.email.trim();
 
-      
+    const result = await authService.login({
+      email,
+      password: form.password,
+    });
 
-      if (!result.success) {
-        setError(result.message || "Login failed.");
-        return;
-      }
+    if (!result.success) {
+      if (result.code === "LOGIN_TEMPORARILY_BLOCKED") {
+  const resolvedBlockedUntilUtc = resolveBlockedUntilUtc(
+    result.blockedUntilUtc,
+    result.retryAfterSeconds
+  );
 
+  const nextRemainingSeconds = calculateRemainingSeconds(
+    resolvedBlockedUntilUtc,
+    result.retryAfterSeconds
+  );
 
-      const finalUser = result.user;
+  if (
+    resolvedBlockedUntilUtc &&
+    nextRemainingSeconds > 0
+  ) {
+    sessionStorage.setItem(
+      LOGIN_BLOCK_STORAGE_KEY,
+      JSON.stringify({
+        blockedUntilUtc: resolvedBlockedUntilUtc,
+      })
+    );
+  }
+
+  setBlockedUntilUtc(resolvedBlockedUntilUtc);
+  setRemainingSeconds(nextRemainingSeconds);
+  setShowBlockPopup(nextRemainingSeconds > 0);
+  setError("");
+  return;
+}
+
+      setError(result.message || "Login failed.");
+      return;
+    }
+    sessionStorage.removeItem(LOGIN_BLOCK_STORAGE_KEY);
+    setBlockedUntilUtc(null);
+    setRemainingSeconds(0);
+    setShowBlockPopup(false);
+
+    const finalUser = result.user;
 
     if (!finalUser) {
       setError("Login response does not contain user information.");
@@ -140,21 +296,20 @@ export default function LoginPage() {
         role: finalRole,
         status: finalStatus,
       },
+      expiresAt: result.expiresAt || null,
     });
 
-
-      goNextByRoleAndStatus({
-        role: finalRole,
-        status: finalStatus,
-        email,
-      });
-    } catch (err) {
-      console.error("LOGIN ERROR:", err);
-      setError("An error occurred. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+    goNextByRoleAndStatus({
+      role: finalRole,
+      status: finalStatus,
+      email,
+    });
+  } catch {
+    setError("An error occurred. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleGoogleLogin = () => {
     const backendUrl = import.meta.env.VITE_BACKEND_BASE_URL;
@@ -396,23 +551,29 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-xl py-4 font-bold transition-all disabled:opacity-60"
+              disabled={loading || remainingSeconds > 0}
+              className="w-full rounded-xl py-4 font-bold transition-all disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background: "#00F0FF",
                 color: "#12151B",
                 boxShadow: "0 0 15px rgba(0,240,255,0.3)",
               }}
-              onMouseEnter={(e) =>
-              (e.currentTarget.style.boxShadow =
-                "0 0 25px rgba(0,240,255,0.5)")
-              }
+              onMouseEnter={(e) => {
+                if (!e.currentTarget.disabled) {
+                  e.currentTarget.style.boxShadow =
+                    "0 0 25px rgba(0,240,255,0.5)";
+                }
+              }}
               onMouseLeave={(e) =>
               (e.currentTarget.style.boxShadow =
                 "0 0 15px rgba(0,240,255,0.3)")
               }
             >
-              {loading ? "Signing in..." : "Sign In"}
+              {remainingSeconds > 0
+                ? `Try again in ${formatCountdown(remainingSeconds)}`
+                : loading
+                  ? "Signing in..."
+                  : "Sign In"}
             </button>
 
             <div className="relative my-2">
@@ -481,8 +642,80 @@ export default function LoginPage() {
               </Link>
             </p>
           </form>
-        </article>
+                </article>
       </main>
+
+      {showBlockPopup && remainingSeconds > 0 && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center px-4"
+          style={{
+            background: "rgba(0, 0, 0, 0.72)",
+            backdropFilter: "blur(8px)",
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl p-6 text-center shadow-2xl"
+            style={{
+              background: "#191c22",
+              border: "1px solid rgba(239, 68, 68, 0.35)",
+              boxShadow: "0 0 40px rgba(239, 68, 68, 0.15)",
+            }}
+          >
+            <div
+              className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full"
+              style={{
+                background: "rgba(239, 68, 68, 0.12)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+              }}
+            >
+              <span
+                className="material-symbols-outlined text-4xl"
+                style={{ color: "#f87171" }}
+              >
+                lock_clock
+              </span>
+            </div>
+
+            <h2 className="mb-2 text-xl font-semibold text-white">
+              Login temporarily blocked
+            </h2>
+
+            <p className="mb-5 text-sm leading-6 text-gray-400">
+              Too many failed login attempts. Please wait until the
+              countdown finishes before trying password login again.
+            </p>
+
+            <div
+              className="mb-5 rounded-xl px-4 py-5"
+              style={{
+                background: "rgba(0, 240, 255, 0.06)",
+                border: "1px solid rgba(0, 240, 255, 0.2)",
+              }}
+            >
+              <p className="mb-1 text-xs uppercase tracking-widest text-gray-400">
+                Try again in
+              </p>
+
+              <p
+                className="text-4xl font-bold tracking-wider"
+                style={{
+                  color: "#00F0FF",
+                  fontFamily: "JetBrains Mono, monospace",
+                  textShadow: "0 0 16px rgba(0, 240, 255, 0.4)",
+                }}
+              >
+                {formatCountdown(remainingSeconds)}
+              </p>
+            </div>
+
+
+            <p className="mt-4 text-xs text-gray-500">
+              Password login will be enabled automatically when the
+              countdown reaches 00:00.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
