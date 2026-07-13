@@ -16,6 +16,8 @@ public class AITaskerDbContext : DbContext
 
     public DbSet<PlatformFeePolicy> PlatformFeePolicies => Set<PlatformFeePolicy>();
 
+    public DbSet<LoginSecurityPolicy> LoginSecurityPolicies => Set<LoginSecurityPolicy>();
+
     public DbSet<ExpertProfileScoringPolicy> ExpertProfileScoringPolicies => Set<ExpertProfileScoringPolicy>();
 
     public DbSet<JobPostingAiPolicy> JobPostingAiPolicies => Set<JobPostingAiPolicy>();
@@ -157,6 +159,15 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.StatusBeforeSuspension)
                 .HasMaxLength(30);
 
+            // Automatic login block after repeated password failures
+            entity.Property(x => x.FailedLoginAttempts)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(x => x.LoginBlockedUntil);
+
+            entity.HasIndex(x => x.LoginBlockedUntil);
+
             // Admin user lock / ban management
             entity.Property(x => x.LockoutCount)
                 .HasDefaultValue(0)
@@ -268,6 +279,57 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(x => x.IsActive)
                 .IsUnique()
                 .HasFilter("[IsActive] = 1");
+
+            entity.HasIndex(x => x.UpdatedByAdminId);
+        });
+
+        // =========================
+        // LoginSecurityPolicies
+        // =========================
+        modelBuilder.Entity<LoginSecurityPolicy>(entity =>
+        {
+            entity.ToTable("LoginSecurityPolicies", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_LoginSecurityPolicies_MaxFailedLoginAttempts",
+                    "[MaxFailedLoginAttempts] BETWEEN 1 AND 20"
+                );
+
+                table.HasCheckConstraint(
+                    "CK_LoginSecurityPolicies_LockoutDurationMinutes",
+                    "[LockoutDurationMinutes] BETWEEN 1 AND 1440"
+                );
+            });
+
+            entity.HasKey(x => x.LoginSecurityPolicyId);
+
+            entity.Property(x => x.MaxFailedLoginAttempts)
+                .HasDefaultValue(5)
+                .IsRequired();
+
+            entity.Property(x => x.LockoutDurationMinutes)
+                .HasDefaultValue(15)
+                .IsRequired();
+
+            entity.Property(x => x.IsEnabled)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.IsActive)
+                .HasDefaultValue(true)
+                .IsRequired();
+
+            entity.Property(x => x.CreatedAt)
+                .IsRequired();
+
+            entity.Property(x => x.UpdatedAt);
+
+            entity.HasOne(x => x.UpdatedByAdmin)
+                .WithMany()
+                .HasForeignKey(x => x.UpdatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(x => x.IsActive);
 
             entity.HasIndex(x => x.UpdatedByAdminId);
         });
