@@ -26,6 +26,10 @@ public class User
 
     public DateTime? UpdatedAt { get; set; }
 
+    public int FailedLoginAttempts { get; set; } = 0;
+
+    public DateTime? LoginBlockedUntil { get; set; }
+
     public int LockoutCount { get; set; } = 0;
 
     public DateTime? LockoutEnd { get; set; }
