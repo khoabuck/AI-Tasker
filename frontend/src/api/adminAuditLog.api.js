@@ -1,40 +1,38 @@
 import axiosInstance from "./axiosInstance";
 
+const hasValue = (value) => {
+  return value !== undefined && value !== null && value !== "";
+};
+
 const adminAuditLogApi = {
   getAuditLogs(params = {}) {
     const query = {};
 
-    if (params.AdminId || params.adminId) {
-      query.AdminId = params.AdminId ?? params.adminId;
-    }
+    if (hasValue(params.AdminId)) query.AdminId = params.AdminId;
+    if (hasValue(params.adminId)) query.AdminId = params.adminId;
 
-    if (params.Action || params.action) {
-      query.Action = params.Action ?? params.action;
-    }
+    if (hasValue(params.Action)) query.Action = params.Action;
+    if (hasValue(params.action)) query.Action = params.action;
 
-    if (params.EntityName || params.entityName) {
-      query.EntityName = params.EntityName ?? params.entityName;
-    }
+    if (hasValue(params.EntityName)) query.EntityName = params.EntityName;
+    if (hasValue(params.entityName)) query.EntityName = params.entityName;
 
-    if (params.EntityId || params.entityId) {
-      query.EntityId = params.EntityId ?? params.entityId;
-    }
+    if (hasValue(params.EntityId)) query.EntityId = params.EntityId;
+    if (hasValue(params.entityId)) query.EntityId = params.entityId;
 
-    if (params.From || params.from) {
-      query.From = params.From ?? params.from;
-    }
+    if (hasValue(params.From)) query.From = params.From;
+    if (hasValue(params.from)) query.From = params.from;
 
-    if (params.To || params.to) {
-      query.To = params.To ?? params.to;
-    }
+    if (hasValue(params.To)) query.To = params.To;
+    if (hasValue(params.to)) query.To = params.to;
 
-    if (params.PageNumber || params.pageNumber) {
-      query.PageNumber = params.PageNumber ?? params.pageNumber;
-    }
+    if (hasValue(params.PageNumber)) query.PageNumber = params.PageNumber;
+    else if (hasValue(params.pageNumber)) query.PageNumber = params.pageNumber;
+    else query.PageNumber = 1;
 
-    if (params.PageSize || params.pageSize) {
-      query.PageSize = params.PageSize ?? params.pageSize;
-    }
+    if (hasValue(params.PageSize)) query.PageSize = params.PageSize;
+    else if (hasValue(params.pageSize)) query.PageSize = params.pageSize;
+    else query.PageSize = 10;
 
     return axiosInstance.get("/admin/audit-logs", { params: query });
   },

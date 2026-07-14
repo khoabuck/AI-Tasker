@@ -35,7 +35,6 @@ export const registerApi = async ({ fullName, email, password }) => {
   return res.data;
 };
 
-// GET /api/auth/verify-email?token=xxx
 export const verifyEmailApi = async (token) => {
   const res = await axiosInstance.get("/auth/verify-email", {
     params: { token },
@@ -44,7 +43,6 @@ export const verifyEmailApi = async (token) => {
   return res.data;
 };
 
-// POST /api/auth/resend-verification-email
 export const resendVerificationEmailApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/resend-verification-email", {
     email,
@@ -78,14 +76,12 @@ export const loginWithGoogleApi = () => {
   window.location.assign(redirectUrl);
 };
 
-// GET /api/auth/me
 export const getMeApi = async () => {
   const res = await axiosInstance.get("/auth/me");
 
   return res.data;
 };
 
-// POST /api/auth/forgot-password
 export const forgotPasswordApi = async ({ email }) => {
   const res = await axiosInstance.post("/auth/forgot-password", {
     email,
@@ -94,8 +90,6 @@ export const forgotPasswordApi = async ({ email }) => {
   return res.data;
 };
 
-// POST /api/auth/reset-password
-// token lấy từ URL: /reset-password?token=xxx
 export const resetPasswordApi = async ({
   token,
   newPassword,
@@ -110,7 +104,24 @@ export const resetPasswordApi = async ({
   return res.data;
 };
 
-// POST /api/auth/select-role
+/* ===========================
+   CHANGE PASSWORD
+=========================== */
+
+export const changePasswordApi = async ({
+  currentPassword,
+  newPassword,
+  confirmNewPassword,
+}) => {
+  const res = await axiosInstance.post("/auth/change-password", {
+    currentPassword,
+    newPassword,
+    confirmNewPassword,
+  });
+
+  return res.data;
+};
+
 export const selectRoleApi = async ({ role }) => {
   const res = await axiosInstance.post("/auth/select-role", {
     role,
@@ -119,7 +130,6 @@ export const selectRoleApi = async ({ role }) => {
   return res.data;
 };
 
-// PUT /api/auth/me/avatar
 export const updateMyAvatarApi = async (avatarUrlOrPayload) => {
   const payload =
     typeof avatarUrlOrPayload === "string"
@@ -143,6 +153,7 @@ export default {
   getMeApi,
   forgotPasswordApi,
   resetPasswordApi,
+  changePasswordApi,
   selectRoleApi,
   updateMyAvatarApi,
 };

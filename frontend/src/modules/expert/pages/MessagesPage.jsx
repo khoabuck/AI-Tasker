@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import conversationService from "../../../services/conversation.service";
 import authService from "../../../services/auth.service";
+import { formatTime } from "../../../utils/dateTime.utils";
 
 const MESSAGE_POLL_INTERVAL_MS = 2000;
 const CONVERSATION_POLL_INTERVAL_MS = 6000;
@@ -290,24 +291,23 @@ export default function MessagesPage() {
   };
 
   const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
+    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-4 py-6 md:px-6">
         <div className="mx-auto max-w-7xl">
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Expert Messages
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Messages
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
               Messages
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Chat with clients about jobs, proposals, projects and
-              deliverables.
+              Chat with clients about active work and proposals.
             </p>
           </div>
 
@@ -317,7 +317,7 @@ export default function MessagesPage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[360px_1fr]">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
             <section className={`${cardStyle} overflow-hidden`}>
               <div className="border-b border-white/10 p-5">
                 <h2 className="text-lg font-bold text-white">
@@ -325,7 +325,7 @@ export default function MessagesPage() {
                 </h2>
 
                 <p className="mt-1 text-sm text-gray-500">
-                  Select a client to start chatting.
+                  Choose a conversation.
                 </p>
 
                 <div className="relative mt-4">
@@ -337,16 +337,16 @@ export default function MessagesPage() {
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Search conversations..."
+                    placeholder="Search messages..."
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                   />
                 </div>
               </div>
 
-              <div className="max-h-[650px] overflow-y-auto">
+              <div className="max-h-[620px] overflow-y-auto">
                 {loadingConversations && (
-                  <div className="p-8 text-center text-sm text-gray-400">
-                    Loading conversations...
+                  <div className="p-4">
+                    <ConversationListSkeleton />
                   </div>
                 )}
 
@@ -418,7 +418,7 @@ export default function MessagesPage() {
               </div>
             </section>
 
-            <section className={`${cardStyle} flex min-h-[650px] flex-col`}>
+            <section className={`${cardStyle} flex min-h-[620px] flex-col`}>
               {!selectedConversation && (
                 <div className="flex flex-1 items-center justify-center p-8 text-center">
                   <div>
@@ -431,7 +431,7 @@ export default function MessagesPage() {
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-500">
-                      Choose a conversation on the left to view messages.
+                      Select a conversation to view messages.
                     </p>
                   </div>
                 </div>
@@ -457,11 +457,7 @@ export default function MessagesPage() {
                   </div>
 
                   <div className="flex-1 space-y-4 overflow-y-auto p-5">
-                    {loadingMessages && (
-                      <div className="p-8 text-center text-sm text-gray-400">
-                        Loading messages...
-                      </div>
-                    )}
+                    {loadingMessages && <MessageThreadSkeleton />}
 
                     {!loadingMessages && messages.length === 0 && (
                       <div className="p-8 text-center">
@@ -474,7 +470,7 @@ export default function MessagesPage() {
                         </h3>
 
                         <p className="mt-2 text-sm text-gray-500">
-                          Send the first message to start the conversation.
+                          Start the conversation with a message.
                         </p>
                       </div>
                     )}
@@ -533,7 +529,7 @@ export default function MessagesPage() {
                         onChange={(event) =>
                           setMessageInput(event.target.value)
                         }
-                        placeholder="Type your message..."
+                        placeholder="Write a message..."
                         className="flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                       />
 
@@ -688,19 +684,6 @@ function isMyMessage(message, user) {
   return senderRole === "EXPERT";
 }
 
-function formatTime(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  return date.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function getInitials(name) {
   if (!name) return "U";
 
@@ -760,4 +743,35 @@ function getFriendlyError(err, fallback) {
   }
 
   return err?.message || fallback || "Something went wrong.";
+}
+
+function ConversationListSkeleton() {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="flex animate-pulse gap-3 rounded-xl p-2">
+          <div className="h-11 w-11 shrink-0 rounded-full bg-white/10" />
+          <div className="min-w-0 flex-1">
+            <div className="h-4 w-2/3 rounded bg-white/10" />
+            <div className="mt-2 h-3 w-full rounded bg-white/[0.06]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MessageThreadSkeleton() {
+  return (
+    <div className="space-y-4 py-4">
+      {[false, true, false, true, false].map((mine, index) => (
+        <div
+          key={index}
+          className={`flex animate-pulse ${mine ? "justify-end" : "justify-start"}`}
+        >
+          <div className="h-16 w-[55%] rounded-2xl bg-white/[0.06]" />
+        </div>
+      ))}
+    </div>
+  );
 }

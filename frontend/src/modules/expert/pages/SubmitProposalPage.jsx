@@ -1,12 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import {
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import jobService from "../../../services/job.service";
 import proposalService, {
   getFriendlyProposalError,
+  mapProposalToForm,
 } from "../../../services/proposal.service";
+import proposalCreditPackageService from "../../../services/proposalCreditPackage.service";
+import expertWalletService from "../../../services/expertWallet.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const createEmptyMilestone = () => ({
   title: "",
   amount: "",
@@ -26,12 +34,27 @@ const createEmptyForm = () => ({
 export default function SubmitProposalPage() {
   const { jobId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const draftId = searchParams.get("draftId") || "";
 
   const [job, setJob] = useState(null);
   const [formData, setFormData] = useState(createEmptyForm);
 
+  const [currentDraftId, setCurrentDraftId] = useState(draftId);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [submittingDraft, setSubmittingDraft] = useState(false);
+
+  const [proposalCredits, setProposalCredits] = useState(null);
+  const [creditPackages, setCreditPackages] = useState([]);
+  const [walletBalance, setWalletBalance] = useState(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [buyingPackageId, setBuyingPackageId] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [accessLoading, setAccessLoading] = useState(false);
 
   const [submitted, setSubmitted] = useState(false);
   const [touched, setTouched] = useState({});
@@ -44,7 +67,6 @@ export default function SubmitProposalPage() {
   const milestoneTotal = useMemo(() => {
     return formData.milestones.reduce((total, milestone) => {
       const amount = Number(milestone.amount || 0);
-
       return total + (Number.isNaN(amount) ? 0 : amount);
     }, 0);
   }, [formData.milestones]);
@@ -52,23 +74,62 @@ export default function SubmitProposalPage() {
   const milestoneDuration = useMemo(() => {
     return formData.milestones.reduce((total, milestone) => {
       const durationDays = Number(milestone.durationDays || 0);
-
       return total + (Number.isNaN(durationDays) ? 0 : durationDays);
     }, 0);
   }, [formData.milestones]);
 
   const priceDifference = Number(formData.proposedPrice || 0) - milestoneTotal;
 
-  useEffect(() => {
-    loadJobDetail();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobId]);
+  const paidCredits = getAvailableProposalCredits(proposalCredits);
+  const freeSubmitRemaining = getFreeSubmitRemaining(proposalCredits);
+  const canSubmitNewProposal = getCanSubmitNewProposal(proposalCredits);
 
-  const loadJobDetail = async () => {
+  const hasFreeSubmit = freeSubmitRemaining > 0;
+  const hasProposalCredit = paidCredits > 0;
+  const submissionsLeft = paidCredits + freeSubmitRemaining;
+
+  const shouldRequireUpgrade =
+    proposalCredits &&
+    canSubmitNewProposal === false &&
+    !hasFreeSubmit &&
+    !hasProposalCredit;
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
+
+  useEffect(() => {
+    loadInitialData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, draftId]);
+
+  const loadInitialData = async () => {
     try {
       setLoading(true);
       setError("");
+      setMessage("");
 
+      await Promise.all([loadJobDetailOnly(), loadSubmitAccess()]);
+
+      if (draftId) {
+        await loadDraftDetail(draftId);
+      } else {
+        setCurrentDraftId("");
+        setFormData(createEmptyForm());
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadJobDetailOnly = async () => {
+    try {
       const response = await jobService.getJobById(jobId);
       const data = unwrapData(response);
 
@@ -77,8 +138,54 @@ export default function SubmitProposalPage() {
       console.error("LOAD JOB DETAIL ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load job detail."));
       setJob(null);
+    }
+  };
+
+  const loadSubmitAccess = async () => {
+    try {
+      setAccessLoading(true);
+
+      const [creditResult, packageResult, balanceResult] =
+        await Promise.allSettled([
+          proposalCreditPackageService.getMyProposalCredits(),
+          proposalCreditPackageService.getAvailablePackages(),
+          expertWalletService.getBalance(),
+        ]);
+
+      if (creditResult.status === "fulfilled") {
+        setProposalCredits(creditResult.value);
+      }
+
+      if (packageResult.status === "fulfilled") {
+        setCreditPackages(
+          Array.isArray(packageResult.value) ? packageResult.value : []
+        );
+      }
+
+      if (balanceResult.status === "fulfilled") {
+        setWalletBalance(balanceResult.value);
+      }
+    } catch (err) {
+      console.error("LOAD SUBMIT ACCESS ERROR:", err?.response?.data || err);
     } finally {
-      setLoading(false);
+      setAccessLoading(false);
+    }
+  };
+
+  const loadDraftDetail = async (proposalId) => {
+    try {
+      const draft = await proposalService.getDraftProposalById(proposalId);
+
+      if (!draft) {
+        setError("Draft not found.");
+        return;
+      }
+
+      setCurrentDraftId(draft.proposalId || proposalId);
+      setFormData(mapProposalToForm(draft));
+    } catch (err) {
+      console.error("LOAD DRAFT DETAIL ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load draft detail."));
     }
   };
 
@@ -154,7 +261,6 @@ export default function SubmitProposalPage() {
 
   const getFieldError = (name) => {
     if (!submitted && !touched[name]) return "";
-
     return formErrors[name] || "";
   };
 
@@ -166,14 +272,303 @@ export default function SubmitProposalPage() {
     return formErrors?.milestones?.[index]?.[name] || "";
   };
 
-  const handleSubmit = async (event) => {
+  const handleSaveDraft = async () => {
+    if (!jobId) {
+      setError("Job information is missing. Please go back and choose a job.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    try {
+      setSavingDraft(true);
+      setError("");
+      setMessage("");
+
+      const draft = currentDraftId
+        ? await proposalService.updateDraftProposal(
+            currentDraftId,
+            jobId,
+            formData
+          )
+        : await proposalService.createDraftProposal(jobId, formData);
+
+      const savedDraftId = draft?.proposalId || draft?.id || currentDraftId;
+
+      if (savedDraftId) {
+        setCurrentDraftId(savedDraftId);
+        setSearchParams({ draftId: String(savedDraftId) });
+      }
+
+      setMessage("Draft saved successfully.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      console.error("SAVE DRAFT ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot save draft."));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+
+  const ensureCanSubmitProposal = async () => {
+    try {
+      setAccessLoading(true);
+
+      const latestCredits =
+        await proposalCreditPackageService.getMyProposalCredits();
+
+      setProposalCredits(latestCredits);
+
+      const latestPaidCredits = getAvailableProposalCredits(latestCredits);
+      const latestFreeSubmit = getFreeSubmitRemaining(latestCredits);
+      const latestCanSubmit = getCanSubmitNewProposal(latestCredits);
+
+      const canSubmit =
+        latestCanSubmit !== false &&
+        latestPaidCredits + latestFreeSubmit > 0;
+
+      if (!canSubmit) {
+        setShowUpgradeModal(true);
+        setError(
+          "You need proposal credits before submitting. Please buy a credit package to continue."
+        );
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("CHECK PROPOSAL CREDIT ERROR:", err?.response?.data || err);
+
+      setShowUpgradeModal(true);
+      setError(
+        getFriendlyError(
+          err,
+          "Cannot verify your proposal credits right now. Please try again."
+        )
+      );
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return false;
+    } finally {
+      setAccessLoading(false);
+    }
+  };
+
+  const executeSubmitDraft = async () => {
+    setSubmitted(true);
+    setMessage("");
+    setError("");
+
+    const errors = validateProposalForm(formData, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setError("Please check the highlighted fields before submitting.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    let draftIdToSubmit = currentDraftId;
+
+    if (!draftIdToSubmit) {
+      if (!jobId) {
+        setError("Job information is missing. Please go back and choose a job.");
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+
+      try {
+        setSavingDraft(true);
+        const savedDraft = await proposalService.createDraftProposal(jobId, formData);
+        draftIdToSubmit = savedDraft?.proposalId || savedDraft?.id || "";
+
+        if (!draftIdToSubmit) {
+          throw new Error("Draft was saved but its id was not returned.");
+        }
+
+        setCurrentDraftId(draftIdToSubmit);
+        setSearchParams({ draftId: String(draftIdToSubmit) });
+      } catch (err) {
+        console.error("SAVE DRAFT BEFORE SUBMIT ERROR:", err?.response?.data || err);
+        setError(getFriendlyError(err, "Cannot save draft before submitting."));
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      } finally {
+        setSavingDraft(false);
+      }
+    }
+
+    if (shouldRequireUpgrade) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    if (!(await ensureCanSubmitProposal())) {
+      return;
+    }
+
+    try {
+      setSubmittingDraft(true);
+
+      await proposalService.updateDraftProposal(draftIdToSubmit, jobId, formData);
+
+      const proposal = await proposalService.submitDraftProposal(draftIdToSubmit);
+      const proposalId = proposal?.proposalId || proposal?.id || draftIdToSubmit;
+
+      setMessage("Draft submitted successfully.");
+      await loadSubmitAccess();
+
+      setTimeout(() => {
+        navigate(`/expert/proposals/${proposalId}`, { replace: true });
+      }, 700);
+    } catch (err) {
+      console.error("SUBMIT DRAFT ERROR:", err?.response?.data || err);
+
+      const friendlyError = getFriendlyProposalError(
+        err,
+        "Cannot submit draft."
+      );
+
+      setError(friendlyError);
+
+      if (isCreditError(friendlyError)) {
+        await loadSubmitAccess();
+        setShowUpgradeModal(true);
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      setSubmittingDraft(false);
+    }
+  };
+
+  const requestSubmitDraft = () => {
+    setConfirmAction({
+      type: "SUBMIT_DRAFT",
+      title: "Submit this proposal draft?",
+      message:
+        "Your draft will be sent to the client and one proposal submission will be used. Please confirm that the price, timeline, and milestones are final.",
+      confirmLabel: "Send Draft",
+      tone: "cyan",
+    });
+  };
+
+  const requestSubmitProposal = (event) => {
     event.preventDefault();
+    setConfirmAction({
+      type: "SUBMIT_PROPOSAL",
+      title: "Submit this proposal?",
+      message:
+        "Your proposal will be sent to the client and one proposal submission will be used. Please review the price, timeline, and milestones before continuing.",
+      confirmLabel: "Send Proposal",
+      tone: "cyan",
+    });
+  };
+
+  const requestCancel = () => {
+    setConfirmAction({
+      type: "CANCEL",
+      title: "Leave this proposal?",
+      message:
+        "Any changes that have not been saved as a draft will be lost.",
+      confirmLabel: "Leave Page",
+      tone: "red",
+    });
+  };
+
+  const handleConfirmAction = async () => {
+    const action = confirmAction?.type;
+    setConfirmAction(null);
+
+    if (action === "SUBMIT_DRAFT") {
+      await executeSubmitDraft();
+      return;
+    }
+
+    if (action === "SUBMIT_PROPOSAL") {
+      await executeSubmitProposal();
+      return;
+    }
+
+    if (action === "CANCEL") {
+      navigate(`/expert/jobs/${jobId}`);
+    }
+  };
+
+  const handleBuyCreditPackage = async (pkg) => {
+    const packageId = pkg?.packageId;
+
+    if (!packageId) {
+      setError("Invalid package.");
+      return;
+    }
+
+    const balance = Number(walletBalance?.availableBalance || 0);
+    const price = Number(pkg.price || 0);
+
+    if (price > balance) {
+      navigate("/expert/wallet", {
+        state: {
+          returnTo: window.location.pathname + window.location.search,
+          reason: "BUY_PROPOSAL_CREDITS",
+          packageId,
+          depositAmount: price,
+          autoOpenDeposit: true,
+        },
+      });
+
+      return;
+    }
+
+    try {
+      setBuyingPackageId(String(packageId));
+      setError("");
+      setMessage("");
+
+      await proposalCreditPackageService.purchasePackage(packageId);
+      await loadSubmitAccess();
+
+      setShowUpgradeModal(false);
+      setMessage("Package purchased successfully. You can submit now.");
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      console.error(
+        "BUY PROPOSAL CREDIT PACKAGE ERROR:",
+        err?.response?.data || err
+      );
+
+      const friendlyError = getFriendlyError(err, "Cannot buy this package.");
+      setError(friendlyError);
+
+      if (isWalletError(friendlyError)) {
+        navigate("/expert/wallet", {
+          state: {
+            returnTo: window.location.pathname + window.location.search,
+            reason: "BUY_PROPOSAL_CREDITS",
+            packageId,
+            depositAmount: Number(pkg.price || 0),
+            autoOpenDeposit: true,
+          },
+        });
+      }
+    } finally {
+      setBuyingPackageId("");
+    }
+  };
+
+  const executeSubmitProposal = async () => {
 
     setSubmitted(true);
     setMessage("");
     setError("");
 
-    const errors = validateProposalForm(formData);
+    const errors = validateProposalForm(formData, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
 
     if (Object.keys(errors).length > 0) {
       setError("Please check the highlighted fields before submitting.");
@@ -187,6 +582,15 @@ export default function SubmitProposalPage() {
       return;
     }
 
+    if (shouldRequireUpgrade) {
+      setShowUpgradeModal(true);
+      return;
+    }
+
+    if (!(await ensureCanSubmitProposal())) {
+      return;
+    }
+
     try {
       setSubmitting(true);
 
@@ -194,6 +598,7 @@ export default function SubmitProposalPage() {
       const proposalId = proposal?.proposalId || proposal?.id;
 
       setMessage("Proposal submitted successfully.");
+      await loadSubmitAccess();
 
       setTimeout(() => {
         if (proposalId) {
@@ -206,11 +611,16 @@ export default function SubmitProposalPage() {
     } catch (err) {
       console.error("SUBMIT PROPOSAL ERROR:", err?.response?.data || err);
 
-      setError(
-        getFriendlyProposalError
-          ? getFriendlyProposalError(err, "Cannot submit proposal.")
-          : getFriendlyError(err, "Cannot submit proposal.")
-      );
+      const friendlyError = getFriendlyProposalError
+        ? getFriendlyProposalError(err, "Cannot submit proposal.")
+        : getFriendlyError(err, "Cannot submit proposal.");
+
+      setError(friendlyError);
+
+      if (isCreditError(friendlyError)) {
+        await loadSubmitAccess();
+        setShowUpgradeModal(true);
+      }
 
       window.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
@@ -223,16 +633,14 @@ export default function SubmitProposalPage() {
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading job information...
-        </div>
+        <PageSkeleton cards={5} />
       </ExpertLayout>
     );
   }
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-5 py-7 md:px-8">
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
@@ -246,26 +654,28 @@ export default function SubmitProposalPage() {
           </button>
 
           <div className="mb-8">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-              Submit Proposal
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              {currentDraftId ? "Edit Proposal Draft" : "Send Proposal"}
             </p>
 
-            <h1 className="text-3xl font-bold text-white md:text-4xl">
-              Send proposal to client
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              {currentDraftId
+                ? "Continue your draft"
+                : "Send a professional proposal"}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Fill in your price, timeline, delivery plan, and milestones.
+              {currentDraftId
+                ? "Update your saved draft, then submit it when you are ready."
+                : "Present your approach, price, timeline, and milestones."}
             </p>
           </div>
 
           {error && (
-            <Alert type="danger" title="Proposal error" message={error} />
+            <Alert type="danger" title="Please review your proposal" message={error} />
           )}
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {!job && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
@@ -283,7 +693,7 @@ export default function SubmitProposalPage() {
 
           {job && (
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={requestSubmitProposal} className="space-y-6">
                 {!isJobOpen && (
                   <Alert
                     type="warning"
@@ -292,7 +702,56 @@ export default function SubmitProposalPage() {
                   />
                 )}
 
-                <Card title="Proposal Content" icon="description">
+                {currentDraftId && (
+                  <section className="rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-bold text-cyan-200">
+                          Editing saved draft
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-cyan-100/80">
+                          Saving keeps this proposal private until you submit it.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => navigate("/expert/proposal/drafts")}
+                        className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                      >
+                        My Drafts
+                      </button>
+                    </div>
+                  </section>
+                )}
+
+                {shouldRequireUpgrade && (
+                  <section className="rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-5">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="font-bold text-yellow-200">
+                          You need proposal credits to submit.
+                        </p>
+
+                        <p className="mt-1 text-sm leading-6 text-yellow-100/80">
+                          Your free submission has been used. Buy credits to
+                          continue applying for jobs.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setShowUpgradeModal(true)}
+                        className="rounded-xl bg-yellow-300 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-200"
+                      >
+                        Get Credits
+                      </button>
+                    </div>
+                  </section>
+                )}
+
+                <Card title="Cover Letter" icon="description">
                   <TextArea
                     label="Cover Letter"
                     required
@@ -305,7 +764,7 @@ export default function SubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Price & Timeline" icon="payments">
+                <Card title="Terms" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <NumberInput
                       label="Proposed Price"
@@ -315,7 +774,7 @@ export default function SubmitProposalPage() {
                       onChange={(value) => updateField("proposedPrice", value)}
                       onBlur={() => markTouched("proposedPrice")}
                       error={getFieldError("proposedPrice")}
-                      placeholder="500"
+                      placeholder="500000"
                     />
 
                     <NumberInput
@@ -337,11 +796,11 @@ export default function SubmitProposalPage() {
                     onClick={syncFromMilestones}
                     className="mt-5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
-                    Sync price and timeline from milestones
+                    Use milestone totals
                   </button>
                 </Card>
 
-                <Card title="Delivery Plan" icon="task_alt">
+                <Card title="Project Plan" icon="task_alt">
                   <div className="space-y-5">
                     <TextArea
                       label="Expected Outputs"
@@ -387,12 +846,11 @@ export default function SubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Milestone requirement
+                      Milestone details
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Each milestone only needs title, payment amount, and
-                      duration days.
+                      Add a title, amount, and duration for each milestone.
                     </p>
                   </div>
 
@@ -447,26 +905,102 @@ export default function SubmitProposalPage() {
                   </div>
                 </Card>
 
-                <div className="flex justify-end gap-3">
+                <div className="flex flex-wrap justify-end gap-3">
                   <button
                     type="button"
-                    onClick={() => navigate(`/expert/jobs/${jobId}`)}
+                    onClick={requestCancel}
                     className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
                   >
                     Cancel
                   </button>
 
                   <button
-                    type="submit"
-                    disabled={submitting || !isJobOpen}
-                    className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    type="button"
+                    onClick={handleSaveDraft}
+                    disabled={savingDraft || submitting || submittingDraft}
+                    className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Submitting..." : "Submit Proposal"}
+                    {savingDraft
+                      ? "Saving..."
+                      : currentDraftId
+                      ? "Update Draft"
+                      : "Save Draft"}
                   </button>
+
+                  {currentDraftId ? (
+                    <button
+                      type="button"
+                      onClick={requestSubmitDraft}
+                      disabled={
+                        submittingDraft ||
+                        submitting ||
+                        savingDraft ||
+                        !isJobOpen ||
+                        accessLoading
+                      }
+                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submittingDraft
+                        ? "Submitting..."
+                        : accessLoading
+                        ? "Checking..."
+                        : "Send Draft"}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      disabled={
+                        submitting ||
+                        submittingDraft ||
+                        savingDraft ||
+                        !isJobOpen ||
+                        accessLoading
+                      }
+                      className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {submitting
+                        ? "Submitting..."
+                        : accessLoading
+                        ? "Checking..."
+                        : "Send Proposal"}
+                    </button>
+                  )}
                 </div>
               </form>
 
               <aside className="space-y-6">
+                <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
+                  <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
+                    Proposal Access
+                  </p>
+
+                  <div className="grid grid-cols-1 gap-3">
+                    <Info
+                      label="Submissions Left"
+                      value={`${submissionsLeft || 0}`}
+                      tone={submissionsLeft > 0 ? "green" : "warning"}
+                    />
+                    <Info
+                      label="Free Submit"
+                      value={
+                        freeSubmitRemaining > 0
+                          ? `${freeSubmitRemaining} left`
+                          : "Used"
+                      }
+                    />
+                  </div>
+
+                  {submissionsLeft <= 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowUpgradeModal(true)}
+                      className="mt-5 w-full rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
+                    >
+                      Buy Proposal Credits
+                    </button>
+                  )}
+                </section>
+
                 <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                   <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
                     Job Summary
@@ -492,12 +1026,8 @@ export default function SubmitProposalPage() {
                     />
 
                     <Info
-                      label="Duration"
-                      value={
-                        getJobDuration(job)
-                          ? `${getJobDuration(job)} days`
-                          : "N/A"
-                      }
+                      label="Application Deadline"
+                      value={formatDeadline(getJobDeadline(job))}
                     />
 
                     <Info label="Status" value={getJobStatus(job) || "OPEN"} />
@@ -517,7 +1047,283 @@ export default function SubmitProposalPage() {
           )}
         </div>
       </div>
+
+      {confirmAction && (
+        <ConfirmModal
+          title={confirmAction.title}
+          message={confirmAction.message}
+          confirmLabel={confirmAction.confirmLabel}
+          tone={confirmAction.tone}
+          busy={submitting || submittingDraft}
+          onCancel={() => setConfirmAction(null)}
+          onConfirm={handleConfirmAction}
+        />
+      )}
+
+      {showUpgradeModal && (
+        <UpgradeProposalModal
+          packages={creditPackages}
+          walletBalance={walletBalance}
+          buyingPackageId={buyingPackageId}
+          onBuy={handleBuyCreditPackage}
+          onClose={() => setShowUpgradeModal(false)}
+          onGoWallet={(pkg) =>
+            navigate("/expert/wallet", {
+              state: {
+                returnTo: window.location.pathname + window.location.search,
+                reason: "BUY_PROPOSAL_CREDITS",
+                packageId: pkg?.packageId,
+                depositAmount: Number(pkg?.price || 0),
+                autoOpenDeposit: true,
+              },
+            })
+          }
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1300] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ConfirmModal({
+  title,
+  message,
+  confirmLabel,
+  tone = "cyan",
+  busy,
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-2xl">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
+          <span className="material-symbols-outlined text-cyan-300">help</span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={busy}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={busy}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {busy ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpgradeProposalModal({
+  packages,
+  walletBalance,
+  buyingPackageId,
+  onBuy,
+  onClose,
+  onGoWallet,
+}) {
+  const activePackages = packages.filter((item) => item.isActive).slice(0, 4);
+  const balance = Number(walletBalance?.availableBalance || 0);
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 py-8 backdrop-blur-sm">
+      <div className="w-full max-w-5xl overflow-hidden rounded-2xl border border-cyan-400/20 bg-[#111823] shadow-[0_35px_120px_rgba(0,0,0,0.78)]">
+        <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
+          <div>
+            <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
+              Credits Required
+            </p>
+
+            <h2 className="text-2xl font-black text-white">
+              Buy proposal credits to continue
+            </h2>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
+              Your free proposal submission has been used. Choose a package
+              below to submit more proposals.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-500 transition hover:bg-white/[0.05] hover:text-white"
+          >
+            <span className="material-symbols-outlined">close</span>
+          </button>
+        </div>
+
+        <div className="px-7 py-6">
+          <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+            <p className="text-sm text-gray-400">Wallet Balance</p>
+
+            <p className="mt-1 text-3xl font-black text-cyan-300">
+              {formatMoney(balance)}
+            </p>
+          </div>
+
+          {activePackages.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center">
+              <p className="font-bold text-white">No packages available</p>
+
+              <p className="mt-2 text-sm text-gray-400">
+                Proposal credit packages are not available right now.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {activePackages.map((pkg, index) => {
+                const notEnoughBalance = Number(pkg.price || 0) > balance;
+                const isPopular = index === 1 || pkg.isPopular || pkg.popular;
+
+                return (
+                  <article
+                    key={pkg.packageId || index}
+                    className={`relative overflow-hidden rounded-[1.5rem] border p-5 ${
+                      isPopular
+                        ? "border-cyan-400/50 bg-cyan-400/10"
+                        : "border-white/10 bg-white/[0.035]"
+                    }`}
+                  >
+                    {isPopular && (
+                      <span className="mb-4 inline-flex rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-300">
+                        Popular
+                      </span>
+                    )}
+
+                    <h3 className="text-lg font-black text-white">
+                      {pkg.packageName}
+                    </h3>
+
+                    <p className="mt-2 min-h-[44px] text-sm leading-6 text-gray-400">
+                      {pkg.description ||
+                        "Add more proposal submissions to your account."}
+                    </p>
+
+                    <div className="my-5 rounded-2xl border border-white/10 bg-[#0f141d] p-4">
+                      <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                        Includes
+                      </p>
+
+                      <p className="mt-1 text-3xl font-black text-cyan-300">
+                        {formatNumber(pkg.proposalCredits)}
+                      </p>
+
+                      <p className="mt-1 text-xs text-gray-500">
+                        proposal submissions
+                      </p>
+                    </div>
+
+                    <p className="mb-5 text-2xl font-black text-white">
+                      {formatMoney(pkg.price)}
+                    </p>
+
+                    {notEnoughBalance ? (
+                      <button
+                        type="button"
+                        onClick={() => onGoWallet(pkg)}
+                        className="w-full rounded-2xl border border-yellow-400/40 bg-yellow-400/10 px-4 py-3 text-sm font-black text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
+                      >
+                        Add Money
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => onBuy(pkg)}
+                        disabled={
+                          String(buyingPackageId) === String(pkg.packageId)
+                        }
+                        className="w-full rounded-2xl bg-cyan-400 px-4 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {String(buyingPackageId) === String(pkg.packageId)
+                          ? "Purchasing..."
+                          : "Buy Now"}
+                      </button>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -591,7 +1397,7 @@ function MilestoneEditor({
           onChange={(value) => onChange(index, "amount", value)}
           onBlur={() => onBlur(index, "amount")}
           error={getError(index, "amount")}
-          placeholder="200"
+          placeholder="200000"
         />
 
         <NumberInput
@@ -747,13 +1553,101 @@ function Alert({ type, title, message }) {
   );
 }
 
+function getCreditRaw(credits) {
+  return credits?.raw || credits?.Raw || credits || {};
+}
+
+function getAvailableProposalCredits(credits) {
+  if (typeof credits === "number") return credits;
+
+  const raw = getCreditRaw(credits);
+
+  return toNumber(
+    getValue(
+      credits?.availableProposalSubmitCredits,
+      credits?.AvailableProposalSubmitCredits,
+      credits?.remainingCredits,
+      credits?.RemainingCredits,
+      credits?.availableCredits,
+      credits?.AvailableCredits,
+      credits?.proposalCredits,
+      credits?.ProposalCredits,
+      credits?.credits,
+      credits?.Credits,
+      credits?.balance,
+      credits?.Balance,
+      raw.availableProposalSubmitCredits,
+      raw.AvailableProposalSubmitCredits,
+      raw.remainingCredits,
+      raw.RemainingCredits,
+      raw.availableCredits,
+      raw.AvailableCredits,
+      raw.proposalCredits,
+      raw.ProposalCredits,
+      raw.credits,
+      raw.Credits,
+      raw.balance,
+      raw.Balance,
+      0
+    ),
+    0
+  );
+}
+
+function getFreeSubmitRemaining(credits) {
+  if (!credits || typeof credits === "number") return 0;
+
+  const raw = getCreditRaw(credits);
+
+  return toNumber(
+    getValue(
+      credits?.freeSubmitRemaining,
+      credits?.FreeSubmitRemaining,
+      credits?.freeSubmitsRemaining,
+      credits?.FreeSubmitsRemaining,
+      raw.freeSubmitRemaining,
+      raw.FreeSubmitRemaining,
+      raw.freeSubmitsRemaining,
+      raw.FreeSubmitsRemaining,
+      0
+    ),
+    0
+  );
+}
+
+function getCanSubmitNewProposal(credits) {
+  if (!credits) return true;
+
+  const raw = getCreditRaw(credits);
+
+  const value = getValue(
+    credits?.canSubmitNewProposal,
+    credits?.CanSubmitNewProposal,
+    raw.canSubmitNewProposal,
+    raw.CanSubmitNewProposal,
+    undefined
+  );
+
+  if (value === undefined) {
+    return (
+      getAvailableProposalCredits(credits) + getFreeSubmitRemaining(credits) >
+      0
+    );
+  }
+
+  return Boolean(value);
+}
+
 function formatBudget(min, max) {
   const minValue = Number(min || 0);
   const maxValue = Number(max || 0);
 
-  if (minValue && maxValue) return `$${minValue} - $${maxValue}`;
-  if (minValue) return `From $${minValue}`;
-  if (maxValue) return `Up to $${maxValue}`;
+  if (minValue && maxValue) {
+    return `${formatMoney(minValue)} - ${formatMoney(maxValue)}`;
+  }
+
+  if (minValue) return `From ${formatMoney(minValue)}`;
+  if (maxValue) return `Up to ${formatMoney(maxValue)}`;
 
   return "Budget not set";
 }
@@ -761,11 +1655,15 @@ function formatBudget(min, max) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("vi-VN").format(Number(value || 0));
 }
 
 function unwrapData(response) {
@@ -779,6 +1677,11 @@ function getValue(...values) {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
   );
+}
+
+function toNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
 }
 
 function getJobTitle(job) {
@@ -808,13 +1711,59 @@ function getJobStatus(job) {
   return getValue(job?.status, job?.Status, "OPEN");
 }
 
-function getJobDuration(job) {
+function getJobDeadline(job) {
   return getValue(
-    job?.durationDays,
-    job?.DurationDays,
-    job?.projectDurationDays,
-    job?.ProjectDurationDays,
+    job?.deadline,
+    job?.Deadline,
+    job?.applicationDeadline,
+    job?.ApplicationDeadline,
+    job?.proposalDeadline,
+    job?.ProposalDeadline,
+    job?.expiredAt,
+    job?.ExpiredAt,
+    job?.expiresAt,
+    job?.ExpiresAt,
+    job?.endDate,
+    job?.EndDate,
+    job?.raw?.deadline,
+    job?.raw?.Deadline,
+    job?.raw?.applicationDeadline,
+    job?.raw?.ApplicationDeadline,
+    job?.raw?.proposalDeadline,
+    job?.raw?.ProposalDeadline,
+    job?.raw?.expiredAt,
+    job?.raw?.ExpiredAt,
+    job?.raw?.expiresAt,
+    job?.raw?.ExpiresAt,
     ""
+  );
+}
+
+function formatDeadline(value) {
+  return formatDateTime(value, "Flexible");
+}
+
+function isWalletError(message) {
+  const value = String(message || "").toLowerCase();
+
+  return (
+    value.includes("balance") ||
+    value.includes("wallet") ||
+    value.includes("insufficient") ||
+    value.includes("not enough")
+  );
+}
+
+function isCreditError(message) {
+  const value = String(message || "").toLowerCase();
+
+  return (
+    value.includes("credit") ||
+    value.includes("free submit") ||
+    value.includes("proposal package") ||
+    value.includes("purchase package") ||
+    value.includes("not enough proposal") ||
+    value.includes("insufficient proposal")
   );
 }
 

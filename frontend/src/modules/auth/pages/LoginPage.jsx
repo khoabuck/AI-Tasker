@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
+import { clearAuth } from "../../../utils/auth.utils";
 
 const formatCountdown = (totalSeconds) => {
   const safeSeconds = Math.max(0, Number(totalSeconds || 0));
@@ -205,15 +206,19 @@ export default function LoginPage() {
       }
     }
 
-    if (normalizedStatus === "SUSPENDED") {
+    if (
+      ["LOCKED", "SUSPENDED", "DISABLED", "INACTIVE", "BLOCKED"].includes(
+        normalizedStatus
+      )
+    ) {
       setError(
-        "Your account has been temporarily suspended. Please contact support."
+        "Your account is currently restricted. Please contact support."
       );
       return;
     }
 
-    if (normalizedStatus === "BANNED") {
-      setError("Your account has been permanently banned.");
+    if (["BANNED", "BAN"].includes(normalizedStatus)) {
+      setError("Your account has been banned.");
       return;
     }
 
@@ -312,14 +317,16 @@ export default function LoginPage() {
 };
 
   const handleGoogleLogin = () => {
-    const backendUrl = import.meta.env.VITE_BACKEND_BASE_URL;
+    const backendUrl = String(
+      import.meta.env.VITE_BACKEND_BASE_URL || ""
+    ).replace(/\/+$/, "");
 
     if (!backendUrl) {
       setError("Missing VITE_BACKEND_BASE_URL");
       return;
     }
 
-    window.location.href = `${backendUrl}/api/auth/google-login`;
+    window.location.assign(`${backendUrl}/api/auth/google-login`);
   };
 
   return (
@@ -392,7 +399,6 @@ export default function LoginPage() {
                 Welcome Back
               </h1>
             </div>
-
           </header>
 
           <form onSubmit={handleSubmit} autoComplete="on" className="space-y-6">
@@ -472,8 +478,7 @@ export default function LoginPage() {
                 <span
                   className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-xl"
                   style={{
-                    color:
-                      focusField === "password" ? "#00F0FF" : "#8c90a0",
+                    color: focusField === "password" ? "#00F0FF" : "#8c90a0",
                     textShadow:
                       focusField === "password"
                         ? "0 0 10px rgba(0,240,255,0.6)"
@@ -503,41 +508,40 @@ export default function LoginPage() {
                     WebkitBoxShadow: "0 0 0 1000px #191c22 inset",
                     WebkitTextFillColor: "#e1e2eb",
                   }}
-                  onFocus={() => {
-                    setFocusField("password");
-                  }}
+                  onFocus={() => setFocusField("password")}
                   onBlur={() => setFocusField("")}
                 />
 
                 <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: "absolute",
-                  right: 14,
-                  top: "50%",
-                  transform: "translateY(-50%)",
-                  background: "transparent",
-                  border: "none",
-                  cursor: "pointer",
-                  color: "#00F0FF",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 0,
-                }}
-              >
-                <span
-                  className="material-symbols-outlined"
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                   style={{
-                    fontSize: 22,
-                    textShadow: "0 0 10px rgba(0,240,255,0.55)",
-                    transition: "0.2s",
+                    position: "absolute",
+                    right: 14,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#00F0FF",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: 0,
                   }}
                 >
-                  {showPassword ? "visibility_off" : "visibility"}
-                </span>
-              </button>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{
+                      fontSize: 22,
+                      textShadow: "0 0 10px rgba(0,240,255,0.55)",
+                      transition: "0.2s",
+                    }}
+                  >
+                    {showPassword ? "visibility_off" : "visibility"}
+                  </span>
+                </button>
               </div>
             </div>
 
@@ -597,19 +601,21 @@ export default function LoginPage() {
             <button
               type="button"
               onClick={handleGoogleLogin}
-              className="flex w-full items-center justify-center gap-3 rounded-xl py-3 font-medium transition-all"
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-3 rounded-xl py-3 font-medium transition-all disabled:cursor-not-allowed disabled:opacity-60"
               style={{
                 background: "#232A35",
                 border: "1px solid rgba(255,255,255,0.12)",
                 color: "#e1e2eb",
-                cursor: "pointer",
               }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "#32353b")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "#232A35")
-              }
+              onMouseEnter={(event) => {
+                if (!loading) {
+                  event.currentTarget.style.background = "#32353b";
+                }
+              }}
+              onMouseLeave={(event) => {
+                event.currentTarget.style.background = "#232A35";
+              }}
             >
               <svg className="h-5 w-5" viewBox="0 0 24 24">
                 <path
@@ -629,6 +635,7 @@ export default function LoginPage() {
                   fill="#EA4335"
                 />
               </svg>
+
               Continue with Google
             </button>
 

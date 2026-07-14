@@ -1,26 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminPolicyService from "../../../services/adminPolicy.service";
 
-export default function AdminPlatformFeePolicyPage() {
-  const [formData, setFormData] = useState({
-    feePercent: 10,
-    minimumFee: 0,
-    maximumFee: "",
-    fixedFee: 0,
-    isActive: true,
-    effectiveFrom: "",
-    effectiveTo: "",
-  });
+import { formatDateTime } from "../../../utils/dateTime.utils";
+const EMPTY_FORM = {
+  individualClientFeeRate: 0,
+  businessClientFeeRate: 0,
+  expertFeeRate: 0,
+  reason: "",
+};
 
-  const [rawPolicy, setRawPolicy] = useState(null);
-  const [previewAmount, setPreviewAmount] = useState(1000);
+export default function AdminPlatformFeePolicyPage() {
+  const [policy, setPolicy] = useState(null);
+  const [form, setForm] = useState(EMPTY_FORM);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const hasChanged = useMemo(() => {
+    if (!policy) return true;
+
+    return (
+      Number(form.individualClientFeeRate) !==
+        Number(policy.individualClientFeeRate || 0) ||
+      Number(form.businessClientFeeRate) !==
+        Number(policy.businessClientFeeRate || 0) ||
+      Number(form.expertFeeRate) !== Number(policy.expertFeeRate || 0) ||
+      String(form.reason || "").trim() !== ""
+    );
+  }, [form, policy]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setSuccess("");
+    }, 3400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [success]);
 
   useEffect(() => {
     loadPolicy();
@@ -30,492 +53,602 @@ export default function AdminPlatformFeePolicyPage() {
     try {
       setLoading(true);
       setError("");
-      setMessage("");
+      setSuccess("");
+      setFieldErrors({});
 
-      const policy = await adminPolicyService.getPlatformFeePolicy();
+      const data = await adminPolicyService.getPlatformFeePolicy();
 
-      setFormData({
-        feePercent: policy.feePercent ?? 10,
-        minimumFee: policy.minimumFee ?? 0,
-        maximumFee: policy.maximumFee ?? "",
-        fixedFee: policy.fixedFee ?? 0,
-        isActive: Boolean(policy.isActive),
-        effectiveFrom: toDateTimeLocalValue(policy.effectiveFrom),
-        effectiveTo: toDateTimeLocalValue(policy.effectiveTo),
+      setPolicy(data);
+
+      setForm({
+        individualClientFeeRate: data?.individualClientFeeRate ?? 0,
+        businessClientFeeRate: data?.businessClientFeeRate ?? 0,
+        expertFeeRate: data?.expertFeeRate ?? 0,
+        reason: "",
       });
-
-      setRawPolicy(policy);
     } catch (err) {
       console.error("LOAD PLATFORM FEE POLICY ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      setError(getFriendlyError(err, "Cannot load platform fee policy."));
     } finally {
       setLoading(false);
     }
   };
 
-  const handleChange = (field, value) => {
-    setFormData((prev) => ({
+  const handleChange = (name, value) => {
+    setError("");
+    setSuccess("");
+    setFieldErrors((prev) => ({
       ...prev,
-      [field]: value,
+      [name]: "",
+    }));
+
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
     }));
   };
 
-  const calculatePreview = () => {
-    const amount = Number(previewAmount || 0);
-    const feePercent = Number(formData.feePercent || 0);
-    const minimumFee = Number(formData.minimumFee || 0);
-    const maximumFee =
-      formData.maximumFee === "" || formData.maximumFee === null
-        ? null
-        : Number(formData.maximumFee);
-    const fixedFee = Number(formData.fixedFee || 0);
-
-    let platformFee = amount * (feePercent / 100) + fixedFee;
-
-    if (platformFee < minimumFee) {
-      platformFee = minimumFee;
+  const handleReset = () => {
+    if (!policy) {
+      setForm(EMPTY_FORM);
+      return;
     }
 
-    if (maximumFee !== null && !Number.isNaN(maximumFee)) {
-      platformFee = Math.min(platformFee, maximumFee);
-    }
+    setForm({
+      individualClientFeeRate: policy.individualClientFeeRate ?? 0,
+      businessClientFeeRate: policy.businessClientFeeRate ?? 0,
+      expertFeeRate: policy.expertFeeRate ?? 0,
+      reason: "",
+    });
 
-    const expertAmount = Math.max(amount - platformFee, 0);
-
-    return {
-      amount,
-      platformFee,
-      expertAmount,
-    };
+    setError("");
+    setSuccess("");
+    setFieldErrors({});
   };
 
-  const preview = calculatePreview();
-
-  const validateForm = () => {
-    if (Number(formData.feePercent) < 0) {
-      return "Fee percent cannot be negative.";
-    }
-
-    if (Number(formData.feePercent) > 100) {
-      return "Fee percent cannot be greater than 100.";
-    }
-
-    if (Number(formData.minimumFee) < 0) {
-      return "Minimum fee cannot be negative.";
-    }
-
-    if (formData.maximumFee !== "" && Number(formData.maximumFee) < 0) {
-      return "Maximum fee cannot be negative.";
-    }
-
-    if (Number(formData.fixedFee) < 0) {
-      return "Fixed fee cannot be negative.";
-    }
-
-    if (
-      formData.maximumFee !== "" &&
-      Number(formData.maximumFee) < Number(formData.minimumFee)
-    ) {
-      return "Maximum fee cannot be lower than minimum fee.";
-    }
-
-    if (
-      formData.effectiveFrom &&
-      formData.effectiveTo &&
-      new Date(formData.effectiveFrom).getTime() >
-        new Date(formData.effectiveTo).getTime()
-    ) {
-      return "Effective from cannot be later than effective to.";
-    }
-
-    return "";
-  };
-
-  const handleSubmit = async (event) => {
+  const handleSubmit = (event) => {
     event.preventDefault();
 
-    const validationMessage = validateForm();
+    const validation = validateForm(form);
 
-    if (validationMessage) {
-      setError(validationMessage);
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
+      return;
+    }
+
+    setError("");
+    setFieldErrors({});
+    setShowSaveConfirm(true);
+  };
+
+  const executeSave = async () => {
+
+    const validation = validateForm(form);
+
+    if (!validation.valid) {
+      setFieldErrors(validation.errors);
+      setError("Please fix the highlighted fields before saving.");
       return;
     }
 
     try {
       setSaving(true);
       setError("");
-      setMessage("");
+      setSuccess("");
+      setFieldErrors({});
 
-      const updated = await adminPolicyService.updatePlatformFeePolicy(formData);
+      const updated = await adminPolicyService.updatePlatformFeePolicy({
+        individualClientFeeRate: Number(form.individualClientFeeRate),
+        businessClientFeeRate: Number(form.businessClientFeeRate),
+        expertFeeRate: Number(form.expertFeeRate),
+        reason: form.reason,
+      });
 
-      setRawPolicy(updated);
-      setMessage("Platform fee policy updated successfully.");
+      setPolicy(updated);
+
+      setForm({
+        individualClientFeeRate: updated?.individualClientFeeRate ?? 0,
+        businessClientFeeRate: updated?.businessClientFeeRate ?? 0,
+        expertFeeRate: updated?.expertFeeRate ?? 0,
+        reason: "",
+      });
+
+      setSuccess("Platform fees has been updated successfully.");
     } catch (err) {
       console.error("UPDATE PLATFORM FEE POLICY ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err));
+      setError(getFriendlyError(err, "Cannot update platform fee policy."));
     } finally {
       setSaving(false);
     }
   };
 
-  const cardStyle =
-    "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_18px_50px_rgba(0,0,0,0.3)]";
-
   return (
     <AdminLayout>
-      <div className="px-5 py-10 md:px-8">
-        <div className="mx-auto max-w-6xl">
-          {/* Header */}
-          <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Admin Policy
-              </p>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-6 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div>
+            <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+              Fees
+            </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Platform fee policy
-              </h1>
+            <h1 className="text-3xl font-bold text-white md:text-3xl">
+              Platform fees
+            </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Configure how the platform fee is calculated from contract or
-                transaction amounts.
-              </p>
-            </div>
-
-            <button
-              type="button"
-              onClick={loadPolicy}
-              disabled={loading || saving}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Refresh
-            </button>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+              Manage fee rates for clients and experts.
+            </p>
           </div>
 
-          {message && (
-            <div className="mb-5 rounded-xl border border-green-500/30 bg-green-500/10 px-5 py-4 text-sm text-green-300">
-              {message}
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-5 rounded-xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-sm text-red-300">
-              {error}
-            </div>
-          )}
-
-          {loading && (
-            <div className={`${cardStyle} p-12 text-center text-gray-400`}>
-              <span className="material-symbols-outlined mb-3 block text-4xl text-[#00F0FF]">
-                hourglass_empty
-              </span>
-              Loading platform fee policy...
-            </div>
-          )}
-
-          {!loading && (
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-              <form onSubmit={handleSubmit} className={`${cardStyle} p-6`}>
-                <SectionTitle icon="payments" title="Fee Rules" />
-
-                <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                  <NumberField
-                    label="Fee Percent"
-                    value={formData.feePercent}
-                    min="0"
-                    max="100"
-                    suffix="%"
-                    onChange={(value) => handleChange("feePercent", value)}
-                  />
-
-                  <NumberField
-                    label="Fixed Fee"
-                    value={formData.fixedFee}
-                    min="0"
-                    onChange={(value) => handleChange("fixedFee", value)}
-                  />
-
-                  <NumberField
-                    label="Minimum Fee"
-                    value={formData.minimumFee}
-                    min="0"
-                    onChange={(value) => handleChange("minimumFee", value)}
-                  />
-
-                  <NumberField
-                    label="Maximum Fee"
-                    value={formData.maximumFee}
-                    min="0"
-                    placeholder="Empty means no maximum"
-                    onChange={(value) => handleChange("maximumFee", value)}
-                  />
-
-                  <DateTimeField
-                    label="Effective From"
-                    value={formData.effectiveFrom}
-                    onChange={(value) => handleChange("effectiveFrom", value)}
-                  />
-
-                  <DateTimeField
-                    label="Effective To"
-                    value={formData.effectiveTo}
-                    onChange={(value) => handleChange("effectiveTo", value)}
-                  />
-
-                  <BooleanField
-                    label="Policy Active"
-                    value={formData.isActive}
-                    onChange={(value) => handleChange("isActive", value)}
-                  />
-                </div>
-
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={loadPolicy}
-                    disabled={saving}
-                    className="rounded-xl border border-white/10 px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:bg-white/[0.04] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Reset
-                  </button>
-
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="rounded-xl bg-gradient-to-r from-[#00F0FF] to-[#7C3AED] px-6 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {saving ? "Saving..." : "Save Policy"}
-                  </button>
-                </div>
-              </form>
-
-              <aside className="space-y-6">
-                <section className={`${cardStyle} p-6`}>
-                  <SectionTitle icon="calculate" title="Fee Preview" />
-
-                  <div className="mb-5">
-                    <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                      Contract Amount
-                    </label>
-
-                    <input
-                      type="number"
-                      min="0"
-                      value={previewAmount}
-                      onChange={(event) => setPreviewAmount(event.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
-                    />
-                  </div>
-
-                  <div className="space-y-4">
-                    <InfoItem
-                      label="Original Amount"
-                      value={formatMoney(preview.amount)}
-                    />
-                    <InfoItem
-                      label="Platform Fee"
-                      value={formatMoney(preview.platformFee)}
-                    />
-                    <InfoItem
-                      label="Expert Amount"
-                      value={formatMoney(preview.expertAmount)}
-                    />
-                  </div>
-                </section>
-
-                <section className={`${cardStyle} p-6`}>
-                  <SectionTitle icon="fact_check" title="Policy Summary" />
-
-                  <div className="space-y-4">
-                    <InfoItem
-                      label="Fee Percent"
-                      value={`${formData.feePercent || 0}%`}
-                    />
-                    <InfoItem
-                      label="Minimum Fee"
-                      value={formatMoney(formData.minimumFee)}
-                    />
-                    <InfoItem
-                      label="Maximum Fee"
-                      value={
-                        formData.maximumFee === ""
-                          ? "No maximum"
-                          : formatMoney(formData.maximumFee)
-                      }
-                    />
-                    <InfoItem
-                      label="Fixed Fee"
-                      value={formatMoney(formData.fixedFee)}
-                    />
-                    <InfoItem
-                      label="Policy Status"
-                      value={formData.isActive ? "Active" : "Inactive"}
-                    />
-                    <InfoItem
-                      label="Updated At"
-                      value={formatDateTime(rawPolicy?.updatedAt)}
-                    />
-                  </div>
-                </section>
-
-                <section className={`${cardStyle} p-6`}>
-                  <details>
-                    <summary className="cursor-pointer text-sm font-bold text-gray-300">
-                      Raw policy data
-                    </summary>
-
-                    <pre className="mt-4 max-h-[360px] overflow-auto rounded-xl border border-white/10 bg-black/30 p-4 text-xs leading-5 text-gray-300">
-                      {JSON.stringify(rawPolicy?.raw || rawPolicy, null, 2)}
-                    </pre>
-                  </details>
-                </section>
-              </aside>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={loadPolicy}
+            disabled={loading || saving}
+            className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Loading..." : "Refresh"}
+          </button>
         </div>
+
+        {error && (
+          <Alert
+            type="danger"
+            title="Action failed"
+            message={error}
+            onClose={() => setError("")}
+          />
+        )}
+
+        {success && <SuccessToast message={success} onClose={() => setSuccess("")} />}
+
+        {loading ? (
+          <PageSkeleton cards={4} />
+        ) : (
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_420px]">
+            <form
+              onSubmit={handleSubmit}
+              className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]"
+            >
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-white">
+                  Fee configuration
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-gray-400">
+                  Enter fee rates clearly. Use 0.1 for 10% when the system uses decimal rates.
+                </p>
+              </div>
+
+              <div className="space-y-5">
+                <NumberInput
+                  label="Individual client fee"
+                  value={form.individualClientFeeRate}
+                  required
+                  error={fieldErrors.individualClientFeeRate}
+                  onChange={(value) =>
+                    handleChange("individualClientFeeRate", value)
+                  }
+                  helper="Fee rate applied to individual client payments."
+                />
+
+                <NumberInput
+                  label="Business client fee"
+                  value={form.businessClientFeeRate}
+                  required
+                  error={fieldErrors.businessClientFeeRate}
+                  onChange={(value) =>
+                    handleChange("businessClientFeeRate", value)
+                  }
+                  helper="Fee rate applied to business client payments."
+                />
+
+                <NumberInput
+                  label="Expert fee"
+                  value={form.expertFeeRate}
+                  required
+                  error={fieldErrors.expertFeeRate}
+                  onChange={(value) => handleChange("expertFeeRate", value)}
+                  helper="Fee rate deducted from expert payout."
+                />
+
+                <TextArea
+                  label="Update Reason"
+                  value={form.reason}
+                  required
+                  error={fieldErrors.reason}
+                  onChange={(value) => handleChange("reason", value)}
+                  placeholder="Example: Adjust fee policy based on platform operating cost."
+                />
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 border-t border-white/10 pt-5 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={handleReset}
+                  disabled={saving}
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Reset
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving || !hasChanged}
+                  className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {saving ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+
+            <aside className="space-y-6">
+              <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+                <h2 className="mb-5 text-xl font-bold text-white">
+                  Current fees
+                </h2>
+
+                <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
+                    Last Updated
+                  </p>
+                  <p className="mt-2 text-sm font-bold text-white">
+                    {formatDateTime(policy?.updatedAt || policy?.createdAt, "N/A")}
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <PolicyValue
+                    icon="person"
+                    label="Individual Client Fee"
+                    value={policy?.individualClientFeeRate}
+                    tone="cyan"
+                  />
+
+                  <PolicyValue
+                    icon="business"
+                    label="Business Client Fee"
+                    value={policy?.businessClientFeeRate}
+                    tone="purple"
+                  />
+
+                  <PolicyValue
+                    icon="engineering"
+                    label="Expert Fee"
+                    value={policy?.expertFeeRate}
+                    tone="yellow"
+                  />
+                </div>
+              </section>
+            </aside>
+          </div>
+        )}
+        {showSaveConfirm && (
+          <ConfirmActionModal
+            title="Save fee changes?"
+            message={`This update changes fees applied to future platform transactions. Individual client fee: ${form.individualClientFeeRate} · Business client fee: ${form.businessClientFeeRate} · Expert fee: ${form.expertFeeRate}. Reason: ${form.reason.trim()}.`}
+            confirmLabel="Confirm Save"
+            loading={saving}
+            onCancel={() => !saving && setShowSaveConfirm(false)}
+            onConfirm={() => {
+              setShowSaveConfirm(false);
+              executeSave();
+            }}
+          />
+        )}
       </div>
     </AdminLayout>
   );
 }
 
-function SectionTitle({ icon, title }) {
+
+function PageSkeleton({ cards = 4 }) {
   return (
-    <div className="mb-5 flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10 text-cyan-300">
-        <span className="material-symbols-outlined">{icon}</span>
+    <div className="animate-pulse">
+      <div className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-6">
+        <div className="h-4 w-36 rounded bg-cyan-400/10" />
+        <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+        <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
       </div>
 
-      <h2 className="text-lg font-bold text-white">{title}</h2>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: cards }).map((_, index) => (
+          <div
+            key={index}
+            className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+          />
+        ))}
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1fr_380px]">
+        <div className="h-[520px] rounded-2xl border border-white/10 bg-[#151a22]" />
+        <div className="h-[360px] rounded-2xl border border-white/10 bg-[#151a22]" />
+      </div>
     </div>
   );
 }
 
-function NumberField({
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1400] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_18px_56px_rgba(0,0,0,0.45)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Updated</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const confirmClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "policy"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Back
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function NumberInput({
   label,
   value,
   onChange,
-  min,
-  max,
-  suffix,
-  placeholder,
+  helper,
+  required = false,
+  error = "",
 }) {
   return (
     <div>
-      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
-      </label>
-
-      <div className="relative">
-        <input
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          placeholder={placeholder}
-          onChange={(event) => onChange(event.target.value)}
-          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 pr-12 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
-        />
-
-        {suffix && (
-          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-500">
-            {suffix}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function DateTimeField({ label, value, onChange }) {
-  return (
-    <div>
-      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-        {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
       <input
-        type="datetime-local"
+        type="text"
+        inputMode="decimal"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
+        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
       />
+
+      {error ? (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      ) : (
+        helper && <p className="mt-2 text-xs leading-5 text-gray-500">{helper}</p>
+      )}
     </div>
   );
 }
 
-function BooleanField({ label, value, onChange }) {
+function TextArea({
+  label,
+  value,
+  onChange,
+  placeholder,
+  required = false,
+  error = "",
+}) {
   return (
     <div>
-      <label className="mb-2 block text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
+      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
         {label}
+        {required && <span className="ml-1 text-red-400">*</span>}
       </label>
 
-      <select
-        value={value ? "true" : "false"}
-        onChange={(event) => onChange(event.target.value === "true")}
-        className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF]"
-      >
-        <option value="true">Active</option>
-        <option value="false">Inactive</option>
-      </select>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={4}
+        placeholder={placeholder}
+        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+          error
+            ? "border-red-400/70 focus:border-red-400"
+            : "border-white/10 focus:border-cyan-400/50"
+        }`}
+      />
+
+      {error && (
+        <p className="mt-2 text-xs font-semibold text-red-300">{error}</p>
+      )}
     </div>
   );
 }
 
-function InfoItem({ label, value }) {
+function PolicyValue({ icon, label, value, tone = "cyan" }) {
+  const toneClass = {
+    cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
+    purple: "border-purple-400/20 bg-purple-400/10 text-purple-300",
+    yellow: "border-yellow-400/20 bg-yellow-400/10 text-yellow-300",
+  };
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-xl border ${
+            toneClass[tone] || toneClass.cyan
+          }`}
+        >
+          <span className="material-symbols-outlined text-[20px]">{icon}</span>
+        </div>
+
+        <p className="text-sm font-bold text-white">{label}</p>
+      </div>
+
+      <p className="text-3xl font-black text-white">{formatRate(value)}</p>
+    </div>
+  );
+}
+
+function InfoBox({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
       <p className="text-[11px] uppercase tracking-wider text-gray-500">
         {label}
       </p>
 
-      <p className="mt-2 break-words text-sm font-semibold text-gray-200">
+      <p className="mt-1 break-words text-sm font-bold text-white">
         {value || "N/A"}
       </p>
     </div>
   );
 }
 
-function formatMoney(value) {
+function Alert({ type, title, message, onClose }) {
+  const className =
+    type === "success"
+      ? "border-green-500/30 bg-green-500/10 text-green-200"
+      : "border-red-500/30 bg-red-500/10 text-red-200";
+
+  return (
+    <div className={`mb-5 rounded-xl border px-5 py-4 ${className}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-bold">{title}</p>
+          <p className="mt-1 text-sm opacity-90">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-sm font-bold opacity-70 hover:opacity-100"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function validateForm(form) {
+  const errors = {};
+
+  ["individualClientFeeRate", "businessClientFeeRate", "expertFeeRate"].forEach(
+    (field) => {
+      const value = String(form[field] ?? "").trim();
+
+      if (!value) {
+        errors[field] = `${formatLabel(field)} is required.`;
+        return;
+      }
+
+      if (!/^\d+(\.\d+)?$/.test(value)) {
+        errors[field] = `${formatLabel(field)} must be a valid number.`;
+        return;
+      }
+
+      if (Number(value) < 0) {
+        errors[field] = `${formatLabel(field)} must be greater than or equal to 0.`;
+      }
+    }
+  );
+
+  const reason = String(form.reason || "").trim();
+
+  if (!reason) {
+    errors.reason = "Update Reason is required.";
+  } else if (reason.length < 10) {
+    errors.reason = "Update Reason must be at least 10 characters.";
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
+function formatRate(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
-  }).format(Number.isNaN(number) ? 0 : number);
-}
+  if (Number.isNaN(number)) return "0";
 
-function formatDateTime(value) {
+  if (number > 0 && number <= 1) {
+    return `${(number * 100).toFixed(2)}%`;
+  }
+
+  return `${number}`;
+};
+
+
+function formatLabel(value) {
   if (!value) return "N/A";
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return String(value)
+    .replace(/([A-Z])/g, " $1")
+    .replaceAll("_", " ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
-function toDateTimeLocalValue(value) {
-  if (!value) return "";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "";
-
-  const timezoneOffset = date.getTimezoneOffset() * 60000;
-  const localDate = new Date(date.getTime() - timezoneOffset);
-
-  return localDate.toISOString().slice(0, 16);
-}
-
-function getFriendlyError(err) {
+function getFriendlyError(err, fallback = "Something went wrong.") {
   const status = err?.response?.status;
 
   if (status === 401) {
@@ -527,7 +660,7 @@ function getFriendlyError(err) {
   }
 
   if (status === 404) {
-    return "Platform fee policy API was not found. Please check backend route.";
+    return "Platform fees API was not found. Please check backend route.";
   }
 
   const data = err?.response?.data;
@@ -535,6 +668,7 @@ function getFriendlyError(err) {
   if (typeof data === "string") return data;
   if (data?.message) return data.message;
   if (data?.title) return data.title;
+  if (data?.detail) return data.detail;
 
   if (data?.errors) {
     const allErrors = Object.values(data.errors).flat();
@@ -544,5 +678,5 @@ function getFriendlyError(err) {
     }
   }
 
-  return err?.message || "Something went wrong. Please try again.";
+  return err?.message || fallback;
 }

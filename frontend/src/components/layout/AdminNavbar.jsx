@@ -11,130 +11,105 @@ export default function AdminNavbar() {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+    `group flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm font-semibold transition ${
       isActive
-        ? "border border-cyan-400/30 bg-cyan-400/10 text-[#00F0FF]"
-        : "text-gray-400 hover:bg-white/[0.05] hover:text-white"
+        ? "border-cyan-400/25 bg-cyan-400/10 text-cyan-300"
+        : "border-transparent text-gray-400 hover:border-white/10 hover:bg-white/[0.04] hover:text-white"
     }`;
 
   const adminInitials = getInitials(user?.fullName || user?.name || "Admin");
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-72 shrink-0 border-r border-white/10 bg-[#0b0f16] px-5 py-5 md:flex md:flex-col">
-      <Link
-        to="/admin/dashboard"
-        className="mb-6 inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
-      >
-        <span className="text-[#00F0FF]">AI</span>
-        <span className="ml-1 text-white">Tasker</span>
-        <span className="ml-3 rounded-full border border-red-400/30 bg-red-400/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-red-300">
-          Admin
-        </span>
-      </Link>
+    <aside className="sticky top-0 hidden h-screen w-[280px] shrink-0 border-r border-white/10 bg-[#0b0f15] md:flex md:flex-col">
+      <div className="border-b border-white/10 px-5 py-5">
+        <Link
+          to="/admin/dashboard"
+          className="inline-flex items-center text-xl font-extrabold tracking-tight no-underline"
+        >
+          <span className="text-cyan-300">AI</span>
+          <span className="ml-1 text-white">Tasker</span>
+          <span className="ml-3 rounded-full border border-red-400/25 bg-red-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-red-300">
+            Admin
+          </span>
+        </Link>
+      </div>
 
-      <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-red-400/40 bg-red-400/10 text-sm font-bold text-red-300">
-            {adminInitials}
-          </div>
+      <div className="px-4 py-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.025] p-3.5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-red-400/30 bg-red-400/10 text-sm font-black text-red-300">
+              {adminInitials}
+            </div>
 
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-white">
-              {user?.fullName || user?.name || "Administrator"}
-            </p>
-
-            <p className="truncate text-xs text-gray-500">
-              {user?.email || "admin@aitasker.com"}
-            </p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-black text-white">
+                {user?.fullName || user?.name || "Administrator"}
+              </p>
+              <p className="mt-0.5 truncate text-xs text-gray-500">
+                {user?.email || "admin@aitasker.com"}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      <nav className="flex flex-1 flex-col gap-1.5 overflow-y-auto pr-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <NavLink to="/admin/dashboard" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            dashboard
-          </span>
-          Dashboard
-        </NavLink>
+      <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 pb-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <NavItem to="/admin/dashboard" icon="dashboard" label="Dashboard" className={navLinkClass} />
+        <NavItem to="/admin/users" icon="groups" label="Users" className={navLinkClass} />
+        <NavItem to="/admin/disputes" icon="gavel" label="Disputes" className={navLinkClass} />
+        <NavItem to="/admin/review-reports" icon="rate_review" label="Review reports" className={navLinkClass} />
+        <NavItem to="/admin/audit-logs" icon="history" label="Audit logs" className={navLinkClass} />
 
-        <NavLink to="/admin/users" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">groups</span>
-          Users
-        </NavLink>
+        <NavSection label="Policies" />
 
-        <NavLink to="/admin/disputes" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">gavel</span>
-          Disputes
-        </NavLink>
+        <NavItem to="/admin/expert-profile-scoring-policy" icon="rule_settings" label="Expert scoring" className={navLinkClass} />
+        <NavItem to="/admin/workflow-policy" icon="settings_suggest" label="Workflow" className={navLinkClass} />
+        <NavItem to="/admin/login-security-policy" icon="shield_lock" label="Login security" className={navLinkClass} />
+        <NavItem to="/admin/job-posting-ai-policy" icon="smart_toy" label="Job AI" className={navLinkClass} />
+        <NavItem to="/admin/platform-fee-policy" icon="payments" label="Platform fees" className={navLinkClass} />
 
-        <NavLink to="/admin/audit-logs" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            history
-          </span>
-          Audit Logs
-        </NavLink>
+        <NavSection label="Platform" />
 
-        <div className="my-2 border-t border-white/10" />
-
-        <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-600">
-          Policies
-        </p>
-
-        <NavLink
-          to="/admin/expert-profile-scoring-policy"
-          className={navLinkClass}
-        >
-          <span className="material-symbols-outlined text-[20px]">
-            rule_settings
-          </span>
-          Expert Scoring
-        </NavLink>
-
-        <NavLink to="/admin/platform-fee-policy" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            payments
-          </span>
-          Platform Fee
-        </NavLink>
-
-        <div className="my-2 border-t border-white/10" />
-
-        <p className="px-3 pt-1 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-600">
-          Operations
-        </p>
-
-        <NavLink to="/admin/jobs" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">work</span>
-          Jobs
-        </NavLink>
-
-        <NavLink to="/admin/withdrawals" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            account_balance
-          </span>
-          Withdrawals
-        </NavLink>
-
-        <NavLink to="/admin/skills" className={navLinkClass}>
-          <span className="material-symbols-outlined text-[20px]">
-            psychology
-          </span>
-          Skills
-        </NavLink>
+        <NavItem to="/admin/ai-management" icon="hub" label="AI management" className={navLinkClass} />
+        <NavItem to="/admin/job-credit-packages" icon="inventory_2" label="Job credit plans" className={navLinkClass} />
+        <NavItem to="/admin/proposal-credit-packages" icon="workspace_premium" label="Proposal plans" className={navLinkClass} />
+        <NavItem to="/admin/proposal-credits" icon="account_balance_wallet" label="Proposal credits" className={navLinkClass} />
+        <NavItem to="/admin/jobs" icon="work" label="Jobs" className={navLinkClass} />
+        <NavItem to="/admin/withdrawals" icon="account_balance" label="Withdrawals" className={navLinkClass} />
+        <NavItem to="/admin/skills" icon="psychology" label="Skills" className={navLinkClass} />
       </nav>
 
-      <div className="mt-5 border-t border-white/10 pt-4">
+      <div className="border-t border-white/10 p-4">
         <button
           type="button"
           onClick={handleLogout}
-          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-gray-400 transition hover:bg-red-400/10 hover:text-red-400"
+          className="flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm font-semibold text-gray-400 transition hover:border-red-400/20 hover:bg-red-400/10 hover:text-red-300"
         >
           <span className="material-symbols-outlined text-[20px]">logout</span>
-          Logout
+          Sign out
         </button>
       </div>
     </aside>
+  );
+}
+
+function NavItem({ to, icon, label, className }) {
+  return (
+    <NavLink to={to} className={className}>
+      <span className="material-symbols-outlined text-[20px]">{icon}</span>
+      <span>{label}</span>
+    </NavLink>
+  );
+}
+
+function NavSection({ label }) {
+  return (
+    <div className="mb-1 mt-3 flex items-center gap-3 px-3">
+      <span className="text-[10px] font-black uppercase tracking-[0.16em] text-gray-600">
+        {label}
+      </span>
+      <span className="h-px flex-1 bg-white/[0.07]" />
+    </div>
   );
 }
 

@@ -70,7 +70,6 @@ export default function ClientContractSignPage() {
 
   const [actionLoading, setActionLoading] = useState(null); // "sign" | "lockEscrow"
 
-
   const pollRef = useRef(null);
 
   // code mới

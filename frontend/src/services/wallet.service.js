@@ -1,66 +1,82 @@
 import { walletApi } from "../api/wallet.api";
+import { compareDateDesc } from "../utils/dateTime.utils";
 
-const unwrap = (res) => res.data?.data ?? res.data;
+const unwrap = (response) => response?.data?.data ?? response?.data;
+
+const normalizeList = (raw) => {
+  if (Array.isArray(raw)) return raw;
+  if (Array.isArray(raw?.items)) return raw.items;
+  if (Array.isArray(raw?.data)) return raw.data;
+  if (Array.isArray(raw?.result)) return raw.result;
+  return [];
+};
+
+const sortNewestFirst = (items) => {
+  return [...items].sort((a, b) =>
+    compareDateDesc(
+      a?.updatedAt || a?.processedAt || a?.paidAt || a?.createdAt,
+      b?.updatedAt || b?.processedAt || b?.paidAt || b?.createdAt
+    )
+  );
+};
 
 export const walletService = {
   async getWallet() {
-    const res = await walletApi.getWallet();
-    const data = unwrap(res);
+    const response = await walletApi.getWallet();
+    const data = unwrap(response);
 
-    // Lưu ý: object này phụ thuộc walletApi.getWallet() trả về đúng shape có
-    // availableBalance/lockedBalance (tức phải gọi /wallets/me, không phải
-    // /wallets/balance — endpoint đó chỉ có field `balance` đơn lẻ).
     return {
+      ...data,
       availableBalance: Number(data?.availableBalance ?? 0),
       lockedBalance: Number(data?.lockedBalance ?? 0),
+      pendingEarningsBalance: Number(data?.pendingEarningsBalance ?? 0),
+      withdrawableBalance: Number(
+        data?.withdrawableBalance ?? data?.availableBalance ?? 0
+      ),
+      totalEarnings: Number(
+        data?.totalEarnings ?? data?.totalEarning ?? 0
+      ),
     };
   },
 
   async getTransactions() {
-    const res = await walletApi.getTransactions();
-    const data = unwrap(res);
-    return Array.isArray(data) ? data : [];
+    const response = await walletApi.getTransactions();
+    return sortNewestFirst(normalizeList(unwrap(response)));
   },
 
   async getDepositOrders() {
-    const res = await walletApi.getMyDepositOrders();
-    const data = unwrap(res);
-    return Array.isArray(data) ? data : [];
+    const response = await walletApi.getMyDepositOrders();
+    return sortNewestFirst(normalizeList(unwrap(response)));
   },
 
   async getEscrows(projectId) {
-    const res = await walletApi.getEscrows(projectId);
-    const data = unwrap(res);
-    return Array.isArray(data) ? data : [];
+    const response = await walletApi.getEscrows(projectId);
+    return sortNewestFirst(normalizeList(unwrap(response)));
   },
 
-  // Lịch sử yêu cầu rút tiền — GET /api/withdrawals/me
-  // Response thật (đã test qua Swagger):
-  // { success: true, data: [ { withdrawalRequestId, userId, amount, feeAmount,
-  //   netAmount, bankCode, bankBin, bankName, bankAccountNumber,
-  //   bankAccountHolder, bankVerificationStatus, bankVerificationMessage,
-  //   payoutReferenceCode, status, adminNote, failureReason, createdAt,
-  //   processedAt, processedByAdminId, ... } ] }
   async getWithdrawals() {
-    const res = await walletApi.getMyWithdrawals();
-    const data = unwrap(res);
-    return Array.isArray(data) ? data : [];
+    const response = await walletApi.getMyWithdrawals();
+    return sortNewestFirst(normalizeList(unwrap(response)));
   },
 
-  createDepositOrder(amount) {
-    return walletApi.createDepositOrder(Number(amount));
+  async createDepositOrder(amount) {
+    const response = await walletApi.createDepositOrder(Number(amount));
+    return unwrap(response);
   },
 
-  getDepositOrderById(id) {
-    return walletApi.getDepositOrderById(id);
+  async getDepositOrderById(id) {
+    const response = await walletApi.getDepositOrderById(id);
+    return unwrap(response);
   },
 
-  createWithdrawal(form) {
-    return walletApi.createWithdrawal({
+  async createWithdrawal(form) {
+    const response = await walletApi.createWithdrawal({
       amount: Number(form.amount),
-      bankName: form.bankName,
-      bankAccountNumber: form.bankAccountNumber,
-      bankAccountHolder: form.bankAccountHolder,
+      bankName: String(form.bankName || "").trim(),
+      bankAccountNumber: String(form.bankAccountNumber || "").trim(),
+      bankAccountHolder: String(form.bankAccountHolder || "").trim(),
     });
+
+    return unwrap(response);
   },
 };

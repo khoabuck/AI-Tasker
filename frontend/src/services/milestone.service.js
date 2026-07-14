@@ -1,5 +1,18 @@
+// src/services/milestone.service.js
 import milestoneApi from "../api/milestone.api";
 import { normalizeMilestone } from "./project.service";
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null" ||
+    Number.isNaN(Number(value)) ||
+    Number(value) <= 0
+  );
+};
 
 const unwrapData = (response) => {
   const data = response?.data;
@@ -9,7 +22,10 @@ const unwrapData = (response) => {
   if (data?.data?.milestone) return data.data.milestone;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
+
+  if (data?.data !== undefined) {
+    return data.data;
+  }
 
   if (data?.milestone) return data.milestone;
   if (data?.item) return data.item;
@@ -20,35 +36,21 @@ const unwrapData = (response) => {
 
 const milestoneService = {
   async getMilestoneById(milestoneId) {
-    if (
-      !milestoneId ||
-      milestoneId === "undefined" ||
-      milestoneId === "null"
-    ) {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
-    const response = await milestoneApi.getMilestoneById(milestoneId);
+    const response = await milestoneApi.getMilestoneById(
+      Number(milestoneId)
+    );
 
-    console.log("GET MILESTONE DETAIL RESPONSE:", response?.data);
+    const milestone = unwrapData(response);
 
-    return normalizeMilestone(unwrapData(response));
-  },
-
-  async updateMilestone(milestoneId, payload) {
-    if (
-      !milestoneId ||
-      milestoneId === "undefined" ||
-      milestoneId === "null"
-    ) {
-      throw new Error("Invalid milestone id.");
+    if (!milestone) {
+      throw new Error("Milestone data is unavailable.");
     }
 
-    const response = await milestoneApi.updateMilestone(milestoneId, payload);
-
-    console.log("UPDATE MILESTONE RESPONSE:", response?.data);
-
-    return normalizeMilestone(unwrapData(response));
+    return normalizeMilestone(milestone);
   },
 };
 

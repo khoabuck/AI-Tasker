@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import expertProfileService from "../../../services/expertProfile.service";
 import jobService from "../../../services/job.service";
+import proposalService from "../../../services/proposal.service";
 import { JobDetailModal } from "./JobDetailPage";
 
+import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
 const MIN_RECOMMENDED_SCORE = 55;
 
 export default function RecommendedJobsPage() {
@@ -12,6 +14,8 @@ export default function RecommendedJobsPage() {
 
   const [jobs, setJobs] = useState([]);
   const [profile, setProfile] = useState(null);
+  const [myProposals, setMyProposals] = useState([]);
+  const [myDrafts, setMyDrafts] = useState([]);
   const [keyword, setKeyword] = useState("");
   const [selectedJobId, setSelectedJobId] = useState(null);
 
@@ -24,14 +28,23 @@ export default function RecommendedJobsPage() {
 
   const expertProfile = useMemo(() => normalizeProfile(profile), [profile]);
 
+  const proposalByJobId = useMemo(() => {
+    return createProposalMap(myProposals, { includeDrafts: false });
+  }, [myProposals]);
+
+  const draftByJobId = useMemo(() => {
+    return createProposalMap(myDrafts, { includeDrafts: true });
+  }, [myDrafts]);
+
   const recommendedJobs = useMemo(() => {
     return jobs
       .map((job) => normalizeRecommendedJob(job, expertProfile))
       .filter((job) => job.id)
       .filter(isActiveJob)
+      .map((job) => attachApplicationState(job, proposalByJobId, draftByJobId))
       .filter(isSuitableJob)
       .sort((a, b) => b.matchScore - a.matchScore);
-  }, [jobs, expertProfile]);
+  }, [jobs, expertProfile, proposalByJobId, draftByJobId]);
 
   const filteredJobs = useMemo(() => {
     const q = keyword.trim().toLowerCase();
@@ -56,10 +69,13 @@ export default function RecommendedJobsPage() {
       setLoading(true);
       setError("");
 
-      const [jobsResult, profileResult] = await Promise.allSettled([
-        loadJobsFromApi(),
-        expertProfileService.getMyExpertProfile(),
-      ]);
+      const [jobsResult, profileResult, proposalsResult, draftsResult] =
+        await Promise.allSettled([
+          loadJobsFromApi(),
+          expertProfileService.getMyExpertProfile(),
+          proposalService.getMyProposals(),
+          proposalService.getMyDraftProposals(),
+        ]);
 
       if (jobsResult.status === "fulfilled") {
         setJobs(Array.isArray(jobsResult.value) ? jobsResult.value : []);
@@ -75,6 +91,28 @@ export default function RecommendedJobsPage() {
           profileResult.reason?.response?.data || profileResult.reason
         );
         setProfile(null);
+      }
+
+      if (proposalsResult.status === "fulfilled") {
+        setMyProposals(
+          Array.isArray(proposalsResult.value) ? proposalsResult.value : []
+        );
+      } else {
+        console.warn(
+          "LOAD MY PROPOSALS WARNING:",
+          proposalsResult.reason?.response?.data || proposalsResult.reason
+        );
+        setMyProposals([]);
+      }
+
+      if (draftsResult.status === "fulfilled") {
+        setMyDrafts(Array.isArray(draftsResult.value) ? draftsResult.value : []);
+      } else {
+        console.warn(
+          "LOAD MY DRAFTS WARNING:",
+          draftsResult.reason?.response?.data || draftsResult.reason
+        );
+        setMyDrafts([]);
       }
     } catch (err) {
       console.error("LOAD RECOMMENDED JOBS ERROR:", err?.response?.data || err);
@@ -106,6 +144,25 @@ export default function RecommendedJobsPage() {
     }
 
     setSelectedJobId(job.id);
+  };
+
+  const handleOpenJobAction = (job) => {
+    if (!job?.id) {
+      setError("This job is unavailable right now. Please try another job.");
+      return;
+    }
+
+    if (job.applicationStatus === "SUBMITTED" && job.proposal?.proposalId) {
+      navigate(`/expert/proposals/${job.proposal.proposalId}`);
+      return;
+    }
+
+    if (job.applicationStatus === "DRAFT" && job.draft?.proposalId) {
+      navigate(`/expert/jobs/${job.id}/proposal?draftId=${job.draft.proposalId}`);
+      return;
+    }
+
+    navigate(`/expert/jobs/${job.id}/proposal`);
   };
 
   return (
@@ -190,11 +247,7 @@ export default function RecommendedJobsPage() {
             </div>
           </section>
 
-          {loading && (
-            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center text-gray-400">
-              Finding the best jobs for you...
-            </div>
-          )}
+          {loading && <ListSkeleton rows={5} />}
 
           {!loading && error && (
             <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-5 text-red-300">
@@ -215,7 +268,7 @@ export default function RecommendedJobsPage() {
                   job={job}
                   rank={index + 1}
                   onViewDetail={() => handleViewDetail(job)}
-                  onSubmit={() => navigate(`/expert/jobs/${job.id}/proposal`)}
+                  onSubmit={() => handleOpenJobAction(job)}
                 />
               ))}
             </div>
@@ -232,6 +285,32 @@ export default function RecommendedJobsPage() {
     </ExpertLayout>
   );
 }
+
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-4">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div>
+              <div className="h-5 w-28 rounded-full bg-white/10" />
+              <div className="mt-4 h-6 w-2/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-full rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-4/5 rounded bg-white/[0.05]" />
+            </div>
+
+            <div className="h-28 rounded-xl border border-white/10 bg-white/[0.03]" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
 function RecommendedJobCard({ job, rank, onViewDetail, onSubmit }) {
   const visibleSkills = job.skills.slice(0, 5);
@@ -271,7 +350,9 @@ function RecommendedJobCard({ job, rank, onViewDetail, onSubmit }) {
         <div className="min-w-0 p-4">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <Badge>{job.category}</Badge>
-            <Badge tone="green">Open</Badge>
+            <Badge tone={getApplicationBadge(job).tone}>
+              {getApplicationBadge(job).label}
+            </Badge>
             {job.complexity && <Badge tone="purple">{job.complexity}</Badge>}
           </div>
 
@@ -353,9 +434,9 @@ function RecommendedJobCard({ job, rank, onViewDetail, onSubmit }) {
             <button
               type="button"
               onClick={onSubmit}
-              className="flex-1 rounded-lg border border-purple-400/60 bg-purple-400/10 px-3 py-2 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
+              className={getPrimaryActionClass(job, "purple")}
             >
-              Apply
+              {getPrimaryActionLabel(job)}
             </button>
           </div>
         </div>
@@ -444,6 +525,154 @@ function EmptyState({ onBrowse }) {
     </div>
   );
 }
+
+
+function createProposalMap(items, options = {}) {
+  const includeDrafts = options.includeDrafts === true;
+  const map = new Map();
+
+  if (!Array.isArray(items)) return map;
+
+  items.forEach((item) => {
+    const status = String(item?.status || item?.Status || "").toUpperCase();
+
+    if (!includeDrafts && status === "DRAFT") return;
+    if (includeDrafts && status && status !== "DRAFT") return;
+
+    const jobId = getProposalJobId(item);
+    const proposalId = getProposalId(item);
+
+    if (!jobId || !proposalId || map.has(String(jobId))) return;
+
+    map.set(String(jobId), {
+      ...item,
+      proposalId,
+      jobId,
+      status: status || (includeDrafts ? "DRAFT" : "SUBMITTED"),
+    });
+  });
+
+  return map;
+}
+
+function attachApplicationState(job, proposalByJobId, draftByJobId) {
+  const jobId = String(job?.id || "");
+  const proposal = proposalByJobId.get(jobId);
+  const draft = draftByJobId.get(jobId);
+
+  if (proposal) {
+    return {
+      ...job,
+      proposal,
+      draft: null,
+      applicationStatus: "SUBMITTED",
+      applicationStatusText: formatStatus(proposal.status || "SUBMITTED"),
+    };
+  }
+
+  if (draft) {
+    return {
+      ...job,
+      proposal: null,
+      draft,
+      applicationStatus: "DRAFT",
+      applicationStatusText: "Draft Saved",
+    };
+  }
+
+  return {
+    ...job,
+    proposal: null,
+    draft: null,
+    applicationStatus: "NONE",
+    applicationStatusText: "Open",
+  };
+}
+
+function getProposalJobId(proposal) {
+  return (
+    proposal?.jobId ||
+    proposal?.jobPostingId ||
+    proposal?.JobId ||
+    proposal?.JobPostingId ||
+    proposal?.raw?.jobId ||
+    proposal?.raw?.jobPostingId ||
+    proposal?.raw?.JobId ||
+    proposal?.raw?.JobPostingId ||
+    ""
+  );
+}
+
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.id ||
+    proposal?.ProposalId ||
+    proposal?.Id ||
+    proposal?.raw?.proposalId ||
+    proposal?.raw?.id ||
+    proposal?.raw?.ProposalId ||
+    proposal?.raw?.Id ||
+    ""
+  );
+}
+
+function getApplicationBadge(job) {
+  if (job.applicationStatus === "SUBMITTED") {
+    const status = String(job.proposal?.status || "").toUpperCase();
+
+    if (status === "ACCEPTED") {
+      return { label: "Accepted", tone: "green" };
+    }
+
+    if (status === "REJECTED") {
+      return { label: "Rejected", tone: "yellow" };
+    }
+
+    if (status === "WITHDRAWN") {
+      return { label: "Withdrawn", tone: "yellow" };
+    }
+
+    return { label: "Proposal Submitted", tone: "green" };
+  }
+
+  if (job.applicationStatus === "DRAFT") {
+    return { label: "Draft Saved", tone: "yellow" };
+  }
+
+  return { label: "Open", tone: "green" };
+}
+
+function getPrimaryActionLabel(job) {
+  if (job.applicationStatus === "SUBMITTED") return "View Proposal";
+  if (job.applicationStatus === "DRAFT") return "Continue Draft";
+
+  return "Apply";
+}
+
+function getPrimaryActionClass(job, theme = "cyan") {
+  if (job.applicationStatus === "SUBMITTED") {
+    return "flex-1 rounded-lg border border-green-400/60 bg-green-400/10 px-3 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black";
+  }
+
+  if (job.applicationStatus === "DRAFT") {
+    return "flex-1 rounded-lg border border-yellow-400/60 bg-yellow-400/10 px-3 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black";
+  }
+
+  if (theme === "purple") {
+    return "flex-1 rounded-lg border border-purple-400/60 bg-purple-400/10 px-3 py-2 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black";
+  }
+
+  return "flex-1 rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-4 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black";
+}
+
+function formatStatus(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 
 function normalizeProfile(profile) {
   return {
@@ -684,9 +913,9 @@ function formatBudget(min, max) {
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
+    currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
@@ -701,13 +930,5 @@ function formatDuration(days) {
 }
 
 function formatDate(value) {
-  if (!value) return "Flexible";
-
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  return formatDateTime(value, "Flexible");
 }

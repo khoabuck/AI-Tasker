@@ -1,37 +1,35 @@
 import adminAuditLogApi from "../api/adminAuditLog.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
   );
 };
 
-const isInvalidId = (value) => {
-  return !value || value === "undefined" || value === "null";
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
 };
 
-const unwrapData = (response) => {
+const unwrapSingleData = (response) => {
   const data = response?.data;
 
   if (!data) return null;
 
   if (data?.data?.auditLog) return data.data.auditLog;
-  if (data?.data?.log) return data.data.log;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
   if (data?.data) return data.data;
 
   if (data?.auditLog) return data.auditLog;
-  if (data?.log) return data.log;
   if (data?.item) return data.item;
   if (data?.result) return data.result;
 
   return data;
 };
 
-const unwrapListData = (response) => {
-  const data = response?.data;
-
+const getListSource = (data) => {
   if (Array.isArray(data)) return data;
 
   if (Array.isArray(data?.data)) return data.data;
@@ -48,172 +46,227 @@ const unwrapListData = (response) => {
   return [];
 };
 
-const parseJsonLike = (value) => {
-  if (!value) return null;
-
-  if (typeof value === "object") {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-};
-
-export const normalizeAuditLog = (log) => {
-  if (!log) return null;
+export const normalizeAuditLog = (item) => {
+  if (!item) return null;
 
   const auditLogId = getValue(
-    log.auditLogId,
-    log.AuditLogId,
-    log.id,
-    log.Id
+    item.auditLogId,
+    item.AuditLogId,
+    item.auditLogID,
+    item.AuditLogID,
+    item.adminAuditLogId,
+    item.AdminAuditLogId,
+    item.adminAuditLogID,
+    item.AdminAuditLogID,
+    item.auditId,
+    item.AuditId,
+    item.auditID,
+    item.AuditID,
+    item.logId,
+    item.LogId,
+    item.logID,
+    item.LogID,
+    item.id,
+    item.Id
   );
 
-  const action = String(
-    getValue(
-      log.action,
-      log.Action,
-      log.actionType,
-      log.ActionType,
-      log.eventType,
-      log.EventType,
-      "UNKNOWN_ACTION"
-    )
-  )
-    .trim()
-    .toUpperCase();
-
-  const entityType = String(
-    getValue(
-      log.entityType,
-      log.EntityType,
-      log.targetType,
-      log.TargetType,
-      log.tableName,
-      log.TableName,
-      "UNKNOWN_ENTITY"
-    )
-  )
-    .trim()
-    .toUpperCase();
+  const admin = getValue(item.admin, item.Admin, null);
+  const user = getValue(item.user, item.User, null);
 
   return {
     auditLogId,
     id: auditLogId,
 
-    action,
-    entityType,
+    adminId: getValue(
+      item.adminId,
+      item.AdminId,
+      admin?.adminId,
+      admin?.AdminId,
+      user?.userId,
+      user?.UserId,
+      item.userId,
+      item.UserId
+    ),
+
+    adminEmail: getValue(
+      item.adminEmail,
+      item.AdminEmail,
+      admin?.email,
+      admin?.Email,
+      user?.email,
+      user?.Email,
+      item.email,
+      item.Email,
+      ""
+    ),
+
+    adminName: getValue(
+      item.adminName,
+      item.AdminName,
+      admin?.fullName,
+      admin?.FullName,
+      user?.fullName,
+      user?.FullName,
+      item.fullName,
+      item.FullName,
+      item.name,
+      item.Name,
+      ""
+    ),
+
+    action: getValue(item.action, item.Action, "UNKNOWN"),
+
+    entityName: getValue(
+      item.entityName,
+      item.EntityName,
+      item.tableName,
+      item.TableName,
+      item.moduleName,
+      item.ModuleName,
+      "N/A"
+    ),
 
     entityId: getValue(
-      log.entityId,
-      log.EntityId,
-      log.targetId,
-      log.TargetId,
-      log.recordId,
-      log.RecordId,
-      ""
-    ),
-
-    actorUserId: getValue(
-      log.actorUserId,
-      log.ActorUserId,
-      log.adminUserId,
-      log.AdminUserId,
-      log.userId,
-      log.UserId,
-      ""
-    ),
-
-    actorName: getValue(
-      log.actorName,
-      log.ActorName,
-      log.adminName,
-      log.AdminName,
-      log.userName,
-      log.UserName,
-      log.actor?.fullName,
-      log.Actor?.FullName,
-      "System"
-    ),
-
-    actorEmail: getValue(
-      log.actorEmail,
-      log.ActorEmail,
-      log.adminEmail,
-      log.AdminEmail,
-      log.userEmail,
-      log.UserEmail,
-      log.actor?.email,
-      log.Actor?.Email,
-      ""
+      item.entityId,
+      item.EntityId,
+      item.recordId,
+      item.RecordId,
+      item.targetId,
+      item.TargetId,
+      "N/A"
     ),
 
     description: getValue(
-      log.description,
-      log.Description,
-      log.message,
-      log.Message,
-      log.note,
-      log.Note,
+      item.description,
+      item.Description,
+      item.message,
+      item.Message,
+      item.details,
+      item.Details,
       ""
     ),
 
-    ipAddress: getValue(log.ipAddress, log.IpAddress, log.ip, log.IP, ""),
+    reason: getValue(item.reason, item.Reason, ""),
 
-    userAgent: getValue(log.userAgent, log.UserAgent, ""),
-
-    oldValues: parseJsonLike(
-      getValue(log.oldValues, log.OldValues, log.before, log.Before, null)
+    oldValues: getValue(
+      item.oldValues,
+      item.OldValues,
+      item.oldValue,
+      item.OldValue,
+      item.beforeValue,
+      item.BeforeValue,
+      ""
     ),
 
-    newValues: parseJsonLike(
-      getValue(log.newValues, log.NewValues, log.after, log.After, null)
+    newValues: getValue(
+      item.newValues,
+      item.NewValues,
+      item.newValue,
+      item.NewValue,
+      item.afterValue,
+      item.AfterValue,
+      ""
     ),
 
-    metadata: parseJsonLike(
-      getValue(log.metadata, log.Metadata, log.extraData, log.ExtraData, null)
+    ipAddress: getValue(
+      item.ipAddress,
+      item.IpAddress,
+      item.ip,
+      item.IP,
+      ""
     ),
+
+    userAgent: getValue(item.userAgent, item.UserAgent, ""),
 
     createdAt: getValue(
-      log.createdAt,
-      log.CreatedAt,
-      log.timestamp,
-      log.Timestamp,
-      log.loggedAt,
-      log.LoggedAt,
+      item.createdAt,
+      item.CreatedAt,
+      item.timestamp,
+      item.Timestamp,
+      item.loggedAt,
+      item.LoggedAt,
+      item.createdDate,
+      item.CreatedDate,
       ""
     ),
 
-    raw: log,
+    raw: item,
+  };
+};
+
+const normalizeAuditLogListResponse = (response, fallbackParams = {}) => {
+  const data = response?.data;
+  const items = getListSource(data)
+    .map(normalizeAuditLog)
+    .filter(Boolean)
+    .sort((a, b) => compareDateDesc(a.createdAt, b.createdAt));
+
+  const metaSource = data?.data && !Array.isArray(data.data) ? data.data : data;
+
+  const pageNumber = toNumber(
+    getValue(
+      metaSource?.pageNumber,
+      metaSource?.PageNumber,
+      metaSource?.currentPage,
+      metaSource?.CurrentPage,
+      fallbackParams.pageNumber,
+      fallbackParams.PageNumber,
+      1
+    ),
+    1
+  );
+
+  const pageSize = toNumber(
+    getValue(
+      metaSource?.pageSize,
+      metaSource?.PageSize,
+      fallbackParams.pageSize,
+      fallbackParams.PageSize,
+      10
+    ),
+    10
+  );
+
+  const totalCount = toNumber(
+    getValue(
+      metaSource?.totalCount,
+      metaSource?.TotalCount,
+      metaSource?.totalItems,
+      metaSource?.TotalItems,
+      metaSource?.count,
+      metaSource?.Count,
+      items.length
+    ),
+    items.length
+  );
+
+  const totalPages = toNumber(
+    getValue(
+      metaSource?.totalPages,
+      metaSource?.TotalPages,
+      Math.ceil(totalCount / Math.max(pageSize, 1))
+    ),
+    Math.ceil(totalCount / Math.max(pageSize, 1)) || 1
+  );
+
+  return {
+    items,
+    pageNumber,
+    pageSize,
+    totalCount,
+    totalPages: Math.max(totalPages, 1),
   };
 };
 
 const adminAuditLogService = {
   async getAuditLogs(params = {}) {
     const response = await adminAuditLogApi.getAuditLogs(params);
-
-    console.log("ADMIN AUDIT LOGS RESPONSE:", response?.data);
-
-    return unwrapListData(response).map(normalizeAuditLog).filter(Boolean);
+    return normalizeAuditLogListResponse(response, params);
   },
 
   async getAuditLogById(auditLogId) {
-    if (isInvalidId(auditLogId)) {
-      throw new Error("Invalid audit log id.");
-    }
-
     const response = await adminAuditLogApi.getAuditLogById(auditLogId);
-
-    console.log("ADMIN AUDIT LOG DETAIL RESPONSE:", response?.data);
-
-    return normalizeAuditLog(unwrapData(response));
+    return normalizeAuditLog(unwrapSingleData(response));
   },
 };
 

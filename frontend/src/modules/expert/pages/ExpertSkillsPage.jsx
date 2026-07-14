@@ -168,24 +168,23 @@ export default function ExpertSkillsPage() {
     <ExpertLayout>
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
-          <section className="mb-8 overflow-hidden rounded-3xl border border-white/10 bg-[#151a22] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="relative p-6 md:p-8">
+          <section className="mb-8 overflow-hidden rounded-2xl border border-white/10 bg-[#151a22] shadow-[0_18px_55px_rgba(0,0,0,0.28)]">
+            <div className="relative p-5 md:p-7">
               <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-cyan-400/10 blur-3xl" />
               <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-purple-400/10 blur-3xl" />
 
               <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
                 <div>
-                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                  <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
                     Expert Skills
                   </p>
 
-                  <h1 className="max-w-3xl text-3xl font-extrabold leading-tight text-white md:text-5xl">
-                    Manage your professional skills
+                  <h1 className="max-w-3xl text-3xl font-extrabold leading-tight text-white md:text-4xl">
+                    Showcase your strongest skills
                   </h1>
 
                   <p className="mt-4 max-w-3xl text-sm leading-7 text-gray-400">
-                    Keep your skills accurate so clients and recommendation
-                    systems can match you with the right projects.
+                    Keep your expertise accurate for better project matches.
                   </p>
                 </div>
 
@@ -227,7 +226,7 @@ export default function ExpertSkillsPage() {
           )}
 
           {loading ? (
-            <div className="rounded-3xl border border-white/10 bg-[#151a22] p-12 text-center text-gray-400">
+            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-12 text-center text-gray-400">
               Loading skills...
             </div>
           ) : (
@@ -235,38 +234,37 @@ export default function ExpertSkillsPage() {
               <section className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-3">
                 <StatCard
                   icon="psychology"
-                  label="Selected Skills"
+                  label="My skills"
                   value={mySkills.length}
-                  description="Skills on your profile"
+                  description="Added to your profile"
                   tone="cyan"
                 />
 
                 <StatCard
                   icon="workspace_premium"
-                  label="Primary Skills"
+                  label="Featured"
                   value={primaryCount}
-                  description="Highlighted expertise"
+                  description="Shown first to clients"
                   tone="green"
                 />
 
                 <StatCard
                   icon="category"
-                  label="Available Skills"
+                  label="Skill catalog"
                   value={allSkills.length}
-                  description="Skills from platform catalog"
+                  description="Available platform skills"
                   tone="purple"
                 />
               </section>
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-[390px_1fr]">
-                <aside className="rounded-3xl border border-white/10 bg-[#151a22] p-6">
+                <aside className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                   <h2 className="text-xl font-extrabold text-white">
                     Add Skill
                   </h2>
 
                   <p className="mt-2 text-sm leading-6 text-gray-500">
-                    Search the platform skill catalog and add skills that match
-                    your expertise.
+                    Choose skills that match the services you offer.
                   </p>
 
                   <div className="mt-5 space-y-3">
@@ -311,7 +309,7 @@ export default function ExpertSkillsPage() {
                   </div>
                 </aside>
 
-                <main className="rounded-3xl border border-white/10 bg-[#151a22] p-6">
+                <main className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
                   <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h2 className="text-xl font-extrabold text-white">
@@ -319,7 +317,7 @@ export default function ExpertSkillsPage() {
                       </h2>
 
                       <p className="mt-1 text-sm text-gray-500">
-                        Update level, experience and primary skill settings.
+                        Set proficiency, experience, and featured skills.
                       </p>
                     </div>
 
@@ -370,7 +368,7 @@ function SkillRow({ skill, onChange, onRemove }) {
           </div>
 
           <p className="mt-1 text-sm text-gray-500">
-            Configure your proficiency and experience for this skill.
+            
           </p>
         </div>
 
@@ -483,14 +481,14 @@ function Alert({ type, title, message }) {
 function EmptyState() {
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-10 text-center">
-      <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
+      <span className="material-symbols-outlined mb-3 block text-4xl text-gray-500">
         psychology
       </span>
 
       <h3 className="font-bold text-white">No skills selected</h3>
 
       <p className="mt-2 text-sm leading-6 text-gray-500">
-        Add your strongest skills to improve profile quality and job matching.
+        Add skills that match the work you want.
       </p>
     </div>
   );

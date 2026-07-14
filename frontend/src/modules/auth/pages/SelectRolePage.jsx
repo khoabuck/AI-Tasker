@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import axiosInstance from "../../../api/axiosInstance";
-import authService from "../../../services/auth.service";
 
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
@@ -70,7 +69,9 @@ export default function SelectRolePage() {
   }, [navigate, user]);
 
   const redirectAfterRoleSelected = (role) => {
-    const normalizedRole = String(role || "").toUpperCase();
+    const normalizedRole = String(role || "")
+      .trim()
+      .toUpperCase();
 
     if (normalizedRole === "EXPERT") {
       navigate("/expert/setup-profile", { replace: true });
@@ -132,7 +133,7 @@ export default function SelectRolePage() {
 };
 
   const handleConfirm = async () => {
-    if (!selected) return;
+    if (!selected || loading) return;
 
     // Nếu role đã được chọn trước đó rồi thì không gọi API select-role nữa.
     // Chỉ cho user tiếp tục về đúng trang setup profile.
@@ -149,7 +150,8 @@ export default function SelectRolePage() {
         role: selected,
       });
 
-      const responseData = selectResponse?.data || {};
+      const responseUser = extractUserFromResponse(selectResponse);
+      let freshUser = null;
 
       const userFromResponse =
         responseData.user ||
@@ -175,13 +177,26 @@ export default function SelectRolePage() {
         });
       }
 
-      redirectAfterRoleSelected(selected);
-    } catch (err) {
-      console.error("SELECT ROLE ERROR:", err?.response?.data || err);
+      handleLoginSuccess({
+        user: nextUser,
+      });
 
+      const nextStatus = String(nextUser.status || "")
+        .trim()
+        .toUpperCase();
+
+      if (nextStatus === "ACTIVE") {
+        redirectUserByStatus(nextUser, navigate);
+        return;
+      }
+
+      redirectAfterRoleSelected(nextUser.role || selected);
+    } catch (err) {
       const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
+        err?.response?.data?.detail ||
+        err?.message ||
         "An error occurred during role selection.";
 
       if (message === "User is not in pending role status.") {
@@ -273,7 +288,7 @@ export default function SelectRolePage() {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
               gap: 24,
               marginBottom: 32,
             }}
@@ -283,8 +298,10 @@ export default function SelectRolePage() {
               const isLockedOtherRole = lockedRole && role.key !== lockedRole;
 
               return (
-                <div
+                <button
                   key={role.key}
+                  type="button"
+                  disabled={loading}
                   onClick={() => {
                     if (loading) return;
 
@@ -297,6 +314,8 @@ export default function SelectRolePage() {
                     setError("");
                   }}
                   style={{
+                    width: "100%",
+                    textAlign: "left",
                     background: isSelected
                       ? `rgba(${
                           role.key === "CLIENT" ? "0,240,255" : "173,198,255"
@@ -314,6 +333,7 @@ export default function SelectRolePage() {
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`
                       : "none",
+                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   <div
@@ -424,7 +444,7 @@ export default function SelectRolePage() {
                       Selected
                     </div>
                   )}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -447,12 +467,16 @@ export default function SelectRolePage() {
           )}
 
           <button
+            type="button"
             onClick={handleConfirm}
             disabled={!selected || loading}
             style={{
               width: "100%",
-              background: selected ? "#00F0FF" : "rgba(255,255,255,0.05)",
-              color: selected ? "#002022" : "#414754",
+              background:
+                selected && !loading
+                  ? "#00F0FF"
+                  : "rgba(255,255,255,0.05)",
+              color: selected && !loading ? "#002022" : "#414754",
               fontFamily: "Hanken Grotesk, sans-serif",
               fontWeight: 700,
               fontSize: 16,
@@ -461,7 +485,10 @@ export default function SelectRolePage() {
               border: "none",
               cursor: selected && !loading ? "pointer" : "not-allowed",
               transition: "all 0.2s",
-              boxShadow: selected ? "0 0 20px rgba(0,240,255,0.3)" : "none",
+              boxShadow:
+                selected && !loading
+                  ? "0 0 20px rgba(0,240,255,0.3)"
+                  : "none",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -470,7 +497,7 @@ export default function SelectRolePage() {
           >
             {loading ? (
               <>
-                <span className="material-symbols-outlined">
+                <span className="material-symbols-outlined animate-spin">
                   progress_activity
                 </span>
                 <span>Processing...</span>
@@ -488,14 +515,97 @@ export default function SelectRolePage() {
   );
 }
 
+function getStoredUser() {
+  try {
+    const raw = localStorage.getItem("user");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem("user");
+    return null;
+  }
+}
+
+function extractUserFromResponse(response) {
+  const data = response?.data;
+
+  return (
+    data?.data?.user ||
+    data?.data?.User ||
+    data?.user ||
+    data?.User ||
+    data?.data ||
+    null
+  );
+}
+
 function normalizeUser(user, selectedRole) {
+  if (!user) return null;
+
   return {
-    userId: user?.userId || user?.UserId || 0,
+    userId: user?.userId || user?.UserId || user?.id || user?.Id || 0,
     email: user?.email || user?.Email || "",
     fullName: user?.fullName || user?.FullName || "",
-    role: user?.role || user?.Role || selectedRole,
+    role: user?.role || user?.Role || selectedRole || "",
     status: user?.status || user?.Status || "PENDING_PROFILE",
-    authProvider: user?.authProvider || user?.AuthProvider || "LOCAL",
-    avatarUrl: user?.avatarUrl || user?.AvatarUrl || null,
+    authProvider:
+      user?.authProvider || user?.AuthProvider || user?.provider || "LOCAL",
+    avatarUrl:
+      user?.avatarUrl ||
+      user?.AvatarUrl ||
+      user?.photoUrl ||
+      user?.PhotoUrl ||
+      null,
   };
+}
+
+function redirectUserByStatus(user, navigate) {
+  if (!user) return false;
+
+  const role = String(user.role || "")
+    .trim()
+    .toUpperCase();
+
+  const status = String(user.status || "")
+    .trim()
+    .toUpperCase();
+
+  if (status === "PENDING_ROLE" || !role) {
+    return false;
+  }
+
+  if (status === "PENDING_PROFILE") {
+    if (role === "EXPERT") {
+      navigate("/expert/setup-profile", { replace: true });
+      return true;
+    }
+
+    if (role === "CLIENT") {
+      navigate("/setup-profile", { replace: true });
+      return true;
+    }
+
+    return false;
+  }
+
+  if (status === "ACTIVE") {
+    if (role === "CLIENT") {
+      navigate("/client/dashboard", { replace: true });
+      return true;
+    }
+
+    if (role === "EXPERT") {
+      navigate("/expert/dashboard", { replace: true });
+      return true;
+    }
+
+    if (role === "ADMIN") {
+      navigate("/admin/dashboard", { replace: true });
+      return true;
+    }
+
+    navigate("/", { replace: true });
+    return true;
+  }
+
+  return false;
 }

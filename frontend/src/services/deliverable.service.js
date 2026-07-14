@@ -1,5 +1,6 @@
 import deliverableApi from "../api/deliverable.api";
 
+import { compareDateDesc } from "../utils/dateTime.utils";
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -7,6 +8,16 @@ const getValue = (...values) => {
 };
 
 const trim = (value) => String(value || "").trim();
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
+};
 
 const unwrapData = (response) => {
   const data = response?.data;
@@ -37,17 +48,21 @@ const unwrapListData = (response) => {
 
   if (Array.isArray(data?.data?.items)) return data.data.items;
   if (Array.isArray(data?.data?.result)) return data.data.result;
-  if (Array.isArray(data?.data?.deliverables)) return data.data.deliverables;
+  if (Array.isArray(data?.data?.deliverables)) {
+    return data.data.deliverables;
+  }
 
   return [];
 };
 
-const normalizeDeliverable = (deliverable) => {
+export const normalizeDeliverable = (deliverable) => {
   if (!deliverable) return null;
 
   const deliverableId = getValue(
     deliverable.deliverableId,
     deliverable.DeliverableId,
+    deliverable.deliverableID,
+    deliverable.DeliverableID,
     deliverable.id,
     deliverable.Id
   );
@@ -55,6 +70,10 @@ const normalizeDeliverable = (deliverable) => {
   const milestoneId = getValue(
     deliverable.milestoneId,
     deliverable.MilestoneId,
+    deliverable.milestoneID,
+    deliverable.MilestoneID,
+    deliverable.projectMilestoneId,
+    deliverable.ProjectMilestoneId,
     deliverable.milestone?.milestoneId,
     deliverable.Milestone?.MilestoneId,
     null
@@ -63,13 +82,27 @@ const normalizeDeliverable = (deliverable) => {
   const projectId = getValue(
     deliverable.projectId,
     deliverable.ProjectId,
+    deliverable.projectID,
+    deliverable.ProjectID,
     deliverable.project?.projectId,
     deliverable.Project?.ProjectId,
     null
   );
 
   const status = String(
-    getValue(deliverable.status, deliverable.Status, "SUBMITTED")
+    getValue(
+      deliverable.status,
+      deliverable.Status,
+      deliverable.deliverableStatus,
+      deliverable.DeliverableStatus,
+      "SUBMITTED"
+    )
+  )
+    .trim()
+    .toUpperCase();
+
+  const milestoneStatus = String(
+    getValue(deliverable.milestoneStatus, deliverable.MilestoneStatus, "")
   )
     .trim()
     .toUpperCase();
@@ -89,6 +122,50 @@ const normalizeDeliverable = (deliverable) => {
       "Milestone"
     ),
 
+    projectTitle: getValue(
+      deliverable.projectTitle,
+      deliverable.ProjectTitle,
+      deliverable.project?.title,
+      deliverable.Project?.Title,
+      "Project"
+    ),
+
+    expertProfileId: getValue(
+      deliverable.expertProfileId,
+      deliverable.ExpertProfileId,
+      null
+    ),
+
+    expertUserId: getValue(
+      deliverable.expertUserId,
+      deliverable.ExpertUserId,
+      null
+    ),
+
+    expertName: getValue(
+      deliverable.expertName,
+      deliverable.ExpertName,
+      "Expert"
+    ),
+
+    clientProfileId: getValue(
+      deliverable.clientProfileId,
+      deliverable.ClientProfileId,
+      null
+    ),
+
+    clientUserId: getValue(
+      deliverable.clientUserId,
+      deliverable.ClientUserId,
+      null
+    ),
+
+    clientName: getValue(
+      deliverable.clientName,
+      deliverable.ClientName,
+      "Client"
+    ),
+
     title: getValue(
       deliverable.title,
       deliverable.Title,
@@ -104,12 +181,23 @@ const normalizeDeliverable = (deliverable) => {
     ),
 
     fileUrl: getValue(deliverable.fileUrl, deliverable.FileUrl, ""),
-
     demoUrl: getValue(deliverable.demoUrl, deliverable.DemoUrl, ""),
+
+    demoInstructions: getValue(
+      deliverable.demoInstructions,
+      deliverable.DemoInstructions,
+      ""
+    ),
 
     testResultUrl: getValue(
       deliverable.testResultUrl,
       deliverable.TestResultUrl,
+      ""
+    ),
+
+    testSummary: getValue(
+      deliverable.testSummary,
+      deliverable.TestSummary,
       ""
     ),
 
@@ -131,13 +219,40 @@ const normalizeDeliverable = (deliverable) => {
       getValue(deliverable.versionNumber, deliverable.VersionNumber, 1)
     ),
 
+    revisionUsed: Number(
+      getValue(deliverable.revisionUsed, deliverable.RevisionUsed, 0)
+    ),
+
     status,
+    milestoneStatus,
+
+    milestonePaymentStatus: String(
+      getValue(
+        deliverable.milestonePaymentStatus,
+        deliverable.MilestonePaymentStatus,
+        ""
+      )
+    )
+      .trim()
+      .toUpperCase(),
 
     submittedAt: getValue(
       deliverable.submittedAt,
       deliverable.SubmittedAt,
       deliverable.createdAt,
       deliverable.CreatedAt,
+      ""
+    ),
+
+    reviewDeadlineAt: getValue(
+      deliverable.reviewDeadlineAt,
+      deliverable.ReviewDeadlineAt,
+      ""
+    ),
+
+    reviewedAt: getValue(
+      deliverable.reviewedAt,
+      deliverable.ReviewedAt,
       ""
     ),
 
@@ -148,34 +263,64 @@ const normalizeDeliverable = (deliverable) => {
   };
 };
 
-const buildSubmitPayload = (formData) => ({
-  fileUrl: trim(formData.fileUrl) || null,
-  demoUrl: trim(formData.demoUrl) || null,
-  testResultUrl: trim(formData.testResultUrl) || null,
-  description: trim(formData.description),
-  handoverNotes: trim(formData.handoverNotes) || null,
-});
+function buildSubmitPayload(formData = {}) {
+  const fileUrl = trim(formData.fileUrl);
+  const demoUrl = trim(formData.demoUrl);
+  const demoInstructions = trim(formData.demoInstructions);
+  const testResultUrl = trim(formData.testResultUrl);
+  const testSummary = trim(formData.testSummary);
+  const description = trim(formData.description);
+  const handoverNotes = trim(formData.handoverNotes);
 
-const buildGenericSubmitPayload = (milestoneId, formData) => ({
-  milestoneId: Number(milestoneId),
-  ...buildSubmitPayload(formData),
-});
+  if (!description) {
+    throw new Error("Deliverable description is required.");
+  }
 
-const buildRevisionPayload = (formData) => ({
-  feedback:
-    trim(formData.feedback) ||
-    trim(formData.handoverNotes) ||
-    "Revision submitted by expert.",
-  fileUrl: trim(formData.fileUrl) || null,
-  demoUrl: trim(formData.demoUrl) || null,
-  testResultUrl: trim(formData.testResultUrl) || null,
-  description: trim(formData.description),
-  handoverNotes: trim(formData.handoverNotes) || null,
-});
+  if (!fileUrl) {
+    throw new Error(
+      "A public file or repository URL is required for this deliverable."
+    );
+  }
+
+  if (testResultUrl && !testSummary) {
+    throw new Error(
+      "Test summary is required when a test result URL is provided."
+    );
+  }
+
+  return {
+    fileUrl,
+    demoUrl: demoUrl || null,
+    demoInstructions: demoInstructions || null,
+    testResultUrl: testResultUrl || null,
+    testSummary: testSummary || null,
+    description,
+    handoverNotes: handoverNotes || null,
+  };
+}
+
+function buildGenericSubmitPayload(milestoneId, formData = {}) {
+  return {
+    milestoneId: Number(milestoneId),
+    ...buildSubmitPayload(formData),
+  };
+}
+
+function buildRevisionRequestPayload(formData = {}) {
+  const feedback = trim(formData.feedback || formData.reason || formData.note);
+
+  if (!feedback) {
+    throw new Error("Revision feedback is required.");
+  }
+
+  return {
+    feedback,
+  };
+}
 
 const deliverableService = {
   async getDeliverablesByMilestone(milestoneId) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
@@ -183,78 +328,97 @@ const deliverableService = {
       milestoneId
     );
 
-    console.log("GET DELIVERABLES BY MILESTONE RESPONSE:", response?.data);
+    return unwrapListData(response)
+      .map(normalizeDeliverable)
+      .filter(Boolean)
+      .sort((a, b) => {
+        const bySubmittedTime = compareDateDesc(
+          a.submittedAt || a.createdAt,
+          b.submittedAt || b.createdAt
+        );
 
-    return unwrapListData(response).map(normalizeDeliverable).filter(Boolean);
+        if (bySubmittedTime !== 0) return bySubmittedTime;
+
+        return Number(b.versionNumber || 0) - Number(a.versionNumber || 0);
+      });
   },
 
   async submitDeliverable(milestoneId, formData) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const payload = buildSubmitPayload(formData);
-
-    console.log("SUBMIT DELIVERABLE PAYLOAD:", payload);
 
     const response = await deliverableApi.submitDeliverableToMilestone(
       milestoneId,
       payload
     );
 
-    console.log("SUBMIT DELIVERABLE RESPONSE:", response?.data);
-
     return normalizeDeliverable(unwrapData(response));
   },
 
   async submitDeliverableGeneric(milestoneId, formData) {
-    if (!milestoneId || milestoneId === "undefined" || milestoneId === "null") {
+    if (isInvalidId(milestoneId)) {
       throw new Error("Invalid milestone id.");
     }
 
     const payload = buildGenericSubmitPayload(milestoneId, formData);
 
-    console.log("SUBMIT GENERIC DELIVERABLE PAYLOAD:", payload);
-
     const response = await deliverableApi.submitDeliverable(payload);
-
-    console.log("SUBMIT GENERIC DELIVERABLE RESPONSE:", response?.data);
 
     return normalizeDeliverable(unwrapData(response));
   },
 
   async getDeliverableById(deliverableId) {
-    if (
-      !deliverableId ||
-      deliverableId === "undefined" ||
-      deliverableId === "null"
-    ) {
+    if (isInvalidId(deliverableId)) {
       throw new Error("Invalid deliverable id.");
     }
 
     const response = await deliverableApi.getDeliverableById(deliverableId);
 
-    console.log("GET DELIVERABLE DETAIL RESPONSE:", response?.data);
+    return normalizeDeliverable(unwrapData(response));
+  },
+
+  // Client-side action. Keep only if client pages still use it.
+  async approveDeliverable(deliverableId) {
+    if (isInvalidId(deliverableId)) {
+      throw new Error("Invalid deliverable id.");
+    }
+
+    const response = await deliverableApi.approveDeliverable(deliverableId);
 
     return normalizeDeliverable(unwrapData(response));
   },
 
-  async submitRevision(deliverableId, formData) {
-    if (
-      !deliverableId ||
-      deliverableId === "undefined" ||
-      deliverableId === "null"
-    ) {
+  // Client-side action. Keep only if client pages still use it.
+  async requestRevision(deliverableId, formData) {
+    if (isInvalidId(deliverableId)) {
       throw new Error("Invalid deliverable id.");
     }
 
-    const payload = buildRevisionPayload(formData);
+    const payload = buildRevisionRequestPayload(formData);
 
-    console.log("SUBMIT DELIVERABLE REVISION PAYLOAD:", payload);
+    const response = await deliverableApi.requestRevision(
+      deliverableId,
+      payload
+    );
 
-    const response = await deliverableApi.submitRevision(deliverableId, payload);
+    return normalizeDeliverable(unwrapData(response));
+  },
 
-    console.log("SUBMIT DELIVERABLE REVISION RESPONSE:", response?.data);
+  // Client-side legacy action. Keep only for backward compatibility.
+  async requestRevisionLegacy(deliverableId, formData) {
+    if (isInvalidId(deliverableId)) {
+      throw new Error("Invalid deliverable id.");
+    }
+
+    const payload = buildRevisionRequestPayload(formData);
+
+    const response = await deliverableApi.requestRevisionLegacy(
+      deliverableId,
+      payload
+    );
 
     return normalizeDeliverable(unwrapData(response));
   },

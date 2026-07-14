@@ -55,7 +55,6 @@ const uploadService = {
     const imageUrl = extractImageUrl(response);
 
     if (!imageUrl) {
-      console.log("UPLOAD RESPONSE:", response?.data);
       throw new Error("Upload image success but backend did not return image URL.");
     }
 

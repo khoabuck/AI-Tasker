@@ -3,11 +3,10 @@ import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import deliverableService from "../../../services/deliverable.service";
 import projectService from "../../../services/project.service";
-import {
-  DELIVERABLE_STATUS_LABEL,
-} from "../../../constants/deliverableStatus";
+import { DELIVERABLE_STATUS_LABEL } from "../../../constants/deliverableStatus";
 
-const emptyForm = {
+import { formatDateTime } from "../../../utils/dateTime.utils";
+const emptySubmissionForm = {
   milestoneId: "",
   fileUrl: "",
   demoUrl: "",
@@ -22,22 +21,33 @@ export default function DeliverablesPage() {
 
   const [project, setProject] = useState(null);
   const [milestones, setMilestones] = useState([]);
-  const [deliverables, setDeliverables] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
 
-  const [formData, setFormData] = useState({
-    ...emptyForm,
+  const [submissionForm, setSubmissionForm] = useState({
+    ...emptySubmissionForm,
     milestoneId: milestoneId || "",
   });
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   const selectedMilestoneId = useMemo(() => {
-    return milestoneId || formData.milestoneId;
-  }, [milestoneId, formData.milestoneId]);
+    return milestoneId || submissionForm.milestoneId;
+  }, [milestoneId, submissionForm.milestoneId]);
+
+  useEffect(() => {
+    if (!message) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     loadData();
@@ -51,16 +61,18 @@ export default function DeliverablesPage() {
       setMessage("");
 
       if (milestoneId) {
-        const deliverableData =
+        const submissionData =
           await deliverableService.getDeliverablesByMilestone(milestoneId);
 
-        setDeliverables(deliverableData);
-        setMilestones([]);
+        setSubmissions(Array.isArray(submissionData) ? submissionData : []);
         setProject(null);
-        setFormData((prev) => ({
+        setMilestones([]);
+
+        setSubmissionForm((prev) => ({
           ...prev,
           milestoneId,
         }));
+
         return;
       }
 
@@ -70,60 +82,72 @@ export default function DeliverablesPage() {
           projectService.getProjectMilestones(projectId),
         ]);
 
+        const safeMilestones = Array.isArray(milestoneData)
+          ? milestoneData
+          : [];
+
         setProject(projectData);
-        setMilestones(milestoneData);
+        setMilestones(safeMilestones);
 
         const firstMilestoneId =
-          formData.milestoneId || milestoneData?.[0]?.milestoneId || "";
+          submissionForm.milestoneId || safeMilestones?.[0]?.milestoneId || "";
 
-        setFormData((prev) => ({
+        setSubmissionForm((prev) => ({
           ...prev,
           milestoneId: firstMilestoneId,
         }));
 
-        const deliverableGroups = await Promise.all(
-          milestoneData.map((item) =>
-            deliverableService.getDeliverablesByMilestone(item.milestoneId)
-          )
+        const submissionGroups = await Promise.all(
+          safeMilestones
+            .filter((item) => item?.milestoneId)
+            .map((item) =>
+              deliverableService.getDeliverablesByMilestone(item.milestoneId)
+            )
         );
 
-        setDeliverables(deliverableGroups.flat());
+        setSubmissions(submissionGroups.flat());
+        return;
       }
+
+      setProject(null);
+      setMilestones([]);
+      setSubmissions([]);
     } catch (err) {
-      console.error("LOAD DELIVERABLES ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot load deliverables."));
+      console.error("LOAD SUBMISSIONS ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot load submissions."));
+      setSubmissions([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const updateField = (name, value) => {
+  const updateSubmissionField = (name, value) => {
     setMessage("");
     setError("");
 
-    setFormData((prev) => ({
+    setSubmissionForm((prev) => ({
       ...prev,
       [name]: value,
     }));
   };
 
-  const validateForm = () => {
+  const validateSubmission = () => {
     if (!selectedMilestoneId) {
       return "Please select a milestone.";
     }
 
-    if (!formData.description.trim()) {
-      return "Description is required.";
+    if (!submissionForm.description.trim()) {
+      return "Please describe what you delivered.";
     }
 
-    if (formData.description.trim().length < 20) {
+    if (submissionForm.description.trim().length < 20) {
       return "Description must be at least 20 characters.";
     }
 
     if (
-      !formData.fileUrl.trim() &&
-      !formData.demoUrl.trim() &&
-      !formData.testResultUrl.trim()
+      !submissionForm.fileUrl.trim() &&
+      !submissionForm.demoUrl.trim() &&
+      !submissionForm.testResultUrl.trim()
     ) {
       return "Please provide at least File URL, Demo URL, or Test Result URL.";
     }
@@ -131,49 +155,78 @@ export default function DeliverablesPage() {
     return "";
   };
 
-  const handleSubmit = async (event) => {
+  const handleSubmitWork = (event) => {
     event.preventDefault();
 
-    const validationError = validateForm();
+    const validationError = validateSubmission();
 
     if (validationError) {
       setError(validationError);
       return;
     }
 
+    setError("");
+    setShowSubmitConfirm(true);
+  };
+
+  const confirmSubmitWork = async () => {
     try {
       setSubmitting(true);
       setError("");
       setMessage("");
 
-      await deliverableService.submitDeliverable(selectedMilestoneId, formData);
+      const created = await deliverableService.submitDeliverable(
+        selectedMilestoneId,
+        submissionForm
+      );
 
-      setMessage("Deliverable submitted successfully.");
+      setShowSubmitConfirm(false);
+      setMessage("Your work has been submitted successfully.");
 
-      setFormData({
-        ...emptyForm,
+      setSubmissionForm({
+        ...emptySubmissionForm,
         milestoneId: selectedMilestoneId,
       });
 
+      if (created?.deliverableId) {
+        navigate(`/expert/deliverables/${created.deliverableId}`);
+        return;
+      }
+
       await loadData();
     } catch (err) {
-      console.error("SUBMIT DELIVERABLE ERROR:", err?.response?.data || err);
-      setError(getFriendlyError(err, "Cannot submit deliverable."));
+      console.error("SUBMIT WORK ERROR:", err?.response?.data || err);
+      setShowSubmitConfirm(false);
+      setError(getFriendlyError(err, "Cannot submit your work."));
     } finally {
       setSubmitting(false);
     }
   };
 
+  const handleBack = () => {
+    if (projectId) {
+      navigate(`/expert/projects/${projectId}`);
+      return;
+    }
+
+    if (milestoneId) {
+      navigate(`/expert/milestones/${milestoneId}`);
+      return;
+    }
+
+    navigate("/expert/projects");
+  };
+
   const pageTitle = milestoneId
-    ? `Deliverables of Milestone #${milestoneId}`
-    : project?.title || "Project Deliverables";
+    ? `Milestone Submissions`
+    : project?.title
+    ? `${project.title} Submissions`
+    : "Work Submissions";
 
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading deliverables...
-        </div>
+        <PageSkeleton cards={4} />
       </ExpertLayout>
     );
   }
@@ -184,77 +237,100 @@ export default function DeliverablesPage() {
         <div className="mx-auto max-w-6xl">
           <button
             type="button"
-            onClick={() => {
-              if (projectId) navigate(`/expert/projects/${projectId}`);
-              else navigate("/expert/projects");
-            }}
+            onClick={handleBack}
             className="mb-6 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300 hover:text-cyan-200"
           >
             <span className="material-symbols-outlined text-sm">
               arrow_back
             </span>
-            Back to project
+            Back
           </button>
 
-          <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                Deliverables
-              </p>
+          <section className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-8">
+            <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
+                  Submissions
+                </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                {pageTitle}
-              </h1>
+                <h1 className="text-3xl font-bold text-white md:text-4xl">
+                  {pageTitle}
+                </h1>
 
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Submit milestone deliverables with file/demo/test result URLs
-                and handover notes.
-              </p>
+                <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
+                  Submit completed work, review previous submissions, and track
+                  client feedback.
+                </p>
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <InfoPill
+                    icon="assignment"
+                    label={`${submissions.length} submission${
+                      submissions.length === 1 ? "" : "s"
+                    }`}
+                  />
+
+                  {milestones.length > 0 && (
+                    <InfoPill
+                      icon="flag"
+                      label={`${milestones.length} milestone${
+                        milestones.length === 1 ? "" : "s"
+                      }`}
+                    />
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={loadData}
+                disabled={loading || submitting}
+                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Refresh
+              </button>
             </div>
+          </section>
 
-            <button
-              type="button"
-              onClick={loadData}
-              className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
-            >
-              Refresh
-            </button>
-          </div>
-
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {error && (
-            <Alert type="danger" title="Deliverable error" message={error} />
+            <Alert type="danger" title="Submission error" message={error} />
           )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_390px]">
-            <main className="space-y-5">
-              <Card title="Submitted Deliverables">
-                {deliverables.length === 0 ? (
+            <main className="space-y-6">
+              <Card title="Your submissions" icon="assignment">
+                {submissions.length === 0 ? (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] p-8 text-center">
                     <span className="material-symbols-outlined mb-3 block text-5xl text-gray-500">
                       assignment
                     </span>
 
                     <h2 className="text-lg font-bold text-white">
-                      No deliverables submitted
+                      No work submitted yet
                     </h2>
 
                     <p className="mt-2 text-sm text-gray-400">
-                      Submit the first deliverable for this milestone.
+                      Once you submit your work, it will appear here.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {deliverables.map((item) => (
-                      <DeliverableCard
-                        key={item.deliverableId}
-                        deliverable={item}
-                        onDetail={() =>
-                          navigate(`/expert/deliverables/${item.deliverableId}`)
-                        }
+                    {submissions.map((item, index) => (
+                      <SubmissionCard
+                        key={item.deliverableId || index}
+                        submission={item}
+                        onDetail={() => {
+                          if (!item.deliverableId) {
+                            setError(
+                              "Cannot open submission detail because id is missing."
+                            );
+                            return;
+                          }
+
+                          navigate(`/expert/deliverables/${item.deliverableId}`);
+                        }}
                       />
                     ))}
                   </div>
@@ -263,15 +339,15 @@ export default function DeliverablesPage() {
             </main>
 
             <aside>
-              <Card title="Submit New Deliverable">
-                <form onSubmit={handleSubmit} className="space-y-5">
+              <Card title="Submit new work" icon="upload_file">
+                <form onSubmit={handleSubmitWork} className="space-y-5">
                   {!milestoneId && (
                     <Field label="Milestone">
                       <select
-                        value={formData.milestoneId}
+                        value={submissionForm.milestoneId}
                         disabled={submitting}
                         onChange={(event) =>
-                          updateField("milestoneId", event.target.value)
+                          updateSubmissionField("milestoneId", event.target.value)
                         }
                         className="w-full rounded-xl border border-white/10 bg-[#151a22] px-4 py-3 text-sm text-white outline-none transition focus:border-[#00F0FF] disabled:opacity-50"
                       >
@@ -282,7 +358,7 @@ export default function DeliverablesPage() {
                             key={item.milestoneId}
                             value={item.milestoneId}
                           >
-                            {item.title || `Milestone #${item.milestoneId}`}
+                            {item.title || `Milestone ${item.milestoneId}`}
                           </option>
                         ))}
                       </select>
@@ -292,10 +368,10 @@ export default function DeliverablesPage() {
                   <Field label="File URL">
                     <input
                       type="url"
-                      value={formData.fileUrl}
+                      value={submissionForm.fileUrl}
                       disabled={submitting}
                       onChange={(event) =>
-                        updateField("fileUrl", event.target.value)
+                        updateSubmissionField("fileUrl", event.target.value)
                       }
                       placeholder="https://..."
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
@@ -305,10 +381,10 @@ export default function DeliverablesPage() {
                   <Field label="Demo URL">
                     <input
                       type="url"
-                      value={formData.demoUrl}
+                      value={submissionForm.demoUrl}
                       disabled={submitting}
                       onChange={(event) =>
-                        updateField("demoUrl", event.target.value)
+                        updateSubmissionField("demoUrl", event.target.value)
                       }
                       placeholder="https://..."
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
@@ -318,25 +394,31 @@ export default function DeliverablesPage() {
                   <Field label="Test Result URL">
                     <input
                       type="url"
-                      value={formData.testResultUrl}
+                      value={submissionForm.testResultUrl}
                       disabled={submitting}
                       onChange={(event) =>
-                        updateField("testResultUrl", event.target.value)
+                        updateSubmissionField(
+                          "testResultUrl",
+                          event.target.value
+                        )
                       }
                       placeholder="https://..."
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
                     />
                   </Field>
 
-                  <Field label="Description">
+                  <Field label="Delivery Description">
                     <textarea
                       rows={5}
-                      value={formData.description}
+                      value={submissionForm.description}
                       disabled={submitting}
                       onChange={(event) =>
-                        updateField("description", event.target.value)
+                        updateSubmissionField(
+                          "description",
+                          event.target.value
+                        )
                       }
-                      placeholder="Describe what you delivered..."
+                      placeholder="Describe what you completed and how the client can review it..."
                       className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
                     />
                   </Field>
@@ -344,12 +426,15 @@ export default function DeliverablesPage() {
                   <Field label="Handover Notes">
                     <textarea
                       rows={4}
-                      value={formData.handoverNotes}
+                      value={submissionForm.handoverNotes}
                       disabled={submitting}
                       onChange={(event) =>
-                        updateField("handoverNotes", event.target.value)
+                        updateSubmissionField(
+                          "handoverNotes",
+                          event.target.value
+                        )
                       }
-                      placeholder="Account info, setup guide, testing notes..."
+                      placeholder="Setup guide, testing notes, credentials, or anything the client should know..."
                       className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
                     />
                   </Field>
@@ -359,7 +444,7 @@ export default function DeliverablesPage() {
                     disabled={submitting}
                     className="w-full rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Submitting..." : "Submit Deliverable"}
+                    {submitting ? "Submitting..." : "Submit Work"}
                   </button>
                 </form>
               </Card>
@@ -367,43 +452,166 @@ export default function DeliverablesPage() {
           </div>
         </div>
       </div>
+      {showSubmitConfirm && (
+        <ConfirmActionModal
+          title="Submit this work?"
+          message="The client will receive this submission for review. Check that your links, delivery description, and handover notes are correct."
+          confirmLabel="Submit Work"
+          loading={submitting}
+          onCancel={() => !submitting && setShowSubmitConfirm(false)}
+          onConfirm={confirmSubmitWork}
+        />
+      )}
     </ExpertLayout>
   );
 }
 
-function DeliverableCard({ deliverable, onDetail }) {
-  const status = String(deliverable.status || "").toUpperCase();
+
+function PageSkeleton({ cards = 4, compact = false }) {
+  return (
+    <div className={`animate-pulse px-5 md:px-8 ${compact ? "py-6" : "py-10"}`}>
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-5 h-5 w-36 rounded-full bg-white/10" />
+
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-32 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.06]" />
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: cards }).map((_, index) => (
+              <div
+                key={index}
+                className="h-36 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+
+          <div className="h-80 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1300] w-[min(92vw,390px)]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.58)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+
+function ConfirmActionModal({
+  title,
+  message,
+  confirmLabel,
+  loading,
+  tone = "cyan",
+  onCancel,
+  onConfirm,
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-400/50 bg-red-400/10 text-red-300 hover:bg-red-400 hover:text-black"
+      : tone === "green"
+        ? "border-green-400/50 bg-green-400/10 text-green-300 hover:bg-green-400 hover:text-black"
+        : "border-cyan-400/50 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black";
+
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-cyan-300">
+          <span className="material-symbols-outlined">
+            {tone === "red" ? "warning" : "verified"}
+          </span>
+        </div>
+
+        <h2 className="text-xl font-black text-white">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">{message}</p>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onCancel}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Cancel
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={onConfirm}
+            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${toneClass}`}
+          >
+            {loading ? "Processing..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+function SubmissionCard({ submission, onDetail }) {
+  const status = String(submission.status || "SUBMITTED").toUpperCase();
 
   return (
     <article className="rounded-xl border border-white/10 bg-white/[0.03] p-5 transition hover:border-cyan-400/40">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div className="flex-1">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <StatusBadge status={status} />
+            <SubmissionStatusBadge status={status} />
 
             <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-              Version {deliverable.versionNumber || 1}
+              Version {submission.versionNumber || 1}
             </span>
 
-            {deliverable.milestoneId && (
+            {submission.submittedAt && (
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
-                Milestone #{deliverable.milestoneId}
+                {formatDate(submission.submittedAt)}
               </span>
             )}
           </div>
 
           <h3 className="font-bold text-white">
-            {deliverable.title || `Deliverable #${deliverable.deliverableId}`}
+            {submission.title || "Submitted Work"}
           </h3>
 
           <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
-            {deliverable.description || "No description."}
+            {submission.description || "No description."}
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <LinkPill label="File" url={deliverable.fileUrl} />
-            <LinkPill label="Demo" url={deliverable.demoUrl} />
-            <LinkPill label="Test Result" url={deliverable.testResultUrl} />
+            <LinkPill label="File" url={submission.fileUrl} />
+            <LinkPill label="Demo" url={submission.demoUrl} />
+            <LinkPill label="Test Result" url={submission.testResultUrl} />
           </div>
         </div>
 
@@ -419,10 +627,21 @@ function DeliverableCard({ deliverable, onDetail }) {
   );
 }
 
-function Card({ title, children }) {
+function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6">
-      <h2 className="mb-5 text-xl font-extrabold text-white">{title}</h2>
+      <div className="mb-5 flex items-center gap-3">
+        {icon && (
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/10">
+            <span className="material-symbols-outlined text-xl text-cyan-300">
+              {icon}
+            </span>
+          </div>
+        )}
+
+        <h2 className="text-xl font-extrabold text-white">{title}</h2>
+      </div>
+
       {children}
     </section>
   );
@@ -439,13 +658,22 @@ function Field({ label, children }) {
   );
 }
 
-function StatusBadge({ status }) {
+function InfoPill({ icon, label }) {
+  return (
+    <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs font-bold text-gray-300">
+      <span className="material-symbols-outlined text-sm">{icon}</span>
+      {label}
+    </span>
+  );
+}
+
+function SubmissionStatusBadge({ status }) {
   const style =
     status === "APPROVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
       : status === "REVISION_REQUESTED"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : status === "DISPUTED"
+      : status === "DISPUTED" || status === "REJECTED"
       ? "border-red-400/30 bg-red-400/10 text-red-300"
       : "border-cyan-400/30 bg-cyan-400/10 text-cyan-300";
 
@@ -453,7 +681,7 @@ function StatusBadge({ status }) {
     <span
       className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${style}`}
     >
-      {DELIVERABLE_STATUS_LABEL[status] || status}
+      {DELIVERABLE_STATUS_LABEL[status] || formatStatusLabel(status)}
     </span>
   );
 }
@@ -487,12 +715,21 @@ function Alert({ type, title, message }) {
   );
 }
 
+function formatDate(value) {
+  return formatDateTime(value, "N/A");
+}
+
+function formatStatusLabel(status) {
+  return String(status || "")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function getFriendlyError(err, fallback) {
-  return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
-    err?.message ||
-    fallback
-  );
+  const data = err?.response?.data;
+
+  if (typeof data === "string") return data;
+
+  return data?.message || data?.title || err?.message || fallback;
 }

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import ExpertLayout from "../../../components/layout/ExpertLayout";
 import proposalService, {
   getFriendlyProposalError,
 } from "../../../services/proposal.service";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 export default function ProposalDetailPage() {
   const { proposalId } = useParams();
   const navigate = useNavigate();
@@ -12,12 +13,16 @@ export default function ProposalDetailPage() {
   const [proposal, setProposal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
 
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const refreshInFlightRef = useRef(false);
 
   const status = getProposalStatus(proposal);
   const statusGroup = getProposalStatusGroup(status);
+  const contractId = getContractId(proposal);
+  const currentProposalId = getProposalId(proposal) || proposalId;
 
   const milestones = useMemo(() => {
     return Array.isArray(proposal?.milestones) ? proposal.milestones : [];
@@ -30,51 +35,105 @@ export default function ProposalDetailPage() {
     }, 0);
   }, [milestones]);
 
-  const milestoneDuration = useMemo(() => {
-    return milestones.reduce((total, milestone) => {
-      const durationDays = Number(
-        milestone?.durationDays ||
-          milestone?.DurationDays ||
-          milestone?.deadlineOffsetDays ||
-          milestone?.DeadlineOffsetDays ||
-          0
-      );
+  useEffect(() => {
+    if (!message) return;
 
-      return total + (Number.isNaN(durationDays) ? 0 : durationDays);
-    }, 0);
-  }, [milestones]);
+    const timeoutId = window.setTimeout(() => {
+      setMessage("");
+    }, 3200);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [message]);
 
   useEffect(() => {
     loadProposal();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
-  const loadProposal = async () => {
+  useEffect(() => {
+    const refreshSilently = async () => {
+      if (document.visibilityState !== "visible") return;
+      if (refreshInFlightRef.current || actionLoading) return;
+
+      refreshInFlightRef.current = true;
+
+      try {
+        await loadProposal({
+          silent: true,
+          preserveMessage: true,
+        });
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(refreshSilently, 5000);
+
+    const handleFocus = () => {
+      refreshSilently();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        refreshSilently();
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposalId, actionLoading]);
+
+  const loadProposal = async ({
+    silent = false,
+    preserveMessage = false,
+  } = {}) => {
     try {
-      setLoading(true);
-      setError("");
-      setMessage("");
+      if (!silent) {
+        setLoading(true);
+        setError("");
+
+        if (!preserveMessage) {
+          setMessage("");
+        }
+      }
 
       const data = await proposalService.getProposalById(proposalId);
       setProposal(data);
+
+      if (silent) {
+        setError("");
+      }
     } catch (err) {
-      console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
-      setError(getFriendlyProposalError(err, "Cannot load proposal detail."));
-      setProposal(null);
+      if (!silent) {
+        console.error("LOAD PROPOSAL DETAIL ERROR:", err?.response?.data || err);
+        setError(getFriendlyProposalError(err, "Cannot load proposal detail."));
+        setProposal(null);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
+  const requestCancelProposal = () => {
+    setError("");
+    setShowCancelConfirm(true);
+  };
+
   const handleCancelProposal = async () => {
-    const ok = window.confirm("Are you sure you want to cancel this proposal?");
-
-    if (!ok) return;
-
     try {
       setActionLoading(true);
       setError("");
       setMessage("");
+      setShowCancelConfirm(false);
 
       await proposalService.withdrawProposal(proposalId);
 
@@ -88,12 +147,24 @@ export default function ProposalDetailPage() {
     }
   };
 
+  const handleViewContract = () => {
+    if (contractId) {
+      navigate(`/expert/contracts/${contractId}`);
+      return;
+    }
+
+    if (currentProposalId) {
+      navigate(`/expert/proposals/${currentProposalId}/contract`);
+      return;
+    }
+
+    setError("Contract information is unavailable. Please refresh and try again.");
+  };
+
   if (loading) {
     return (
       <ExpertLayout>
-        <div className="flex min-h-[70vh] items-center justify-center text-gray-400">
-          Loading proposal detail...
-        </div>
+        <PageSkeleton rows={3} />
       </ExpertLayout>
     );
   }
@@ -117,13 +188,17 @@ export default function ProposalDetailPage() {
             <Alert type="danger" title="Proposal error" message={error} />
           )}
 
-          {message && (
-            <Alert type="success" title="Success" message={message} />
-          )}
+          {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
 
           {!proposal && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-10 text-center">
-              <p className="text-gray-400">Proposal not found.</p>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04] text-gray-400">
+                <span className="material-symbols-outlined text-3xl">description_off</span>
+              </div>
+              <h2 className="mt-4 text-xl font-black text-white">Proposal not found</h2>
+              <p className="mt-2 text-sm text-gray-400">
+                This proposal may have been removed or is no longer available.
+              </p>
 
               <button
                 type="button"
@@ -143,12 +218,6 @@ export default function ProposalDetailPage() {
                     <div className="mb-4 flex flex-wrap items-center gap-2">
                       <StatusBadge status={status} />
 
-                      {hasVersion(proposal) && (
-                        <span className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-xs font-bold text-purple-300">
-                          {formatProposalVersion(proposal)}
-                        </span>
-                      )}
-
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                         Submitted{" "}
                         {formatDate(proposal?.submittedAt || proposal?.createdAt)}
@@ -156,7 +225,7 @@ export default function ProposalDetailPage() {
                     </div>
 
                     <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                      Proposal Detail
+                      Proposal Workspace
                     </p>
 
                     <h1 className="text-3xl font-bold text-white md:text-4xl">
@@ -170,7 +239,7 @@ export default function ProposalDetailPage() {
                     </h1>
 
                     <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                      Client:{" "}
+                      Working with:{" "}
                       <span className="font-bold text-gray-300">
                         {formatDisplayValue(
                           proposal?.clientName ||
@@ -194,6 +263,16 @@ export default function ProposalDetailPage() {
                       View Versions
                     </button>
 
+                    {canViewContract(contractId) && (
+                      <button
+                        type="button"
+                        onClick={handleViewContract}
+                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+                      >
+                        View Contract
+                      </button>
+                    )}
+
                     {canResubmitProposal(statusGroup) && (
                       <button
                         type="button"
@@ -210,7 +289,7 @@ export default function ProposalDetailPage() {
                       <button
                         type="button"
                         disabled={actionLoading}
-                        onClick={handleCancelProposal}
+                        onClick={requestCancelProposal}
                         className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {actionLoading ? "Cancelling..." : "Cancel"}
@@ -228,23 +307,18 @@ export default function ProposalDetailPage() {
                         View Job
                       </button>
                     )}
-
-                    {proposal?.contractId && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          navigate(`/expert/contracts/${proposal.contractId}`)
-                        }
-                        className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
-                      >
-                        View Contract
-                      </button>
-                    )}
                   </div>
                 </div>
               </section>
 
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
+              {statusGroup === "ACCEPTED" && (
+                <AcceptedContractNotice
+                  contractId={contractId}
+                  onViewContract={handleViewContract}
+                />
+              )}
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
                 <main className="space-y-6">
                   <Card title="Cover Letter" icon="description">
                     <p className="whitespace-pre-line text-sm leading-7 text-gray-300">
@@ -261,11 +335,6 @@ export default function ProposalDetailPage() {
                     <DetailBlock
                       label="Working Approach"
                       value={proposal?.workingApproach}
-                    />
-
-                    <DetailBlock
-                      label="Preliminary Milestone Plan"
-                      value={proposal?.preliminaryMilestonePlan}
                     />
                   </Card>
 
@@ -333,48 +402,46 @@ export default function ProposalDetailPage() {
                         )} days`}
                       />
 
+                      <Info label="Milestones" value={`${milestones.length}`} />
+
                       <Info
                         label="Milestone Total"
                         value={formatMoney(milestoneTotal)}
                       />
 
                       <Info
-                        label="Milestone Days"
-                        value={`${milestoneDuration} days`}
+                        label="Contract"
+                        value={contractId ? "Available" : "No contract yet"}
                       />
-
-                      <Info
-                        label="Version"
-                        value={formatProposalVersion(proposal)}
-                      />
-
-                      {proposal?.contractId && (
-                        <Info
-                          label="Contract ID"
-                          value={`#${proposal.contractId}`}
-                        />
-                      )}
                     </div>
                   </Card>
 
-                  <Card title="Dates" icon="event">
+                  <Card title="Important Date" icon="event">
                     <div className="space-y-4">
                       <Info
-                        label="Submitted At"
+                        label="Submitted"
                         value={formatDate(
                           proposal?.submittedAt || proposal?.createdAt
                         )}
                       />
 
-                      <Info
-                        label="Updated At"
-                        value={formatDate(proposal?.updatedAt)}
-                      />
+                      {statusGroup === "ACCEPTED" && (
+                        <Info
+                          label="Accepted"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
 
-                      <Info
-                        label="Decided At"
-                        value={formatDate(proposal?.decidedAt)}
-                      />
+                      {statusGroup === "REJECTED" && (
+                        <Info
+                          label="Rejected"
+                          value={formatDate(
+                            proposal?.decidedAt || proposal?.updatedAt
+                          )}
+                        />
+                      )}
                     </div>
                   </Card>
                 </aside>
@@ -383,7 +450,157 @@ export default function ProposalDetailPage() {
           )}
         </div>
       </div>
+      {showCancelConfirm && (
+        <ProposalConfirmModal
+          loading={actionLoading}
+          onCancel={() => !actionLoading && setShowCancelConfirm(false)}
+          onConfirm={handleCancelProposal}
+        />
+      )}
     </ExpertLayout>
+  );
+}
+
+
+function PageSkeleton({ rows = 4 }) {
+  return (
+    <div className="animate-pulse px-5 py-8 md:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-6 h-5 w-36 rounded-full bg-white/10" />
+        <div className="mb-6 rounded-3xl border border-white/10 bg-[#151a22] p-6 md:p-8">
+          <div className="h-4 w-28 rounded bg-cyan-400/10" />
+          <div className="mt-4 h-9 w-2/3 rounded bg-white/10" />
+          <div className="mt-3 h-4 w-1/2 rounded bg-white/[0.07]" />
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[0, 1, 2].map((item) => (
+              <div
+                key={item}
+                className="h-20 rounded-2xl border border-white/10 bg-white/[0.03]"
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_340px]">
+          <div className="space-y-4">
+            {Array.from({ length: rows }).map((_, index) => (
+              <div
+                key={index}
+                className="h-32 rounded-2xl border border-white/10 bg-[#151a22]"
+              />
+            ))}
+          </div>
+          <div className="h-72 rounded-2xl border border-white/10 bg-[#151a22]" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+function SuccessToast({ message, onClose }) {
+  return (
+    <div className="fixed right-4 top-4 z-[1200] w-[min(92vw,380px)] animate-[fadeIn_.2s_ease-out]">
+      <div className="flex items-start gap-3 rounded-2xl border border-green-400/30 bg-[#111a16] p-4 shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-green-400/30 bg-green-400/10 text-green-300">
+          <span className="material-symbols-outlined">check_circle</span>
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-black text-white">Action completed</p>
+          <p className="mt-1 text-sm leading-5 text-green-100/75">{message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-gray-500 transition hover:text-white"
+          aria-label="Close notification"
+        >
+          <span className="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
+function ProposalConfirmModal({ loading, onCancel, onConfirm }) {
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/75 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-red-400/20 bg-[#151a22] p-5 shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl border border-red-400/20 bg-red-400/10 text-red-300">
+          <span className="material-symbols-outlined">cancel</span>
+        </div>
+
+        <h2 className="text-lg font-black text-white">Cancel this proposal?</h2>
+        <p className="mt-2 text-sm leading-6 text-gray-400">
+          The proposal will be withdrawn and the client will no longer be able
+          to accept it.
+        </p>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+          >
+            Keep Proposal
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={loading}
+            className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "Cancelling..." : "Cancel Proposal"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AcceptedContractNotice({ contractId, onViewContract }) {
+  return (
+    <section className="mb-6 rounded-3xl border border-green-400/30 bg-green-400/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.25)] md:p-7">
+      <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-green-400/40 bg-green-400/10 text-green-300">
+            <span className="material-symbols-outlined">verified</span>
+          </div>
+
+          <div>
+            <h2 className="text-xl font-bold text-white">
+              Your proposal was accepted
+            </h2>
+
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-green-100/80">
+              The client selected your proposal. You can open the related
+              contract to review its current status, final terms, milestones,
+              fees, and project information.
+            </p>
+
+            {!contractId && (
+              <p className="mt-2 text-xs font-semibold text-green-200/80">
+                The contract is being prepared by the client.
+              </p>
+            )}
+          </div>
+        </div>
+
+        {contractId && (
+          <button
+            type="button"
+            onClick={onViewContract}
+            className="shrink-0 rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black"
+          >
+            View Contract
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -428,9 +645,7 @@ function MilestoneCard({ milestone, index }) {
             {formatDisplayValue(milestone?.title || `Milestone ${index + 1}`)}
           </p>
 
-          <p className="mt-1 text-xs text-gray-500">
-            Milestone {index + 1}
-          </p>
+          <p className="mt-1 text-xs text-gray-500">Milestone {index + 1}</p>
         </div>
 
         <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold text-cyan-300">
@@ -514,6 +729,30 @@ function EmptyState({ message }) {
   );
 }
 
+function getProposalId(proposal) {
+  return (
+    proposal?.proposalId ||
+    proposal?.ProposalId ||
+    proposal?.id ||
+    proposal?.Id ||
+    ""
+  );
+}
+
+function getContractId(proposal) {
+  return (
+    proposal?.contractId ||
+    proposal?.ContractId ||
+    proposal?.contractID ||
+    proposal?.ContractID ||
+    proposal?.contract?.contractId ||
+    proposal?.contract?.id ||
+    proposal?.Contract?.ContractId ||
+    proposal?.Contract?.Id ||
+    ""
+  );
+}
+
 function getJobId(proposal) {
   return (
     proposal?.jobId ||
@@ -551,13 +790,19 @@ function getProposalStatusGroup(status) {
     return "REJECTED";
   }
 
-  if (value === "ACCEPTED") return "ACCEPTED";
+  if (["ACCEPTED", "APPROVED", "SELECTED"].includes(value)) {
+    return "ACCEPTED";
+  }
 
   if (["WITHDRAWN", "CANCELLED", "CANCELED"].includes(value)) {
     return "CANCELLED";
   }
 
   return "SUBMITTED";
+}
+
+function canViewContract(contractId) {
+  return Boolean(contractId);
 }
 
 function canResubmitProposal(statusGroup) {
@@ -573,53 +818,19 @@ function getProposalStatusLabel(statusGroup) {
     SUBMITTED: "Submitted",
     ACCEPTED: "Accepted",
     REJECTED: "Rejected",
-    CANCELLED: "Cancel",
+    CANCELLED: "Cancelled",
   };
 
   return map[statusGroup] || "Submitted";
 }
 
-function hasVersion(proposal) {
-  return Boolean(
-    proposal?.version ||
-      proposal?.Version ||
-      proposal?.latestVersion ||
-      proposal?.LatestVersion
-  );
-}
-
-function formatProposalVersion(proposal) {
-  const version =
-    proposal?.version ||
-    proposal?.Version ||
-    proposal?.latestVersion ||
-    proposal?.LatestVersion;
-
-  if (!version) return "Version N/A";
-
-  if (typeof version === "object") {
-    const versionNumber =
-      version.versionNumber ||
-      version.VersionNumber ||
-      version.version ||
-      version.Version ||
-      version.proposalVersionId ||
-      version.ProposalVersionId ||
-      "N/A";
-
-    return `Version ${versionNumber}`;
-  }
-
-  return `Version ${version}`;
-}
-
 function formatMoney(value) {
   const number = Number(value || 0);
 
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("vi-VN", {
     style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 2,
+    currency: "VND",
+    maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
 }
 
@@ -632,16 +843,7 @@ function formatNumber(value) {
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(value));
-  } catch {
-    return String(value);
-  }
+  return formatDateTime(value, "N/A");
 }
 
 function formatDisplayValue(value) {

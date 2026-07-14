@@ -1,41 +1,111 @@
 // src/api/job.api.js
 import axiosInstance from "./axiosInstance";
 
-// POST /api/jobs/draft — lưu nháp
-export const saveJobDraftApi = (data) => axiosInstance.post("/jobs/draft", data);
+/**
+ * CLIENT: Create a draft job.
+ * POST /api/jobs/draft
+ */
+export const saveJobDraftApi = (data) => {
+  return axiosInstance.post("/jobs/draft", data);
+};
 
-// POST /api/jobs/submit — submit chính thức
-export const submitJobApi = (data) => axiosInstance.post("/jobs/submit", data);
+/**
+ * CLIENT: Create and submit a new job immediately.
+ * POST /api/jobs/submit
+ */
+export const submitJobApi = (data) => {
+  return axiosInstance.post("/jobs/submit", data);
+};
 
-// GET /api/jobs/open — lấy danh sách job đang mở
-export const getJobsApi = (params = {}) =>
-  axiosInstance.get("/jobs/open", { params });
+/**
+ * CLIENT: Submit an existing draft.
+ * PUT /api/jobs/{id}/submit
+ */
+export const submitJobDraftApi = (jobId) => {
+  return axiosInstance.put(`/jobs/${jobId}/submit`);
+};
 
-// Giữ logic của fe/minh: GET /api/jobs — lấy danh sách jobs chung
-export const getAllJobsApi = (params = {}) =>
-  axiosInstance.get("/jobs", { params });
+/**
+ * Public: Get open jobs.
+ * GET /api/jobs/open
+ *
+ * Backend currently supports:
+ * - keyword
+ * - skillId
+ */
+export const getJobsApi = (params = {}) => {
+  return axiosInstance.get("/jobs/open", { params });
+};
 
-// GET /api/jobs/my — lấy job của tôi
-export const getMyJobsApi = () => axiosInstance.get("/jobs/my");
+/**
+ * CLIENT: Get jobs owned by the current client.
+ * GET /api/jobs/my
+ */
+export const getMyJobsApi = () => {
+  return axiosInstance.get("/jobs/my");
+};
 
-// GET /api/jobs/{id} — lấy chi tiết job
-export const getJobByIdApi = (id) => axiosInstance.get(`/jobs/${id}`);
+/**
+ * Public/Authenticated: Get job detail.
+ * GET /api/jobs/{id}
+ */
+export const getJobByIdApi = (jobId) => {
+  return axiosInstance.get(`/jobs/${jobId}`);
+};
+
+/**
+ * CLIENT: Update a job.
+ * PUT /api/jobs/{id}
+ */
+export const updateJobApi = (jobId, data) => {
+  return axiosInstance.put(`/jobs/${jobId}`, data);
+};
+
+/**
+ * CLIENT: Cancel a job owned by the current client.
+ * PUT /api/jobs/{id}/cancel
+ *
+ * Backend does not require a request body.
+ */
+export const cancelJobApi = (jobId) => {
+  return axiosInstance.put(`/jobs/${jobId}/cancel`);
+};
 
 const jobApi = {
-  getOpenJobs(params = {}) {
-    return axiosInstance.get("/jobs/open", { params });
+  createDraft(data) {
+    return saveJobDraftApi(data);
   },
 
-  getAllJobs(params = {}) {
-    return axiosInstance.get("/jobs", { params });
+  saveJobDraft(data) {
+    return saveJobDraftApi(data);
+  },
+
+  submitJob(data) {
+    return submitJobApi(data);
+  },
+
+  submitDraft(jobId) {
+    return submitJobDraftApi(jobId);
+  },
+
+  getOpenJobs(params = {}) {
+    return getJobsApi(params);
   },
 
   getJobById(jobId) {
-    return axiosInstance.get(`/jobs/${jobId}`);
+    return getJobByIdApi(jobId);
   },
 
   getMyJobs() {
-    return axiosInstance.get("/jobs/my");
+    return getMyJobsApi();
+  },
+
+  updateJob(jobId, data) {
+    return updateJobApi(jobId, data);
+  },
+
+  cancelJob(jobId) {
+    return cancelJobApi(jobId);
   },
 
   getRecommendedJobs(limit = 10) {
@@ -46,7 +116,3 @@ const jobApi = {
 };
 
 export default jobApi;
-
-// TODO (BE): thêm khi BE làm xong
-// export const updateJobApi = (id, data) => axiosInstance.put(`/jobs/${id}`, data);
-// export const deleteJobApi = (id) => axiosInstance.delete(`/jobs/${id}`);

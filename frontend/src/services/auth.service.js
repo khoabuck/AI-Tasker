@@ -1,14 +1,17 @@
 import {
-  loginApi,
-  logoutApi,
-  loginWithGoogleApi,
   getMeApi,
+  loginApi,
+  loginWithGoogleApi,
+  logoutApi,
   updateMyAvatarApi,
 } from "../api/auth.api";
 
 const getValue = (...values) => {
   return values.find(
-    (value) => value !== undefined && value !== null && value !== ""
+    (value) =>
+      value !== undefined &&
+      value !== null &&
+      value !== ""
   );
 };
 
@@ -67,6 +70,8 @@ const normalizeUser = (user) => {
     status: getValue(
       user.status,
       user.Status,
+      user.userStatus,
+      user.UserStatus,
       ""
     ),
 
@@ -91,19 +96,27 @@ const normalizeUser = (user) => {
 };
 
 const isValidUser = (user) => {
-  return Boolean(
-    Number(user?.userId) > 0 &&
-    String(user?.email || "").trim()
-  );
+  const userId = Number(user?.userId || 0);
+  const email = String(user?.email || "").trim();
+
+  return userId > 0 && Boolean(email);
 };
 
 const getCurrentUserFromStorage = () => {
   try {
     const storedUser = localStorage.getItem("user");
 
-    return storedUser
-      ? JSON.parse(storedUser)
-      : null;
+    if (!storedUser) return null;
+
+    const parsedUser = JSON.parse(storedUser);
+    const normalizedUser = normalizeUser(parsedUser);
+
+    if (!isValidUser(normalizedUser)) {
+      localStorage.removeItem("user");
+      return null;
+    }
+
+    return normalizedUser;
   } catch {
     localStorage.removeItem("user");
     return null;
@@ -148,11 +161,45 @@ const mergeUserToLocalStorage = (newUserData) => {
   return mergedUser;
 };
 
-const getFriendlyError = (error, fallback) => {
+const clearLegacyAuthStorage = () => {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("token");
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("refreshToken");
+};
+
+const clearExpertProfileDrafts = () => {
+  localStorage.removeItem(
+    "aitasker_expert_profile_setup_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_edit_draft"
+  );
+
+  localStorage.removeItem(
+    "aitasker_expert_profile_correction_draft"
+  );
+};
+
+const getFriendlyError = (
+  error,
+  fallback = "Something went wrong."
+) => {
   const data = error?.response?.data;
 
   if (typeof data === "string") {
     return data;
+  }
+
+  if (data?.errors && typeof data.errors === "object") {
+    const messages = Object.values(data.errors)
+      .flat()
+      .filter(Boolean);
+
+    if (messages.length > 0) {
+      return messages.join(" ");
+    }
   }
 
   return (
@@ -160,6 +207,8 @@ const getFriendlyError = (error, fallback) => {
     data?.Message ||
     data?.title ||
     data?.Title ||
+    data?.detail ||
+    data?.Detail ||
     error?.message ||
     fallback
   );
@@ -167,9 +216,9 @@ const getFriendlyError = (error, fallback) => {
 
 const getResponseBody = (response) => {
   /*
-   * Hỗ trợ cả hai trường hợp:
-   * - auth.api trả thẳng response.data
-   * - auth.api trả nguyên Axios response
+   * Hỗ trợ hai trường hợp:
+   * - auth.api trả response.data
+   * - auth.api trả Axios response đầy đủ
    */
   if (
     response?.data &&
@@ -183,13 +232,6 @@ const getResponseBody = (response) => {
   }
 
   return response;
-};
-
-const clearLegacyAuthStorage = () => {
-  localStorage.removeItem("accessToken");
-  localStorage.removeItem("token");
-  localStorage.removeItem("authToken");
-  localStorage.removeItem("refreshToken");
 };
 
 const authService = {
@@ -212,8 +254,8 @@ const authService = {
       );
 
       /*
-       * Nếu response login chưa có đủ user thì kiểm tra lại
-       * phiên HttpOnly cookie bằng /auth/me.
+       * Nếu login response chưa chứa đủ user,
+       * xác minh lại bằng phiên HttpOnly cookie.
        */
       if (!isValidUser(user)) {
         try {
@@ -226,9 +268,8 @@ const authService = {
           );
         } catch {
           /*
-           * Một số trạng thái onboarding như
-           * PENDING_ROLE hoặc PENDING_EMAIL_VERIFICATION
-           * có thể chưa gọi được /auth/me.
+           * Một số trạng thái onboarding có thể chưa gọi được /auth/me.
+           * Khi đó sẽ kiểm tra lại dữ liệu từ login response bên dưới.
            */
         }
       }
@@ -243,22 +284,32 @@ const authService = {
         };
       }
 
-      localStorage.setItem(
-        "user",
-        JSON.stringify(user)
-      );
+      const savedUser = saveUserToLocalStorage(user);
+
+      if (!savedUser) {
+        return {
+          success: false,
+          message:
+            "Unable to save the authenticated user information.",
+        };
+      }
 
       /*
-       * Dọn token cũ.
-       * Không tạo token giả vì Backend dùng HttpOnly cookie.
+       * Backend dùng HttpOnly cookie.
+       * Không lưu hoặc tạo access token giả ở frontend.
        */
       clearLegacyAuthStorage();
 
       return {
         success: true,
-        user,
-        role: user.role,
-        status: user.status,
+
+        // Giữ field này để không làm hỏng code cũ đang đọc accessToken.
+        accessToken: "",
+
+        user: savedUser,
+        role: savedUser.role,
+        status: savedUser.status,
+
         expiresAt:
           loginData?.expiresAt ||
           loginData?.ExpiresAt ||
@@ -278,7 +329,9 @@ const authService = {
         responseData?.code ||
         responseData?.Code ||
         ""
-      ).toUpperCase();
+      )
+        .trim()
+        .toUpperCase();
 
       if (
         httpStatus === 429 &&
@@ -338,31 +391,20 @@ const authService = {
       await logoutApi();
     } catch {
       /*
-       * Dù Backend logout lỗi vẫn phải xóa auth state phía FE.
+       * Dù API logout lỗi vẫn phải xóa auth state phía frontend.
        */
     } finally {
+      clearLegacyAuthStorage();
+      clearExpertProfileDrafts();
+
       localStorage.removeItem("user");
       localStorage.removeItem("role");
       localStorage.removeItem("currentUser");
 
-      clearLegacyAuthStorage();
-
-      localStorage.removeItem(
-        "aitasker_expert_profile_setup_draft"
-      );
-
-      localStorage.removeItem(
-        "aitasker_expert_profile_edit_draft"
-      );
-
-      localStorage.removeItem(
-        "aitasker_expert_profile_correction_draft"
-      );
-
       sessionStorage.clear();
 
       /*
-       * Báo cho các tab khác biết user đã logout.
+       * Báo cho các tab khác rằng user đã logout.
        */
       localStorage.setItem(
         "aitasker_logout_at",
@@ -372,8 +414,8 @@ const authService = {
   },
 
   /*
-   * Chỉ dùng làm UI cache để hiển thị tên/avatar.
-   * Không dùng localStorage để xác thực hoặc phân quyền.
+   * Chỉ dùng localStorage làm UI cache.
+   * Không dùng để xác thực hoặc phân quyền.
    */
   getCurrentUser: () => {
     return getCurrentUserFromStorage();
@@ -400,12 +442,7 @@ const authService = {
       return null;
     }
 
-    localStorage.setItem(
-      "user",
-      JSON.stringify(user)
-    );
-
-    return user;
+    return saveUserToLocalStorage(user);
   },
 
   updateMyAvatar: async (avatarUrlOrPayload) => {
@@ -441,7 +478,7 @@ const authService = {
       }
     } catch {
       /*
-       * Nếu /auth/me lỗi thì cập nhật avatar vào UI cache hiện tại.
+       * Nếu /auth/me lỗi thì chỉ cập nhật avatar trong UI cache.
        */
     }
 
@@ -450,7 +487,33 @@ const authService = {
     });
   },
 
+  /*
+   * Giữ các method cũ để không ảnh hưởng page/service hiện tại.
+   * Đây chỉ là kiểm tra UI cache, không phải xác thực bảo mật.
+   */
+  isAuthenticated: () => {
+    return isValidUser(
+      authService.getCurrentUser()
+    );
+  },
+
+  getRole: () => {
+    return (
+      authService.getCurrentUser()?.role ||
+      null
+    );
+  },
+
+  getStatus: () => {
+    return (
+      authService.getCurrentUser()?.status ||
+      null
+    );
+  },
+
   normalizeUser,
+
+  isValidUser,
 };
 
 export default authService;

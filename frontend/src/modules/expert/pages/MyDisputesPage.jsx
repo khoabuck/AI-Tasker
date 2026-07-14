@@ -7,11 +7,14 @@ import {
   RESOLUTION_TYPE_LABEL,
 } from "../../../constants/disputeStatus";
 
+import { formatDateTime } from "../../../utils/dateTime.utils";
 const FILTERS = [
   { key: "ALL", label: "All" },
   { key: "OPEN", label: "Open" },
   { key: "UNDER_REVIEW", label: "Under Review" },
   { key: "RESOLVED", label: "Resolved" },
+  { key: "CLOSED", label: "Closed" },
+  { key: "REJECTED", label: "Rejected" },
 ];
 
 export default function MyDisputesPage() {
@@ -30,8 +33,8 @@ export default function MyDisputesPage() {
   const filteredDisputes = useMemo(() => {
     if (filter === "ALL") return disputes;
 
-    return disputes.filter(
-      (item) => String(item.status || "").toUpperCase() === filter
+    return disputes.filter((item) =>
+      matchesDisputeFilter(item?.status, filter)
     );
   }, [disputes, filter]);
 
@@ -41,8 +44,7 @@ export default function MyDisputesPage() {
       setError("");
 
       const data = await disputeService.getMyDisputes();
-
-      setDisputes(data);
+      setDisputes(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD MY DISPUTES ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load disputes."));
@@ -53,21 +55,20 @@ export default function MyDisputesPage() {
 
   return (
     <ExpertLayout>
-      <div className="px-5 py-10 md:px-8">
+      <div className="px-5 py-7 md:px-8">
         <div className="mx-auto max-w-6xl">
           <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                My Disputes
+              <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
+                Disputes
               </p>
 
-              <h1 className="text-3xl font-bold text-white md:text-4xl">
-                Dispute management
+              <h1 className="text-3xl font-bold text-white md:text-3xl">
+                Your disputes
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Track disputes you opened or are involved in, and submit
-                evidence when needed.
+                Track open cases, evidence, and admin decisions.
               </p>
             </div>
 
@@ -76,7 +77,7 @@ export default function MyDisputesPage() {
               onClick={() => navigate("/expert/projects")}
               className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
             >
-              View Projects
+              Projects
             </button>
           </div>
 
@@ -99,11 +100,7 @@ export default function MyDisputesPage() {
             ))}
           </div>
 
-          {loading && (
-            <div className="rounded-2xl border border-white/10 bg-[#151a22] p-12 text-center text-gray-400">
-              Loading disputes...
-            </div>
-          )}
+          {loading && <ListSkeleton rows={5} />}
 
           {!loading && filteredDisputes.length === 0 && (
             <div className="rounded-2xl border border-white/10 bg-[#151a22] p-12 text-center">
@@ -112,11 +109,11 @@ export default function MyDisputesPage() {
               </span>
 
               <h2 className="text-xl font-bold text-white">
-                No disputes found
+                No disputes
               </h2>
 
               <p className="mt-2 text-sm text-gray-400">
-                You can open a dispute from a project detail page.
+                Eligible milestones allow you to open a dispute.
               </p>
 
               <button
@@ -124,7 +121,7 @@ export default function MyDisputesPage() {
                 onClick={() => navigate("/expert/projects")}
                 className="mt-6 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Go to Projects
+                View Projects
               </button>
             </div>
           )}
@@ -135,7 +132,7 @@ export default function MyDisputesPage() {
                 <DisputeCard
                   key={dispute.disputeId}
                   dispute={dispute}
-                  onDetail={() =>
+                  onView={() =>
                     navigate(`/expert/disputes/${dispute.disputeId}`)
                   }
                   onProject={() =>
@@ -152,8 +149,34 @@ export default function MyDisputesPage() {
   );
 }
 
-function DisputeCard({ dispute, onDetail, onProject }) {
+
+function ListSkeleton({ rows = 5 }) {
+  return (
+    <div className="space-y-3">
+      {Array.from({ length: rows }).map((_, index) => (
+        <div
+          key={index}
+          className="animate-pulse rounded-2xl border border-white/10 bg-[#151a22] p-5"
+        >
+          <div className="flex gap-4">
+            <div className="h-11 w-11 shrink-0 rounded-xl bg-white/10" />
+            <div className="min-w-0 flex-1">
+              <div className="h-4 w-1/3 rounded bg-white/10" />
+              <div className="mt-3 h-4 w-4/5 rounded bg-white/[0.06]" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-white/[0.05]" />
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+function DisputeCard({ dispute, onView, onProject }) {
   const status = String(dispute.status || "").toUpperCase();
+  const resolutionLabel =
+    RESOLUTION_TYPE_LABEL[dispute.resolutionType] || dispute.resolutionType;
 
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-6 transition hover:border-cyan-400/40">
@@ -174,7 +197,7 @@ function DisputeCard({ dispute, onDetail, onProject }) {
           </div>
 
           <h2 className="text-xl font-bold text-white">
-            {dispute.projectTitle || `Dispute #${dispute.disputeId}`}
+            {dispute.projectTitle || "Project dispute"}
           </h2>
 
           <p className="mt-2 text-sm text-gray-500">
@@ -185,15 +208,24 @@ function DisputeCard({ dispute, onDetail, onProject }) {
             {dispute.reason || "No reason."}
           </p>
 
-          {dispute.resolutionType && (
+          {resolutionLabel && (
             <div className="mt-4 rounded-xl border border-green-400/30 bg-green-400/10 p-4 text-green-200">
               <p className="text-xs font-bold uppercase tracking-wider">
                 Resolution
               </p>
 
-              <p className="mt-2 text-sm leading-6">
-                {RESOLUTION_TYPE_LABEL[dispute.resolutionType] ||
-                  dispute.resolutionType}
+              <p className="mt-2 text-sm leading-6">{resolutionLabel}</p>
+            </div>
+          )}
+
+          {dispute.adminDecision && (
+            <div className="mt-4 rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-cyan-100">
+              <p className="text-xs font-bold uppercase tracking-wider">
+                Decision
+              </p>
+
+              <p className="mt-2 line-clamp-3 text-sm leading-6">
+                {dispute.adminDecision}
               </p>
             </div>
           )}
@@ -202,16 +234,17 @@ function DisputeCard({ dispute, onDetail, onProject }) {
         <div className="w-full rounded-xl border border-white/10 bg-white/[0.03] p-4 lg:w-72">
           <div className="space-y-4">
             <Info
-              label="Disputed Amount"
+              label="Amount"
               value={formatMoney(dispute.disputedAmount)}
             />
 
             <Info
               label="Milestone"
               value={
-                dispute.milestoneId
-                  ? `#${dispute.milestoneId}`
-                  : "Whole project"
+                dispute.milestoneTitle ||
+                (dispute.milestoneId
+                  ? "Related milestone"
+                  : "Whole project")
               }
             />
 
@@ -223,10 +256,10 @@ function DisputeCard({ dispute, onDetail, onProject }) {
             <div className="flex gap-2 pt-2">
               <button
                 type="button"
-                onClick={onDetail}
+                onClick={onView}
                 className="flex-1 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Detail
+                View
               </button>
 
               <button
@@ -255,12 +288,16 @@ function Info({ label, value }) {
 }
 
 function StatusBadge({ status }) {
+  const group = getDisputeStatusGroup(status);
+
   const style =
-    status === "RESOLVED"
+    group === "RESOLVED"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : status === "UNDER_REVIEW"
+      : group === "ACTIVE"
       ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-300"
-      : "border-red-400/30 bg-red-400/10 text-red-300";
+      : group === "REJECTED"
+      ? "border-red-400/30 bg-red-400/10 text-red-300"
+      : "border-gray-400/30 bg-gray-400/10 text-gray-300";
 
   return (
     <span
@@ -280,26 +317,87 @@ function Alert({ title, message }) {
   );
 }
 
+
+function getDisputeStatusGroup(status) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (
+    ["OPEN", "UNDER_REVIEW", "PENDING", "INVESTIGATING", "EVIDENCE_REQUIRED"].includes(
+      value
+    )
+  ) {
+    return "ACTIVE";
+  }
+
+  if (["RESOLVED", "CLOSED", "COMPLETED"].includes(value)) {
+    return "RESOLVED";
+  }
+
+  if (["REJECTED", "CANCELLED", "CANCELED"].includes(value)) {
+    return "REJECTED";
+  }
+
+  return "OTHER";
+}
+
+function matchesDisputeFilter(status, filter) {
+  const value = String(status || "").trim().toUpperCase();
+
+  if (filter === "ALL") return true;
+  if (filter === "OPEN") return value === "OPEN";
+  if (filter === "UNDER_REVIEW") {
+    return ["UNDER_REVIEW", "PENDING", "INVESTIGATING", "EVIDENCE_REQUIRED"].includes(
+      value
+    );
+  }
+  if (filter === "RESOLVED") {
+    return ["RESOLVED", "COMPLETED"].includes(value);
+  }
+  if (filter === "CLOSED") return value === "CLOSED";
+  if (filter === "REJECTED") {
+    return ["REJECTED", "CANCELLED", "CANCELED"].includes(value);
+  }
+
+  return value === filter;
+}
+
 function formatMoney(value) {
   const number = Number(value || 0);
-  if (!number) return "$0";
-  return `$${number.toLocaleString()}`;
+
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number.isNaN(number) ? 0 : number);
 }
 
 function formatDate(value) {
-  if (!value) return "N/A";
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "N/A";
-
-  return date.toLocaleString();
+  return formatDateTime(value, "N/A");
 }
 
 function getFriendlyError(err, fallback) {
+  const status = err?.response?.status;
+
+  if (status === 401) {
+    return "Your session has expired. Please sign in again.";
+  }
+
+  if (status === 403) {
+    return "You do not have access to these dispute records.";
+  }
+
+  if (status === 404) {
+    return "Dispute information is temporarily unavailable.";
+  }
+
+  const data = err?.response?.data;
+
+  if (typeof data === "string" && data.trim()) return data;
+
   return (
-    err?.response?.data?.message ||
-    err?.response?.data?.title ||
-    err?.response?.data ||
+    data?.message ||
+    data?.title ||
+    data?.detail ||
     err?.message ||
     fallback
   );
