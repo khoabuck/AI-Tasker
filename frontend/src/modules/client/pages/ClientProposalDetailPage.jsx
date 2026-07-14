@@ -27,6 +27,12 @@ const PROPOSAL_STATUS = {
 };
 
 const cardStyle = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  overflow: "hidden",
+  overflowWrap: "anywhere",
   background: "rgba(16,19,25,0.85)",
   backdropFilter: "blur(20px)",
   border: "1px solid rgba(255,255,255,0.1)",
@@ -122,11 +128,51 @@ function MessageModal({ proposal, onClose, navigate }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
+    <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100%",
+          maxWidth: "100vw",
+          minWidth: 0,
+          boxSizing: "border-box",
+          overflowX: "hidden",
+
+          background: "rgba(0,0,0,0.7)",
+          backdropFilter: "blur(4px)",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+        onClick={(e) => e.target === e.currentTarget && onClose()}
+      >
+        <div
+          style={{
+            width: "100%",
+            maxWidth: 480,
+            minWidth: 0,
+            boxSizing: "border-box",
+            overflowX: "hidden",
+
+            background: "rgba(16,19,25,0.98)",
+            border: "1px solid rgba(192,193,255,0.25)",
+            borderRadius: 16,
+            padding: 28,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+          }}
+        >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              minWidth: 0,
+              flex: 1,
+            }}
+          >
             <img
               src={
                 proposal.expertAvatarUrl ||
@@ -266,6 +312,8 @@ export default function ClientProposalDetailPage() {
 
   useEffect(() => {
   if (!proposal) {
+    setContractCreated(null);
+    setContractChecked(false);
     return;
   }
 
@@ -282,71 +330,44 @@ export default function ClientProposalDetailPage() {
   const contractId =
     getProposalContractId(proposal);
 
-  // API proposal đã trả sẵn contract thì dùng trực tiếp,
-  // không cần gọi thêm API contract.
+  /*
+   * Trang proposal detail không gọi API contract.
+   * Chỉ sử dụng dữ liệu có sẵn trong response proposal.
+   */
   if (embeddedContract) {
     setContractCreated(embeddedContract);
     setContractChecked(true);
     return;
   }
 
-  /*
-   * Proposal chưa Accept hoặc response không có contractId:
-   * không được gọi GET /proposals/{proposalId}/contract.
-   *
-   * Nhờ đó khi chỉ nhấn View Full để xem proposal,
-   * Network sẽ không còn contract 404.
-   */
   if (
-    proposalStatus !== "ACCEPTED" ||
-    !contractId
+    proposalStatus === "ACCEPTED" &&
+    contractId
   ) {
-    setContractCreated(null);
+    setContractCreated({
+      contractId,
+      projectId:
+        proposal?.projectId ??
+        null,
+      status:
+        proposal?.contractStatus ??
+        "PENDING",
+      clientConfirmed:
+        proposal?.clientConfirmed === true,
+      expertConfirmed:
+        proposal?.expertConfirmed === true,
+      projectEscrowLockedAt:
+        proposal?.projectEscrowLockedAt ??
+        null,
+    });
+
     setContractChecked(true);
     return;
   }
 
-  const controller = new AbortController();
-
-  const fetchExistingContract = async () => {
-    setContractChecked(false);
-
-    try {
-      const res = await axiosInstance.get(
-        `/proposals/${proposalId}/contract`,
-        {
-          signal: controller.signal,
-        }
-      );
-
-      const contract =
-        res.data?.data ??
-        res.data ??
-        null;
-
-      setContractCreated(contract);
-    } catch (err) {
-      if (
-        err?.code === "ERR_CANCELED" ||
-        err?.name === "CanceledError"
-      ) {
-        return;
-      }
-
-      setContractCreated(null);
-    } finally {
-      if (!controller.signal.aborted) {
-        setContractChecked(true);
-      }
-    }
-  };
-
-  fetchExistingContract();
-
-  return () => {
-    controller.abort();
-  };
-}, [proposal, proposalId]);
+  setContractCreated(null);
+  setContractChecked(true);
+}, [proposal]);
 
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
@@ -443,7 +464,7 @@ export default function ClientProposalDetailPage() {
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          overflowX: "hidden",
+          overflowX: "clip",
         }}
       >
         <span
@@ -472,9 +493,22 @@ export default function ClientProposalDetailPage() {
   );
 }
 
-  if (error) return (
+  if (error) {
+  return (
     <ClientLayout>
-      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 96px)",
+          boxSizing: "border-box",
+          overflowX: "hidden",
+          background: "#0b0e14",
+          textAlign: "center",
+          padding: "120px 24px 40px",
+        }}
+      >
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <button onClick={() => navigate(-1)}
@@ -485,6 +519,7 @@ export default function ClientProposalDetailPage() {
       </div>
     </ClientLayout>
   );
+}
 
   if (!proposal) return null;
 
@@ -513,16 +548,17 @@ export default function ClientProposalDetailPage() {
   return (
     <ClientLayout>
       <div
-          style={{
-            width: "100%",
-            maxWidth: 860,
-            minWidth: 0,
-            margin: "0 auto",
-            padding: "40px 24px",
-            boxSizing: "border-box",
-            overflowX: "hidden",
-          }}
-        >
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 860,
+          minWidth: 0,
+          margin: "0 auto",
+          padding: "40px 24px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+        }}
+      >
 
         {/* Back */}
         <button onClick={() => navigate(-1)}
@@ -539,7 +575,14 @@ export default function ClientProposalDetailPage() {
             <img src={proposal.expertAvatarUrl || proposal.avatarUrl || "/default-avatar.png"}
               style={{ width: 60, height: 60, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)", flexShrink: 0 }} />
 
-            <div style={{ flex: 1 }}>
+            <div
+              style={{
+                flex: "1 1 280px",
+                minWidth: 0,
+                maxWidth: "100%",
+                overflowWrap: "anywhere",
+              }}
+            >
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4, flexWrap: "wrap" }}>
                 <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>
                   {expertName}
@@ -737,17 +780,35 @@ export default function ClientProposalDetailPage() {
                     key={m.proposalMilestoneDraftId ?? index}
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "1fr auto auto",
+                      gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                      width: "100%",
+                      maxWidth: "100%",
+                      minWidth: 0,
                       gap: 16,
                       alignItems: "center",
                       padding: 16,
+                      boxSizing: "border-box",
+                      overflow: "hidden",
                       borderRadius: 12,
                       background: "rgba(255,255,255,0.03)",
                       border: "1px solid rgba(255,255,255,0.08)",
                     }}
                   >
-                    <div>
-                      <p style={{ color: "#e1e2eb", fontWeight: 700, margin: "0 0 4px" }}>
+                    <div
+                      style={{
+                        minWidth: 0,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <p
+                        style={{
+                          color: "#e1e2eb",
+                          fontWeight: 700,
+                          margin: "0 0 4px",
+                          overflowWrap: "anywhere",
+                          wordBreak: "break-word",
+                        }}
+                      >
                         {index + 1}. {m.title}
                       </p>
                       <p style={{ color: "#8c90a0", fontSize: 13, margin: 0 }}>
@@ -906,11 +967,31 @@ export default function ClientProposalDetailPage() {
       )}
 
       <style>{`
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      `}</style>
+  html,
+  body,
+  #root {
+    width: 100%;
+    max-width: 100%;
+    margin: 0;
+    overflow-x: hidden !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`}</style>
     </ClientLayout>
   );
 }
