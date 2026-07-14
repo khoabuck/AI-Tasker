@@ -133,82 +133,83 @@ export default function SelectRolePage() {
 };
 
   const handleConfirm = async () => {
-    if (!selected || loading) return;
+  if (!selected || loading) return;
 
-    // Nếu role đã được chọn trước đó rồi thì không gọi API select-role nữa.
-    // Chỉ cho user tiếp tục về đúng trang setup profile.
-    if (lockedRole) {
-      redirectAfterRoleSelected(lockedRole);
-      return;
+  // Role đã được chọn trước đó thì không gọi lại select-role.
+  if (lockedRole) {
+    redirectAfterRoleSelected(lockedRole);
+    return;
+  }
+
+  setLoading(true);
+  setError("");
+
+  try {
+    const selectResponse = await axiosInstance.post("/auth/select-role", {
+      role: selected,
+    });
+
+    const responseUser = extractUserFromResponse(selectResponse);
+
+    const nextUser = normalizeUser(
+      {
+        ...(user || {}),
+        ...(responseUser || {}),
+        role:
+          responseUser?.role ||
+          responseUser?.Role ||
+          selected,
+        status:
+          responseUser?.status ||
+          responseUser?.Status ||
+          "PENDING_PROFILE",
+      },
+      selected
+    );
+
+    if (!nextUser) {
+      throw new Error(
+        "Select role response does not contain valid user information."
+      );
     }
 
-    setLoading(true);
-    setError("");
-
-    try {
-      const selectResponse = await axiosInstance.post("/auth/select-role", {
-        role: selected,
-      });
-
-      const responseUser = extractUserFromResponse(selectResponse);
-      let freshUser = null;
-
-      const userFromResponse =
-        responseData.user ||
-        responseData.User ||
-        responseData.data?.user ||
-        responseData.data?.User ||
-        responseData.data ||
-        responseData;
-
-      const selectedUser = authService.normalizeUser({
-        ...(user || {}),
-        ...userFromResponse,
-        role: selected,
-        status:
-          userFromResponse?.status ||
-          userFromResponse?.Status ||
-          "PENDING_PROFILE",
-      });
-
-      if (handleLoginSuccess) {
-        handleLoginSuccess({
-          user: selectedUser,
-        });
-      }
-
+    if (handleLoginSuccess) {
       handleLoginSuccess({
         user: nextUser,
       });
-
-      const nextStatus = String(nextUser.status || "")
-        .trim()
-        .toUpperCase();
-
-      if (nextStatus === "ACTIVE") {
-        redirectUserByStatus(nextUser, navigate);
-        return;
-      }
-
-      redirectAfterRoleSelected(nextUser.role || selected);
-    } catch (err) {
-      const message =
-        err?.response?.data?.message ||
-        err?.response?.data?.title ||
-        err?.response?.data?.detail ||
-        err?.message ||
-        "An error occurred during role selection.";
-
-      if (message === "User is not in pending role status.") {
-        await redirectExistingUser();
-        return;
-      }
-
-      setError(message);
-    } finally {
-      setLoading(false);
     }
-  };
+
+    const nextStatus = String(nextUser.status || "")
+      .trim()
+      .toUpperCase();
+
+    if (nextStatus === "ACTIVE") {
+      redirectUserByStatus(nextUser, navigate);
+      return;
+    }
+
+    redirectAfterRoleSelected(nextUser.role || selected);
+  } catch (err) {
+    const message =
+      err?.response?.data?.message ||
+      err?.response?.data?.Message ||
+      err?.response?.data?.title ||
+      err?.response?.data?.Title ||
+      err?.response?.data?.detail ||
+      err?.response?.data?.Detail ||
+      err?.message ||
+      "An error occurred during role selection.";
+
+    if (message === "User is not in pending role status.") {
+      await redirectExistingUser();
+      return;
+    }
+
+    setError(message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div
@@ -328,12 +329,11 @@ export default function SelectRolePage() {
                     borderRadius: 16,
                     padding: 32,
                     cursor: loading || isLockedOtherRole ? "not-allowed" : "pointer",
-                    opacity: isLockedOtherRole ? 0.45 : 1,
+                    opacity: isLockedOtherRole ? 0.45 : loading ? 0.7 : 1,
                     transition: "all 0.2s",
                     boxShadow: isSelected
                       ? `0 0 20px ${role.color}22`
                       : "none",
-                    opacity: loading ? 0.7 : 1,
                   }}
                 >
                   <div
