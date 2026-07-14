@@ -312,38 +312,57 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
-    [HttpPost("select-role")]
-    public async Task<IActionResult> SelectRole(SelectRoleRequest request)
+[HttpPost("select-role")]
+public async Task<IActionResult> SelectRole(SelectRoleRequest request)
+{
+    var userId = GetCurrentUserId();
+
+    if (userId == null)
     {
-        var userId = GetCurrentUserId();
-
-        if (userId == null)
+        return Unauthorized(new
         {
-            return Unauthorized(new
-            {
-                success = false,
-                message = "Invalid token."
-            });
-        }
-
-        try
-        {
-            var result = await _authService.SelectRoleAsync(
-                userId.Value,
-                request
-            );
-
-            return Ok(result);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new
-            {
-                success = false,
-                message = ex.Message
-            });
-        }
+            success = false,
+            message = "Invalid token."
+        });
     }
+
+    try
+    {
+        var result = await _authService.SelectRoleAsync(
+            userId.Value,
+            request
+        );
+
+        /*
+         * User's role and status changed after role selection.
+         * Replace the old HttpOnly cookie with the newly generated JWT,
+         * otherwise role-protected endpoints still see the old claims.
+         */
+        SetAuthCookie(
+            result.AccessToken,
+            result.ExpiresAt
+        );
+
+        return Ok(new
+        {
+            success = true,
+            message = "Role selected successfully.",
+            data = new
+            {
+                user = result.User,
+                expiresAt = result.ExpiresAt
+            }
+        });
+    }
+    catch (InvalidOperationException ex)
+    {
+        return BadRequest(new
+        {
+            success = false,
+            message = ex.Message
+        });
+    }
+}
 
     [Authorize]
     [HttpPut("me/avatar")]
