@@ -79,7 +79,7 @@ function ExpertsFromApi({ onExpertClick }) {
             onClick={() => fetchExperts(new AbortController().signal)}
             className="px-5 py-2 rounded-lg border border-cyan-400/30 bg-cyan-400/10 text-cyan-400 text-sm"
           >
-            Thử lại
+            Retry
           </button>
         </div>
       )}
