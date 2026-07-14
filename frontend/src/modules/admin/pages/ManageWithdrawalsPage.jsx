@@ -7,11 +7,10 @@ const STATUS_OPTIONS = [
   "ALL",
   "PENDING",
   "PROCESSING",
-  "APPROVED",
-  "COMPLETED",
   "PAID",
   "REJECTED",
   "FAILED",
+  "EXPIRED",
 ];
 
 const EMPTY_ACTION = {
@@ -99,13 +98,21 @@ export default function ManageWithdrawalsPage() {
           result.processingAmount += amount;
         }
 
-        if (["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(status)) {
-          result.approved += 1;
-          result.approvedAmount += amount;
+        if (status === "PAID") {
+          result.paid += 1;
+          result.paidAmount += amount;
         }
 
-        if (["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(status)) {
+        if (status === "REJECTED") {
           result.rejected += 1;
+        }
+
+        if (status === "FAILED") {
+          result.failed += 1;
+        }
+
+        if (status === "EXPIRED") {
+          result.expired += 1;
         }
 
         return result;
@@ -114,12 +121,14 @@ export default function ManageWithdrawalsPage() {
         total: 0,
         pending: 0,
         processing: 0,
-        approved: 0,
+        paid: 0,
         rejected: 0,
+        failed: 0,
+        expired: 0,
         totalAmount: 0,
         pendingAmount: 0,
         processingAmount: 0,
-        approvedAmount: 0,
+        paidAmount: 0,
       }
     );
   }, [withdrawals]);
@@ -612,10 +621,10 @@ const requestApprovePayos = () => {
           />
 
           <StatCard
-            icon="check_circle"
-            label="Approved"
-            value={stats.approved}
-            description={formatMoney(stats.approvedAmount, "VND")}
+            icon="paid"
+            label="Paid"
+            value={stats.paid}
+            description={formatMoney(stats.paidAmount, "VND")}
             tone="green"
           />
         </section>
@@ -1034,8 +1043,8 @@ function WithdrawalRow({
 }) {
   const status = String(withdrawal.status || "PENDING").toUpperCase();
   const canApprove = status === "PENDING";
-  const canReject = ["PENDING", "PROCESSING"].includes(status);
-  const canSync = ["PENDING", "PROCESSING", "APPROVED"].includes(status);
+  const canReject = status === "PENDING";
+  const canSync = status === "PROCESSING";
 
   return (
     <article className="p-5 transition hover:bg-white/[0.02]">
@@ -1088,6 +1097,11 @@ function WithdrawalRow({
             type="button"
             onClick={onApprove}
             disabled={disabled || !canApprove}
+            title={
+              canApprove
+                ? "Approve this pending withdrawal"
+                : "Only pending withdrawals can be approved"
+            }
             className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Approve
@@ -1097,6 +1111,11 @@ function WithdrawalRow({
             type="button"
             onClick={onSyncPayos}
             disabled={disabled || !canSync}
+            title={
+              canSync
+                ? "Check the latest PayOS transfer status"
+                : "Only processing withdrawals can be synchronized"
+            }
             className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Check Status
@@ -1106,6 +1125,11 @@ function WithdrawalRow({
             type="button"
             onClick={onReject}
             disabled={disabled || !canReject}
+            title={
+              canReject
+                ? "Reject this pending withdrawal"
+                : "Only pending withdrawals can be rejected"
+            }
             className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Reject
@@ -1320,13 +1344,17 @@ function StatusBadge({ status }) {
   const value = String(status || "PENDING").toUpperCase();
 
   const className =
-    ["APPROVED", "COMPLETED", "PAID", "SUCCESS"].includes(value)
+    value === "PAID"
       ? "border-green-400/30 bg-green-400/10 text-green-300"
-      : ["REJECTED", "FAILED", "CANCELLED", "CANCELED"].includes(value)
+      : value === "REJECTED"
         ? "border-red-400/30 bg-red-400/10 text-red-300"
-        : value === "PROCESSING"
-          ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
-          : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
+        : value === "FAILED"
+          ? "border-red-400/30 bg-red-400/10 text-red-300"
+          : value === "EXPIRED"
+            ? "border-gray-400/30 bg-gray-400/10 text-gray-300"
+            : value === "PROCESSING"
+              ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-300"
+              : "border-yellow-400/30 bg-yellow-400/10 text-yellow-300";
 
   return (
     <span

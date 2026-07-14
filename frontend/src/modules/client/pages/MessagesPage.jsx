@@ -42,6 +42,171 @@ function formatMessageTime(value) {
   });
 }
 
+function getMessageTimestamp(message) {
+  const value =
+    message?.createdAt ??
+    message?.sentAt ??
+    message?.updatedAt ??
+    null;
+
+  const timestamp = value ? new Date(value).getTime() : 0;
+
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function compareMessagesByTime(a, b) {
+  return getMessageTimestamp(a) - getMessageTimestamp(b);
+}
+
+function isSameSentMessage(serverMessage, pendingMessage) {
+  if (!serverMessage?.isMe || !pendingMessage?.isMe) {
+    return false;
+  }
+
+  if (
+    String(serverMessage.text || "").trim() !==
+    String(pendingMessage.text || "").trim()
+  ) {
+    return false;
+  }
+
+  const serverTime = getMessageTimestamp(serverMessage);
+  const pendingTime = getMessageTimestamp(pendingMessage);
+
+  /*
+   * Cùng nội dung và được tạo gần nhau thì coi là cùng một tin nhắn.
+   * Khoảng 2 phút đủ rộng để chịu độ trễ API nhưng vẫn tránh match nhầm
+   * các tin nhắn trùng nội dung ở thời điểm khác xa nhau.
+   */
+  return (
+    serverTime > 0 &&
+    pendingTime > 0 &&
+    Math.abs(serverTime - pendingTime) <= 2 * 60 * 1000
+  );
+}
+
+function getBackendBaseUrl() {
+  const configuredBackendUrl = String(
+    import.meta.env.VITE_BACKEND_BASE_URL || ""
+  ).trim();
+
+  if (configuredBackendUrl) {
+    return configuredBackendUrl.replace(/\/+$/, "");
+  }
+
+  const configuredApiUrl = String(
+    import.meta.env.VITE_API_BASE_URL ||
+      axiosInstance.defaults.baseURL ||
+      ""
+  ).trim();
+
+  if (configuredApiUrl) {
+    return configuredApiUrl
+      .replace(/\/api\/?$/i, "")
+      .replace(/\/+$/, "");
+  }
+
+  return import.meta.env.DEV
+    ? "http://localhost:5070"
+    : "";
+}
+
+function getExpertFallbackAvatar(identifier) {
+  const key = String(identifier || "expert").trim() || "expert";
+
+  return `https://i.pravatar.cc/120?u=${encodeURIComponent(key)}`;
+}
+
+function normalizeAvatarUrl(value) {
+  let avatar = String(value || "").trim();
+
+  if (!avatar) {
+    return "/default-avatar.png";
+  }
+
+  try {
+    avatar = decodeURIComponent(avatar);
+  } catch {
+    // Keep the original value.
+  }
+
+  if (
+    avatar.startsWith("http://") ||
+    avatar.startsWith("https://") ||
+    avatar.startsWith("blob:") ||
+    avatar.startsWith("data:")
+  ) {
+    return avatar;
+  }
+
+  if (avatar.startsWith("//")) {
+    return `${window.location.protocol}${avatar}`;
+  }
+
+  const backendBaseUrl = getBackendBaseUrl();
+
+  if (!backendBaseUrl) {
+    return avatar.startsWith("/")
+      ? avatar
+      : `/${avatar}`;
+  }
+
+  const normalizedPath = avatar.startsWith("/")
+    ? avatar
+    : `/${avatar}`;
+
+  return `${backendBaseUrl}${normalizedPath}`;
+}
+
+function unwrapExpertProfileResponse(response) {
+  const body = response?.data;
+
+  return (
+    body?.data?.expert ||
+    body?.data?.item ||
+    body?.data ||
+    body?.expert ||
+    body?.item ||
+    body ||
+    null
+  );
+}
+
+function AvatarImage({
+  src,
+  alt,
+  size = 36,
+  style = {},
+  fallbackKey = "",
+}) {
+  const [failed, setFailed] = useState(false);
+
+  const primarySrc = normalizeAvatarUrl(src);
+  const fallbackSrc = getExpertFallbackAvatar(
+    fallbackKey || alt || "expert"
+  );
+
+  return (
+    <img
+      src={failed ? fallbackSrc : primarySrc}
+      alt={alt || "Avatar"}
+      onError={() => {
+        if (!failed) {
+          setFailed(true);
+        }
+      }}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        objectFit: "cover",
+        flexShrink: 0,
+        ...style,
+      }}
+    />
+  );
+}
+
 // ── Proposal Review Modal — Client xem proposal, Accept hoặc Yêu cầu sửa ──
 function ProposalReviewModal({ state, onClose, onRequestRevision }) {
   const [revisionNote, setRevisionNote] = useState("");
@@ -179,6 +344,7 @@ export default function MessagesPage() {
   const newExpertUserId = searchParams.get("newExpertUserId");
   const newExpertProfileId = searchParams.get("newExpertProfileId");
   const newExpertName = searchParams.get("newExpertName");
+  const newExpertAvatar = searchParams.get("newExpertAvatar");
   const overrideJobTitle = searchParams.get("jobTitle");
   const isNewChatDraft = !conversationId && !!newExpertUserId;
   const currentUser = authService.getCurrentUser();
@@ -194,6 +360,7 @@ export default function MessagesPage() {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [proposalModal, setProposalModal] = useState(null); // { loading, error, data, accepting, requestingRevision }
   const [openConversationMenu, setOpenConversationMenu] = useState(null);
+  const [draftExpertLoaded, setDraftExpertLoaded] = useState(false);
 
   // Pin/Delete chưa có API thật từ BE (không có trong danh sách endpoint) — lưu tạm
   // vào localStorage để giữ trạng thái qua reload. Khi BE bổ sung API, thay 2 phần này
@@ -211,6 +378,7 @@ export default function MessagesPage() {
 
   const scrollRef = useRef(null);
   const pollRef = useRef(null);
+  const pendingMessagesRef = useRef([]);
 
   // ── Load conversations ───────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
@@ -228,10 +396,25 @@ export default function MessagesPage() {
           return {
             id: convId,
             name: c.expertName || c.otherPartyName || c.clientName || "Expert",
-            avatar:
+            avatar: normalizeAvatarUrl(
               c.expertAvatarUrl ||
-              c.otherPartyAvatarUrl ||
-              "/default-avatar.png",
+                c.ExpertAvatarUrl ||
+                c.expertAvatar ||
+                c.ExpertAvatar ||
+                c.otherPartyAvatarUrl ||
+                c.OtherPartyAvatarUrl ||
+                c.otherPartyAvatar ||
+                c.OtherPartyAvatar ||
+                c.avatarUrl ||
+                c.AvatarUrl ||
+                getExpertFallbackAvatar(
+                  c.expertProfileId ||
+                    c.ExpertProfileId ||
+                    c.expertUserId ||
+                    c.ExpertUserId ||
+                    convId
+                )
+            ),
             online: c.isOtherPartyOnline ?? false,
             lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
             time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
@@ -284,28 +467,152 @@ export default function MessagesPage() {
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
   useEffect(() => {
-  if (!isNewChatDraft) return;
+    if (!isNewChatDraft) return;
 
-  setActiveChat({
-    id: null,
-    name: newExpertName ? decodeURIComponent(newExpertName) : "Expert",
-    avatar: "/default-avatar.png",
-    online: false,
-    lastMessage: "",
-    time: "",
-    unread: 0,
-    relatedProposalId: null,
-    relatedJobId: null,
-    relatedJobTitle: null,
-    pinned: false,
-    raw: {
-      expertUserId: Number(newExpertUserId),
-      expertProfileId: newExpertProfileId ? Number(newExpertProfileId) : null,
-    },
-  });
-  setMessages([]);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [isNewChatDraft, newExpertUserId, newExpertProfileId, newExpertName]);
+    const resolvedName = newExpertName
+      ? decodeURIComponent(newExpertName)
+      : "Expert";
+
+    const resolvedAvatar = normalizeAvatarUrl(
+      newExpertAvatar ||
+        getExpertFallbackAvatar(
+          newExpertProfileId || newExpertUserId
+        )
+    );
+
+    setActiveChat({
+      id: null,
+      name: resolvedName,
+      avatar: resolvedAvatar,
+      online: false,
+      lastMessage: "",
+      time: "",
+      unread: 0,
+      relatedProposalId: null,
+      relatedJobId: null,
+      relatedJobTitle: overrideJobTitle || null,
+      pinned: false,
+      raw: {
+        expertUserId: Number(newExpertUserId),
+        expertProfileId: newExpertProfileId
+          ? Number(newExpertProfileId)
+          : null,
+        expertAvatarUrl: resolvedAvatar,
+      },
+    });
+
+    setMessages([]);
+    pendingMessagesRef.current = [];
+  }, [
+    isNewChatDraft,
+    newExpertUserId,
+    newExpertProfileId,
+    newExpertName,
+    newExpertAvatar,
+    overrideJobTitle,
+  ]);
+
+  useEffect(() => {
+    if (!isNewChatDraft || !newExpertProfileId) {
+      setDraftExpertLoaded(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadDraftExpert = async () => {
+      try {
+        const response = await axiosInstance.get(
+          `/experts/${newExpertProfileId}`
+        );
+
+        if (cancelled) return;
+
+        const profile = unwrapExpertProfileResponse(response);
+
+        if (!profile) {
+          setDraftExpertLoaded(true);
+          return;
+        }
+
+        const profileAvatar =
+          profile.avatarUrl ||
+          profile.AvatarUrl ||
+          profile.userAvatarUrl ||
+          profile.UserAvatarUrl ||
+          profile.user?.avatarUrl ||
+          profile.user?.AvatarUrl ||
+          "";
+
+        const profileName =
+          profile.fullName ||
+          profile.FullName ||
+          profile.expertName ||
+          profile.ExpertName ||
+          "";
+
+        setActiveChat((previous) => {
+          if (!previous || previous.id) return previous;
+
+          return {
+            ...previous,
+            name: profileName || previous.name || "Expert",
+            avatar: normalizeAvatarUrl(
+              profileAvatar ||
+                previous.avatar ||
+                getExpertFallbackAvatar(
+                  profile.expertProfileId ||
+                    profile.ExpertProfileId ||
+                    newExpertProfileId ||
+                    profile.userId ||
+                    profile.UserId ||
+                    newExpertUserId
+                )
+            ),
+            raw: {
+              ...(previous.raw || {}),
+              expertUserId:
+                profile.userId ||
+                profile.UserId ||
+                previous.raw?.expertUserId,
+              expertProfileId:
+                profile.expertProfileId ||
+                profile.ExpertProfileId ||
+                previous.raw?.expertProfileId,
+              expertAvatarUrl: normalizeAvatarUrl(
+                profileAvatar ||
+                  previous.raw?.expertAvatarUrl ||
+                  previous.avatar ||
+                  getExpertFallbackAvatar(
+                    profile.expertProfileId ||
+                      profile.ExpertProfileId ||
+                      newExpertProfileId ||
+                      profile.userId ||
+                      profile.UserId ||
+                      newExpertUserId
+                  )
+              ),
+            },
+          };
+        });
+      } catch {
+        // Keep the query-string data and fallback avatar.
+      } finally {
+        if (!cancelled) {
+          setDraftExpertLoaded(true);
+        }
+      }
+    };
+
+    loadDraftExpert();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    isNewChatDraft,
+    newExpertProfileId,
+  ]);
 
   // ── Load messages khi chọn conversation ──────────────────────────
   const fetchMessages = useCallback(async (convId, silent = false) => {
@@ -317,23 +624,50 @@ export default function MessagesPage() {
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
       const normalized = list.map((m) => {
-      const senderId = m.senderUserId ?? m.senderId ?? m.userId;
+        const senderId = m.senderUserId ?? m.senderId ?? m.userId;
 
-      const isMe =
-        currentUserId != null && senderId != null
-          ? String(senderId) === String(currentUserId)
-          : (m.isMine ?? m.senderType === "CLIENT" ?? false);
+        const isMe =
+          currentUserId != null && senderId != null
+            ? String(senderId) === String(currentUserId)
+            : Boolean(m.isMine ?? (m.senderType === "CLIENT"));
 
-      return {
-        id: m.conversationMessageId ?? m.messageId ?? m.id,
-        text: m.content,
-        isMe,
-        time: formatMessageTime(m.createdAt),
-        avatar: m.senderAvatarUrl,
-      };
-    });
+        const createdAt =
+          m.createdAt ??
+          m.sentAt ??
+          m.updatedAt ??
+          null;
 
-      setMessages(normalized);
+        return {
+          id: m.conversationMessageId ?? m.messageId ?? m.id,
+          text: m.content,
+          isMe,
+          time: formatMessageTime(createdAt),
+          avatar: m.senderAvatarUrl,
+          createdAt,
+          pending: false,
+        };
+      });
+
+      /*
+       * Polling có thể chạy trước khi Backend trả lại tin nhắn vừa gửi.
+       * Nếu chỉ setMessages(normalized), optimistic message sẽ biến mất tạm thời.
+       * Giữ pending messages cho đến khi tìm thấy bản tương ứng từ Backend.
+       */
+      const remainingPending = pendingMessagesRef.current.filter(
+        (pendingMessage) => {
+          const matched = normalized.some((serverMessage) =>
+            isSameSentMessage(serverMessage, pendingMessage)
+          );
+
+          return !matched;
+        }
+      );
+
+      pendingMessagesRef.current = remainingPending;
+
+      setMessages(
+        [...normalized, ...remainingPending].sort(compareMessagesByTime)
+      );
     } catch (err) {
       if (!silent) setError(err?.response?.data?.message || "Unable to load messages.");
     } finally {
@@ -366,11 +700,30 @@ useEffect(() => {
   if (!content || !activeChat) return;
 
   setInput("");
-  const tempId = `temp-${Date.now()}`;
-  setMessages((prev) => [
-    ...prev,
-    { id: tempId, text: content, isMe: true, time: formatMessageTime(new Date()) },
-  ]);
+
+  const clientCreatedAt = new Date().toISOString();
+  const tempId = `temp-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+
+  const optimisticMessage = {
+    id: tempId,
+    text: content,
+    isMe: true,
+    time: formatMessageTime(clientCreatedAt),
+    createdAt: clientCreatedAt,
+    avatar: null,
+    pending: true,
+  };
+
+  pendingMessagesRef.current = [
+    ...pendingMessagesRef.current,
+    optimisticMessage,
+  ];
+
+  setMessages((prev) =>
+    [...prev, optimisticMessage].sort(compareMessagesByTime)
+  );
 
   try {
     let convId = activeChat.id;
@@ -402,7 +755,16 @@ useEffect(() => {
     await fetchMessages(convId, true);
   } catch (err) {
     setError(err?.response?.data?.message || "Send message failed.");
-    setMessages((prev) => prev.filter((m) => m.id !== tempId));
+
+    pendingMessagesRef.current =
+      pendingMessagesRef.current.filter(
+        (message) => message.id !== tempId
+      );
+
+    setMessages((prev) =>
+      prev.filter((message) => message.id !== tempId)
+    );
+
     setInput(content);
   }
 };
@@ -616,7 +978,23 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                     style={{ padding: 12, borderRadius: 12, marginBottom: 4, cursor: "pointer", background: activeChat?.id === conv.id ? "rgba(173,198,255,0.08)" : "transparent", border: `1px solid ${activeChat?.id === conv.id ? "rgba(173,198,255,0.2)" : "transparent"}`, transition: "all 0.2s", position: "relative" }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                       <div style={{ position: "relative", flexShrink: 0 }}>
-                        <img src={conv.avatar} alt={conv.name} style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", filter: conv.online ? "none" : "grayscale(0.5) opacity(0.8)" }} />
+                        <AvatarImage
+                          src={conv.avatar}
+                          alt={conv.name}
+                          size={44}
+                          fallbackKey={
+                            conv.raw?.expertProfileId ||
+                            conv.raw?.ExpertProfileId ||
+                            conv.raw?.expertUserId ||
+                            conv.raw?.ExpertUserId ||
+                            conv.id
+                          }
+                          style={{
+                            filter: conv.online
+                              ? "none"
+                              : "grayscale(0.5) opacity(0.8)",
+                          }}
+                        />
                         <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, background: conv.online ? "#00F0FF" : "#8c90a0", borderRadius: "50%", border: "2px solid #1d2026" }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
@@ -712,7 +1090,22 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                   </span>
                 </button>
                 <div style={{ position: "relative" }}>
-                  <img src={activeChat.avatar} alt={activeChat.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(173,198,255,0.3)" }} />
+                  <AvatarImage
+                    src={activeChat.avatar}
+                    alt={activeChat.name}
+                    size={36}
+                    fallbackKey={
+                      activeChat.raw?.expertProfileId ||
+                      activeChat.raw?.ExpertProfileId ||
+                      activeChat.raw?.expertUserId ||
+                      activeChat.raw?.ExpertUserId ||
+                      activeChat.id
+                    }
+                    style={{
+                      border:
+                        "2px solid rgba(173,198,255,0.3)",
+                    }}
+                  />
                   {activeChat.online && <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, background: "#00F0FF", borderRadius: "50%", border: "2px solid #101319" }} />}
                 </div>
                 <div>
@@ -737,14 +1130,35 @@ Client notes: ${feedbackText || "(no additional notes)"}`;
                   <div key={msg.id} style={{ display: "flex", gap: 10, flexDirection: msg.isMe ? "row-reverse" : "row", alignSelf: msg.isMe ? "flex-end" : "flex-start", maxWidth: "95%" }}>
                     {!msg.isMe && (
                       msg.avatar
-                        ? <img src={msg.avatar} alt="" style={{ width: 30, height: 30, borderRadius: "50%", objectFit: "cover", alignSelf: "flex-end", flexShrink: 0 }} />
+                        ? <AvatarImage
+                            src={msg.avatar}
+                            alt={activeChat.name}
+                            size={30}
+                            fallbackKey={
+                              activeChat.raw?.expertProfileId ||
+                              activeChat.raw?.ExpertProfileId ||
+                              activeChat.raw?.expertUserId ||
+                              activeChat.raw?.ExpertUserId ||
+                              activeChat.id
+                            }
+                            style={{
+                              alignSelf: "flex-end",
+                            }}
+                          />
                         : <div style={{ width: 30, flexShrink: 0 }} />
                     )}
                     <div style={{ display: "flex", flexDirection: "column", alignItems: msg.isMe ? "flex-end" : "flex-start", gap: 3 }}>
                       <div style={{ padding: "10px 14px", borderRadius: msg.isMe ? "16px 16px 0 16px" : "16px 16px 16px 0", background: msg.isMe ? "linear-gradient(135deg, #1772eb, #00F0FF)" : "rgba(50,53,59,0.9)", border: msg.isMe ? "none" : "1px solid rgba(255,255,255,0.05)", boxShadow: msg.isMe ? "0 4px 15px rgba(0,240,255,0.2)" : "none", color: msg.isMe ? "#fff" : "#c2c6d6", fontSize: 14, lineHeight: 1.6, wordBreak: "break-word" }}>
                         {msg.text}
                       </div>
-                      <span style={{ fontSize: 10, color: "#8c90a0" }}>{msg.time}</span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: msg.pending ? "#facc15" : "#8c90a0",
+                        }}
+                      >
+                        {msg.pending ? "Sending..." : msg.time}
+                      </span>
                     </div>
                   </div>
                 ))

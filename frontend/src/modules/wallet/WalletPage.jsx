@@ -77,8 +77,9 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
 
     const checkStatus = async () => {
       try {
-        const res = await walletService.getDepositOrderById(order.depositOrderId);
-        const latest = res.data?.data || res.data;
+        const latest = await walletService.getDepositOrderById(
+          order.depositOrderId
+        );
 
         if (latest?.status === "PAID") {
           onSuccess();
@@ -104,7 +105,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     }, 3000);
 
     return () => { stopped = true; clearInterval(pollInterval); };
-  }, [step, order]);
+  }, [step, order, onClose, onSuccess]);
 
   // Countdown tới expiresAt — chỉ để HIỂN THỊ, không tự quyết định hết hạn.
   // Việc hết hạn thật được xác nhận qua polling status ở trên (BE trả EXPIRED/CANCELLED).
@@ -152,8 +153,13 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     if (!amount || Number(amount) <= 0) { setError("The amount must be greater than 0."); return; }
     setLoading(true); setError("");
     try {
-      const res = await walletService.createDepositOrder(amount);
-      const orderData = res.data?.data || res.data;
+      const orderData = await walletService.createDepositOrder(amount);
+
+      if (!orderData?.depositOrderId) {
+        throw new Error(
+          "Deposit order response does not contain depositOrderId."
+        );
+      }
 
       setOrder(orderData);
       setQrOpenedAt(Date.now());
@@ -345,11 +351,14 @@ function WithdrawModal({ onClose, onSuccess }) {
     if (Object.keys(errors).length > 0) { setFieldErrors(errors); return; }
     setLoading(true); setError("");
     try {
-      const res = await walletService.createWithdrawal(form);
-      // Response thật: { success, message, data: { withdrawalRequestId, amount,
-      // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
-      // status: "PENDING", createdAt, ... } }
-      const created = res.data?.data ?? res.data;
+      const created = await walletService.createWithdrawal(form);
+
+      if (!created?.withdrawalRequestId) {
+        throw new Error(
+          "Withdrawal response does not contain withdrawalRequestId."
+        );
+      }
+
       onSuccess(created);
       onClose();
     } catch (err) {
@@ -668,10 +677,14 @@ export default function WalletPage() {
         walletService.getWithdrawals(),
       ]);
 
-      setBalance(wallet);
-      setTransactions(tx);
-      setDepositOrders(deposit);
-      setWithdrawals(withdrawalList);
+      setBalance(wallet || null);
+      setTransactions(Array.isArray(tx) ? tx.filter(Boolean) : []);
+      setDepositOrders(Array.isArray(deposit) ? deposit.filter(Boolean) : []);
+      setWithdrawals(
+        Array.isArray(withdrawalList)
+          ? withdrawalList.filter(Boolean)
+          : []
+      );
     } catch (err) {
       console.error(err);
     } finally {
