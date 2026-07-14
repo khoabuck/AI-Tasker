@@ -427,34 +427,7 @@ export default function ClientContractSignPage() {
           boxSizing: "border-box",
           overflowX: "clip",
           background: "#0b0e14",
-          textAlign: "center",
-        }}
-      >
-          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{loadError || "Contract not found."}</p>
-          <button onClick={() => navigate(`/client/proposals/${proposalId}`)}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Back to Proposal
-          </button>
-        </div>
-      </ClientLayout>
-    );
-  }
-
-    if (!proposal || !contract) {
-  return (
-    <ClientLayout>
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "100%",
-          minWidth: 0,
-          minHeight: "calc(100vh - 82px)",
-          margin: 0,
-          padding: "100px 24px 40px",
-          boxSizing: "border-box",
-          overflowX: "clip",
-          background: "#0b0e14",
+          color: "#8c90a0",
           textAlign: "center",
         }}
       >
@@ -462,22 +435,33 @@ export default function ClientContractSignPage() {
           className="material-symbols-outlined"
           style={{
             display: "block",
-            marginBottom: 12,
+            marginBottom: 16,
             fontSize: 48,
-            color: "#f87171",
+            color: "#00F0FF",
           }}
         >
-          error_outline
+          cloud_sync
         </span>
 
         <p
           style={{
-            color: "#f87171",
+            margin: "0 0 8px",
+            color: "#c2c6d6",
             fontSize: 15,
-            marginBottom: 20,
+            fontWeight: 600,
           }}
         >
-          Contract data could not be loaded.
+          Contract information is taking longer than expected.
+        </p>
+
+        <p
+          style={{
+            margin: "0 0 24px",
+            color: "#8c90a0",
+            fontSize: 13,
+          }}
+        >
+          Please try loading the contract again.
         </p>
 
         <div
@@ -511,9 +495,9 @@ export default function ClientContractSignPage() {
             }
             style={{
               padding: "10px 24px",
-              background: "#00F0FF",
-              color: "#002022",
-              border: "none",
+              background: "transparent",
+              color: "#c2c6d6",
+              border: "1px solid rgba(255,255,255,0.15)",
               borderRadius: 8,
               cursor: "pointer",
               fontWeight: 700,
@@ -522,6 +506,117 @@ export default function ClientContractSignPage() {
             Back to Proposal
           </button>
         </div>
+      </div>
+    </ClientLayout>
+  );
+}
+
+    if (!proposal || !contract) {
+  return (
+    <ClientLayout>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "100px 24px 40px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+          background: "#0b0e14",
+          color: "#8c90a0",
+          textAlign: "center",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            display: "block",
+            marginBottom: 16,
+            fontSize: 48,
+            color: "#00F0FF",
+            animation: "spin 1s linear infinite",
+          }}
+        >
+          autorenew
+        </span>
+
+        <p
+          style={{
+            margin: "0 0 8px",
+            color: "#c2c6d6",
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
+          Loading contract information...
+        </p>
+
+        <p
+          style={{
+            margin: "0 0 24px",
+            color: "#8c90a0",
+            fontSize: 13,
+          }}
+        >
+          The server may need a little more time to respond.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => fetchAll(undefined, false)}
+            style={{
+              padding: "10px 24px",
+              background: "rgba(0,240,255,0.08)",
+              color: "#00F0FF",
+              border: "1px solid rgba(0,240,255,0.3)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Retry
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/client/proposals/${proposalId}`)
+            }
+            style={{
+              padding: "10px 24px",
+              background: "transparent",
+              color: "#c2c6d6",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Back to Proposal
+          </button>
+        </div>
+
+        <style>{`
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
       </div>
     </ClientLayout>
   );
