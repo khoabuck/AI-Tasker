@@ -54,6 +54,16 @@ function readContractSignState(contract) {
   return { clientSigned, expertSigned, bothSigned };
 }
 
+function getProposalContractId(proposal) {
+  return (
+    proposal?.contractId ??
+    proposal?.projectContractId ??
+    proposal?.contract?.contractId ??
+    proposal?.contract?.id ??
+    null
+  );
+}
+
 // ── Message Modal ─────────────────────────────────────────────────────
 function MessageModal({ proposal, onClose, navigate }) {
   const [message, setMessage] = useState("");
@@ -254,26 +264,89 @@ export default function ClientProposalDetailPage() {
     fetchWalletBalance();
   }, []);
 
-  // Phát hiện contract dở dang (từ lần accept trước, lỡ rời trang chưa ký
-  // xong) — chỉ để hiển thị nút "Continue to Contract", KHÔNG tự mở modal
-  // hay auto-navigate ở đây nữa (toàn bộ logic ký chuyển sang trang riêng).
   useEffect(() => {
-    const fetchExistingContract = async () => {
-      try {
-        const res = await axiosInstance.get(`/proposals/${proposalId}/contract`);
-        const contract = res.data?.data ?? res.data ?? null;
-        setContractCreated(contract);
-      } catch (err) {
-        if (err?.response?.status !== 404) {
-          console.error(err);
+  if (!proposal) {
+    return;
+  }
+
+  const proposalStatus = String(
+    proposal?.status ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const embeddedContract =
+    proposal?.contract ??
+    null;
+
+  const contractId =
+    getProposalContractId(proposal);
+
+  // API proposal đã trả sẵn contract thì dùng trực tiếp,
+  // không cần gọi thêm API contract.
+  if (embeddedContract) {
+    setContractCreated(embeddedContract);
+    setContractChecked(true);
+    return;
+  }
+
+  /*
+   * Proposal chưa Accept hoặc response không có contractId:
+   * không được gọi GET /proposals/{proposalId}/contract.
+   *
+   * Nhờ đó khi chỉ nhấn View Full để xem proposal,
+   * Network sẽ không còn contract 404.
+   */
+  if (
+    proposalStatus !== "ACCEPTED" ||
+    !contractId
+  ) {
+    setContractCreated(null);
+    setContractChecked(true);
+    return;
+  }
+
+  const controller = new AbortController();
+
+  const fetchExistingContract = async () => {
+    setContractChecked(false);
+
+    try {
+      const res = await axiosInstance.get(
+        `/proposals/${proposalId}/contract`,
+        {
+          signal: controller.signal,
         }
-      } finally {
+      );
+
+      const contract =
+        res.data?.data ??
+        res.data ??
+        null;
+
+      setContractCreated(contract);
+    } catch (err) {
+      if (
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        return;
+      }
+
+      setContractCreated(null);
+    } finally {
+      if (!controller.signal.aborted) {
         setContractChecked(true);
       }
-    };
+    }
+  };
 
-    fetchExistingContract();
-  }, [proposalId]);
+  fetchExistingContract();
+
+  return () => {
+    controller.abort();
+  };
+}, [proposal, proposalId]);
 
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
@@ -352,15 +425,52 @@ export default function ClientProposalDetailPage() {
   };
 
   // ── Loading ───────────────────────────────────────────────────────
-  if (loading) return (
+  if (loading && !proposal) {
+  return (
     <ClientLayout>
-      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: 860,
+          minWidth: 0,
+          minHeight: "calc(100vh - 96px)",
+          margin: "0 auto",
+          padding: "40px 24px",
+          boxSizing: "border-box",
+          background: "#0b0e14",
+          color: "#8c90a0",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          overflowX: "hidden",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            fontSize: 48,
+            display: "block",
+            marginBottom: 16,
+            animation: "spin 1s linear infinite",
+            color: "#00F0FF",
+          }}
+        >
+          autorenew
+        </span>
+
         Loading proposal...
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     </ClientLayout>
   );
+}
 
   if (error) return (
     <ClientLayout>
@@ -402,7 +512,17 @@ export default function ClientProposalDetailPage() {
 
   return (
     <ClientLayout>
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>
+      <div
+          style={{
+            width: "100%",
+            maxWidth: 860,
+            minWidth: 0,
+            margin: "0 auto",
+            padding: "40px 24px",
+            boxSizing: "border-box",
+            overflowX: "hidden",
+          }}
+        >
 
         {/* Back */}
         <button onClick={() => navigate(-1)}
