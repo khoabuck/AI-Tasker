@@ -23,12 +23,12 @@ const NAV_ITEMS = [
     dropdown: [
       {
         icon: "auto_awesome",
-        label: "AI Matching",
+        label: "AI MATCHING",
         to: "/client/ai-matching",
       },
       {
         icon: "person_search",
-        label: "Expert Search",
+        label: "EXPERT SEARCH",
         to: "/client/experts",
       },
     ],
