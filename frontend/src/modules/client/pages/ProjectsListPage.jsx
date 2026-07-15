@@ -139,11 +139,8 @@ export default function ProjectsListPage() {
   const activeStatus = searchParams.get("status") || "ACTIVE";
 
   useEffect(() => {
-    window.scrollTo({
-      top: 0,
-      behavior: "instant",
-    });
-  }, [activeStatus]);
+  window.scrollTo(0, 0);
+}, []);
 
   const [allProjects, setAllProjects] = useState([]);
   const [reviewedProjectIds, setReviewedProjectIds] = useState(new Set());
@@ -191,10 +188,12 @@ export default function ProjectsListPage() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetchProjects(controller.signal);
-    return () => controller.abort();
-  }, [fetchProjects, location.key]);
+  const controller = new AbortController();
+
+  fetchProjects(controller.signal);
+
+  return () => controller.abort();
+}, [fetchProjects]);
 
   const filteredProjects = allProjects.filter(
   (p) => (p.status || "").toUpperCase() === activeStatus.toUpperCase()
@@ -218,7 +217,20 @@ export default function ProjectsListPage() {
             return (
               <button key={tab.key}
                 onClick={() => setSearchParams({ status: tab.key })}
-                style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 18px", background: "none", border: "none", borderBottom: active ? `2px solid ${tab.color}` : "2px solid transparent", color: active ? tab.color : "#8c90a0", cursor: "pointer", fontSize: 14, fontWeight: active ? 700 : 500, fontFamily: "Inter, sans-serif", transition: "all 0.2s", marginBottom: -1 }}>
+                style={{
+                    display:"flex",
+                    alignItems:"center",
+                    gap:8,
+                    padding:"12px 18px",
+                    background:"none",
+                    border:"none",
+                    borderBottom:"2px solid transparent",
+                    boxShadow: active 
+                      ? `inset 0 -2px 0 ${tab.color}`
+                      : "none",
+                    color: active ? tab.color : "#8c90a0",
+                    cursor:"pointer",
+                    }}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{tab.icon}</span>
                 {tab.label}
                 <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: active ? tab.color + "20" : "rgba(255,255,255,0.06)", color: active ? tab.color : "#8c90a0" }}>

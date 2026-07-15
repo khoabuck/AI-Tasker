@@ -140,7 +140,7 @@ export default function JobCreditPackagesPage() {
         {/* Bảng các gói — giống bố cục Đề xuất bảng gói */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 18, marginBottom: 32 }}>
         {packages.map((pkg) => {
-            const isPopular = pkg.packageName === "Pro";
+            const isPopular = pkg.isPopular === true;
 
             return (
             <div
@@ -168,7 +168,7 @@ export default function JobCreditPackagesPage() {
                 {pkg.description}
                 </p>
 
-                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 800, color: pkg.price === 0 ? "#c2c6d6" : "#00F0FF", marginBottom: 22 }}>
+                <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 800, color: pkg.isFreeTier ? "#c2c6d6" : "#00F0FF", marginBottom: 22 }}>
                 {formatVND(pkg.price)}
                 </div>
 
