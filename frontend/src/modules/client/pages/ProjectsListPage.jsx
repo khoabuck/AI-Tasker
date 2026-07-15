@@ -6,6 +6,14 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_TABS = [
   { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
   { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
@@ -66,7 +74,7 @@ function ProjectCard({ project, hasReview }) {
           {(project.totalBudget ?? project.milestoneTotalAmount) != null && (
             <div>
               <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 15, fontWeight: 700, color: "#00F0FF" }}>
-                ${(project.totalBudget ?? project.milestoneTotalAmount).toLocaleString()}
+                {formatCurrency(project.totalBudget ?? project.milestoneTotalAmount)}
               </span>
             </div>
           )}
@@ -199,7 +207,7 @@ export default function ProjectsListPage() {
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
           <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Projects</h1>
-          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Theo dõi tiến độ các project đang hợp tác.</p>
+          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Monitor the progress of ongoing collaborative projects.</p>
         </div>
 
         {/* Tabs */}

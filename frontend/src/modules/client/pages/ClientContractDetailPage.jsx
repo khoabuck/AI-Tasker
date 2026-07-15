@@ -3,6 +3,14 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { clientContractApi } from "../../../api/clientContract.api";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 export default function ClientContractDetailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -180,21 +188,21 @@ export default function ClientContractDetailPage() {
           <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
             <p className="text-gray-400 text-xs">Price</p>
             <p className="text-white text-xl font-bold">
-              ${contract?.finalPrice}
+              {formatCurrency(contract?.finalPrice)}
             </p>
           </div>
 
           <div className="p-5 bg-white/5 border border-white/10 rounded-2xl">
             <p className="text-gray-400 text-xs">Fee</p>
             <p className="text-white text-xl font-bold">
-              ${contract?.platformFeeAmount}
+              {formatCurrency(contract?.platformFeeAmount)}
             </p>
           </div>
 
           <div className="p-5 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
             <p className="text-gray-400 text-xs">Total</p>
             <p className="text-emerald-400 text-xl font-bold">
-              ${contract?.totalClientPayment}
+              {formatCurrency(contract?.totalClientPayment)}
             </p>
           </div>
 
@@ -262,7 +270,7 @@ export default function ClientContractDetailPage() {
                 </div>
 
                 <p className="text-cyan-400 font-semibold">
-                  ${m.amount}
+                  {formatCurrency(m.amount)}
                 </p>
               </div>
             ))

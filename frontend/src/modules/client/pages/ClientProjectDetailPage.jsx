@@ -17,6 +17,14 @@ import axiosInstance from "../../../api/axiosInstance";
 import { clientContractApi } from "../../../api/clientContract.api";
 import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_CONFIG = {
   ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
   COMPLETED: { label: "Completed", color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
@@ -1037,7 +1045,7 @@ if (!project) return null;
                     <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                       {m.amount != null && (
                         <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, color: "#00F0FF", fontWeight: 700 }}>
-                          ${m.amount.toLocaleString()}
+                          {formatCurrency(m.amount)}
                         </span>
                       )}
                       <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: mCfg.color, background: mCfg.color + "15", border: `1px solid ${mCfg.color}40` }}>

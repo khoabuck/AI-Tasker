@@ -12,6 +12,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { transactionService } from "../../../services/transaction.service";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
   backdropFilter: "blur(20px)",
@@ -148,7 +156,7 @@ export default function TransactionDetailPage() {
 
           <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 6px" }}>{typeCfg.label}</p>
           <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 34, fontWeight: 700, color: isExpense ? "#ffb4ab" : "#34d399", margin: "0 0 16px" }}>
-            {isExpense ? "-" : "+"}{Math.abs(amount).toLocaleString()}₫
+            {isExpense ? "-" : "+"}{formatCurrency(Math.abs(amount))}
           </p>
 
           <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 14px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.05em", background: statusCfg.bg, color: statusCfg.color, border: `1px solid ${statusCfg.border}` }}>

@@ -6,6 +6,14 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import { transactionService } from "../../../services/transaction.service";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_CONFIG = {
   SUCCESS:   { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
   COMPLETED: { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.2)" },
@@ -102,9 +110,11 @@ const ROW_OPTIONS = [5, 10, 20, 50];
   const getTxAmountText = (tx) => {
     const amount = Number(tx.amount ?? 0);
 
-    if (amount === 0) return "0₫";
+    if (amount === 0) return "0 ₫";
 
-    return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
+    return `${isExpenseTx(tx) ? "-" : "+"}${formatCurrency(
+      Math.abs(amount)
+    )}`;
   };
 
     const getTxProjectText = (tx) => {

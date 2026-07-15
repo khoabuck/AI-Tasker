@@ -17,6 +17,14 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const PROPOSAL_STATUS = {
   SUBMITTED: { label: "Submitted", color: "#facc15" },
   PENDING:   { label: "Pending",   color: "#facc15" },
@@ -597,7 +605,7 @@ export default function ClientProposalDetailPage() {
                 <div>
                   <span style={sectionLabel}>Proposed Price</span>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF" }}>
-                    ${(proposal.proposedPrice || proposal.bidAmount)?.toLocaleString()}
+                    {formatCurrency(proposal.proposedPrice || proposal.bidAmount)}
                   </div>
                 </div>
                 <div>
@@ -621,12 +629,10 @@ export default function ClientProposalDetailPage() {
                   color: "#facc15",
                 }}
               >
-                Wallet balance: $
+                Wallet balance:  {" "}
                 {walletLoading
                   ? "Loading..."
-                  : Number(walletBalance ?? 0).toLocaleString()}
-                {" — "}
-                money in wallet
+                  : formatCurrency(walletBalance)}
               </div>
             )}
 
@@ -817,7 +823,7 @@ export default function ClientProposalDetailPage() {
                     </div>
 
                     <span style={{ color: "#00F0FF", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}>
-                      ${Number(m.amount || 0).toLocaleString()}
+                      {formatCurrency(m.amount)}
                     </span>
 
                     <span style={{ color: "#8c90a0", fontSize: 12 }}>
@@ -842,7 +848,7 @@ export default function ClientProposalDetailPage() {
                   <div>
                     <span style={sectionLabel}>Counter Price</span>
                     <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#f97316" }}>
-                      ${proposal.counterPrice?.toLocaleString()}
+                      {formatCurrency(proposal.counterPrice)}
                     </div>
                   </div>
                 )}
@@ -928,7 +934,7 @@ export default function ClientProposalDetailPage() {
 
             <div className="mb-5 rounded-xl bg-white/5 p-4">
               <div className="mb-2 text-white">
-                Price: ${proposedPrice.toLocaleString()}
+                Price: {formatCurrency(proposedPrice)}
               </div>
 
               <div className="mb-3 text-white">
@@ -939,7 +945,7 @@ export default function ClientProposalDetailPage() {
                 Current wallet balance: $
                 {walletLoading
                   ? "Loading..."
-                  : Number(walletBalance ?? 0).toLocaleString()}
+                  : formatCurrency(walletBalance)}
               </div>
 
             </div>

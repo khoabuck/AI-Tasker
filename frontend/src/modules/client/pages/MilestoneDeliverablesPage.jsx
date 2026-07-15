@@ -10,6 +10,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
   backdropFilter: "blur(20px)",
@@ -281,7 +289,9 @@ export default function MilestoneDeliverablesPage() {
             <div>
               <span style={sectionLabel}>Milestone Amount</span>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>
-                ${milestone.amount?.toLocaleString() ?? "—"}
+                {milestone.amount != null
+                  ? formatCurrency(milestone.amount)
+                  : "—"}
               </div>
             </div>
             <div>

@@ -21,6 +21,14 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const cardStyle = {
   width: "100%",
   maxWidth: "100%",
@@ -733,19 +741,19 @@ export default function ClientContractSignPage() {
             <div>
               <span style={sectionLabel}>Final Price</span>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: "#00F0FF" }}>
-                ${Number(contract?.finalPrice ?? proposedPrice).toLocaleString()}
+                {formatCurrency(contract?.finalPrice ?? proposedPrice)}
               </div>
             </div>
             <div>
               <span style={sectionLabel}>Platform Fee ({platformFeeRate}%)</span>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: "#e1e2eb" }}>
-                ${Number(contract?.platformFeeAmount ?? 0).toLocaleString()}
+                {formatCurrency(contract?.platformFeeAmount ?? 0)}
               </div>
             </div>
             <div>
               <span style={sectionLabel}>Total You Pay</span>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, fontWeight: 700, color: "#facc15" }}>
-                ${requiredDeposit.toLocaleString()}
+                {formatCurrency(requiredDeposit)}
               </div>
             </div>
           </div>
@@ -760,7 +768,7 @@ export default function ClientContractSignPage() {
               fontSize: 13,
             }}
           >
-            Wallet balance: ${Number(walletBalance ?? 0).toLocaleString()} — Required: ${requiredDeposit.toLocaleString()}
+            Wallet balance: {formatCurrency(walletBalance)} — Required: {formatCurrency(requiredDeposit)}
           </div>
         </div>
 
@@ -841,7 +849,7 @@ export default function ClientContractSignPage() {
                     <p style={{ color: "#8c90a0", fontSize: 13, margin: 0 }}>Duration: {m.durationDays} days</p>
                   </div>
                   <span style={{ color: "#00F0FF", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}>
-                    ${Number(m.amount || 0).toLocaleString()}
+                    {formatCurrency(m.amount)}
                   </span>
                 </div>
               ))}

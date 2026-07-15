@@ -5,6 +5,14 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_CONFIG = {
   DRAFT:     { label: "Draft",     color: "#94a3b8", bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.25)" },
   OPEN:      { label: "Open",      color: "#00F0FF", bg: "rgba(0,240,255,0.08)",   border: "rgba(0,240,255,0.25)"   },
@@ -384,8 +392,8 @@ if (showFullLoading) {
               </div>
               <div style={{ display: "flex", gap: 28 }}>
                 <div style={{ textAlign: "center" }}>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}</div>
-                  <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>USD/month</div>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>{formatCurrency(job.budgetMin)} – {formatCurrency(job.budgetMax)}</div>
+                  
                 </div>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#facc15" }}>{proposals.length}</div>
@@ -423,7 +431,7 @@ if (showFullLoading) {
             <div style={cardStyle}>
               <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>Project Details</h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 20 }}>
-                <div><span style={labelStyle}>Budget</span><div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "#00F0FF", fontSize: 15 }}>${job.budgetMin?.toLocaleString()} — ${job.budgetMax?.toLocaleString()}</div><div style={{ fontSize: 11, color: "#8c90a0" }}>USD / month</div></div>
+                <div><span style={labelStyle}>Budget</span><div style={{ fontFamily: "JetBrains Mono, monospace", fontWeight: 700, color: "#00F0FF", fontSize: 15 }}>{formatCurrency(job.budgetMin)} — {formatCurrency(job.budgetMax)}</div><div style={{ fontSize: 11, color: "#8c90a0" }}></div></div>
                 <div><span style={labelStyle}>Deadline</span><div style={{ color: "#e1e2eb", fontSize: 14, fontWeight: 600 }}>{deadline}</div></div>
                 <div><span style={labelStyle}>Project Type</span><div style={{ color: "#e1e2eb", fontSize: 14 }}>{job.projectType || "—"}</div></div>
                 <div><span style={labelStyle}>Complexity</span><div style={{ color: "#facc15", fontSize: 14, fontWeight: 600 }}>{job.complexity || "—"}</div></div>
@@ -503,7 +511,7 @@ if (showFullLoading) {
                               </div>
                               <div style={{ textAlign: "right" }}>
                                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>
-                                  {price != null ? `$${price.toLocaleString()}` : "—"}
+                                  {price != null ? formatCurrency(price) : "—"}
                                 </div>
                                 <div style={{ fontSize: 11, color: "#8c90a0" }}>
                                   {timelineDays != null ? `${timelineDays} days` : "—"}

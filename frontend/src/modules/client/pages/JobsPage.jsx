@@ -13,6 +13,14 @@ import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const STATUS_TABS = [
   { key: "DRAFT",     label: "Draft",     icon: "draft",  color: "#94a3b8" },
   { key: "OPEN",      label: "Open",      icon: "work",   color: "#00F0FF" },
@@ -160,7 +168,7 @@ function JobCard({ job, onStatusChange }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "#00F0FF" }}>
-            ${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}
+            {formatCurrency(job.budgetMin)} – {formatCurrency(job.budgetMax)}
           </span>
           {job.projectType && <span style={{ fontSize: 12, color: "#8c90a0" }}>{job.projectType}</span>}
           {checkingProposal && (
