@@ -7,11 +7,13 @@ import Footer       from "./Footer";
 
 export default function ClientLayout({ children }) {
   return (
-    <div className="bg-[#101319] text-[#e1e2eb] min-h-screen flex flex-col">
+    <div className="flex min-h-screen w-full min-w-0 flex-col overflow-x-hidden bg-[#101319] text-[#e1e2eb]">
       <ClientNavbar />
-      <main className="flex-1">
+
+      <main className="w-full min-w-0 flex-1 overflow-x-hidden">
         {children}
       </main>
+
       <Footer />
     </div>
   );

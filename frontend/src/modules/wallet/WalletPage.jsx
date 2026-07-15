@@ -32,6 +32,14 @@ import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../components/layout/ClientLayout";
 import { walletService } from "../../services/wallet.service";
 
+const formatCurrency = (value) => {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(Number(value || 0));
+};
+
 const parseBackendTime = (value) => {
   if (!value) return null;
 
@@ -237,7 +245,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
             <div style={{ textAlign: "center" }}>
               <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 4px" }}>Số tiền</p>
               <p style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF", margin: 0 }}>
-                {Number(order.amount).toLocaleString()}₫
+                {formatCurrency(order.amount)}
               </p>
             </div>
 
@@ -617,7 +625,7 @@ const getTxAmountText = (tx) => {
 
   if (amount === 0) return "0₫";
 
-  return `${isExpenseTx(tx) ? "-" : "+"}${Math.abs(amount).toLocaleString()}₫`;
+  return `${isExpenseTx(tx) ? "-" : "+"}${formatCurrency(Math.abs(amount))}`;
 };
 
 function StatusBadge({ status }) {
@@ -734,21 +742,21 @@ const metrics = balance
   ? [
       {
         label: "Balance",
-        value: `${Number(balance.availableBalance ?? 0).toLocaleString()}₫`,
+        value: formatCurrency(balance.availableBalance),
         icon: "account_balance_wallet",
         iconBg: "rgba(0,240,255,0.1)",
         iconColor: "#00F0FF",
       },
       {
         label: "Escrow",
-        value: `${escrowAmount.toLocaleString()}₫`,
+        value: formatCurrency(escrowAmount),
         icon: "lock",
         iconBg: "rgba(250,204,21,0.1)",
         iconColor: "#facc15",
       },
       {
         label: "Withdraw",
-        value: `${activeWithdrawalAmount.toLocaleString()}₫`,
+        value: formatCurrency(activeWithdrawalAmount),
         icon: "outbox",
         iconBg: "rgba(74,222,128,0.1)",
         iconColor: "#4ade80",
@@ -888,7 +896,7 @@ const metrics = balance
                               }}
                             >
                               {formatTxDescription(tx)}
-</td>
+                            </td>
                             <td style={{ padding: "14px 20px", fontSize: 13, color: "#8c90a0" }}>{date}</td>
                             <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: isExpenseTx(tx) ? "#ffb4ab" : "#00F0FF" }}>
                               {getTxAmountText(tx)}
@@ -955,7 +963,7 @@ const metrics = balance
                         >
                           <div>
                             <p style={{ fontSize: 13, color: "#e1e2eb", margin: "0 0 2px", fontWeight: 600 }}>
-                              {(order.amount ?? 0).toLocaleString()}₫
+                              {formatCurrency(order.amount)}
                             </p>
                             <p style={{ fontSize: 11, color: "#8c90a0", margin: 0 }}>
                               {order.provider ?? "PAYOS"} • {date}
@@ -1032,13 +1040,13 @@ const metrics = balance
                         <tr key={w.withdrawalRequestId ?? i}
                           style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#e1e2eb" }}>
-                            {Number(w.amount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.amount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#8c90a0" }}>
-                            {Number(w.feeAmount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.feeAmount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontFamily: "JetBrains Mono, monospace", fontSize: 13, color: "#00F0FF" }}>
-                            {Number(w.netAmount ?? 0).toLocaleString()}₫
+                            {formatCurrency(w.netAmount)}
                           </td>
                           <td style={{ padding: "14px 20px", fontSize: 13, color: "#c2c6d6" }}>
                             {w.bankName ?? "—"} • {w.bankAccountNumber ?? "—"}
@@ -1092,7 +1100,7 @@ const metrics = balance
           onSuccess={(created) =>
             showSuccess(
               created
-                ? `Withdrawal request submitted! You will receive ${Number(created.netAmount ?? 0).toLocaleString()}₫ after a ${Number(created.feeAmount ?? 0).toLocaleString()}₫ fee.`
+                ? `Withdrawal request submitted! You will receive ${formatCurrency(created.netAmount)} after a ${formatCurrency(created.feeAmount)} fee.`
                 : "Withdrawal request submitted!"
             )
           }

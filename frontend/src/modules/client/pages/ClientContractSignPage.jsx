@@ -17,11 +17,18 @@
 // GET  /api/wallets/balance                          → số dư ví
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useParams, useNavigate, useLocation, Link } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
 const cardStyle = {
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  overflow: "hidden",
+  overflowWrap: "anywhere",
+
   background: "rgba(16,19,25,0.85)",
   backdropFilter: "blur(20px)",
   border: "1px solid rgba(255,255,255,0.1)",
@@ -72,28 +79,62 @@ export default function ClientContractSignPage() {
 
   const pollRef = useRef(null);
 
-  // code mới
-  const fetchAll = useCallback(async (signal, silent = false) => {
+  const fetchAll = useCallback(
+  async (signal, silent = false) => {
     if (!silent) {
       setLoading(true);
       setLoadError("");
     }
+
     try {
       const proposalRes = await axiosInstance.get(
-      `/proposals/${proposalId}`,
-      { signal }
-    );
+        `/proposals/${proposalId}`,
+        { signal }
+      );
 
-    const proposalData =
-      proposalRes.data?.data ?? proposalRes.data;
+      const rawProposal =
+        proposalRes.data?.data ??
+        proposalRes.data ??
+        null;
 
-    setProposal(
-      Array.isArray(proposalData)
-        ? proposalData[0] ?? null
-        : proposalData
-    );
+      const proposalData = Array.isArray(rawProposal)
+        ? rawProposal[0] ?? null
+        : rawProposal;
 
-    if (!initialContract) {
+      if (!proposalData) {
+        setProposal(null);
+        setContract(null);
+
+        if (!silent) {
+          setLoadError("Proposal not found.");
+        }
+
+        return;
+      }
+
+      setProposal(proposalData);
+
+      /*
+       * Sau khi Accept Proposal, contract đã được truyền qua navigate state.
+       * Lần tải đầu chỉ cần dùng contract đó, không gọi GET contract lần nữa.
+       */
+      const initialContractId =
+        getContractId(initialContract);
+
+      if (
+        !silent &&
+        initialContract &&
+        initialContractId
+      ) {
+        setContract(initialContract);
+        return;
+      }
+
+      /*
+       * Chỉ gọi lại API contract trong các trường hợp:
+       * - Người dùng F5 hoặc mở trực tiếp URL.
+       * - Cần refresh ngầm trạng thái contract.
+       */
       const contractRes = await axiosInstance.get(
         `/proposals/${proposalId}/contract`,
         { signal }
@@ -104,21 +145,56 @@ export default function ClientContractSignPage() {
         contractRes.data ??
         null;
 
+      if (!contractData || !getContractId(contractData)) {
+        setContract(null);
+
+        if (!silent) {
+          setLoadError("Contract not found.");
+        }
+
+        return;
+      }
+
       setContract(contractData);
-    }
     } catch (err) {
-      if (err?.code === "ERR_CANCELED") return;
+      if (
+        err?.code === "ERR_CANCELED" ||
+        err?.name === "CanceledError"
+      ) {
+        return;
+      }
+
       if (!silent) {
-        if (err?.response?.status === 404) {
-          setLoadError("");
+        const status = err?.response?.status;
+        const apiMessage =
+          err?.response?.data?.message;
+
+        if (status === 404) {
+          setLoadError(
+            apiMessage ||
+            "Contract not found."
+          );
+        } else if (status === 403) {
+          setLoadError(
+            apiMessage ||
+            "You do not have permission to view this contract."
+          );
         } else {
-          setLoadError(err?.response?.data?.message || "Failed to load contract.");
+          setLoadError(
+            apiMessage ||
+            err?.message ||
+            "Failed to load contract."
+          );
         }
       }
     } finally {
-      if (!silent) setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
-  }, [proposalId, initialContract]);
+  },
+  [proposalId, initialContract]
+);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -289,41 +365,262 @@ export default function ClientContractSignPage() {
 }, [contract, fetchAll, navigate]);
 
   if (loading) {
-    return (
-      <ClientLayout>
-        <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
-          Loading contract...
-          <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </ClientLayout>
-    );
-  }
+  return (
+    <ClientLayout>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "100px 24px 40px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+          background: "#0b0e14",
+          color: "#8c90a0",
+          textAlign: "center",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            fontSize: 48,
+            display: "block",
+            marginBottom: 16,
+            animation: "spin 1s linear infinite",
+            color: "#00F0FF",
+          }}
+        >
+          autorenew
+        </span>
+
+        Loading contract...
+
+        <style>{`
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </div>
+    </ClientLayout>
+  );
+}
 
   if (loadError && !loading) {
-    return (
-      <ClientLayout>
-        <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{loadError || "Contract not found."}</p>
-          <button onClick={() => navigate(`/client/proposals/${proposalId}`)}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
+  return (
+    <ClientLayout>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "100px 24px 40px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+          background: "#0b0e14",
+          color: "#8c90a0",
+          textAlign: "center",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            display: "block",
+            marginBottom: 16,
+            fontSize: 48,
+            color: "#00F0FF",
+          }}
+        >
+          cloud_sync
+        </span>
+
+        <p
+          style={{
+            margin: "0 0 8px",
+            color: "#c2c6d6",
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
+          Contract information is taking longer than expected.
+        </p>
+
+        <p
+          style={{
+            margin: "0 0 24px",
+            color: "#8c90a0",
+            fontSize: 13,
+          }}
+        >
+          Please try loading the contract again.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => fetchAll(undefined, false)}
+            style={{
+              padding: "10px 24px",
+              background: "rgba(0,240,255,0.08)",
+              color: "#00F0FF",
+              border: "1px solid rgba(0,240,255,0.3)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Retry
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/client/proposals/${proposalId}`)
+            }
+            style={{
+              padding: "10px 24px",
+              background: "transparent",
+              color: "#c2c6d6",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
             Back to Proposal
           </button>
         </div>
-      </ClientLayout>
-    );
-  }
+      </div>
+    </ClientLayout>
+  );
+}
 
     if (!proposal || !contract) {
-      return (
-        <ClientLayout>
-          <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
-            Loading contract...
-          </div>
-        </ClientLayout>
-      );
-    }
+  return (
+    <ClientLayout>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "100px 24px 40px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+          background: "#0b0e14",
+          color: "#8c90a0",
+          textAlign: "center",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            display: "block",
+            marginBottom: 16,
+            fontSize: 48,
+            color: "#00F0FF",
+            animation: "spin 1s linear infinite",
+          }}
+        >
+          autorenew
+        </span>
+
+        <p
+          style={{
+            margin: "0 0 8px",
+            color: "#c2c6d6",
+            fontSize: 15,
+            fontWeight: 600,
+          }}
+        >
+          Loading contract information...
+        </p>
+
+        <p
+          style={{
+            margin: "0 0 24px",
+            color: "#8c90a0",
+            fontSize: 13,
+          }}
+        >
+          The server may need a little more time to respond.
+        </p>
+
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => fetchAll(undefined, false)}
+            style={{
+              padding: "10px 24px",
+              background: "rgba(0,240,255,0.08)",
+              color: "#00F0FF",
+              border: "1px solid rgba(0,240,255,0.3)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Retry
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              navigate(`/client/proposals/${proposalId}`)
+            }
+            style={{
+              padding: "10px 24px",
+              background: "transparent",
+              color: "#c2c6d6",
+              border: "1px solid rgba(255,255,255,0.15)",
+              borderRadius: 8,
+              cursor: "pointer",
+              fontWeight: 700,
+            }}
+          >
+            Back to Proposal
+          </button>
+        </div>
+
+        <style>{`
+          @keyframes spin {
+            from {
+              transform: rotate(0deg);
+            }
+
+            to {
+              transform: rotate(360deg);
+            }
+          }
+        `}</style>
+      </div>
+    </ClientLayout>
+  );
+}
 
   const { clientSigned, expertSigned, bothSigned } = readContractSignState(contract);
   const isCancelled = (contract?.status || "").toUpperCase() === "CANCELLED";
@@ -338,8 +635,19 @@ export default function ClientContractSignPage() {
   const hasEnoughWallet = !walletLoading && Number(walletBalance ?? 0) >= requiredDeposit;
 
   return (
-    <ClientLayout>
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>
+  <ClientLayout>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        maxWidth: 860,
+        minWidth: 0,
+        margin: "0 auto",
+        padding: "40px 24px",
+        boxSizing: "border-box",
+        overflowX: "clip",
+      }}
+    >
 
         <button onClick={() => navigate(`/client/proposals/${proposalId}`)}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 24, padding: 0 }}>
@@ -498,9 +806,38 @@ export default function ClientContractSignPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {proposal.milestones.map((m, index) => (
                 <div key={m.proposalMilestoneDraftId ?? index}
-                  style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 16, alignItems: "center", padding: 16, borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                  <div>
-                    <p style={{ color: "#e1e2eb", fontWeight: 700, margin: "0 0 4px" }}>{index + 1}. {m.title}</p>
+                  style={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) auto",
+                      width: "100%",
+                      maxWidth: "100%",
+                      minWidth: 0,
+                      gap: 16,
+                      alignItems: "center",
+                      padding: 16,
+                      boxSizing: "border-box",
+                      overflow: "hidden",
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                    }}>
+                  <div
+                    style={{
+                      minWidth: 0,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <p
+                      style={{
+                        color: "#e1e2eb",
+                        fontWeight: 700,
+                        margin: "0 0 4px",
+                        overflowWrap: "anywhere",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {index + 1}. {m.title}
+                    </p>
                     <p style={{ color: "#8c90a0", fontSize: 13, margin: 0 }}>Duration: {m.durationDays} days</p>
                   </div>
                   <span style={{ color: "#00F0FF", fontWeight: 800, fontFamily: "JetBrains Mono, monospace" }}>

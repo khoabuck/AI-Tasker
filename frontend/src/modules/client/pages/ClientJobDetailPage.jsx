@@ -28,9 +28,19 @@ const PROPOSAL_STATUS = {
   COUNTERED: { label: "Countered", color: "#c0c1ff" },
 };
 const cardStyle = {
-  background: "rgba(16,19,25,0.85)", backdropFilter: "blur(20px)",
-  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 16,
-  padding: 28, boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+  width: "100%",
+  maxWidth: "100%",
+  minWidth: 0,
+  boxSizing: "border-box",
+  overflow: "hidden",
+  overflowWrap: "anywhere",
+
+  background: "rgba(16,19,25,0.85)",
+  backdropFilter: "blur(20px)",
+  border: "1px solid rgba(255,255,255,0.1)",
+  borderRadius: 16,
+  padding: 28,
+  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 const labelStyle = {
   display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10,
@@ -219,22 +229,75 @@ export default function ClientJobDetailPage() {
     finally { setActionLoading(null); }
   };
 
-  // Chỉ hiện spinner toàn trang ở lần load đầu (chưa có job nào).
   const showFullLoading = loading && !job;
 
-  if (showFullLoading) return (
+if (showFullLoading) {
+  return (
     <ClientLayout>
-      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", color: "#8c90a0" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#00F0FF" }}>autorenew</span>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "60px 24px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+
+          background: "#0b0e14",
+          color: "#8c90a0",
+          textAlign: "center",
+
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "flex-start",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{
+            fontSize: 48,
+            display: "block",
+            marginBottom: 16,
+            animation: "spin 1s linear infinite",
+            color: "#00F0FF",
+          }}
+        >
+          autorenew
+        </span>
+
         Loading job details...
-        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     </ClientLayout>
   );
+}
 
-  if (error && !job) return (
+  if (error && !job) {
+  return (
     <ClientLayout>
-      <div style={{ minHeight: "100vh", background: "#0b0e14", textAlign: "center", paddingTop: "120px", paddingLeft: 24, paddingRight: 24 }}>
+      <div
+        style={{
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          minHeight: "calc(100vh - 82px)",
+          margin: 0,
+          padding: "80px 24px 40px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+          background: "#0b0e14",
+          textAlign: "center",
+        }}
+      >
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
@@ -245,6 +308,7 @@ export default function ClientJobDetailPage() {
       </div>
     </ClientLayout>
   );
+}
 
   if (!job) return null;
 
@@ -253,9 +317,30 @@ export default function ClientJobDetailPage() {
   const createdAt = job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
 
   return (
-    <ClientLayout>
-      <div style={{ minHeight: "100vh", background: "#0b0e14" }}>
-        <div style={{ maxWidth: 960, margin: "0 auto", padding: "40px 24px" }}>
+  <ClientLayout>
+    <div
+      style={{
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        minHeight: "calc(100vh - 82px)",
+        boxSizing: "border-box",
+        overflowX: "clip",
+        background: "#0b0e14",
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 960,
+          minWidth: 0,
+          margin: "0 auto",
+          padding: "40px 24px",
+          boxSizing: "border-box",
+          overflowX: "clip",
+        }}
+      >
           <button onClick={() => navigate("/client/jobs")}
             style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 28, padding: 0 }}
             onMouseEnter={(e) => (e.currentTarget.style.color = "#e1e2eb")}
@@ -266,8 +351,24 @@ export default function ClientJobDetailPage() {
 
           <div style={{ ...cardStyle, marginBottom: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div
+                style={{
+                  flex: "1 1 300px",
+                  minWidth: 0,
+                  maxWidth: "100%",
+                  overflowWrap: "anywhere",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    marginBottom: 10,
+                    flexWrap: "wrap",
+                    minWidth: 0,
+                  }}
+                >
                   <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 26, fontWeight: 700, color: "#e1e2eb", margin: 0 }}>{job.title}</h1>
                   {job.isAiAssisted && (
                     <span style={{ display: "flex", alignItems: "center", gap: 4, padding: "3px 10px", background: "rgba(0,240,255,0.08)", border: "1px solid rgba(0,240,255,0.2)", borderRadius: 999, fontSize: 10, color: "#00F0FF", fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap" }}>
