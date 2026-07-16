@@ -131,19 +131,14 @@ export default function ExpertProfileViewPage() {
   if (error || !expert) {
     return (
       <ClientLayout>
-        <div className="flex items-center justify-center px-6 py-32">
-          <button
-            onClick={() => navigate("/client/experts")}
-            className="rounded-lg bg-cyan-400 px-6 py-2.5 font-bold text-[#101319] transition hover:brightness-110"
-          >
-            Back to search
-          </button>
+        <div className="flex items-center justify-center py-32 text-gray-400">
+          Loading profile...
         </div>
       </ClientLayout>
     );
   }
 
-  const rating = expert.profileScore ? expert.profileScore / 20 : 0;
+  const rating = expert.averageRating || 0;
   const isVerified = expert.experienceVerificationStatus === "VERIFIED";
   const expertSkills = Array.isArray(expert.expertSkills) ? expert.expertSkills : [];
   const certificates = Array.isArray(expert.certificates) ? expert.certificates : [];
@@ -163,7 +158,7 @@ export default function ExpertProfileViewPage() {
         <div className="relative mb-5 overflow-hidden rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
 
           <div className="flex flex-wrap items-start gap-5">
-            <img src={expert.avatarUrl || `https://i.pravatar.cc/120?u=${expert.expertProfileId}`} alt={expert.fullName}
+            <img src={expert.avatarUrl || "/default-avatar.png"} alt={expert.fullName}
               className="h-21 w-21 flex-shrink-0 rounded-full border-2 border-cyan-400/25 object-cover" style={{ width: 84, height: 84 }} />
 
             <div className="min-w-[200px] flex-1">
@@ -171,12 +166,20 @@ export default function ExpertProfileViewPage() {
               <p className="mb-2.5 font-mono text-[13px] uppercase tracking-wide text-cyan-400">{expert.professionalTitle}</p>
 
               <div className="flex flex-wrap items-center gap-4">
-                {rating > 0 && (
-                  <div className="flex items-center gap-2">
-                    <StarRating rating={rating} />
-                    <span className="font-mono text-[13px] text-gray-300">{expert.profileScore}/100</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  {rating > 0 ? (
+                    <>
+                      <StarRating rating={rating} />
+                      <span className="font-mono text-[13px] text-gray-300">
+                        {expert.averageRating.toFixed(1)}/5
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-mono text-[13px] text-gray-400">
+                      No reviews
+                    </span>
+                  )}
+                </div>
 
                 {expert.availableForWork && (
                   <span className="flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase text-green-400">
