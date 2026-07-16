@@ -109,20 +109,25 @@ export default function TransactionDetailPage() {
     );
   }
 
-  if (error || !transaction) {
-    return (
-      <ClientLayout>
-        <div style={{ textAlign: "center", padding: "120px 24px" }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error || "Transaction not found."}</p>
-          <button onClick={() => navigate("/client/transactions")}
-            style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-            Quay lại danh sách
-          </button>
-        </div>
-      </ClientLayout>
-    );
-  }
+  if (error) {
+  return (
+    <ClientLayout>
+      <div style={{ textAlign: "center", padding: "120px 24px", color: "#8c90a0" }}>
+        Unable to load transaction.
+      </div>
+    </ClientLayout>
+  );
+}
+
+if (!transaction) {
+  return (
+    <ClientLayout>
+      <div style={{ textAlign: "center", padding: "120px 24px", color: "#8c90a0" }}>
+        Loading transaction...
+      </div>
+    </ClientLayout>
+  );
+}
 
   const type = (transaction.type ?? "").toUpperCase();
   const typeCfg = TYPE_CONFIG[type] || { label: type || "—", icon: "receipt_long", color: "#8c90a0", isExpense: transaction.amount < 0 };
