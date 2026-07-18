@@ -11,6 +11,22 @@ const formatCurrency = (value) => {
   }).format(Number(value || 0));
 };
 
+const getStatusClass = (status) => {
+  switch (status) {
+    case "CONFIRMED":
+      return "bg-green-500/10 text-green-400";
+
+    case "CANCELLED":
+      return "bg-red-500/10 text-red-400";
+
+    case "PENDING":
+      return "bg-yellow-500/10 text-yellow-400";
+
+    default:
+      return "bg-gray-500/10 text-gray-400";
+  }
+};
+
 export default function ClientContractDetailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -64,7 +80,10 @@ export default function ClientContractDetailPage() {
     } catch (err) {
       console.error("LOAD CONTRACT ERROR:", err);
       if (!silent) {
-        setError("Failed to load contract");
+        setError(
+        err?.response?.data?.message ||
+        "Failed to load contract"
+        );
         setContract(null);
         setMilestones([]);
       }
@@ -82,14 +101,24 @@ export default function ClientContractDetailPage() {
   // cần Client tự F5. Dừng poll khi hợp đồng đã bị hủy vì lúc đó không còn gì
   // thay đổi thêm.
   useEffect(() => {
-    if (!contract || contract.status === "CANCELLED") return;
+    if (!contract) return;
+
+    const shouldStopPolling =
+      contract.status === "CANCELLED" ||
+      contract.projectStatus === "COMPLETED";
+
+    if (shouldStopPolling) return;
 
     const intervalId = setInterval(() => {
       fetchData(true);
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [contract?.status, fetchData]);
+  }, [
+    contract?.status,
+    contract?.projectStatus,
+    fetchData
+  ]);
 
   // loading
   if (loading && !contract) {
@@ -138,10 +167,14 @@ export default function ClientContractDetailPage() {
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-6">
 
         <button
+          type="button"
           onClick={() => navigate(-1)}
-          className="text-gray-400 hover:text-white flex items-center gap-2"
+          className="mb-5 flex w-fit items-center gap-2 rounded-lg border border-white/10 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:border-cyan-400/50 hover:text-cyan-400"
         >
-          ← Back
+          <span className="material-symbols-outlined text-[18px]">
+            arrow_back
+          </span>
+          Back
         </button>
 
         {/* HEADER */}
@@ -157,7 +190,9 @@ export default function ClientContractDetailPage() {
               </p>
             </div>
 
-            <span className="px-3 py-1 text-xs rounded-full bg-green-500/10 text-green-400">
+            <span
+              className={`px-3 py-1 text-xs rounded-full ${getStatusClass(contract?.status)}`}
+            >
               {contract?.status}
             </span>
           </div>

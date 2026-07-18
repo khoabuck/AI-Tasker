@@ -2,6 +2,9 @@
 // POST /api/recommendations/experts/from-prompt   { prompt }  →  Expert[]
 // Response là array trực tiếp, đã sort theo matchScore giảm dần — không còn dùng GET /experts?keyword=
 
+
+// Import hook useState để quản lý state trong React
+// useState giúp component nhớ dữ liệu và tự render lại khi dữ liệu thay đổi
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
@@ -14,10 +17,41 @@ const LEVEL_CONFIG = {
   EXPERT:  { label: "Expert",  badge: "bg-indigo-300/20 text-indigo-300 border-indigo-300/40" },
 };
 
+/*
+Component con: ExpertCard
+
+Nhận dữ liệu từ component cha bằng props:
+
+expert:
+- thông tin một Expert từ API
+
+onConnect:
+- function xử lý khi bấm Connect
+
+onViewProfile:
+- lưu trạng thái trước khi qua trang Profile
+
+Component này chỉ có nhiệm vụ hiển thị 1 Expert.
+*/
 function ExpertCard({ expert, onConnect, onViewProfile }) {
   const navigate = useNavigate();
-  const level = LEVEL_CONFIG[expert.level] || { label: expert.level, badge: "bg-gray-500/20 text-gray-400 border-gray-500/40" };
+  // Chuẩn hóa dữ liệu BE.
+// BE có thể trả MID hoặc MID_LEVEL.
+// Trong nghiệp vụ hai giá trị này là cùng một level.
+  const normalizedLevel =
+    expert.level === "MID_LEVEL"
+      ? "MID"
+      : expert.level;
+
+  const level = LEVEL_CONFIG[normalizedLevel] || {
+    label: expert.level,
+    badge: "bg-gray-500/20 text-gray-400 border-gray-500/40"
+  };
+  // Lấy điểm matching từ BE.  FE chỉ hiển thị, không tự tính score.
   const matchScore = expert.matchScore ? Math.round(expert.matchScore) : null;
+  // Chọn danh sách skill để hiển thị.
+// Hiện tại ưu tiên matchedSkills nếu AI tìm được skill phù hợp.
+// Nếu không có thì dùng expertSkills.
   const skillsToShow = expert.matchedSkills?.length > 0 ? expert.matchedSkills : expert.expertSkills || [];
   const isMatchedSkills = expert.matchedSkills?.length > 0;
 
@@ -33,9 +67,12 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
 
       {/* Header */}
       <div className="flex items-start gap-3.5">
-        <img src={expert.avatarUrl || `https://i.pravatar.cc/100?u=${expert.expertProfileId}`}
+        <img
+          src={expert.avatarUrl}
           alt={expert.fullName}
-          className="h-13 w-13 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover" style={{ width: 52, height: 52 }} />
+          className="h-13 w-13 flex-shrink-0 rounded-full border-2 border-cyan-400/20 object-cover"
+          style={{ width: 52, height: 52 }}
+        />
         <div className="min-w-0 flex-1">
           <div className="mb-0.5 flex items-center gap-2">
             <h3 className="font-display text-base font-bold text-gray-100">{expert.fullName}</h3>
@@ -90,7 +127,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
       {/* Skills */}
       {skillsToShow.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {skillsToShow.slice(0, 6).map((s) => (
+          {skillsToShow.map((s) => (
             <span key={s.skillId}
               className={`rounded-full border px-2.5 py-0.5 font-mono text-[11px] ${
                 isMatchedSkills
@@ -103,16 +140,6 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
         </div>
       )}
 
-      {/* Budget */}
-      {(expert.expectedProjectBudgetMin || expert.expectedProjectBudgetMax) && (
-        <div className="flex items-center gap-1.5 text-[13px] text-gray-300">
-          <span className="material-symbols-outlined text-cyan-400" style={{ fontSize: 15 }}>payments</span>
-          <span className="font-mono font-semibold">
-            ${expert.expectedProjectBudgetMin?.toLocaleString()} — ${expert.expectedProjectBudgetMax?.toLocaleString()}
-            <span className="ml-1 text-[11px] font-normal text-gray-400">USD/mo</span>
-          </span>
-        </div>
-      )}
 
       {/* Risk note */}
       {expert.riskNote && (
@@ -139,6 +166,15 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 }
 
+/*
+Component chính của trang AI Matching.
+
+Nhiệm vụ:
+- Quản lý input tìm kiếm.
+- Gọi API.
+- Lưu danh sách Expert.
+- Điều khiển trạng thái Loading/Error/Result.
+*/
 export default function AIMatchingPage() {
   const navigate = useNavigate();
 
@@ -177,6 +213,7 @@ export default function AIMatchingPage() {
 
   const initial = restoreState();
 
+// query: nội dung người dùng nhập vào ô search.
   const [query, setQuery] = useState(initial?.query ?? "");
   const [searching, setSearching] = useState(false);
   const [experts, setExperts] = useState(initial?.experts ?? []);
@@ -260,7 +297,6 @@ export default function AIMatchingPage() {
 
     setSearching(true);
     setError("");
-    setHasSearched(false);
 
     try {
       const { items, total } =
@@ -281,7 +317,7 @@ export default function AIMatchingPage() {
 
   return (
     <ClientLayout>
-      <div className="px-6 pb-16 pt-12">
+      <div className="min-h-screen overflow-x-hidden px-6 pb-16 pt-12">
 
         {/* Header */}
         <div className="mx-auto mb-10 max-w-[860px] text-center">
@@ -356,9 +392,15 @@ export default function AIMatchingPage() {
 
         {/* Loading */}
         {searching && (
-          <div className="py-16 text-center">
-            <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 56 }}>autorenew</span>
-            <p className="font-mono text-[15px] text-cyan-400">Analyzing and finding experts...</p>
+          <div className="flex min-h-[500px] items-center justify-center text-center">
+            <div>
+              <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 56 }}>
+                autorenew
+              </span>
+              <p className="font-mono text-[15px] text-cyan-400">
+                Analyzing and finding experts...
+              </p>
+            </div>
           </div>
         )}
 
@@ -392,7 +434,17 @@ export default function AIMatchingPage() {
             </div>
 
             {experts.length > 0 ? (
-              <div className="grid gap-5" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))" }}>
+              <div
+                className="
+                  grid
+                  w-full
+                  gap-5
+                "
+                style={{
+                  gridTemplateColumns:
+                  "repeat(auto-fit, minmax(min(320px,100%),1fr))"
+                }}
+                >
                 {experts.map((expert) => (
                   <ExpertCard key={expert.expertProfileId} expert={expert} onConnect={handleConnect} onViewProfile={handleViewProfile} />
                 ))}

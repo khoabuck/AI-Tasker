@@ -40,6 +40,13 @@ const formatCurrency = (value) => {
   }).format(Number(value || 0));
 };
 
+const QUICK_DEPOSIT_AMOUNTS = [
+  20000,
+  50000,
+  100000,
+  500000,
+];
+
 const parseBackendTime = (value) => {
   if (!value) return null;
 
@@ -86,7 +93,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     const checkStatus = async () => {
       try {
         const res = await walletService.getDepositOrderById(order.depositOrderId);
-        const latest = res.data?.data || res.data;
+        const latest = res;
 
         if (latest?.status === "PAID") {
           onSuccess();
@@ -161,7 +168,7 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     setLoading(true); setError("");
     try {
       const res = await walletService.createDepositOrder(amount);
-      const orderData = res.data?.data || res.data;
+      const orderData = res;
 
       setOrder(orderData);
       setQrOpenedAt(Date.now());
@@ -211,8 +218,8 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
 
             {/* Quick amounts */}
             <div style={{ display: "flex", gap: 8 }}>
-              {[20000, 50000, 100000, 500000].map((a) => (
-                <button key={a} onClick={() => setAmount(String(a))}
+              {QUICK_DEPOSIT_AMOUNTS.map((a) => (
+                  <button key={a} onClick={() => setAmount(String(a))}
                   style={{ flex: 1, padding: "8px", background: amount == a ? "rgba(0,240,255,0.12)" : "rgba(255,255,255,0.04)", border: `1px solid ${amount == a ? "rgba(0,240,255,0.4)" : "rgba(255,255,255,0.1)"}`, borderRadius: 8, color: amount == a ? "#00F0FF" : "#8c90a0", fontSize: 12, cursor: "pointer", fontFamily: "JetBrains Mono, monospace" }}>
                   {a.toLocaleString()}₫
                 </button>
@@ -357,7 +364,7 @@ function WithdrawModal({ onClose, onSuccess }) {
       // Response thật: { success, message, data: { withdrawalRequestId, amount,
       // feeAmount, netAmount, bankName, bankAccountNumber, bankAccountHolder,
       // status: "PENDING", createdAt, ... } }
-      const created = res.data?.data ?? res.data;
+      const created = res;
       onSuccess(created);
       onClose();
     } catch (err) {
@@ -924,7 +931,7 @@ const metrics = balance
                 ) : (
                   <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
                     <div style={{ display: "flex", flexDirection: "column" }}>
-                      {depositOrders.map((order, i) => {
+                      {depositOrders.filter(Boolean).map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
                       void tick;
 
@@ -1077,14 +1084,17 @@ const metrics = balance
           }}
           onSuccess={() => showSuccess("Deposit successful!")}
           onOrderCreated={(createdOrder) => {
-            setDepositOrders((prev) => [
-              createdOrder,
-              ...prev.filter(
-                (o) => o.depositOrderId !== createdOrder.depositOrderId
-              ),
-            ]);
-            
-          }}
+          if (!createdOrder?.depositOrderId) return;
+
+          setDepositOrders((prev) => [
+            createdOrder,
+            ...prev.filter(
+              (o) =>
+                o &&
+                o.depositOrderId !== createdOrder.depositOrderId
+            ),
+          ]);
+}}
         />
       )}
       {selectedOrder && (
