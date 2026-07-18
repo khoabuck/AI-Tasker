@@ -4,7 +4,10 @@
 // GET  /api/conversations/{conversationId}/messages → lấy lịch sử chat
 // POST /api/conversations/{conversationId}/messages { content, messageType, attachmentUrl }
 //
-// LƯU Ý: BE chưa có response mẫu thật (test trả "data": []). Dùng optional chaining +
+// BE trả message đầy đủ:
+// GET messages trả danh sách lịch sử.
+// POST messages trả message vừa tạo.
+// FE không tạo pending message, dùng dữ liệu từ BE. Dùng optional chaining +
 // nhiều tên field dự phòng. Khi có response thật, kiểm tra lại field tên/avatar đối phương
 // và field phân biệt "tin nhắn của tôi" trong messages[].
 
@@ -13,6 +16,13 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import ClientNavbar from "../../../components/layout/ClientNavbar";
 import axiosInstance from "../../../api/axiosInstance";
 import authService from "../../../services/auth.service";
+
+const formatCurrency = (value) =>
+ new Intl.NumberFormat("vi-VN",{
+   style:"currency",
+   currency:"VND",
+   maximumFractionDigits:0
+ }).format(Number(value||0));
 
 function timeAgo(dateStr) {
   if (!dateStr) return "";
@@ -81,7 +91,7 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
               </p>
 
               <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: 14, fontSize: 12, color: "#8c90a0", display: "flex", flexDirection: "column", gap: 4 }}>
-                <span>Proposed Price: <span style={{ color: "#00F0FF" }}>${p.proposedPrice?.toLocaleString() ?? "—"}</span></span>
+                <span>Proposed Price: <span style={{ color: "#00F0FF" }}>{formatCurrency(p.proposedPrice)}</span></span>
                 <span>Timeline: <span style={{ color: "#e1e2eb" }}>{p.proposedTimelineDays ?? "—"} days</span></span>
               </div>
 
@@ -118,7 +128,7 @@ function ProposalReviewModal({ state, onClose, onRequestRevision }) {
               <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
                 <div>
                   <span style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Proposed Price</span>
-                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF" }}>${p.proposedPrice?.toLocaleString() ?? "—"}</div>
+                  <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 22, fontWeight: 700, color: "#00F0FF" }}>{formatCurrency(p.proposedPrice)}</div>
                 </div>
                 <div>
                   <span style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6 }}>Timeline</span>
@@ -231,7 +241,7 @@ export default function MessagesPage() {
             avatar:
               c.expertAvatarUrl ||
               c.otherPartyAvatarUrl ||
-              "/default-avatar.png",
+              null,
             online: c.isOtherPartyOnline ?? false,
             lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
             time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
@@ -289,7 +299,7 @@ export default function MessagesPage() {
   setActiveChat({
     id: null,
     name: newExpertName ? decodeURIComponent(newExpertName) : "Expert",
-    avatar: "/default-avatar.png",
+    avatar: null,
     online: false,
     lastMessage: "",
     time: "",
@@ -322,7 +332,7 @@ export default function MessagesPage() {
       const isMe =
         currentUserId != null && senderId != null
           ? String(senderId) === String(currentUserId)
-          : (m.isMine ?? m.senderType === "CLIENT" ?? false);
+          : Boolean(m.isMine ?? (m.senderType === "CLIENT"));
 
       return {
         id: m.conversationMessageId ?? m.messageId ?? m.id,
@@ -333,13 +343,16 @@ export default function MessagesPage() {
       };
     });
 
-      setMessages(normalized);
+
+    setMessages(normalized);
+
+     
     } catch (err) {
       if (!silent) setError(err?.response?.data?.message || "Unable to load messages.");
     } finally {
       if (!silent) setLoadingMessages(false);
     }
-  }, []);
+  }, [currentUserId]);
 
   const MESSAGE_POLL_INTERVAL = 5000;
 
@@ -366,11 +379,7 @@ useEffect(() => {
   if (!content || !activeChat) return;
 
   setInput("");
-  const tempId = `temp-${Date.now()}`;
-  setMessages((prev) => [
-    ...prev,
-    { id: tempId, text: content, isMe: true, time: formatMessageTime(new Date()) },
-  ]);
+  
 
   try {
     let convId = activeChat.id;
@@ -402,7 +411,6 @@ useEffect(() => {
     await fetchMessages(convId, true);
   } catch (err) {
     setError(err?.response?.data?.message || "Send message failed.");
-    setMessages((prev) => prev.filter((m) => m.id !== tempId));
     setInput(content);
   }
 };
@@ -423,7 +431,7 @@ useEffect(() => {
       const res = await axiosInstance.post("/uploads/images", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      const url = res.data?.url ?? res.data?.data?.url ?? res.data;
+      const url = res.data?.image?.url;
 
       await axiosInstance.post(`/conversations/${activeChat.id}/messages`, {
         content: "[Image]",
@@ -503,7 +511,7 @@ useEffect(() => {
     const summary =
 `Revision request for proposal (keeping existing details for reference):
 
-— Proposed Price: $${p.proposedPrice?.toLocaleString() ?? "—"}
+— Proposed Price: ${formatCurrency(p.proposedPrice)}
 — Timeline: ${p.proposedTimelineDays ?? "—"} days
 — Cover Letter: ${p.coverLetter ?? "—"}
 — Expected Outputs: ${p.expectedOutputs ?? "—"}

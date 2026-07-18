@@ -7,6 +7,14 @@ import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 import { findExistingConversationWithExpert } from "../../../utils/conversation.util";
 
+const normalizeLevel = (level) => {
+  if (level === "MID_LEVEL") {
+    return "MID";
+  }
+
+  return level;
+};
+
 
 // ─── Component con: 1 Expert Card ─────────────────────
 function ExpertCard({ expert, onConnect }) {
@@ -31,7 +39,7 @@ function ExpertCard({ expert, onConnect }) {
             Level
           </p>
           <p className="text-sm font-bold text-white">
-            {expert.level}
+            {normalizeLevel(expert.level)}
           </p>
         </div>
 
@@ -113,27 +121,38 @@ function ExpertSection({ title, icon, iconColor, experts, onConnect }) {
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
-  if (!experts || experts.length === 0) return null;
 
   const updateScrollState = () => {
     const el = scrollRef.current;
     if (!el) return;
+
     setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+    setCanScrollRight(
+      el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+    );
   };
+
 
   useEffect(() => {
     updateScrollState();
+
     const el = scrollRef.current;
+
     if (!el) return;
+
     el.addEventListener("scroll", updateScrollState);
     window.addEventListener("resize", updateScrollState);
+
     return () => {
       el.removeEventListener("scroll", updateScrollState);
       window.removeEventListener("resize", updateScrollState);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [experts.length]);
+
+
+  if (!experts || experts.length === 0) return null;
+    
 
   // Cuộn đúng 1 card mỗi lần bấm — dùng đúng kích thước card thật (320px + gap),
   // không phải con số ước lượng, để luôn dừng lại đúng ranh giới card, không
@@ -270,15 +289,14 @@ export default function ClientDashboard() {
       navigate(
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
-    } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the expert.");
+    } catch{
+      return;
     }
   };
 
-  const seniorExperts = experts.filter((e) => e.level === "SENIOR");
-  const midExperts = experts.filter((e) => e.level === "MID");
-  const juniorExperts = experts.filter((e) => e.level === "JUNIOR");
+  const seniorExperts = experts.filter((e) => normalizeLevel(e.level) === "SENIOR");
+  const midExperts = experts.filter((e) => normalizeLevel(e.level) === "MID");
+  const juniorExperts = experts.filter((e) => normalizeLevel(e.level) === "JUNIOR");
   return (
     <ClientLayout>
       <section className="max-w-7xl mx-auto px-4 md:px-6 lg:px-12 py-12 space-y-12">

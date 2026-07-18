@@ -1,15 +1,16 @@
 // src/modules/client/pages/DisputeDetailPage.jsx
 //
-// GET  /api/disputes/me                      → list dispute của Client hiện tại
-// GET  /api/disputes/{disputeId}              → chi tiết 1 dispute
-// POST /api/disputes/{disputeId}/evidences    → bổ sung bằng chứng { evidenceText, fileUrl }
+// GET  /api/disputes/me
+//      → lấy danh sách dispute của Client hiện tại
 //
-// LƯU Ý: chưa test được response thật của GET /disputes/{disputeId} (chưa có dispute
-// nào được tạo để thử). Field dưới đây dựa trên request schema đã xác nhận
-// (OpenDisputeRequest: projectId, milestoneId, respondentUserId, disputedAmount, reason,
-// evidenceText, evidenceFileUrl) cộng thêm các field suy luận hợp lý cho 1 response
-// dispute (disputeId, status, createdAt, resolution, resolvedAt, evidences[]).
-// Khi có response thật, kiểm tra lại toàn bộ field trong unwrap bên dưới.
+// GET  /api/disputes/{disputeId}
+//      → lấy chi tiết dispute
+//
+// POST /api/disputes/{disputeId}/evidences
+//      → thêm evidence bằng link/file URL
+//
+// POST /api/disputes/{disputeId}/evidences/image
+//      → thêm evidence bằng nhiều ảnh upload
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -54,9 +55,8 @@ export default function ClientDisputeDetailPage() {
   const [error, setError] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
   const [evidenceFileUrl, setEvidenceFileUrl] = useState("");
-  const [evidenceImageUrls, setEvidenceImageUrls] = useState([]);
+  const [evidenceFiles, setEvidenceFiles] = useState([]);
   const [evidencePreviewUrls, setEvidencePreviewUrls] = useState([]);
-  const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadImageError, setUploadImageError] = useState("");
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
@@ -78,9 +78,10 @@ const normalizedEvidenceFileUrl = evidenceFileUrl.trim();
 
 const hasEvidenceText = normalizedEvidenceText.length > 0;
 
+const hasEvidenceUrl = normalizedEvidenceFileUrl.length > 0;
+const hasEvidenceImages = evidenceFiles.length > 0;
 const hasEvidenceAttachment =
-  normalizedEvidenceFileUrl.length > 0 ||
-  evidenceImageUrls.length > 0;
+  hasEvidenceUrl || hasEvidenceImages;
 
 const isValidEvidenceFileUrl = (() => {
   if (!normalizedEvidenceFileUrl) {
@@ -105,11 +106,14 @@ const canSubmitEvidence =
   hasEvidenceText &&
   hasEvidenceAttachment &&
   isValidEvidenceFileUrl &&
-  !uploadingImage &&
   !submittingEvidence &&
   !evidenceSent;
 
-  
+const isSubmitLocked =
+  isClosed ||
+  !Boolean(dispute?.disputeId) ||
+  submittingEvidence ||
+  evidenceSent;
 
   // Tìm dispute đúng theo projectId truyền qua query param — vì hiện tại điều hướng
   // tới trang này chỉ biết projectId (không biết sẵn disputeId), nên phải lấy list
@@ -180,7 +184,7 @@ const canSubmitEvidence =
     return () => controller.abort();
   }, [fetchDispute]);
 
-  // Tự động làm mới dispute mỗi 5s khi chưa CLOSED — để phát hiện khi Admin
+  // Tự động làm mới dispute mỗi 15s khi chưa CLOSED — để phát hiện khi Admin
   // xử lý xong (Resolved/Rejected) mà không cần Client tự F5.
   useEffect(() => {
     if (!dispute) return;
@@ -189,81 +193,37 @@ const canSubmitEvidence =
 
     const intervalId = setInterval(() => {
       fetchDispute(undefined, true);
-    }, 5000);
+    }, 15000);
 
     return () => clearInterval(intervalId);
   }, [dispute?.status, fetchDispute]);
 
   
-  const handleUploadEvidenceImages = async (files) => {
-  const selectedFiles = Array.from(files || []).filter((file) =>
-    file.type.startsWith("image/")
-  );
+  const handleSelectEvidenceImages = (files) => {
+    const selectedFiles = Array.from(files || [])
+      .filter((file) => file.type.startsWith("image/"));
 
-  if (selectedFiles.length === 0) {
-    setUploadImageError("Please select valid image files.");
-    return;
-  }
-
-  setUploadingImage(true);
-  setUploadImageError("");
-
-  try {
-    const previewUrls = selectedFiles.map((file) => URL.createObjectURL(file));
-      setEvidencePreviewUrls((prev) => [...prev, ...previewUrls]);
-
-      const uploadedUrls = [];
-
-      for (const file of selectedFiles) {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const res = await axiosInstance.post("/uploads/images", formData, {
-        headers: {
-          "Content-Type": "multipart/form-data",
-        },
-      });
-
-      const raw = res.data?.data ?? res.data;
-
-      const imageUrl =
-        typeof raw === "string"
-          ? raw
-          : raw?.url ||
-            raw?.fileUrl ||
-            raw?.imageUrl ||
-            raw?.secureUrl ||
-            raw?.secure_url ||
-            raw?.path ||
-            raw?.image?.url ||
-            raw?.image?.fileUrl ||
-            raw?.image?.imageUrl ||
-            raw?.data?.url ||
-            raw?.data?.fileUrl ||
-            raw?.data?.imageUrl ||
-            raw?.data?.secureUrl ||
-            raw?.data?.secure_url ||
-            raw?.data?.image?.url ||
-            "";
-
-      if (imageUrl) {
-        uploadedUrls.push(String(imageUrl));
-      } else {
-        throw new Error("Upload image API did not return image URL.");
-      }
+    if (selectedFiles.length === 0) {
+      setUploadImageError("Please select valid image files.");
+      return;
     }
 
-    setEvidenceImageUrls((prev) => [...prev, ...uploadedUrls]);
-  } catch (err) {
-    setUploadImageError(
-      err?.message ||
-      err?.response?.data?.message ||
-      "Image upload failed. Please try again."
+    setUploadImageError("");
+
+    setEvidenceFiles((prev) => [
+      ...prev,
+      ...selectedFiles,
+    ]);
+
+    const previewUrls = selectedFiles.map((file) =>
+      URL.createObjectURL(file)
     );
-  } finally {
-    setUploadingImage(false);
-  }
-};
+
+    setEvidencePreviewUrls((prev) => [
+      ...prev,
+      ...previewUrls,
+    ]);
+  };
 
   const handleAddEvidence = async () => {
   if (!canSubmitEvidence) {
@@ -288,18 +248,44 @@ const canSubmitEvidence =
   setEvidenceError("");
 
   try {
-    await axiosInstance.post(
-      `/disputes/${dispute.disputeId}/evidences`,
-      {
-        evidenceText: normalizedEvidenceText,
-        fileUrl: normalizedEvidenceFileUrl || null,
+    if (normalizedEvidenceFileUrl) {
+  await axiosInstance.post(
+    `/disputes/${dispute.disputeId}/evidences`,
+    {
+      evidenceText: normalizedEvidenceText,
+      fileUrl: normalizedEvidenceFileUrl,
+      imageUrl: null,
+      imageUrls: []
+    }
+  );
+}
 
-        // Không truyền URL thường vào imageUrl.
-        // Ảnh đã upload được gửi trong imageUrls.
-        imageUrl: null,
-        imageUrls: evidenceImageUrls,
-      }
+
+if (evidenceFiles.length > 0) {
+  const formData = new FormData();
+
+  formData.append(
+    "EvidenceText",
+    normalizedEvidenceText
+  );
+
+  evidenceFiles.forEach((file) => {
+    formData.append(
+      "Images",
+      file
     );
+  });
+
+  await axiosInstance.post(
+    `/disputes/${dispute.disputeId}/evidences/image`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+}
 
     // API detail trả toàn bộ dispute và evidences.
     await fetchDispute(undefined, true);
@@ -311,7 +297,7 @@ const canSubmitEvidence =
     setEvidenceSent(true);
     setEvidenceText("");
     setEvidenceFileUrl("");
-    setEvidenceImageUrls([]);
+    setEvidenceFiles([]);
     setEvidencePreviewUrls([]);
     setUploadImageError("");
 
@@ -541,7 +527,7 @@ const canSubmitEvidence =
             <div>
               <span style={sectionLabel}>Disputed Amount</span>
               <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#f97316" }}>
-                ${Number(dispute.disputedAmount ?? 0).toLocaleString()}
+                {Number(dispute.disputedAmount ?? 0).toLocaleString("vi-VN")} VND
               </div>
             </div>
             <div>
@@ -902,7 +888,7 @@ const canSubmitEvidence =
               }}
             />
 
-            {/* Upload ảnh bổ sung — chỉ hỗ trợ ảnh vì BE chỉ có /uploads/images */}
+            {/* Upload ảnh bổ sung - BE xử lý qua /evidences/image */}
             <div style={{ marginBottom: 12 }}>
               <label
                 style={{
@@ -928,15 +914,13 @@ const canSubmitEvidence =
                   border: "1px solid rgba(255,255,255,0.12)",
                   borderRadius: 10,
                   padding: "12px 14px",
-                  cursor: uploadingImage ? "not-allowed" : "pointer",
+                  cursor: "pointer",
                 }}
               >
                 <span style={{ color: "#8c90a0", fontSize: 13 }}>
-                  {uploadingImage
-                    ? "Uploading image..."
-                    : evidenceImageUrls.length > 0
-                      ? `${evidenceImageUrls.length} image(s) uploaded`
-                      : "Choose evidence images"}
+                  {evidenceFiles.length > 0
+                ? `${evidenceFiles.length} image(s) selected`
+                : "Choose evidence images"}
                 </span>
 
                 <span
@@ -957,10 +941,9 @@ const canSubmitEvidence =
                   type="file"
                   accept="image/*"
                   multiple
-                  disabled={uploadingImage}
                   style={{ display: "none" }}
                   onChange={(e) => {
-                    handleUploadEvidenceImages(e.target.files);
+                    handleSelectEvidenceImages(e.target.files);
                     e.target.value = "";
                   }}
                 />
@@ -1018,7 +1001,7 @@ const canSubmitEvidence =
                           prev.filter((_, i) => i !== index)
                         );
 
-                        setEvidenceImageUrls((prev) =>
+                        setEvidenceFiles((prev) =>
                           prev.filter((_, i) => i !== index)
                         );
                       }}
@@ -1049,35 +1032,35 @@ const canSubmitEvidence =
 
             <button
               onClick={handleAddEvidence}
-              disabled={!canSubmitEvidence}
+              disabled={isSubmitLocked}
               style={{
-                      padding: "11px 22px",
+                padding: "11px 22px",
 
-                      background: evidenceSent
-                        ? "#22c55e"
-                        : canSubmitEvidence
-                          ? "#00F0FF"
-                          : "rgba(0,240,255,0.08)",
+                background: evidenceSent
+                  ? "#22c55e"
+                  : isSubmitLocked
+                    ? "rgba(0,240,255,0.08)"
+                    : "#00F0FF",
 
-                      color: evidenceSent
-                        ? "#002022"
-                        : canSubmitEvidence
-                          ? "#002022"
-                          : "#8c90a0",
+                color: evidenceSent
+                  ? "#002022"
+                  : isSubmitLocked
+                    ? "#8c90a0"
+                    : "#002022",
 
-                      border: "none",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: 700,
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 700,
 
-                      cursor: canSubmitEvidence
-                        ? "pointer"
-                        : "not-allowed",
+                cursor: isSubmitLocked
+                  ? "not-allowed"
+                  : "pointer",
 
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
                 {evidenceSent ? "check_circle" : submittingEvidence ? "hourglass_empty" : "upload_file"}
