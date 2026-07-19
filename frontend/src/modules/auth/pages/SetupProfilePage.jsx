@@ -13,7 +13,6 @@ import { useAuth } from "../../../context/AuthContext";
 const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const MAX_ATTEMPTS = 5;
 
 function FieldError({ name, errors }) {
   if (!errors[name]) return null;
@@ -22,6 +21,113 @@ function FieldError({ name, errors }) {
       <span className="material-symbols-outlined text-[13px]">error</span>
       {errors[name]}
     </p>
+  );
+}
+
+function unwrapAuthUser(response) {
+  const data = response?.data;
+
+  return (
+    data?.data?.user ||
+    data?.data?.User ||
+    data?.data ||
+    data?.user ||
+    data?.User ||
+    data
+  );
+}
+
+function getLockSeconds(lockedUntil) {
+  if (!lockedUntil) return 0;
+
+  const lockedUntilTime = new Date(lockedUntil).getTime();
+
+  if (Number.isNaN(lockedUntilTime)) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    Math.ceil((lockedUntilTime - Date.now()) / 1000)
+  );
+}
+
+function formatRemainingTime(totalSeconds) {
+  const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
+
+  const days = Math.floor(safeSeconds / 86400);
+  const hours = Math.floor((safeSeconds % 86400) / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  const seconds = safeSeconds % 60;
+
+  const parts = [];
+
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0 || days > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || hours > 0 || days > 0) {
+    parts.push(`${minutes}m`);
+  }
+
+  parts.push(`${seconds}s`);
+
+  return parts.join(" ");
+}
+
+function LockPopup({
+  open,
+  message,
+  secondsLeft,
+  lockedUntil,
+  onClose,
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#171B22] p-6 shadow-2xl">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-500/15">
+            <span className="material-symbols-outlined text-2xl text-red-400">
+              lock
+            </span>
+          </div>
+
+          <div>
+            <h2 className="text-lg font-bold text-red-300">
+              Business verification locked
+            </h2>
+
+          </div>
+        </div>
+
+        {secondsLeft > 0 && (
+          <div className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 p-4 text-center">
+            <p className="text-xs uppercase tracking-widest text-red-200/70">
+              Try again in
+            </p>
+
+            <p className="mt-1 text-2xl font-bold text-red-300">
+              {formatRemainingTime(secondsLeft)}
+            </p>
+
+            {lockedUntil && (
+              <p className="mt-2 text-xs text-red-100/60">
+                Available again at{" "}
+                {new Date(lockedUntil).toLocaleString()}
+              </p>
+            )}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-full rounded-lg bg-red-400 px-4 py-3 font-bold text-[#2A0808] transition hover:bg-red-300"
+        >
+          Close
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -37,29 +143,39 @@ function parseApiError(err) {
     };
   }
 
+  const sourceData = resData?.data || resData;
   const fieldErrors = {};
 
   if (
-    resData.errors &&
-    typeof resData.errors === "object" &&
-    !Array.isArray(resData.errors)
+    sourceData.errors &&
+    typeof sourceData.errors === "object" &&
+    !Array.isArray(sourceData.errors)
   ) {
-    Object.assign(fieldErrors, resData.errors);
+    Object.entries(sourceData.errors).forEach(([key, value]) => {
+      const normalizedKey =
+        key.charAt(0).toLowerCase() + key.slice(1);
+
+      fieldErrors[normalizedKey] = Array.isArray(value)
+        ? value[0]
+        : String(value);
+    });
   }
 
-  if (resData.message === "Phone number already exists.") {
+  if (sourceData.message === "Phone number already exists.") {
     fieldErrors.phoneNumber = "This phone number is already in use.";
   }
 
-  if (resData.message === "Business email already exists.") {
-    fieldErrors.businessEmail = "This business email is already in use.";
+  if (sourceData.message === "Business email already exists.") {
+    fieldErrors.businessEmail =
+      "This business email is already in use.";
   }
 
-  const businessProfile = resData.businessProfile || null;
+  const businessProfile =
+    sourceData.businessProfile || null;
 
   const message =
-    resData.message ||
-    resData.title ||
+    sourceData.message ||
+    sourceData.title ||
     businessProfile?.verificationNote ||
     (status === 401 && "Your session has expired. Please log in again.") ||
     (status === 403 && "You do not have permission.") ||
@@ -85,7 +201,11 @@ export default function SetupProfilePage() {
 
   const [lockSecondsLeft, setLockSecondsLeft] = useState(0);
   const lockIntervalRef = useRef(null);
-  const hasAlertedRef = useRef(false);
+
+  const [lockPopup, setLockPopup] = useState({
+    open: false,
+    message: "",
+  });
 
   const [individual, setIndividual] = useState({
     phoneNumber: "",
@@ -113,15 +233,7 @@ export default function SetupProfilePage() {
 
         if (data?.userStatus === "ACTIVE") {
           const meRes = await axiosInstance.get("/auth/me");
-          const meData = meRes?.data;
-
-          const freshUser =
-            meData?.data?.user ||
-            meData?.data?.User ||
-            meData?.data ||
-            meData?.user ||
-            meData?.User ||
-            meData;
+          const freshUser = unwrapAuthUser(meRes);
 
           handleLoginSuccess({
             user: freshUser,
@@ -151,6 +263,23 @@ export default function SetupProfilePage() {
             verificationLockedUntil: bp?.verificationLockedUntil || null,
           });
 
+          const secondsLeft = getLockSeconds(
+            bp?.verificationLockedUntil
+          );
+
+          const isLockedProfile =
+            bp?.verificationStatus === "LOCKED" &&
+            secondsLeft > 0;
+
+          if (isLockedProfile) {
+            setLockPopup({
+              open: true,
+              message:
+                bp?.verificationNote ||
+                "Business verification is temporarily locked.",
+            });
+          }
+
           if (bp?.verificationStatus === "VERIFIED") {
             setVerifiedBusiness(bp);
           }
@@ -160,8 +289,21 @@ export default function SetupProfilePage() {
             address: data?.address || "",
           });
         }
-      } catch {
-        setIsEdit(false);
+      } catch (err) {
+        const status = err?.response?.status;
+        const { message } = parseApiError(err);
+
+        if (status === 401) {
+          navigate("/login", { replace: true });
+          return;
+        }
+
+        if (status === 404) {
+          setIsEdit(false);
+          return;
+        }
+
+        setGlobalError(message);
       } finally {
         setFetching(false);
       }
@@ -178,45 +320,92 @@ export default function SetupProfilePage() {
 
     if (!business.verificationLockedUntil) {
       setLockSecondsLeft(0);
-      hasAlertedRef.current = false;
       return;
     }
 
-    const updateCountdown = () => {
-      const remainMs =
-        new Date(business.verificationLockedUntil).getTime() - Date.now();
-      const remainSec = Math.max(0, Math.ceil(remainMs / 1000));
-      setLockSecondsLeft(remainSec);
+    let isSyncing = false;
 
-      if (remainSec <= 0) {
-        clearInterval(lockIntervalRef.current);
-        lockIntervalRef.current = null;
+    const syncProfileAfterLock = async () => {
+      if (isSyncing) return;
+
+      isSyncing = true;
+
+      try {
+        const res = await axiosInstance.get(
+          "/client-profiles/me"
+        );
+
+        const data = res.data;
+        const bp = data?.businessProfile || null;
 
         setBusiness((prev) => ({
           ...prev,
-          verificationLockedUntil: null,
-          verificationSubmissionCount: 0,
+          verificationStatus:
+            bp?.verificationStatus || "",
+          verificationNote:
+            bp?.verificationNote || "",
+          verificationSubmissionCount:
+            bp?.verificationSubmissionCount || 0,
+          verificationLockedUntil:
+            getLockSeconds(bp?.verificationLockedUntil) > 0
+              ? bp.verificationLockedUntil
+              : null,
         }));
 
-        setGlobalError("");
-        setFieldErrors({});
-        hasAlertedRef.current = false;
+        if (
+          bp?.verificationStatus !== "LOCKED" ||
+          getLockSeconds(bp?.verificationLockedUntil) <= 0
+        ) {
+          setLockPopup({
+            open: false,
+            message: "",
+          });
+
+          setGlobalError("");
+          setFieldErrors({});
+        }
+      } catch (err) {
+        const { message } = parseApiError(err);
+        setGlobalError(message);
+      } finally {
+        isSyncing = false;
+      }
+    };
+
+    const updateCountdown = () => {
+      const remainSec = getLockSeconds(
+        business.verificationLockedUntil
+      );
+
+      setLockSecondsLeft(remainSec);
+
+      if (remainSec <= 0) {
+        if (lockIntervalRef.current) {
+          clearInterval(lockIntervalRef.current);
+          lockIntervalRef.current = null;
+        }
+
+        syncProfileAfterLock();
       }
     };
 
     updateCountdown();
-    lockIntervalRef.current = setInterval(updateCountdown, 1000);
+
+    lockIntervalRef.current = setInterval(
+      updateCountdown,
+      1000
+    );
 
     return () => {
       if (lockIntervalRef.current) {
         clearInterval(lockIntervalRef.current);
+        lockIntervalRef.current = null;
       }
     };
   }, [business.verificationLockedUntil]);
 
   const locked = clientType === "business" && lockSecondsLeft > 0;
   const attempts = business.verificationSubmissionCount || 0;
-  const remainingAttempts = Math.max(0, MAX_ATTEMPTS - attempts);
 
   const inputClass = (name) =>
     `w-full rounded-lg border bg-[#232A35] px-4 py-3 text-sm text-[#e1e2eb] outline-none transition placeholder:text-gray-500 disabled:cursor-not-allowed disabled:opacity-60 [color-scheme:dark] autofill:shadow-[inset_0_0_0px_1000px_#232A35] autofill:[-webkit-text-fill-color:#e1e2eb] ${
@@ -313,58 +502,100 @@ export default function SetupProfilePage() {
   };
 
   const applyBusinessVerificationResult = (data) => {
-    const bp = data?.businessProfile;
+    const resultData = data?.data || data;
+    const bp = resultData?.businessProfile;
+
     if (!bp) return false;
 
     setIsEdit(true);
 
     setBusiness((prev) => ({
       ...prev,
-      verificationStatus: bp.verificationStatus || "",
-      verificationNote: bp.verificationNote || "",
-      verificationSubmissionCount: bp.verificationSubmissionCount || 0,
-      verificationLockedUntil: bp.verificationLockedUntil || null,
+      verificationStatus:
+        bp.verificationStatus || "",
+      verificationNote:
+        bp.verificationNote || "",
+      verificationSubmissionCount:
+        bp.verificationSubmissionCount || 0,
+      verificationLockedUntil:
+        bp.verificationLockedUntil || null,
     }));
 
     if (bp.verificationStatus === "VERIFIED") {
       setVerifiedBusiness(bp);
       setGlobalError("");
       setFieldErrors({});
-      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      setLockPopup({
+        open: false,
+        message: "",
+      });
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+
       return true;
     }
 
-    const count = bp.verificationSubmissionCount || 0;
-    const remaining = Math.max(0, MAX_ATTEMPTS - count);
-    const msg =
+    const message =
       bp.verificationNote ||
       "Business verification failed. Please check your tax code.";
 
-    if (bp.verificationLockedUntil) {
-      const secondsLeft = Math.max(
-        0,
-        Math.ceil(
-          (new Date(bp.verificationLockedUntil).getTime() - Date.now()) / 1000
-        )
-      );
+    const secondsLeft = getLockSeconds(
+      bp.verificationLockedUntil
+    );
 
-      setGlobalError(
-        `Too many failed attempts. Your account has been banned for ${secondsLeft} seconds.`
-      );
+    const isLocked =
+      bp.verificationStatus === "LOCKED" &&
+      secondsLeft > 0;
 
-      if (!hasAlertedRef.current) {
-        hasAlertedRef.current = true;
-        alert(
-          "Account is banned. Too many failed verification attempts. Please wait 15 seconds."
-        );
-      }
+    if (isLocked) {
+      setGlobalError(message);
+      setFieldErrors({});
+
+      setLockPopup({
+        open: true,
+        message,
+      });
     } else {
-      setGlobalError(`${msg} Attempts left: ${remaining}/${MAX_ATTEMPTS}.`);
+      setGlobalError(message);
+
+      setFieldErrors({
+        taxCode: message,
+      });
     }
 
-    setFieldErrors({ taxCode: msg });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+
     return true;
+  };
+
+  const handleGoToDashboard = async () => {
+    try {
+      setLoading(true);
+      setGlobalError("");
+
+      const meRes = await axiosInstance.get("/auth/me");
+      const freshUser = unwrapAuthUser(meRes);
+
+      handleLoginSuccess({
+        user: freshUser,
+      });
+
+      navigate("/client/dashboard", {
+        replace: true,
+      });
+    } catch (err) {
+      const { message } = parseApiError(err);
+      setGlobalError(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -380,8 +611,22 @@ export default function SetupProfilePage() {
     }
 
     if (clientType === "business" && locked) {
-      setGlobalError(`Account is banned. Try again in ${lockSecondsLeft}s.`);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      const message =
+        business.verificationNote ||
+        "Business verification is temporarily locked.";
+
+      setGlobalError(message);
+
+      setLockPopup({
+        open: true,
+        message,
+      });
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+
       return;
     }
 
@@ -404,7 +649,7 @@ export default function SetupProfilePage() {
           : await axiosInstance.post("/client-profiles/individual", payload);
 
         const meRes = await axiosInstance.get("/auth/me");
-        const freshUser = meRes?.data?.data || meRes?.data;
+        const freshUser = unwrapAuthUser(meRes);
 
         handleLoginSuccess({
           user: freshUser,
@@ -423,9 +668,12 @@ export default function SetupProfilePage() {
         businessPhone: business.businessPhone.replace(/\D/g, "").slice(0, 10),
       };
 
-      const shouldResubmit = ["NEEDS_CORRECTION", "REJECTED", "FAILED"].includes(
-        business.verificationStatus
-      );
+      const shouldResubmit = [
+        "NEEDS_CORRECTION",
+        "REJECTED",
+        "FAILED",
+        "LOCKED",
+      ].includes(business.verificationStatus);
 
       if (shouldResubmit) {
         res = await axiosInstance.put(
@@ -451,28 +699,58 @@ export default function SetupProfilePage() {
         return;
       }
 
-      const lockMatch = message?.match(/after\s+([\d-]+\s[\d:]+)\s*UTC/i);
-
-      if (lockMatch) {
-        const lockedUntilUtc = lockMatch[1].replace(" ", "T") + "Z";
-
-        setBusiness((prev) => ({
-          ...prev,
-          verificationSubmissionCount: MAX_ATTEMPTS,
-          verificationLockedUntil: lockedUntilUtc,
-        }));
-
-        setGlobalError(message);
-
-        if (!hasAlertedRef.current) {
-          hasAlertedRef.current = true;
-          alert(
-            "Account is banned. Too many failed verification attempts. Please wait."
+      if (clientType === "business") {
+        try {
+          const profileRes = await axiosInstance.get(
+            "/client-profiles/me"
           );
-        }
 
-        window.scrollTo({ top: 0, behavior: "smooth" });
-        return;
+          const profileData = profileRes.data;
+          const bp = profileData?.businessProfile || null;
+
+          const secondsLeft = getLockSeconds(
+            bp?.verificationLockedUntil
+          );
+
+          const isLocked =
+            bp?.verificationStatus === "LOCKED" &&
+            secondsLeft > 0;
+
+          if (isLocked) {
+            const lockMessage =
+              bp?.verificationNote ||
+              message;
+
+            setBusiness((prev) => ({
+              ...prev,
+              verificationStatus:
+                bp.verificationStatus || "",
+              verificationNote:
+                bp.verificationNote || "",
+              verificationSubmissionCount:
+                bp.verificationSubmissionCount || 0,
+              verificationLockedUntil:
+                bp.verificationLockedUntil || null,
+            }));
+
+            setGlobalError(lockMessage);
+            setFieldErrors({});
+
+            setLockPopup({
+              open: true,
+              message: lockMessage,
+            });
+
+            window.scrollTo({
+              top: 0,
+              behavior: "smooth",
+            });
+
+            return;
+          }
+        } catch {
+          // Giữ lỗi gốc của request submit.
+        }
       }
 
       setGlobalError(message);
@@ -519,6 +797,18 @@ export default function SetupProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#12151B] text-[#e1e2eb]">
+      <LockPopup
+        open={lockPopup.open}
+        message={lockPopup.message}
+        secondsLeft={lockSecondsLeft}
+        lockedUntil={business.verificationLockedUntil}
+        onClose={() =>
+          setLockPopup({
+            open: false,
+            message: "",
+          })
+        }
+      />
       <nav className="fixed top-0 z-50 w-full border-b border-white/10 bg-[#12151B]/80 backdrop-blur-xl">
         <div className="mx-auto flex h-20 max-w-7xl items-center gap-4 px-6 md:px-12">
           <Link
@@ -547,7 +837,7 @@ export default function SetupProfilePage() {
               {verifiedBusiness
                 ? "Business Verified"
                 : locked
-                  ? "Account Banned"
+                  ? "Verification Locked"
                   : isEdit
                     ? "Update Your Profile"
                     : "Complete Your Profile"}
@@ -566,15 +856,15 @@ export default function SetupProfilePage() {
               </span>
               <div className="flex-1">
                 <p className="font-semibold text-red-300">
-                  Account is banned
+                  Business verification is locked
                 </p>
                 <p className="text-sm text-red-200/80">
-                  Too many failed verification attempts. Please wait before
+                  Too many failed verification submissions. Please wait before
                   trying again.
                 </p>
               </div>
-              <div className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-red-400 text-lg font-bold text-red-300">
-                {lockSecondsLeft}
+              <div className="flex min-w-[120px] items-center justify-center rounded-xl border-2 border-red-400 px-3 py-2 text-base font-bold text-red-300">
+                {formatRemainingTime(lockSecondsLeft)}
               </div>
             </div>
           )}
@@ -606,11 +896,11 @@ export default function SetupProfilePage() {
                     </span>
                   </div>
                   <span className="rounded-full bg-yellow-400/20 px-3 py-1 text-sm font-bold text-yellow-200">
-                    {attempts}/{MAX_ATTEMPTS}
+                    {attempts}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-yellow-100/80">
-                  Attempts left: {remainingAttempts}/{MAX_ATTEMPTS}
+                  Unsuccessful submissions recorded by the server.
                 </p>
               </div>
             )}
@@ -828,11 +1118,16 @@ export default function SetupProfilePage() {
               <div className="flex gap-3 pt-2">
                 {verifiedBusiness ? (
                   <button
-                    type="button"
-                    onClick={() => navigate("/client/dashboard")}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-400 px-4 py-4 font-bold text-[#002022] shadow-[0_0_20px_rgba(52,211,153,0.35)] hover:bg-emerald-300"
-                  >
-                    Go to Dashboard
+                      type="button"
+                      onClick={handleGoToDashboard}
+                      disabled={loading}
+                      className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-4 font-bold transition ${
+                        loading
+                          ? "cursor-not-allowed bg-[#1D2026] text-gray-500"
+                          : "bg-emerald-400 text-[#002022] shadow-[0_0_20px_rgba(52,211,153,0.35)] hover:bg-emerald-300"
+                      }`}
+                    >
+                    {loading ? "Loading..." : "Go to Dashboard"}
                     <span className="material-symbols-outlined">
                       arrow_forward
                     </span>
@@ -857,7 +1152,7 @@ export default function SetupProfilePage() {
                     ) : locked ? (
                       <>
                         <span className="material-symbols-outlined">lock</span>
-                        Locked {lockSecondsLeft}s
+                        Locked {formatRemainingTime(lockSecondsLeft)}
                       </>
                     ) : (
                       <>
