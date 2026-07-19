@@ -5,7 +5,7 @@ namespace AITasker.Application.Interfaces;
 
 public interface IJobCreditPackageService
 {
-    Task<List<JobCreditPackageResponse>> GetActivePackagesAsync();
+    Task<List<AvailableJobCreditPackageResponse>> GetActivePackagesAsync();
 
     Task<List<JobCreditPackageResponse>> GetAdminPackagesAsync();
 

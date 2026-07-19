@@ -17,17 +17,22 @@ public class JobCreditPackageService : IJobCreditPackageService
 
     private readonly AITaskerDbContext _context;
     private readonly IAdminAuditLogService _adminAuditLogService;
+    private readonly IJobPostingAiPolicyService _jobPostingAiPolicyService;
 
     public JobCreditPackageService(
         AITaskerDbContext context,
-        IAdminAuditLogService adminAuditLogService)
+        IAdminAuditLogService adminAuditLogService,
+        IJobPostingAiPolicyService jobPostingAiPolicyService)
     {
         _context = context;
         _adminAuditLogService = adminAuditLogService;
+        _jobPostingAiPolicyService = jobPostingAiPolicyService;
     }
 
-    public async Task<List<JobCreditPackageResponse>> GetActivePackagesAsync()
+    public async Task<List<AvailableJobCreditPackageResponse>> GetActivePackagesAsync()
     {
+        var policy = await _jobPostingAiPolicyService.GetActivePolicyAsync();
+
         var packages = await _context.JobCreditPackages
             .AsNoTracking()
             .Where(x => x.IsActive)
@@ -36,7 +41,13 @@ public class JobCreditPackageService : IJobCreditPackageService
             .ThenBy(x => x.JobCreditPackageId)
             .ToListAsync();
 
-        return packages.Select(MapPackage).ToList();
+        var responses = new List<AvailableJobCreditPackageResponse>
+        {
+            MapFreePackage(policy)
+        };
+
+        responses.AddRange(packages.Select(MapAvailablePackage));
+        return responses;
     }
 
     public async Task<List<JobCreditPackageResponse>> GetAdminPackagesAsync()
@@ -419,6 +430,56 @@ public class JobCreditPackageService : IJobCreditPackageService
         }
 
         return normalized;
+    }
+
+    private static AvailableJobCreditPackageResponse MapFreePackage(
+        JobPostingAiPolicyResponse policy)
+    {
+        return new AvailableJobCreditPackageResponse
+        {
+            JobCreditPackageId = null,
+            PackageName = "Free",
+            Description =
+                $"{policy.InitialFreeJobPostCredits} free job posting credit(s) and " +
+                $"{policy.InitialFreeAiGenerationCredits} free AI generation credit(s), granted once when a Client profile is created.",
+            JobPostCredits = policy.InitialFreeJobPostCredits,
+            AiGenerationCredits = policy.InitialFreeAiGenerationCredits,
+            Price = 0,
+            Currency = "VND",
+            IsActive = policy.IsActive,
+            IsFreeTier = true,
+            IsPurchasable = false,
+            DisplayOrder = 0,
+            CreatedAt = policy.CreatedAt,
+            UpdatedAt = policy.UpdatedAt,
+            UpdatedByAdminId = policy.UpdatedByAdminId,
+            UpdatedByAdminEmail = policy.UpdatedByAdminEmail,
+            UpdatedByAdminFullName = policy.UpdatedByAdminFullName
+        };
+    }
+
+    private static AvailableJobCreditPackageResponse MapAvailablePackage(
+        JobCreditPackage package)
+    {
+        return new AvailableJobCreditPackageResponse
+        {
+            JobCreditPackageId = package.JobCreditPackageId,
+            PackageName = package.PackageName,
+            Description = package.Description,
+            JobPostCredits = package.JobPostCredits,
+            AiGenerationCredits = package.AiGenerationCredits,
+            Price = package.Price,
+            Currency = package.Currency,
+            IsActive = package.IsActive,
+            IsFreeTier = false,
+            IsPurchasable = true,
+            DisplayOrder = package.DisplayOrder,
+            CreatedAt = package.CreatedAt,
+            UpdatedAt = package.UpdatedAt,
+            UpdatedByAdminId = package.UpdatedByAdminId,
+            UpdatedByAdminEmail = package.UpdatedByAdmin?.Email,
+            UpdatedByAdminFullName = package.UpdatedByAdmin?.FullName
+        };
     }
 
     private static JobCreditPackageResponse MapPackage(JobCreditPackage package)
