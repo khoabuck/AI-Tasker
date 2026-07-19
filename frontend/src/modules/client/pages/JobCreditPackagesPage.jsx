@@ -1,28 +1,26 @@
 // src/modules/client/pages/JobCreditPackagesPage.jsx
 //
-// GET  /api/job-credit-packages              → danh sách gói trả phí (Basic/Pro/Business)
-// POST /api/job-credit-packages/{id}/purchase → mua gói
-// GET  /api/job-credit-packages/my-purchases  → lịch sử đã mua
+// GET  /api/job-credit-packages
+//      → danh sách tất cả gói từ BE, bao gồm Free/Basic/Pro/Business
 //
-// LƯU Ý: Gói "Free" không tồn tại trong BE — đây là gói mặc định mọi Client đã có
-// sẵn lúc đăng ký, nên chỉ hiển thị cứng ở FE để client thấy đủ bảng giá, KHÔNG
-// gọi mua qua API cho gói này (sẽ luôn báo lỗi nếu cố gọi vì BE không biết gói này).
+// POST /api/job-credit-packages/{id}/purchase
+//      → mua gói trả phí
+//
+// GET  /api/job-credit-packages/my-purchases
+//      → lịch sử mua gói của Client
+//
+// Gói Free do BE trả về với:
+// - isFreeTier: true
+// - isPurchasable: false
+// - jobCreditPackageId: null
+//
+// FE không tự tạo dữ liệu gói Free và không gọi API mua gói Free.
 
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const FREE_PACKAGE = {
-  jobCreditPackageId: null, // không có ID thật — không mua được qua API
-  packageName: "Free",
-  description: "Included by default for every Client account.",
-  jobPostCredits: 1,
-  aiGenerationCredits: 3,
-  price: 0,
-  currency: "VND",
-  isFreeTier: true,
-};
 
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
@@ -33,8 +31,22 @@ const cardStyle = {
   boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
 };
 
-function formatVND(amount) {
-  return Number(amount || 0).toLocaleString("vi-VN") + " VND";
+function formatCurrency(amount, currency = "VND") {
+  const numericAmount = Number(amount);
+
+  if (!Number.isFinite(numericAmount)) {
+    return "—";
+  }
+
+  try {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(numericAmount);
+  } catch {
+    return `${numericAmount.toLocaleString("vi-VN")} ${currency}`;
+  }
 }
 
 export default function JobCreditPackagesPage() {
@@ -51,22 +63,56 @@ export default function JobCreditPackagesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError("");
+
     try {
-      const [pkgRes, purchaseRes] = await Promise.all([
-        axiosInstance.get("/job-credit-packages"),
-        axiosInstance.get("/job-credit-packages/my-purchases"),
-      ]);
+      const [packageResult, purchaseResult] =
+        await Promise.allSettled([
+          axiosInstance.get("/job-credit-packages"),
+          axiosInstance.get(
+            "/job-credit-packages/my-purchases"
+          ),
+        ]);
 
-      const pkgRaw = pkgRes.data?.data ?? pkgRes.data;
-      const pkgList = Array.isArray(pkgRaw) ? pkgRaw : pkgRaw?.items ?? [];
-      // Sắp theo displayOrder BE trả về, rồi luôn chèn Free lên đầu danh sách.
-      const sorted = [...pkgList].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
-      setPackages([FREE_PACKAGE, ...sorted]);
+      if (packageResult.status === "fulfilled") {
+        const pkgRaw =
+          packageResult.value.data?.data ??
+          packageResult.value.data;
 
-      const purchaseRaw = purchaseRes.data?.data ?? purchaseRes.data;
-      setPurchases(Array.isArray(purchaseRaw) ? purchaseRaw : purchaseRaw?.items ?? []);
-    } catch (err) {
-      setError(err?.response?.data?.message || "Unable to load the package list. Please try again.");
+        const pkgList = Array.isArray(pkgRaw)
+          ? pkgRaw
+          : pkgRaw?.items ?? [];
+
+        const sorted = [...pkgList]
+          .filter((pkg) => pkg.isActive !== false)
+          .sort(
+            (a, b) =>
+              Number(a.displayOrder ?? 0) -
+              Number(b.displayOrder ?? 0)
+          );
+
+        setPackages(sorted);
+      } else {
+        setPackages([]);
+
+        setError(
+          packageResult.reason?.response?.data?.message ||
+            "Unable to load the package list. Please try again."
+        );
+      }
+
+      if (purchaseResult.status === "fulfilled") {
+        const purchaseRaw =
+          purchaseResult.value.data?.data ??
+          purchaseResult.value.data;
+
+        setPurchases(
+          Array.isArray(purchaseRaw)
+            ? purchaseRaw
+            : purchaseRaw?.items ?? []
+        );
+      } else {
+        setPurchases([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -75,7 +121,13 @@ export default function JobCreditPackagesPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const handlePurchase = async (pkg) => {
-    if (pkg.isFreeTier) return; // Free không gọi API mua — không có ID thật
+    if (
+      pkg.isFreeTier === true ||
+      pkg.isPurchasable !== true ||
+      pkg.jobCreditPackageId == null
+    ) {
+      return;
+    }
 
     setPurchasingId(pkg.jobCreditPackageId);
     setPurchaseError("");
@@ -138,13 +190,23 @@ export default function JobCreditPackagesPage() {
         )}
 
         {/* Bảng các gói — giống bố cục Đề xuất bảng gói */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 18, marginBottom: 32 }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns:
+              "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 18,
+            marginBottom: 32,
+          }}
+        >
         {packages.map((pkg) => {
             const isPopular = pkg.isPopular === true;
-
             return (
             <div
-                key={pkg.jobCreditPackageId ?? "free"}
+                key={
+                  pkg.jobCreditPackageId ??
+                  `${pkg.packageName}-${pkg.displayOrder}`
+                }
                 style={{
                 background: isPopular ? "linear-gradient(180deg, rgba(0,240,255,0.12), rgba(16,19,25,0.92))" : "rgba(16,19,25,0.9)",
                 border: isPopular ? "1px solid rgba(0,240,255,0.45)" : "1px solid rgba(255,255,255,0.1)",
@@ -169,7 +231,7 @@ export default function JobCreditPackagesPage() {
                 </p>
 
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 800, color: pkg.isFreeTier ? "#c2c6d6" : "#00F0FF", marginBottom: 22 }}>
-                {formatVND(pkg.price)}
+                {formatCurrency(pkg.price, pkg.currency)}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 22 }}>
@@ -184,22 +246,67 @@ export default function JobCreditPackagesPage() {
                 </div>
                 </div>
 
-                {pkg.isFreeTier ? (
+                {pkg.isFreeTier === true ? (
                 <button
-                    disabled
-                    style={{ width: "100%", padding: "12px", borderRadius: 10, background: "rgba(255,255,255,0.06)", color: "#8c90a0", border: "1px solid rgba(255,255,255,0.1)", fontWeight: 700 }}
+                  disabled
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.06)",
+                    color: "#8c90a0",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    fontWeight: 700,
+                    cursor: "not-allowed",
+                  }}
                 >
-                    Included
+                  Included
                 </button>
-                ) : (
+              ) : pkg.isPurchasable !== true ? (
                 <button
-                    onClick={() => handlePurchase(pkg)}
-                    disabled={purchasingId === pkg.jobCreditPackageId}
-                    style={{ width: "100%", padding: "12px", borderRadius: 10, background: purchasingId === pkg.jobCreditPackageId ? "#1d2026" : "#00F0FF", color: purchasingId === pkg.jobCreditPackageId ? "#8c90a0" : "#002022", border: "none", fontWeight: 800, cursor: purchasingId === pkg.jobCreditPackageId ? "not-allowed" : "pointer" }}
+                  disabled
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: 10,
+                    background: "rgba(255,255,255,0.06)",
+                    color: "#8c90a0",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    fontWeight: 700,
+                    cursor: "not-allowed",
+                  }}
                 >
-                    {purchasingId === pkg.jobCreditPackageId ? "Processing..." : "Buy Package"}
+                  Unavailable
                 </button>
-                )}
+              ) : (
+                <button
+                  onClick={() => handlePurchase(pkg)}
+                  disabled={purchasingId === pkg.jobCreditPackageId}
+                  style={{
+                    width: "100%",
+                    padding: "12px",
+                    borderRadius: 10,
+                    background:
+                      purchasingId === pkg.jobCreditPackageId
+                        ? "#1d2026"
+                        : "#00F0FF",
+                    color:
+                      purchasingId === pkg.jobCreditPackageId
+                        ? "#8c90a0"
+                        : "#002022",
+                    border: "none",
+                    fontWeight: 800,
+                    cursor:
+                      purchasingId === pkg.jobCreditPackageId
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  {purchasingId === pkg.jobCreditPackageId
+                    ? "Processing..."
+                    : "Buy Package"}
+                </button>
+              )}
             </div>
             );
         })}
@@ -234,7 +341,10 @@ export default function JobCreditPackagesPage() {
                   </div>
 
                   <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "#00F0FF" }}>
-                    {formatVND(p.pricePaid)}
+                    {formatCurrency(
+                      p.pricePaid,
+                      p.currencySnapshot ?? p.currency ?? "VND"
+                    )}
                   </span>
                 </div>
               ))}
