@@ -1,5 +1,5 @@
 // src/modules/client/pages/ClientJobDetailPage.jsx
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
@@ -35,6 +35,34 @@ const PROPOSAL_STATUS = {
   WITHDRAWN: { label: "Withdrawn", color: "#8c90a0" },
   COUNTERED: { label: "Countered", color: "#c0c1ff" },
 };
+
+const PROPOSAL_POLL_INTERVAL_MS = 5000;
+
+const DEFAULT_STATUS_CONFIG = {
+  label: "Unknown",
+  color: "#94a3b8",
+  bg: "rgba(148,163,184,0.08)",
+  border: "rgba(148,163,184,0.25)",
+};
+
+const DEFAULT_PROPOSAL_STATUS = {
+  label: "Unknown",
+  color: "#8c90a0",
+};
+
+const parseProposalItems = (responseData) => {
+  const data = responseData?.data ?? responseData;
+
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  if (Array.isArray(data?.items)) {
+    return data.items;
+  }
+
+  return [];
+};
 const cardStyle = {
   width: "100%",
   maxWidth: "100%",
@@ -55,6 +83,59 @@ const labelStyle = {
   textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 6,
 };
 
+function ExpertAvatar({
+  src,
+  alt,
+  size = 44,
+  borderColor = "rgba(255,255,255,0.1)",
+}) {
+  const [imageError, setImageError] = useState(false);
+
+  if (!src || imageError) {
+    return (
+      <div
+        role="img"
+        aria-label={alt}
+        style={{
+          width: size,
+          height: size,
+          borderRadius: "50%",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: "rgba(192,193,255,0.08)",
+          border: `2px solid ${borderColor}`,
+          color: "#c0c1ff",
+        }}
+      >
+        <span
+          className="material-symbols-outlined"
+          style={{ fontSize: size * 0.55 }}
+        >
+          person
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      onError={() => setImageError(true)}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: "50%",
+        objectFit: "cover",
+        border: `2px solid ${borderColor}`,
+        flexShrink: 0,
+      }}
+    />
+  );
+}
+
 function MessageModal({ proposal, onClose, navigate }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
@@ -63,25 +144,36 @@ function MessageModal({ proposal, onClose, navigate }) {
   const expertName = proposal.expertName || proposal.fullName || "Expert";
 
   const handleSend = async () => {
-    if (!message.trim()) return;
-    setSending(true); setSendError("");
+    const trimmedMessage = message.trim();
+
+    if (!trimmedMessage || sending) {
+      return;
+    }
+
+    setSending(true);
+    setSendError("");
+
     try {
-      // Kiểm tra đã có conversation nào với đúng expert này chưa (theo
-      // expertUserId, không phải relatedProposalId — vì cùng 1 expert có
-      // thể có nhiều proposal khác nhau nhưng chỉ nên dùng chung 1 conversation).
-      const existing = await findExistingConversationWithExpert(axiosInstance, {
-        expertUserId: proposal.expertUserId,
-      });
+      const existing = await findExistingConversationWithExpert(
+        axiosInstance,
+        {
+          expertUserId: proposal.expertUserId,
+        }
+      );
+
       let conversationId = existing?.conversationId ?? null;
 
       if (conversationId) {
-        await axiosInstance.post(`/conversations/${conversationId}/messages`, {
-          content: message,
-          messageType: "TEXT",
-          attachmentUrl: null,
-        });
+        await axiosInstance.post(
+          `/conversations/${conversationId}/messages`,
+          {
+            content: trimmedMessage,
+            messageType: "TEXT",
+            attachmentUrl: null,
+          }
+        );
       } else {
-        const res = await axiosInstance.post("/conversations", {
+        const response = await axiosInstance.post("/conversations", {
           conversationType: "JOB_INQUIRY",
           clientUserId: proposal.clientUserId,
           expertUserId: proposal.expertUserId,
@@ -89,20 +181,38 @@ function MessageModal({ proposal, onClose, navigate }) {
           expertProfileId: proposal.expertProfileId,
           relatedJobId: proposal.jobId,
           relatedProposalId: proposal.proposalId,
-          initialMessage: message,
+          initialMessage: trimmedMessage,
         });
-        const conv = res.data?.data ?? res.data;
-        conversationId = conv?.conversationId;
+
+        const conversationData =
+          response.data?.data ?? response.data;
+
+        conversationId = conversationData?.conversationId;
+
+        if (!conversationId) {
+          throw new Error(
+            "Conversation ID was not returned by the server."
+          );
+        }
       }
 
       setSent(true);
+
       setTimeout(() => {
-        setSent(false); setMessage(""); onClose();
-        if (conversationId) navigate(`/client/messages/${conversationId}`);
+        setSent(false);
+        setMessage("");
+        onClose();
+        navigate(`/client/messages/${conversationId}`);
       }, 1200);
     } catch (err) {
-      setSendError(err?.response?.data?.message || "Message sent failed.");
-    } finally { setSending(false); }
+      setSendError(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to send message."
+      );
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -111,13 +221,26 @@ function MessageModal({ proposal, onClose, navigate }) {
       <div style={{ background: "rgba(16,19,25,0.98)", border: "1px solid rgba(192,193,255,0.25)", borderRadius: 16, padding: 28, width: "100%", maxWidth: 480, boxShadow: "0 20px 60px rgba(0,0,0,0.8)" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <img
-                src={proposal.expertAvatarUrl || `https://i.pravatar.cc/100?u=${proposal.expertProfileId || proposal.expertUserId || proposal.proposalId}`}
+            <ExpertAvatar
+                src={proposal.expertAvatarUrl}
                 alt={expertName}
-              style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(192,193,255,0.3)" }} />
+                size={40}
+                borderColor="rgba(192,193,255,0.3)"
+              />
             <div>
               <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, fontSize: 15, color: "#e1e2eb", margin: 0 }}>{expertName}</h3>
-              <p style={{ fontSize: 11, color: "#c0c1ff", fontFamily: "JetBrains Mono, monospace", margin: 0 }}>{proposal.expertTitle || proposal.professionalTitle}</p>
+              {(proposal.expertTitle || proposal.professionalTitle) && (
+                <p
+                  style={{
+                    fontSize: 11,
+                    color: "#c0c1ff",
+                    fontFamily: "JetBrains Mono, monospace",
+                    margin: 0,
+                  }}
+                >
+                  {proposal.expertTitle || proposal.professionalTitle}
+                </p>
+              )}
             </div>
           </div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: "#8c90a0", cursor: "pointer", padding: 4 }}>
@@ -131,7 +254,6 @@ function MessageModal({ proposal, onClose, navigate }) {
             style={{ width: "100%", background: "#1d2026", border: "1px solid rgba(192,193,255,0.2)", borderRadius: 10, padding: "12px 14px", color: "#e1e2eb", outline: "none", fontFamily: "Inter, sans-serif", fontSize: 14, resize: "none", boxSizing: "border-box" }}
             onFocus={(e) => (e.target.style.borderColor = "#c0c1ff")}
             onBlur={(e) => (e.target.style.borderColor = "rgba(192,193,255,0.2)")} />
-          <p style={{ fontSize: 11, color: "#8c90a0", marginTop: 6 }}>{message.length}/500</p>
         </div>
         <div style={{ marginBottom: 16 }}>
           <p style={{ fontSize: 11, color: "#8c90a0", fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Quick templates:</p>
@@ -165,37 +287,57 @@ export default function ClientJobDetailPage() {
   const [proposals, setProposals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [actionLoading, setActionLoading] = useState(null);
   const [messagingProposal, setMessagingProposal] = useState(null);
 
-  // Đánh dấu đã load lần đầu chưa. Từ lần refetch thứ 2 trở đi (khi quay lại
-  // trang) sẽ fetch ngầm, giữ nguyên nội dung cũ trên màn hình → không nháy trắng.
-  const hasLoadedOnce = useRef(false);
+  
 
-  const fetchData = useCallback(async (signal, silent = false) => {
-    // Chỉ bật spinner khi CHƯA có data (lần đầu) và không phải refetch nền.
-    if (!hasLoadedOnce.current && !silent) {
-      setLoading(true);
+  const fetchData = useCallback(async (signal) => {
+  setLoading(true);
+  setError("");
+  setJob(null);
+  setProposals([]);
+
+  try {
+    const [jobRes, proposalsRes] = await Promise.all([
+      axiosInstance.get(`/jobs/${id}`, { signal }),
+      axiosInstance.get(`/jobs/${id}/proposals`, { signal }),
+    ]);
+
+    setJob(jobRes.data);
+    setProposals(parseProposalItems(proposalsRes.data));
+  } catch (err) {
+    if (err?.code === "ERR_CANCELED") {
+      return;
     }
-    if (!silent) setError("");
-    try {
-      const [jobRes, proposalsRes] = await Promise.all([
-        axiosInstance.get(`/jobs/${id}`, { signal }),
-        axiosInstance.get(`/jobs/${id}/proposals`, { signal }),
-      ]);
-      setJob(jobRes.data);
-      const raw = proposalsRes.data;
-      setProposals(Array.isArray(raw) ? raw : raw.items ?? raw.data ?? []);
-      hasLoadedOnce.current = true;
-    } catch (err) {
-      if (err?.code === "ERR_CANCELED") return;
-      if (!silent) {
-        setError(err?.response?.status === 404 ? "No job found for this position." : err?.response?.status === 403 ? "You are not allowed to view it." : err?.response?.data?.message || "An error has occurred.");
-      }
-    } finally {
-      if (!silent) setLoading(false);
+
+    setError(
+      err?.response?.status === 404
+        ? "No job found for this position."
+        : err?.response?.status === 403
+          ? "You are not allowed to view it."
+          : err?.response?.data?.message ||
+            "An error has occurred."
+    );
+  } finally {
+    setLoading(false);
+  }
+}, [id]);
+
+  const fetchProposals = useCallback(async () => {
+  try {
+    const response = await axiosInstance.get(
+      `/jobs/${id}/proposals`
+    );
+
+    setProposals(parseProposalItems(response.data));
+  } catch (err) {
+    if (err?.code === "ERR_CANCELED") {
+      return;
     }
-  }, [id]);
+
+    // Polling nền lỗi thì giữ lại danh sách proposal hiện tại.
+  }
+}, [id]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -208,34 +350,16 @@ export default function ClientJobDetailPage() {
   // đã ACTIVE/COMPLETED/CANCELLED/DISPUTED vì lúc đó không còn ai nộp proposal
   // mới nữa.
   useEffect(() => {
-    if (job?.status !== "OPEN") return;
+    if (job?.status !== "OPEN") {
+      return;
+    }
 
     const intervalId = setInterval(() => {
-      fetchData(undefined, true);
-    }, 5000);
+      fetchProposals();
+    }, PROPOSAL_POLL_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-  }, [job?.status, fetchData]);
-
-  const handleAccept = async (proposalId) => {
-    if (!confirm("Accept this proposal? The other proposals will be rejected.")) return;
-    setActionLoading(proposalId + "_accept");
-    try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
-      setProposals((prev) => prev.map((p) => ({ ...p, status: p.proposalId === proposalId ? "ACCEPTED" : (p.status === "PENDING" || p.status === "SUBMITTED") ? "REJECTED" : p.status })));
-    } catch (err) { alert(err?.response?.data?.message || "Accept failed."); }
-    finally { setActionLoading(null); }
-  };
-
-  const handleDecline = async (proposalId) => {
-    if (!confirm("Reject this proposal?")) return;
-    setActionLoading(proposalId + "_decline");
-    try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=REJECT`);
-      setProposals((prev) => prev.map((p) => p.proposalId === proposalId ? { ...p, status: "REJECTED" } : p));
-    } catch (err) { alert(err?.response?.data?.message || "Decline failed."); }
-    finally { setActionLoading(null); }
-  };
+  }, [job?.status, fetchProposals]);
 
   const showFullLoading = loading && !job;
 
@@ -309,7 +433,9 @@ if (showFullLoading) {
         <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
         <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{error}</p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={() => fetchData(new AbortController().signal)} style={{ padding: "10px 24px", background: "rgba(0,240,255,0.08)", color: "#00F0FF", border: "1px solid rgba(0,240,255,0.3)", borderRadius: 8, cursor: "pointer", fontWeight: 600 }}>Retry</button>
+          <button onClick={() => fetchData()}>
+            Retry
+          </button>
           <button onClick={() => navigate("/client/jobs")} style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>Back to Jobs</button>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -320,7 +446,10 @@ if (showFullLoading) {
 
   if (!job) return null;
 
-  const statusCfg = STATUS_CONFIG[job.status] || STATUS_CONFIG.OPEN;
+  const statusCfg = STATUS_CONFIG[job.status] || {
+    ...DEFAULT_STATUS_CONFIG,
+    label: job.status || DEFAULT_STATUS_CONFIG.label,
+  };
   const deadline = job.deadline ? new Date(job.deadline).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : "—";
   const createdAt = job.createdAt ? new Date(job.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) : "—";
 
@@ -471,15 +600,16 @@ if (showFullLoading) {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {proposals.map((proposal) => {
-                    const pStatus = PROPOSAL_STATUS[proposal.status] || PROPOSAL_STATUS.PENDING;
+                    const pStatus = PROPOSAL_STATUS[proposal.status] || {
+                      ...DEFAULT_PROPOSAL_STATUS,
+                      label:
+                        proposal.status ||
+                        DEFAULT_PROPOSAL_STATUS.label,
+                    };
                     const level = LEVEL_CONFIG[proposal.level] || { label: proposal.level || "—", color: "#8c90a0" };
                     const submittedDate = (proposal.createdAt || proposal.submittedAt)
                       ? new Date(proposal.createdAt || proposal.submittedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })
                       : "—";
-                    const isPending = proposal.status === "PENDING" || proposal.status === "SUBMITTED";
-                    const isAccepting = actionLoading === proposal.proposalId + "_accept";
-                    const isDeclining = actionLoading === proposal.proposalId + "_decline";
-                    const isProcessing = isAccepting || isDeclining;
                     const expertName = proposal.expertName || proposal.fullName || "Expert";
 
                     // FIX: field thật từ BE là proposedPrice / proposedTimelineDays
@@ -494,10 +624,11 @@ if (showFullLoading) {
                         onMouseEnter={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = "rgba(0,240,255,0.2)"; }}
                         onMouseLeave={(e) => { if (proposal.status !== "ACCEPTED") e.currentTarget.style.borderColor = proposal.status === "ACCEPTED" ? "rgba(34,197,94,0.25)" : "rgba(255,255,255,0.07)"; }}>
                         <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
-                          <img
-                            src={proposal.expertAvatarUrl || `https://i.pravatar.cc/100?u=${proposal.expertProfileId || proposal.expertUserId || proposal.proposalId}`}
+                          <ExpertAvatar
+                            src={proposal.expertAvatarUrl}
                             alt={expertName}
-                            style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.1)", flexShrink: 0 }} />
+                            size={44}
+                          />
                           <div style={{ flex: 1 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
                               <div>
@@ -507,7 +638,19 @@ if (showFullLoading) {
                                     <span style={{ padding: "2px 7px", borderRadius: 999, fontSize: 9, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", background: level.color + "20", color: level.color, border: `1px solid ${level.color}40` }}>{level.label}</span>
                                   )}
                                 </div>
-                                <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{proposal.expertTitle || proposal.professionalTitle}</p>
+                                {(proposal.expertTitle ||
+                                  proposal.professionalTitle) && (
+                                  <p
+                                    style={{
+                                      fontSize: 12,
+                                      color: "#8c90a0",
+                                      margin: 0,
+                                    }}
+                                  >
+                                    {proposal.expertTitle ||
+                                      proposal.professionalTitle}
+                                  </p>
+                                )}
                               </div>
                               <div style={{ textAlign: "right" }}>
                                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 17, fontWeight: 700, color: "#00F0FF" }}>

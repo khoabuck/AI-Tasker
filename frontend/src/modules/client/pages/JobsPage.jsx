@@ -326,7 +326,7 @@ export default function JobsPage() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
             <div>
               <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Jobs</h1>
-              <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Quản lý các job postings của bạn.</p>
+              <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Manage your job postings.</p>
             </div>
             <button onClick={() => navigate("/client/post-job")}
               style={{ display: "flex", alignItems: "center", gap: 8, padding: "12px 22px", background: "linear-gradient(90deg, #1772eb, #00F0FF)", color: "#fff", fontWeight: 700, borderRadius: 10, border: "none", cursor: "pointer", fontSize: 14, fontFamily: "Hanken Grotesk, sans-serif", boxShadow: "0 0 16px rgba(0,240,255,0.2)" }}>
