@@ -1,23 +1,18 @@
 import axios from "axios";
 
 const getApiBaseUrl = () => {
-  const configuredUrl = import.meta.env.VITE_API_BASE_URL?.trim();
+  const configuredUrl =
+    import.meta.env.VITE_API_BASE_URL?.trim();
 
-  if (configuredUrl) {
-    return configuredUrl.replace(/\/+$/, "");
+
+  if (!configuredUrl) {
+    throw new Error(
+      "Missing VITE_API_BASE_URL"
+    );
   }
 
-  const backendBaseUrl = import.meta.env.VITE_BACKEND_BASE_URL?.trim();
 
-  if (backendBaseUrl) {
-    return `${backendBaseUrl.replace(/\/+$/, "")}/api`;
-  }
-
-  if (import.meta.env.DEV) {
-    return "http://localhost:5070/api";
-  }
-
-  return "";
+  return configuredUrl.replace(/\/+$/, "");
 };
 
 const ACCOUNT_BLOCKED_EVENT = "aitasker-account-blocked";

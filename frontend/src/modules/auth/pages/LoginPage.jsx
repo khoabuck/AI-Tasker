@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
 import { clearAuth } from "../../../utils/auth.utils";
+import { BACKEND_URL } from "../../../config/env";
 
 const formatCountdown = (totalSeconds) => {
   const safeSeconds = Math.max(0, Number(totalSeconds || 0));
@@ -317,16 +318,9 @@ export default function LoginPage() {
 };
 
   const handleGoogleLogin = () => {
-    const backendUrl = String(
-      import.meta.env.VITE_BACKEND_BASE_URL || ""
-    ).replace(/\/+$/, "");
-
-    if (!backendUrl) {
-      setError("Missing VITE_BACKEND_BASE_URL");
-      return;
-    }
-
-    window.location.assign(`${backendUrl}/api/auth/google-login`);
+    window.location.assign(
+      `${BACKEND_URL}/api/auth/google-login`
+    );
   };
 
   return (

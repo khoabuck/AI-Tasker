@@ -2,10 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { registerApi } from "../../../api/auth.api";
 import { getErrorMessage } from "../../../utils/auth.utils";
+import { BACKEND_URL } from "../../../config/env";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
-const GOOGLE_LOGIN_URL = `${import.meta.env.VITE_BACKEND_BASE_URL}/api/auth/google-login`;
+const GOOGLE_LOGIN_URL = `${BACKEND_URL}/api/auth/google-login`;
 
 const GoogleIcon = () => (
   <svg style={{ width: 20, height: 20 }} viewBox="0 0 24 24">
@@ -52,8 +53,7 @@ export default function RegisterPage() {
     }
   };
 
-  // TODO (BE): Khi BE sửa GoogleCallback redirect về http://localhost:5173/oauth/callback?token=xxx
-  // thì tạo thêm trang /oauth/callback để bắt token và lưu vào localStorage
+
   const handleGoogleLogin = () => {
     window.location.href = GOOGLE_LOGIN_URL;
   };
@@ -356,7 +356,7 @@ export default function RegisterPage() {
       <footer style={{ background: "#0b0e14", borderTop: "1px solid rgba(255,255,255,0.12)", padding: "48px 0" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 48px" }}>
           <p style={{ fontFamily: "Hanken Grotesk, sans-serif", fontWeight: 700, color: "#e1e2eb", marginBottom: 4 }}>AI Tasker</p>
-          <p style={{ fontSize: 14, color: "#8c90a0" }}>© 2024 AI Tasker. All rights reserved.</p>
+          <p style={{ fontSize: 14, color: "#8c90a0" }}>© 2026 AI Tasker. All rights reserved.</p>
         </div>
       </footer>
     </div>
