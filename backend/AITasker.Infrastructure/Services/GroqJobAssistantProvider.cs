@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Globalization;
+using System.Text.Json;
 using AITasker.Application.DTOs.Ai;
 using AITasker.Application.DTOs.Requests;
 using AITasker.Application.DTOs.Responses;
@@ -10,7 +11,8 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
 {
     private readonly IGroqChatCompletionService _groqChatCompletionService;
 
-    public GroqJobAssistantProvider(IGroqChatCompletionService groqChatCompletionService)
+    public GroqJobAssistantProvider(
+        IGroqChatCompletionService groqChatCompletionService)
     {
         _groqChatCompletionService = groqChatCompletionService;
     }
@@ -19,27 +21,44 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         JobAssistantRequest request,
         List<string> availableSkills)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(availableSkills);
+
+        if (string.IsNullOrWhiteSpace(request.RawRequirement))
+        {
+            throw new ArgumentException(
+                "Raw requirement is required.",
+                nameof(request)
+            );
+        }
+
         var prompt = BuildPrompt(request, availableSkills);
 
-        var aiResponse = await _groqChatCompletionService.CreateChatCompletionAsync(
-            new GroqChatCompletionRequest
-            {
-                Feature = "JobAssistant",
-                Messages = new List<GroqChatMessage>
+        var aiResponse = await _groqChatCompletionService
+            .CreateChatCompletionAsync(
+                new GroqChatCompletionRequest
                 {
-                    new()
+                    Feature = "JobAssistant",
+                    Messages = new List<GroqChatMessage>
                     {
-                        Role = "system",
-                        Content = "You are an AI job requirement analyst for an AI freelance marketplace. Return exactly one valid JSON object only. Do not return markdown, code fences, comments, or explanation."
-                    },
-                    new()
-                    {
-                        Role = "user",
-                        Content = prompt
+                        new()
+                        {
+                            Role = "system",
+                            Content =
+                                "You are an AI job requirement analyst and budget estimator " +
+                                "for an AI freelance marketplace. Improve clarity without expanding " +
+                                "the client's requested scope. All monetary amounts are VND. " +
+                                "Return exactly one valid JSON object only. Do not return markdown, " +
+                                "code fences, comments, or explanation outside the JSON object."
+                        },
+                        new()
+                        {
+                            Role = "user",
+                            Content = prompt
+                        }
                     }
                 }
-            }
-        );
+            );
 
         return ParseAiResult(aiResponse.Content);
     }
@@ -48,54 +67,160 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
         JobAssistantRequest request,
         List<string> availableSkills)
     {
-        var skillsText = string.Join(", ", availableSkills);
+        var normalizedBudgetMin = NormalizeBudgetValue(request.BudgetMin);
+        var normalizedBudgetMax = NormalizeBudgetValue(request.BudgetMax);
+
+        var budgetMinText = FormatOptionalBudget(normalizedBudgetMin);
+        var budgetMaxText = FormatOptionalBudget(normalizedBudgetMax);
+
+        var deadlineText = request.Deadline.HasValue
+            ? request.Deadline.Value.ToString(
+                "O",
+                CultureInfo.InvariantCulture
+            )
+            : "null";
+
+        var projectTypeHintText =
+            string.IsNullOrWhiteSpace(request.ProjectTypeHint)
+                ? "null"
+                : request.ProjectTypeHint.Trim();
+
+        var skillsText = string.Join(
+            ", ",
+            availableSkills
+                .Where(skill => !string.IsNullOrWhiteSpace(skill))
+                .Select(skill => skill.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+        );
 
         return $$"""
-        Analyze this client job requirement and improve it for an AI service marketplace.
+        Analyze and improve the following client job requirement for an AI freelance marketplace.
 
-        Client raw requirement:
-        {{request.RawRequirement}}
+        CLIENT RAW REQUIREMENT:
+        {{request.RawRequirement.Trim()}}
 
-        Client form values, if already provided:
-        BudgetMin: {{request.BudgetMin}}
-        BudgetMax: {{request.BudgetMax}}
-        Deadline: {{request.Deadline}}
-        ProjectTypeHint: {{request.ProjectTypeHint}}
+        OPTIONAL CLIENT FORM VALUES:
+        BudgetMin: {{budgetMinText}}
+        BudgetMax: {{budgetMaxText}}
+        Deadline: {{deadlineText}}
+        ProjectTypeHint: {{projectTypeHintText}}
 
-        Available skills in system:
+        AVAILABLE SKILLS IN THE SYSTEM:
         {{skillsText}}
 
-        Rules:
-        - The client may not understand technical complexity.
-        - You must estimate complexity as SIMPLE, MEDIUM, COMPLEX, or UNKNOWN.
-        - SuggestedSkillNames must only use names from Available skills.
-        - Do not invent skill names outside the available skills list.
-        - If the requirement is vague, still suggest a practical improved version.
-        - Keep the result practical for a real software project.
-        - Budget suggestion rules:
-          1. If BudgetMin or BudgetMax is already provided in the form values, return those values for the matching fields and set suggestedBudgetSource = "FORM".
-          2. If the raw requirement explicitly states a budget, extract it and set suggestedBudgetSource = "RAW_REQUIREMENT".
-          3. If the raw requirement does not clearly mention budget and form values are empty, estimate a practical VND budget range based on scope, complexity, required skills, likely deliverables, and deadline. Set suggestedBudgetSource = "AI_ESTIMATE".
-        - If the raw requirement says a range like "5 million to 10 million VND", "5-10 triá»‡u", or "khoáº£ng 5 tá»›i 10 triá»‡u", return suggestedBudgetMin = 5000000 and suggestedBudgetMax = 10000000.
-        - If the raw requirement says a single maximum budget like "budget 10 million VND", return suggestedBudgetMax = 10000000 and suggestedBudgetMin = null.
-        - If the raw requirement says a minimum budget, return suggestedBudgetMin.
-        - When estimating budget, do not return null unless the requirement is too vague to price at all.
-        - Estimated budget must be realistic for Vietnam freelance AI/software projects, not too low, and not enterprise-inflated.
-        - Add a short budgetSuggestionNote explaining why the budget was extracted or estimated.
-        - Budget values must be numeric VND amounts without commas, currency symbols, or text.
-        - Return JSON only.
-        - Do not wrap the JSON in markdown.
-        - Do not add explanation outside JSON.
+        PRIMARY TASKS:
+        1. Rewrite the requirement so it is clearer, less repetitive, internally consistent,
+           and understandable to qualified experts.
+        2. Preserve the client's requested business scope and major features.
+        3. Do not add new committed scope that the client did not request.
+        4. Produce concrete, reviewable deliverables that map directly to the requested scope.
+        5. Estimate a realistic VND budget range for exactly that scope.
+        6. Select the minimum essential skills from AVAILABLE SKILLS and order them from
+           most important to least important.
 
-        JSON format:
+        SCOPE CONTROL RULES:
+        - Improve wording, organization, acceptance clarity, and missing context only.
+        - Do not transform the request into a larger, enterprise-grade, production-scale,
+          or commercial-scale system unless the client explicitly requested that level.
+        - Do not invent extra user roles, modules, dashboards, integrations, infrastructure,
+          analytics, compliance requirements, support periods, warranties, or deployment work.
+        - Do not add offline mode, Power BI, vector databases, RAG, semantic search,
+          custom model training, Kubernetes, microservices, message queues, teacher roles,
+          password reset, profile management, file upload, or post-delivery support unless
+          the client explicitly requested that exact capability.
+        - Do not add a technology merely because it exists in AVAILABLE SKILLS.
+        - If the client did not choose a specific framework, describe the capability
+          generically instead of committing to an unnecessary technology.
+        - Responsive web design is not a separate mobile application.
+        - Use "mobile application" only when the client explicitly requests a separate
+          native or cross-platform iOS/Android application.
+        - Do not silently remove a major requested feature because the client's stated
+          budget appears too low. Keep the requested scope and recommend a more realistic budget.
+        - If a necessary detail is missing, state a concise assumption in warnings.
+          Do not convert that assumption into an additional committed feature.
+
+        DESCRIPTION AND DELIVERABLE RULES:
+        - suggestedTitle must be concise and describe only the client's improved scope.
+        - improvedDescription must contain only the requested features plus necessary
+          clarification. It must not include speculative optional features.
+        - aiGeneratedDescription must be a concise summary of the same scope.
+        - Estimate complexity as SIMPLE, MEDIUM, COMPLEX, or UNKNOWN.
+        - expectedDeliverables must map directly to the requested features.
+        - Basic source code, configuration, migrations, tests, and short setup documentation
+          may be included only when they are necessary to deliver the requested system.
+        - Do not add extensive specifications, Power BI templates, warranty periods,
+          long-term support, repository history, containerization, or production operations
+          unless explicitly requested.
+        - The title, descriptions, deliverables, complexity, and skills must be consistent.
+
+        CURRENCY RULES:
+        - Every budget amount in the form, raw requirement, output, and notes is VND.
+        - Never interpret an amount as USD or another currency.
+        - Never convert VND into another currency.
+        - Never write "presumably USD" or infer another currency from the size of the number.
+
+        BUDGET RULES:
+        - Recommend a realistic VND range for the client's actual requested scope only.
+        - Positive BudgetMin and BudgetMax form values are client references.
+        - A budget written inside the raw requirement is also a client reference.
+        - Zero or negative form values mean the client did not provide that field.
+        - Evaluate the reference budget against the requested features, platforms,
+          integrations, complexity, deliverables, and deadline.
+        - If the client's budget is realistic, you may retain it.
+        - If it is materially unrealistic, return a realistic AI-estimated range and explain
+          the mismatch in budgetSuggestionNote and warnings.
+        - Do not shrink the scope into an unrelated tiny task merely to retain a low budget.
+        - If no usable budget was provided, estimate both minimum and maximum values.
+        - suggestedBudgetMin and suggestedBudgetMax must always be positive numeric VND values.
+        - Never return null, zero, negative values, text, commas, or currency symbols in
+          suggestedBudgetMin or suggestedBudgetMax.
+        - suggestedBudgetMin must be less than or equal to suggestedBudgetMax.
+        - Estimate the budget from the requested scope. Do not add invented work and then
+          charge for that invented work.
+        - Do not cite hourly rates, market-rate claims, USD rates, developer salaries,
+          estimated labor hours, or arithmetic cost formulas in budgetSuggestionNote.
+        - budgetSuggestionNote should explain the estimate using scope factors only, such as
+          number of platforms, requested modules, AI integrations, complexity, and deadline.
+        - Keep the estimate proportionate to the requirement and avoid extreme ranges caused
+          by optional features that were not requested.
+
+        BUDGET SOURCE RULES:
+        - Use "FORM" only when the final recommended range substantially keeps the positive
+          form budget values.
+        - Use "RAW_REQUIREMENT" only when the final recommended range substantially keeps
+          the explicit budget written in the raw requirement.
+        - Use "AI_ESTIMATE" when no usable client budget exists or when an unrealistic
+          client budget is materially adjusted or replaced.
+        - Use "UNKNOWN" only when pricing genuinely cannot be assessed, but still return
+          the best positive preliminary min/max range.
+
+        SKILL RULES:
+        - suggestedSkillNames must contain exact names from AVAILABLE SKILLS only.
+        - Never invent, translate, rename, abbreviate, or approximate a skill name.
+        - Do not select an unrelated skill because an exact matching skill is unavailable.
+        - Select only skills directly needed by the requested deliverables.
+        - Order skills from most essential to least essential because the platform may apply
+          an Admin-configured maximum number of suggested skills.
+        - If a requested deliverable has no matching active skill, preserve the requested
+          deliverable, omit the unrelated skill, and add a warning that the active skill
+          catalog has no direct match.
+        - If no available skill is appropriate, return an empty array.
+
+        OUTPUT RULES:
+        - Return exactly one valid JSON object.
+        - Do not wrap JSON in markdown.
+        - Do not include comments or explanation outside JSON.
+        - Do not repeat warnings.
+
+        JSON FORMAT:
         {
           "suggestedTitle": "string",
           "improvedDescription": "string",
           "aiGeneratedDescription": "string",
           "suggestedProjectType": "string",
           "suggestedComplexity": "SIMPLE | MEDIUM | COMPLEX | UNKNOWN",
-          "suggestedBudgetMin": 0,
-          "suggestedBudgetMax": 0,
+          "suggestedBudgetMin": 1000000,
+          "suggestedBudgetMax": 2000000,
           "suggestedBudgetSource": "FORM | RAW_REQUIREMENT | AI_ESTIMATE | UNKNOWN",
           "budgetSuggestionNote": "string",
           "expectedDeliverables": "string",
@@ -107,6 +232,13 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
 
     private static JobAiAnalysisResult ParseAiResult(string aiText)
     {
+        if (string.IsNullOrWhiteSpace(aiText))
+        {
+            throw new InvalidOperationException(
+                "AI job assistant returned an empty response."
+            );
+        }
+
         var cleaned = CleanAiJson(aiText);
 
         var options = new JsonSerializerOptions
@@ -114,72 +246,154 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
             PropertyNameCaseInsensitive = true
         };
 
-        var result = JsonSerializer.Deserialize<JobAiAnalysisResult>(
-            cleaned,
-            options
-        );
+        JobAiAnalysisResult? result;
+
+        try
+        {
+            result = JsonSerializer.Deserialize<JobAiAnalysisResult>(
+                cleaned,
+                options
+            );
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidOperationException(
+                "Cannot parse AI job assistant result as valid JSON.",
+                exception
+            );
+        }
 
         if (result == null)
         {
-            throw new InvalidOperationException("Cannot parse AI job assistant result.");
+            throw new InvalidOperationException(
+                "Cannot parse AI job assistant result."
+            );
         }
 
-        result.SuggestedTitle = result.SuggestedTitle?.Trim() ?? string.Empty;
-        result.ImprovedDescription = result.ImprovedDescription?.Trim() ?? string.Empty;
-        result.AiGeneratedDescription = result.AiGeneratedDescription?.Trim() ?? string.Empty;
-        result.SuggestedProjectType = result.SuggestedProjectType?.Trim() ?? string.Empty;
-        result.ExpectedDeliverables = result.ExpectedDeliverables?.Trim() ?? string.Empty;
-        result.SuggestedComplexity = NormalizeComplexity(result.SuggestedComplexity);
-        result.SuggestedBudgetMin = NormalizeBudgetValue(result.SuggestedBudgetMin);
-        result.SuggestedBudgetMax = NormalizeBudgetValue(result.SuggestedBudgetMax);
-        result.SuggestedBudgetSource = NormalizeBudgetSource(result.SuggestedBudgetSource);
-        result.BudgetSuggestionNote = result.BudgetSuggestionNote?.Trim() ?? string.Empty;
+        result.SuggestedTitle =
+            result.SuggestedTitle?.Trim() ?? string.Empty;
 
-        if (result.SuggestedBudgetMin.HasValue &&
-            result.SuggestedBudgetMax.HasValue &&
-            result.SuggestedBudgetMin.Value > result.SuggestedBudgetMax.Value)
-        {
-            (result.SuggestedBudgetMin, result.SuggestedBudgetMax) =
-                (result.SuggestedBudgetMax, result.SuggestedBudgetMin);
-        }
+        result.ImprovedDescription =
+            result.ImprovedDescription?.Trim() ?? string.Empty;
 
-        result.SuggestedSkillNames = result.SuggestedSkillNames?
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList() ?? new List<string>();
+        result.AiGeneratedDescription =
+            result.AiGeneratedDescription?.Trim() ?? string.Empty;
 
-        result.Warnings = result.Warnings?
-            .Where(x => !string.IsNullOrWhiteSpace(x))
-            .Select(x => x.Trim())
-            .ToList() ?? new List<string>();
+        result.SuggestedProjectType =
+            result.SuggestedProjectType?.Trim() ?? string.Empty;
+
+        result.ExpectedDeliverables =
+            result.ExpectedDeliverables?.Trim() ?? string.Empty;
+
+        result.SuggestedComplexity =
+            NormalizeComplexity(result.SuggestedComplexity);
+
+        result.SuggestedBudgetMin =
+            NormalizeBudgetValue(result.SuggestedBudgetMin);
+
+        result.SuggestedBudgetMax =
+            NormalizeBudgetValue(result.SuggestedBudgetMax);
+
+        NormalizeBudgetRange(result);
+
+        result.SuggestedBudgetSource =
+            NormalizeBudgetSource(result.SuggestedBudgetSource);
+
+        result.BudgetSuggestionNote =
+            result.BudgetSuggestionNote?.Trim() ?? string.Empty;
+
+        result.SuggestedSkillNames =
+            result.SuggestedSkillNames?
+                .Where(skill => !string.IsNullOrWhiteSpace(skill))
+                .Select(skill => skill.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            ?? new List<string>();
+
+        result.Warnings =
+            result.Warnings?
+                .Where(warning => !string.IsNullOrWhiteSpace(warning))
+                .Select(warning => warning.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList()
+            ?? new List<string>();
 
         return result;
+    }
+
+    private static void NormalizeBudgetRange(
+        JobAiAnalysisResult result)
+    {
+        if (!result.SuggestedBudgetMin.HasValue &&
+            !result.SuggestedBudgetMax.HasValue)
+        {
+            throw new InvalidOperationException(
+                "AI did not return a valid positive budget range."
+            );
+        }
+
+        if (!result.SuggestedBudgetMin.HasValue)
+        {
+            result.SuggestedBudgetMin =
+                result.SuggestedBudgetMax;
+        }
+
+        if (!result.SuggestedBudgetMax.HasValue)
+        {
+            result.SuggestedBudgetMax =
+                result.SuggestedBudgetMin;
+        }
+
+        if (result.SuggestedBudgetMin!.Value >
+            result.SuggestedBudgetMax!.Value)
+        {
+            (
+                result.SuggestedBudgetMin,
+                result.SuggestedBudgetMax
+            ) =
+            (
+                result.SuggestedBudgetMax,
+                result.SuggestedBudgetMin
+            );
+        }
     }
 
     private static string CleanAiJson(string aiText)
     {
         var cleaned = aiText.Trim();
 
-        if (cleaned.StartsWith("```"))
+        if (cleaned.StartsWith("```", StringComparison.Ordinal))
         {
             cleaned = cleaned
-                .Replace("```json", "", StringComparison.OrdinalIgnoreCase)
-                .Replace("```", "")
+                .Replace(
+                    "```json",
+                    string.Empty,
+                    StringComparison.OrdinalIgnoreCase
+                )
+                .Replace(
+                    "```",
+                    string.Empty,
+                    StringComparison.Ordinal
+                )
                 .Trim();
         }
 
         var firstBrace = cleaned.IndexOf('{');
         var lastBrace = cleaned.LastIndexOf('}');
 
-        if (firstBrace < 0 || lastBrace < 0 || lastBrace <= firstBrace)
+        if (firstBrace < 0 ||
+            lastBrace < 0 ||
+            lastBrace <= firstBrace)
         {
             throw new InvalidOperationException(
-                "AI response does not contain valid JSON object."
+                "AI response does not contain a valid JSON object."
             );
         }
 
-        return cleaned.Substring(firstBrace, lastBrace - firstBrace + 1);
+        return cleaned.Substring(
+            firstBrace,
+            lastBrace - firstBrace + 1
+        );
     }
 
     private static string NormalizeComplexity(string? complexity)
@@ -189,14 +403,18 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
             return "UNKNOWN";
         }
 
-        var normalized = complexity.Trim().ToUpper();
+        var normalized = complexity
+            .Trim()
+            .ToUpperInvariant();
 
-        if (normalized is "SIMPLE" or "MEDIUM" or "COMPLEX" or "UNKNOWN")
+        return normalized switch
         {
-            return normalized;
-        }
-
-        return "UNKNOWN";
+            "SIMPLE" => "SIMPLE",
+            "MEDIUM" => "MEDIUM",
+            "COMPLEX" => "COMPLEX",
+            "UNKNOWN" => "UNKNOWN",
+            _ => "UNKNOWN"
+        };
     }
 
     private static string NormalizeBudgetSource(string? source)
@@ -206,7 +424,9 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
             return "UNKNOWN";
         }
 
-        var normalized = source.Trim().ToUpperInvariant();
+        var normalized = source
+            .Trim()
+            .ToUpperInvariant();
 
         return normalized switch
         {
@@ -219,17 +439,25 @@ public class GroqJobAssistantProvider : IJobAssistantProvider
 
     private static decimal? NormalizeBudgetValue(decimal? value)
     {
-        if (!value.HasValue)
+        if (!value.HasValue || value.Value <= 0)
         {
             return null;
         }
 
-        if (value.Value <= 0)
-        {
-            return null;
-        }
+        return decimal.Round(
+            value.Value,
+            0,
+            MidpointRounding.AwayFromZero
+        );
+    }
 
-        return decimal.Round(value.Value, 0, MidpointRounding.AwayFromZero);
+    private static string FormatOptionalBudget(decimal? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString(
+                "0",
+                CultureInfo.InvariantCulture
+            )
+            : "null";
     }
 }
-
