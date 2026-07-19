@@ -73,9 +73,10 @@ export default function ClientContractSignPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const initialContract = location.state?.contract ?? null;
+  const initialContractId = getContractId(initialContract);
 
   const [proposal, setProposal] = useState(null);
-  const [contract, setContract] = useState(initialContract);
+  const [contract, setContract] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [pageError, setPageError] = useState("");
@@ -83,7 +84,11 @@ export default function ClientContractSignPage() {
   const [walletBalance, setWalletBalance] = useState(null);
   const [walletLoading, setWalletLoading] = useState(true);
 
-  const [actionLoading, setActionLoading] = useState(null); // "sign" | "lockEscrow"
+  const [actionLoading, setActionLoading] = useState(null);
+  // "sign" | "cancel" | "autoEscrow"
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
 
   const pollRef = useRef(null);
 
@@ -126,25 +131,19 @@ export default function ClientContractSignPage() {
        * Sau khi Accept Proposal, contract đã được truyền qua navigate state.
        * Lần tải đầu chỉ cần dùng contract đó, không gọi GET contract lần nữa.
        */
-      const initialContractId =
-        getContractId(initialContract);
-
-      if (
-        !silent &&
-        initialContract &&
-        initialContractId
-      ) {
-        setContract(initialContract);
-        return;
-      }
+      
 
       /*
        * Chỉ gọi lại API contract trong các trường hợp:
        * - Người dùng F5 hoặc mở trực tiếp URL.
        * - Cần refresh ngầm trạng thái contract.
        */
+      const contractUrl = initialContractId
+        ? `/contracts/${initialContractId}`
+        : `/proposals/${proposalId}/contract`;
+
       const contractRes = await axiosInstance.get(
-        `/proposals/${proposalId}/contract`,
+        contractUrl,
         { signal }
       );
 
@@ -201,14 +200,16 @@ export default function ClientContractSignPage() {
       }
     }
   },
-  [proposalId, initialContract]
+  [proposalId, initialContractId]
 );
 
   useEffect(() => {
     const controller = new AbortController();
+
     fetchAll(controller.signal);
+
     return () => controller.abort();
-  }, [fetchAll]);
+  }, [fetchAll, location.key]);
 
   useEffect(() => {
     const fetchWallet = async () => {
@@ -247,16 +248,29 @@ export default function ClientContractSignPage() {
   // Poll mỗi 3s khi client đã ký nhưng expert chưa ký, để tự phát hiện khi
   // expert ký xong mà không cần user tự bấm refresh.
   useEffect(() => {
-    if (!contract) return;
-    const { clientSigned, bothSigned } = readContractSignState(contract);
-    if (!clientSigned || bothSigned) return;
+  if (!contract) return;
 
-    const intervalId = setInterval(() => {
-      pollRef.current?.();
-    }, 3000);
+  const contractStatus =
+    (contract.status || "").toUpperCase();
 
-    return () => clearInterval(intervalId);
-  }, [contract]);
+  const { clientSigned, bothSigned } =
+    readContractSignState(contract);
+
+  if (
+    !clientSigned ||
+    bothSigned ||
+    contractStatus === "CANCELLED" ||
+    contractStatus === "EXPIRED"
+  ) {
+    return;
+  }
+
+  const intervalId = setInterval(() => {
+    pollRef.current?.();
+  }, 3000);
+
+  return () => clearInterval(intervalId);
+}, [contract]);
 
   const handleSignContract = async () => {
     const contractId = getContractId(contract);
@@ -293,21 +307,116 @@ export default function ClientContractSignPage() {
     }
   };
 
+  const openCancelModal = () => {
+    setCancelReason("");
+    setCancelError("");
+    setShowCancelModal(true);
+  };
+
+  const closeCancelModal = () => {
+    if (actionLoading === "cancel") {
+      return;
+    }
+
+    setShowCancelModal(false);
+    setCancelReason("");
+    setCancelError("");
+  };
+
+  // hàm hủy hợp đồng
+  const handleCancelContract = async () => {
+  const contractId = getContractId(contract);
+
+  if (!contractId) {
+    setCancelError("Contract not found.");
+    return;
+  }
+
+  const trimmedReason = cancelReason.trim();
+
+  if (!trimmedReason) {
+    setCancelError("Cancellation reason is required.");
+    return;
+  }
+
+  setActionLoading("cancel");
+  setCancelError("");
+  setPageError("");
+
+  try {
+    const response = await axiosInstance.post(
+      `/contracts/${contractId}/cancel`,
+      {
+        reason: trimmedReason,
+      }
+    );
+
+    const cancelledContract =
+      response.data?.data ??
+      response.data ??
+      null;
+
+    if (cancelledContract) {
+      setContract(cancelledContract);
+    } else {
+      await fetchAll(undefined, true);
+    }
+
+    setShowCancelModal(false);
+    setCancelReason("");
+
+    window.dispatchEvent(new Event("jobs:refresh"));
+    window.dispatchEvent(new Event("projects:refresh"));
+  } catch (err) {
+    const message =
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      "Failed to cancel contract.";
+
+    setCancelError(message);
+  } finally {
+    setActionLoading(null);
+  }
+};
+
  
 
-  // Tạo project ngay khi phát hiện bothSigned qua polling (không chỉ lúc mới ký),
-  // để trường hợp resume trang cũng tự tạo project nếu chưa có.
-  useEffect(() => {
-  if (!contract) return;
+  // Tạo project ngay khi phát hiện cả Client và Expert đã ký.
+useEffect(() => {
+  if (!contract) {
+    return;
+  }
 
-  const { bothSigned } = readContractSignState(contract);
-  if (!bothSigned) return;
+  const contractStatus =
+    (contract.status || "").toUpperCase();
+
+  // Không tạo project từ hợp đồng đã hủy hoặc hết hạn.
+  if (
+    contractStatus === "CANCELLED" ||
+    contractStatus === "EXPIRED"
+  ) {
+    return;
+  }
+
+  const { bothSigned } =
+    readContractSignState(contract);
+
+  if (!bothSigned) {
+    return;
+  }
 
   const contractId = getContractId(contract);
-  if (!contractId) return;
 
+  if (!contractId) {
+    return;
+  }
+
+  // Project đã được kích hoạt và escrow đã khóa.
   if (contract.projectEscrowLockedAt) {
-    navigate("/client/projects?status=ACTIVE");
+    navigate("/client/projects?status=ACTIVE", {
+      replace: true,
+    });
     return;
   }
 
@@ -319,51 +428,96 @@ export default function ClientContractSignPage() {
       let projectId =
         contract.projectId ??
         contract.project?.projectId ??
-        contract.project?.id;
+        contract.project?.id ??
+        null;
 
+      // Chưa có project thì tạo project từ contract.
       if (!projectId) {
-        const projectRes = await axiosInstance.post(`/projects/from-contract/${contractId}`);
-        const projectData = projectRes.data?.data ?? projectRes.data;
+        const projectRes = await axiosInstance.post(
+          `/projects/from-contract/${contractId}`
+        );
+
+        const projectData =
+          projectRes.data?.data ??
+          projectRes.data ??
+          null;
 
         projectId =
           projectData?.projectId ??
           projectData?.id ??
           projectData?.project?.projectId ??
-          projectData?.project?.id;
+          projectData?.project?.id ??
+          null;
       }
 
+      // API tạo project không trả projectId thì đọc lại contract.
       if (!projectId) {
-        const latestContractRes = await axiosInstance.get(`/contracts/${contractId}`);
-        const latestContract = latestContractRes.data?.data ?? latestContractRes.data;
+        const latestContractRes =
+          await axiosInstance.get(
+            `/contracts/${contractId}`
+          );
+
+        const latestContract =
+          latestContractRes.data?.data ??
+          latestContractRes.data ??
+          null;
 
         projectId =
           latestContract?.projectId ??
           latestContract?.project?.projectId ??
-          latestContract?.project?.id;
+          latestContract?.project?.id ??
+          null;
       }
 
       if (!projectId) {
         await fetchAll(undefined, true);
-        setPageError("Project was created but projectId was not returned by API.");
+
+        setPageError(
+          "Project was created but projectId was not returned by API."
+        );
         return;
       }
 
-      await axiosInstance.post(`/escrows/projects/${projectId}/lock`);
+      // Khóa tiền escrow để kích hoạt project.
+      await axiosInstance.post(
+        `/escrows/projects/${projectId}/lock`
+      );
 
-      window.dispatchEvent(new Event("jobs:refresh"));
-      window.dispatchEvent(new Event("projects:refresh"));
+      window.dispatchEvent(
+        new Event("jobs:refresh")
+      );
 
-      navigate("/client/projects?status=ACTIVE", { replace: true });
+      window.dispatchEvent(
+        new Event("projects:refresh")
+      );
+
+      navigate("/client/projects?status=ACTIVE", {
+        replace: true,
+      });
     } catch (err) {
       const status = err?.response?.status;
-      const message = err?.response?.data?.message || err?.message || "";
 
-      if (status === 409 || message.toLowerCase().includes("already")) {
-        navigate("/client/projects?status=ACTIVE", { replace: true });
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "";
+
+      // Project hoặc escrow đã được tạo trước đó.
+      if (
+        status === 409 ||
+        message.toLowerCase().includes("already")
+      ) {
+        navigate("/client/projects?status=ACTIVE", {
+          replace: true,
+        });
         return;
       }
 
-      setPageError(message || "Failed to activate project.");
+      setPageError(
+        message ||
+        "Failed to activate project."
+      );
     } finally {
       setActionLoading(null);
     }
@@ -499,7 +653,9 @@ export default function ClientContractSignPage() {
           <button
             type="button"
             onClick={() =>
-              navigate(`/client/proposals/${proposalId}`)
+              navigate(`/client/proposals/${proposalId}`, {
+                replace: true,
+              })
             }
             style={{
               padding: "10px 24px",
@@ -598,7 +754,9 @@ export default function ClientContractSignPage() {
           <button
             type="button"
             onClick={() =>
-              navigate(`/client/proposals/${proposalId}`)
+              navigate(`/client/proposals/${proposalId}`, {
+                replace: true,
+              })
             }
             style={{
               padding: "10px 24px",
@@ -634,6 +792,7 @@ export default function ClientContractSignPage() {
   const isCancelled = (contract?.status || "").toUpperCase() === "CANCELLED";
   const isActive = bothSigned && !!contract?.projectEscrowLockedAt;
   const isSigning = actionLoading === "sign";
+  const isCancelling = actionLoading === "cancel";
 
   const expertName = proposal.expertName || proposal.fullName || contract?.expertName || "Expert";
   const proposedPrice = Number(proposal.proposedPrice || proposal.bidAmount || 0);
@@ -657,7 +816,9 @@ export default function ClientContractSignPage() {
       }}
     >
 
-        <button onClick={() => navigate(`/client/proposals/${proposalId}`)}
+        <button onClick={() => navigate(`/client/proposals/${proposalId}`, {
+          replace: true,
+        })}
           style={{ display: "flex", alignItems: "center", gap: 6, background: "none", border: "none", color: "#8c90a0", cursor: "pointer", fontSize: 14, marginBottom: 24, padding: 0 }}>
           <span className="material-symbols-outlined" style={{ fontSize: 18 }}>arrow_back</span>
           Back to Proposal
@@ -668,19 +829,58 @@ export default function ClientContractSignPage() {
         </h1>
 
         {isCancelled && (
-          <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.04)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 22, color: "#f87171" }}>schedule</span>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 16, fontWeight: 700, color: "#f87171", margin: 0 }}>
-                Contract Expired
-              </h3>
-            </div>
-            <p style={{ fontSize: 14, color: "#c2c6d6", margin: 0, lineHeight: 1.7 }}>
-              The signing deadline has passed. This contract was cancelled and the job has been reopened.
-              Please contact the expert or submit a new agreement if you'd still like to proceed.
-            </p>
+        <div
+          style={{
+            ...cardStyle,
+            marginBottom: 20,
+            border: "1px solid rgba(239,68,68,0.3)",
+            background: "rgba(239,68,68,0.04)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 10,
+              marginBottom: 8,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: 22,
+                color: "#f87171",
+              }}
+            >
+              cancel
+            </span>
+
+            <h3
+              style={{
+                fontFamily: "Hanken Grotesk, sans-serif",
+                fontSize: 16,
+                fontWeight: 700,
+                color: "#f87171",
+                margin: 0,
+              }}
+            >
+              Contract Cancelled
+            </h3>
           </div>
-        )}
+
+          <p
+            style={{
+              fontSize: 14,
+              color: "#c2c6d6",
+              margin: 0,
+              lineHeight: 1.7,
+            }}
+          >
+            This contract is no longer available for signing. Return to the
+            proposal page to review the current proposal status.
+          </p>
+        </div>
+      )}
 
         {isActive && (
           <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(34,197,94,0.3)", background: "rgba(34,197,94,0.04)" }}>
@@ -870,24 +1070,395 @@ export default function ClientContractSignPage() {
           </div>
         )}
 
-        {!isCancelled && !isActive && !clientSigned && (
-          hasEnoughWallet ? (
-            <button onClick={handleSignContract} disabled={isSigning}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 28px", background: isSigning ? "rgba(0,240,255,0.08)" : "#00F0FF", color: isSigning ? "#00F0FF" : "#002022", border: "1px solid rgba(0,240,255,0.5)", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: isSigning ? "not-allowed" : "pointer" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{isSigning ? "hourglass_empty" : "draw"}</span>
-              {isSigning ? "Signing..." : "Sign Contract"}
-            </button>
-          ) : (
-            <button onClick={() => navigate("/client/wallet")}
-              style={{ display: "flex", alignItems: "center", gap: 8, padding: "13px 28px", background: "rgba(250,204,21,0.12)", color: "#facc15", border: "1px solid rgba(250,204,21,0.35)", borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: "pointer" }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>account_balance_wallet</span>
-              Deposit Wallet to Continue
-            </button>
-          )
-        )}
+        {!isCancelled && !isActive && !bothSigned && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          {!clientSigned &&
+            (hasEnoughWallet ? (
+              <button
+                type="button"
+                onClick={handleSignContract}
+                disabled={isSigning || isCancelling}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "13px 28px",
+                  background: isSigning
+                    ? "rgba(0,240,255,0.08)"
+                    : "#00F0FF",
+                  color: isSigning ? "#00F0FF" : "#002022",
+                  border: "1px solid rgba(0,240,255,0.5)",
+                  borderRadius: 10,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor:
+                    isSigning || isCancelling
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity: isCancelling ? 0.6 : 1,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 18 }}
+                >
+                  {isSigning ? "hourglass_empty" : "draw"}
+                </span>
+
+                {isSigning ? "Signing..." : "Sign Contract"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => navigate("/client/wallet")}
+                disabled={isCancelling}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "13px 28px",
+                  background: "rgba(250,204,21,0.12)",
+                  color: "#facc15",
+                  border: "1px solid rgba(250,204,21,0.35)",
+                  borderRadius: 10,
+                  fontSize: 15,
+                  fontWeight: 700,
+                  cursor: isCancelling
+                    ? "not-allowed"
+                    : "pointer",
+                  opacity: isCancelling ? 0.6 : 1,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 18 }}
+                >
+                  account_balance_wallet
+                </span>
+
+                Deposit Wallet to Continue
+              </button>
+            ))}
+
+          <button
+            type="button"
+            onClick={openCancelModal}
+            disabled={isSigning || isCancelling}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: "13px 28px",
+              background: "rgba(239,68,68,0.08)",
+              color: "#f87171",
+              border: "1px solid rgba(239,68,68,0.35)",
+              borderRadius: 10,
+              fontSize: 15,
+              fontWeight: 700,
+              cursor:
+                isSigning || isCancelling
+                  ? "not-allowed"
+                  : "pointer",
+              opacity: isSigning ? 0.6 : 1,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 18 }}
+            >
+              {isCancelling ? "hourglass_empty" : "cancel"}
+            </span>
+
+            {isCancelling
+              ? "Cancelling..."
+              : "Cancel Contract"}
+          </button>
+        </div>
+      )}
       </div>
 
-     
+     {showCancelModal && (
+  <div
+    role="presentation"
+    onMouseDown={(event) => {
+      if (event.target === event.currentTarget) {
+        closeCancelModal();
+      }
+    }}
+    style={{
+      position: "fixed",
+      inset: 0,
+      zIndex: 9999,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 20,
+      background: "rgba(0,0,0,0.72)",
+      backdropFilter: "blur(6px)",
+    }}
+  >
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cancel-contract-title"
+      style={{
+        width: "100%",
+        maxWidth: 480,
+        padding: 24,
+        boxSizing: "border-box",
+        borderRadius: 16,
+        background: "#11151d",
+        border: "1px solid rgba(239,68,68,0.3)",
+        boxShadow: "0 24px 80px rgba(0,0,0,0.6)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: 16,
+          marginBottom: 20,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              width: 42,
+              height: 42,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              borderRadius: 12,
+              background: "rgba(239,68,68,0.1)",
+              border: "1px solid rgba(239,68,68,0.25)",
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: 23,
+                color: "#f87171",
+              }}
+            >
+              warning
+            </span>
+          </div>
+
+          <div>
+            <h2
+              id="cancel-contract-title"
+              style={{
+                margin: "0 0 5px",
+                color: "#f1f5f9",
+                fontSize: 18,
+                fontWeight: 800,
+              }}
+            >
+              Cancel Contract
+            </h2>
+
+            <p
+              style={{
+                margin: 0,
+                color: "#8c90a0",
+                fontSize: 13,
+                lineHeight: 1.5,
+              }}
+            >
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={closeCancelModal}
+          disabled={isCancelling}
+          aria-label="Close cancel contract dialog"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            width: 34,
+            height: 34,
+            padding: 0,
+            flexShrink: 0,
+            borderRadius: 8,
+            background: "transparent",
+            color: "#8c90a0",
+            border: "1px solid rgba(255,255,255,0.1)",
+            cursor: isCancelling ? "not-allowed" : "pointer",
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 19 }}
+          >
+            close
+          </span>
+        </button>
+      </div>
+
+      <label
+        htmlFor="cancel-contract-reason"
+        style={{
+          display: "block",
+          marginBottom: 8,
+          color: "#c2c6d6",
+          fontSize: 13,
+          fontWeight: 700,
+        }}
+      >
+        Cancellation reason
+      </label>
+
+      <textarea
+        id="cancel-contract-reason"
+        value={cancelReason}
+        onChange={(event) => {
+          setCancelReason(event.target.value);
+
+          if (cancelError) {
+            setCancelError("");
+          }
+        }}
+        disabled={isCancelling}
+        rows={4}
+        maxLength={500}
+        placeholder="Enter the reason for cancelling this contract..."
+        style={{
+          width: "100%",
+          minHeight: 110,
+          padding: "12px 14px",
+          boxSizing: "border-box",
+          resize: "vertical",
+          outline: "none",
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.04)",
+          color: "#e1e2eb",
+          border: cancelError
+            ? "1px solid rgba(239,68,68,0.7)"
+            : "1px solid rgba(255,255,255,0.12)",
+          fontFamily: "inherit",
+          fontSize: 14,
+          lineHeight: 1.6,
+        }}
+      />
+
+      <div
+        style={{
+          marginTop: 6,
+          color: "#686d7d",
+          fontSize: 11,
+          textAlign: "right",
+        }}
+      >
+        {cancelReason.length}/500
+      </div>
+
+      {cancelError && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: "10px 12px",
+            borderRadius: 8,
+            background: "rgba(239,68,68,0.08)",
+            border: "1px solid rgba(239,68,68,0.25)",
+            color: "#f87171",
+            fontSize: 13,
+          }}
+        >
+          {cancelError}
+        </div>
+      )}
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: 10,
+          marginTop: 22,
+          flexWrap: "wrap",
+        }}
+      >
+        <button
+          type="button"
+          onClick={closeCancelModal}
+          disabled={isCancelling}
+          style={{
+            padding: "11px 18px",
+            borderRadius: 9,
+            background: "transparent",
+            color: "#c2c6d6",
+            border: "1px solid rgba(255,255,255,0.14)",
+            fontSize: 14,
+            fontWeight: 700,
+            cursor: isCancelling ? "not-allowed" : "pointer",
+          }}
+        >
+          Keep Contract
+        </button>
+
+        <button
+          type="button"
+          onClick={handleCancelContract}
+          disabled={isCancelling || !cancelReason.trim()}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 7,
+            minWidth: 155,
+            padding: "11px 18px",
+            borderRadius: 9,
+            background:
+              isCancelling || !cancelReason.trim()
+                ? "rgba(239,68,68,0.12)"
+                : "#ef4444",
+            color:
+              isCancelling || !cancelReason.trim()
+                ? "#f87171"
+                : "#ffffff",
+            border: "1px solid rgba(239,68,68,0.45)",
+            fontSize: 14,
+            fontWeight: 800,
+            cursor:
+              isCancelling || !cancelReason.trim()
+                ? "not-allowed"
+                : "pointer",
+            opacity: !cancelReason.trim() ? 0.6 : 1,
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 18 }}
+          >
+            {isCancelling ? "hourglass_empty" : "cancel"}
+          </span>
+
+          {isCancelling
+            ? "Cancelling..."
+            : "Confirm Cancel"}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
