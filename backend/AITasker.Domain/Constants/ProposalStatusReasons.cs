@@ -7,5 +7,6 @@ public static class ProposalStatusReasons
     public const string AutoNotSelected = "AUTO_NOT_SELECTED";
     public const string ExpertWithdrawn = "EXPERT_WITHDRAWN";
     public const string ContractCancelled = "CONTRACT_CANCELLED";
+    public const string ContractRevisionRequested = "CONTRACT_REVISION_REQUESTED";
     public const string ContractExpired = "CONTRACT_EXPIRED";
 }

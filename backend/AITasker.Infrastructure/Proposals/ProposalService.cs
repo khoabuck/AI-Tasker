@@ -25,6 +25,7 @@ namespace AITasker.Infrastructure.Proposals
         private const string ProposalCreditUsagePaid = "PAID";
 
         private const string ContractStatusDraft = "DRAFT";
+        private const string ContractStatusConfirmed = "CONFIRMED";
         private const string ContractSourceProposal = "PROPOSAL";
 
         private readonly AITaskerDbContext _context;
@@ -667,6 +668,88 @@ namespace AITasker.Infrastructure.Proposals
             return await MapToProposalResponseAsync(proposal);
         }
 
+        public async Task<ProposalResponse> DeclineAcceptedDealAsync(
+            int userId,
+            int proposalId,
+            DeclineAcceptedProposalDealRequest request)
+        {
+            var proposal = await GetProposalByIdAsync(proposalId);
+            var job = await GetJobByIdAsync(proposal.JobId);
+            var clientProfile = await GetClientProfileByIdAsync(job.ClientProfileId);
+            var expertProfile = await GetExpertProfileByIdAsync(proposal.ExpertId);
+
+            var userIsClient = clientProfile.UserId == userId;
+            var userIsExpert = expertProfile.UserId == userId;
+
+            if (!userIsClient && !userIsExpert)
+            {
+                throw new UnauthorizedAccessException("Only the selected Client or Expert can decline this accepted deal.");
+            }
+
+            if (!string.Equals(proposal.Status, StatusAccepted, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Only ACCEPTED proposals can be declined through the accepted deal flow.");
+            }
+
+            if (await HasActiveContractForProposalAsync(proposal.ProposalId))
+            {
+                throw new InvalidOperationException("This accepted proposal already has an active contract. Decline the deal from the contract endpoint instead.");
+            }
+
+            var reason = string.IsNullOrWhiteSpace(request?.Reason)
+                ? "No reason provided."
+                : request.Reason.Trim();
+
+            proposal.Status = StatusRejected;
+            proposal.StatusReason = ProposalStatusReasons.ContractCancelled;
+
+            job.Status = "OPEN";
+            job.UpdatedAt = DateTime.UtcNow;
+
+            var autoRejectedProposals = await _context.Proposals
+                .Where(x =>
+                    x.JobId == job.JobPostingId &&
+                    x.ProposalId != proposal.ProposalId &&
+                    x.Status == StatusRejected &&
+                    x.StatusReason == ProposalStatusReasons.AutoNotSelected)
+                .ToListAsync();
+
+            foreach (var autoRejectedProposal in autoRejectedProposals)
+            {
+                autoRejectedProposal.Status = StatusSubmitted;
+                autoRejectedProposal.StatusReason = null;
+            }
+
+            await _context.SaveChangesAsync();
+
+            if (userIsClient)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Accepted deal declined by Client",
+                    $"The client declined the accepted deal for job '{job.Title}' before creating a contract. Reason: {reason}",
+                    NotificationTypes.ProposalRejected,
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: proposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId);
+            }
+            else
+            {
+                await _notificationService.CreateNotificationAsync(
+                    clientProfile.UserId,
+                    "Accepted deal declined by Expert",
+                    $"The expert declined the accepted deal for job '{job.Title}' before creating a contract. Reason: {reason}",
+                    NotificationTypes.ProposalRejected,
+                    relatedEntityType: "PROPOSAL",
+                    relatedEntityId: proposal.ProposalId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId);
+            }
+
+            return await MapToProposalResponseAsync(proposal);
+        }
+
         public async Task<ProposalWithdrawWarningResponse> GetWithdrawWarningAsync(
             int userId,
             int proposalId)
@@ -1169,9 +1252,10 @@ namespace AITasker.Infrastructure.Proposals
 
             await EnsureExpertOwnsProposalForVersionAsync(userId, proposal);
 
-            if (proposal.Status == StatusAccepted)
+            if (proposal.Status == StatusAccepted &&
+                await HasActiveContractForProposalAsync(proposal.ProposalId))
             {
-                throw new InvalidOperationException("Accepted proposal cannot be resubmitted.");
+                throw new InvalidOperationException("Accepted proposal cannot be resubmitted while an active contract draft or confirmed contract exists. Cancel the current draft first.");
             }
 
             if (proposal.Status == StatusRejected)
@@ -1212,8 +1296,15 @@ namespace AITasker.Infrastructure.Proposals
                 {
                     await _context.Entry(proposal).ReloadAsync();
 
-                    if (proposal.Status == StatusAccepted ||
-                        proposal.Status == StatusRejected ||
+                    var keepAcceptedAfterResubmit = proposal.Status == StatusAccepted;
+
+                    if (keepAcceptedAfterResubmit &&
+                        await HasActiveContractForProposalAsync(proposal.ProposalId))
+                    {
+                        throw new InvalidOperationException("Accepted proposal cannot be resubmitted while an active contract draft or confirmed contract exists. Cancel the current draft first.");
+                    }
+
+                    if (proposal.Status == StatusRejected ||
                         proposal.Status == StatusWithdrawn)
                     {
                         throw new InvalidOperationException("Proposal state changed and it can no longer be resubmitted.");
@@ -1234,8 +1325,10 @@ namespace AITasker.Infrastructure.Proposals
                     proposal.PreliminaryMilestonePlan = string.IsNullOrWhiteSpace(request.PreliminaryMilestonePlan)
                         ? null
                         : request.PreliminaryMilestonePlan.Trim();
-                    proposal.Status = StatusSubmitted;
-                    proposal.StatusReason = null;
+                    proposal.Status = keepAcceptedAfterResubmit ? StatusAccepted : StatusSubmitted;
+                    proposal.StatusReason = keepAcceptedAfterResubmit
+                        ? ProposalStatusReasons.ClientAccepted
+                        : null;
 
                     newVersion = new ProposalVersion
                     {
@@ -1296,6 +1389,17 @@ namespace AITasker.Infrastructure.Proposals
             }
 
             return await MapToProposalResponseAsync(proposal);
+        }
+
+        private async Task<bool> HasActiveContractForProposalAsync(int proposalId)
+        {
+            return await _context.ProjectContracts
+                .AnyAsync(x =>
+                    x.ProposalId == proposalId &&
+                    (
+                        x.Status == ContractStatusDraft ||
+                        x.Status == ContractStatusConfirmed
+                    ));
         }
 
         private async Task<Proposal> LoadProposalForVersionAsync(int proposalId)

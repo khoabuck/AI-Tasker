@@ -199,17 +199,17 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("{contractId:int}/cancel")]
+        [HttpPost("{contractId:int}/cancel-draft")]
         [Authorize(Roles = "CLIENT,EXPERT")]
-        public async Task<IActionResult> Cancel(
+        public async Task<IActionResult> CancelDraft(
             int contractId,
-            [FromBody] CancelContractRequest request)
+            [FromBody] CancelContractDraftRequest request)
         {
             try
             {
                 var userId = GetCurrentUserId();
 
-                var result = await _contractService.CancelContractAsync(
+                var result = await _contractService.CancelContractDraftAsync(
                     userId,
                     contractId,
                     request);
@@ -217,7 +217,47 @@ namespace AITasker.Api.Controllers
                 return Ok(new
                 {
                     success = true,
-                    message = "Contract cancelled successfully.",
+                    message = "Contract draft cancelled successfully. The accepted proposal remains selected.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{contractId:int}/decline-deal")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> DeclineDeal(
+            int contractId,
+            [FromBody] DeclineContractDealRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _contractService.DeclineDealAsync(
+                    userId,
+                    contractId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Deal declined successfully. The job was reopened for another proposal.",
                     data = result
                 });
             }
