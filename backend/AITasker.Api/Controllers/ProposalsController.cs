@@ -479,6 +479,46 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpPost("{proposalId:int}/decline-accepted-deal")]
+        [Authorize(Roles = "CLIENT,EXPERT")]
+        public async Task<IActionResult> DeclineAcceptedDeal(
+            int proposalId,
+            [FromBody] DeclineAcceptedProposalDealRequest request)
+        {
+            try
+            {
+                var userId = GetCurrentUserId();
+
+                var result = await _proposalService.DeclineAcceptedDealAsync(
+                    userId,
+                    proposalId,
+                    request);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Accepted deal declined successfully. The job was reopened.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpGet("{proposalId:int}/withdraw-warning")]
         [Authorize(Roles = "EXPERT")]
         public async Task<IActionResult> GetWithdrawWarning(int proposalId)

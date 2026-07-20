@@ -71,7 +71,6 @@ namespace AITasker.Infrastructure.Banking
         private readonly HttpClient _httpClient;
         private readonly IPlatformWalletService _platformWalletService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
-        private readonly IContractFailureRollbackService _contractFailureRollbackService;
 
         public WalletService(
                 AITaskerDbContext context,
@@ -79,8 +78,7 @@ namespace AITasker.Infrastructure.Banking
                 IConfiguration configuration,
                 HttpClient httpClient,
                 IPlatformWalletService platformWalletService,
-                IMarketplaceWorkflowPolicyService workflowPolicyService,
-                IContractFailureRollbackService contractFailureRollbackService)
+                IMarketplaceWorkflowPolicyService workflowPolicyService)
         {
             _context = context;
             _notificationService = notificationService;
@@ -88,7 +86,6 @@ namespace AITasker.Infrastructure.Banking
             _httpClient = httpClient;
             _platformWalletService = platformWalletService;
             _workflowPolicyService = workflowPolicyService;
-            _contractFailureRollbackService = contractFailureRollbackService;
         }
 
         public async Task<decimal> GetBalanceAsync(int userId)

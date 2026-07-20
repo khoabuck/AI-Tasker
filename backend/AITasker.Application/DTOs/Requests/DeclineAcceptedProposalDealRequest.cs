@@ -1,6 +1,6 @@
 namespace AITasker.Application.DTOs.Requests
 {
-    public class CancelContractRequest
+    public class DeclineAcceptedProposalDealRequest
     {
         public string? Reason { get; set; }
     }
