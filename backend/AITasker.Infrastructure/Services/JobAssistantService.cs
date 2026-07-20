@@ -31,41 +31,62 @@ public class JobAssistantService : IJobAssistantService
         int userId,
         JobAssistantRequest request)
     {
+        ArgumentNullException.ThrowIfNull(request);
+
         if (string.IsNullOrWhiteSpace(request.RawRequirement))
         {
-            throw new InvalidOperationException("Raw requirement is required.");
+            throw new InvalidOperationException(
+                "Raw requirement is required."
+            );
         }
+
+        request.RawRequirement = request.RawRequirement.Trim();
+
+        NormalizeRequestBudget(request);
+        ValidateRequestBudgetRange(request);
 
         var activeSkills = await _context.Skills
             .AsNoTracking()
-            .Where(x => x.IsActive)
-            .OrderBy(x => x.SkillName)
-            .Select(x => new
+            .Where(skill => skill.IsActive)
+            .OrderBy(skill => skill.SkillName)
+            .Select(skill => new
             {
-                x.SkillId,
-                x.SkillName,
-                x.Category
+                skill.SkillId,
+                skill.SkillName,
+                skill.Category
             })
             .ToListAsync();
 
         if (activeSkills.Count == 0)
         {
-            throw new InvalidOperationException("No active skills found in system.");
+            throw new InvalidOperationException(
+                "No active skills found in system."
+            );
         }
 
-        var clientProfile = await GetEligibleClientProfileForAiAssistantAsync(userId);
+        var clientProfile =
+            await GetEligibleClientProfileForAiAssistantAsync(userId);
 
         var jobPostingAiPolicy = await _jobPostingAiPolicyService
             .GetOrCreateActivePolicyEntityAsync();
 
-        var maxSuggestedSkills = Math.Max(1, jobPostingAiPolicy.MaxSuggestedSkills);
+        var maxSkillsPerJob = Math.Max(
+            1,
+            jobPostingAiPolicy.MaxSkillsPerJob
+        );
 
-        var reservedCreditType = await ReserveAiGenerationCreditAsync(clientProfile);
+        var maxSuggestedSkills = Math.Min(
+            Math.Max(1, jobPostingAiPolicy.MaxSuggestedSkills),
+            maxSkillsPerJob
+        );
+
+        var reservedCreditType =
+            await ReserveAiGenerationCreditAsync(clientProfile);
 
         try
         {
             var availableSkillNames = activeSkills
-                .Select(x => x.SkillName)
+                .Select(skill => skill.SkillName)
                 .ToList();
 
             var aiResult = await _jobAssistantProvider.AnalyzeAsync(
@@ -73,15 +94,26 @@ public class JobAssistantService : IJobAssistantService
                 availableSkillNames
             );
 
-            var rawSuggestedSkillCount = aiResult.SuggestedSkillNames
-                .Count(x => !string.IsNullOrWhiteSpace(x));
+            aiResult.SuggestedSkillNames ??= new List<string>();
+            aiResult.Warnings ??= new List<string>();
 
-            var normalizedAiSkillNames = aiResult.SuggestedSkillNames
-                .Where(x => !string.IsNullOrWhiteSpace(x))
-                .Select(x => x.Trim().ToLowerInvariant())
-                .Distinct()
-                .Take(maxSuggestedSkills)
+            var warnings = aiResult.Warnings
+                .Where(warning => !string.IsNullOrWhiteSpace(warning))
+                .Select(warning => warning.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+
+            var suggestedBudget = ResolveSuggestedBudget(
+                aiResult,
+                warnings
+            );
+
+            var normalizedAiSkillNames =
+                aiResult.SuggestedSkillNames
+                    .Where(skill => !string.IsNullOrWhiteSpace(skill))
+                    .Select(skill => skill.Trim().ToLowerInvariant())
+                    .Distinct()
+                    .ToList();
 
             var skillOrder = normalizedAiSkillNames
                 .Select((skillName, index) => new
@@ -90,96 +122,148 @@ public class JobAssistantService : IJobAssistantService
                     Index = index
                 })
                 .ToDictionary(
-                    x => x.SkillName,
-                    x => x.Index
+                    item => item.SkillName,
+                    item => item.Index
                 );
 
-            var matchedSkills = activeSkills
-                .Where(x => skillOrder.ContainsKey(x.SkillName.Trim().ToLowerInvariant()))
-                .OrderBy(x => skillOrder[x.SkillName.Trim().ToLowerInvariant()])
-                .Take(maxSuggestedSkills)
-                .Select(x => new JobAssistantSkillResponse
+            /*
+             * Match against every AI-suggested skill first, then apply
+             * the Admin-configured limit. This prevents a valid skill
+             * later in the AI list from being dropped merely because an
+             * earlier suggestion did not match an active system skill.
+             */
+            var allMatchedSkills = activeSkills
+                .Where(skill => skillOrder.ContainsKey(
+                    skill.SkillName.Trim().ToLowerInvariant()
+                ))
+                .OrderBy(skill => skillOrder[
+                    skill.SkillName.Trim().ToLowerInvariant()
+                ])
+                .Select(skill => new JobAssistantSkillResponse
                 {
-                    SkillId = x.SkillId,
-                    SkillName = x.SkillName,
-                    Category = x.Category
+                    SkillId = skill.SkillId,
+                    SkillName = skill.SkillName,
+                    Category = skill.Category
                 })
                 .ToList();
 
-            var warnings = aiResult.Warnings ?? new List<string>();
+            var matchedSkills = allMatchedSkills
+                .Take(maxSuggestedSkills)
+                .ToList();
 
-            if (rawSuggestedSkillCount > maxSuggestedSkills)
+            if (allMatchedSkills.Count > maxSuggestedSkills)
             {
-                warnings.Add(
-                    $"AI suggested more skills than the current admin policy allows. Only the top {maxSuggestedSkills} matched skills were returned."
+                AddWarning(
+                    warnings,
+                    $"The active Job Posting AI Policy allows at most {maxSuggestedSkills} suggested skills. " +
+                    $"The top {maxSuggestedSkills} matched skills were returned."
                 );
             }
 
-            if (matchedSkills.Count == 0)
+            if (normalizedAiSkillNames.Count > 0 &&
+                allMatchedSkills.Count == 0)
             {
-                warnings.Add("AI could not match any active skill from the system.");
+                AddWarning(
+                    warnings,
+                    "AI could not match the suggested skills with active skills in the system."
+                );
             }
 
-            var suggestedBudget = ResolveSuggestedBudget(request, aiResult, warnings);
+            warnings = warnings
+                .Where(warning => !string.IsNullOrWhiteSpace(warning))
+                .Select(warning => warning.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
 
             return new JobAssistantResponse
             {
                 SuggestedTitle = aiResult.SuggestedTitle,
                 ImprovedDescription = aiResult.ImprovedDescription,
-                AiGeneratedDescription = aiResult.AiGeneratedDescription,
-                SuggestedProjectType = aiResult.SuggestedProjectType,
-                SuggestedComplexity = aiResult.SuggestedComplexity,
+                AiGeneratedDescription =
+                    aiResult.AiGeneratedDescription,
+
+                SuggestedProjectType =
+                    aiResult.SuggestedProjectType,
+
+                SuggestedComplexity =
+                    aiResult.SuggestedComplexity,
+
                 SuggestedBudgetMin = suggestedBudget.Min,
                 SuggestedBudgetMax = suggestedBudget.Max,
                 SuggestedBudgetSource = suggestedBudget.Source,
                 IsBudgetEstimated = suggestedBudget.IsEstimated,
                 BudgetSuggestionNote = suggestedBudget.Note,
-                ExpectedDeliverables = aiResult.ExpectedDeliverables,
-                SuggestedSkillIds = matchedSkills.Select(x => x.SkillId).ToList(),
+
+                ExpectedDeliverables =
+                    aiResult.ExpectedDeliverables,
+
+                SuggestedSkillIds = matchedSkills
+                    .Select(skill => skill.SkillId)
+                    .ToList(),
+
                 SuggestedSkills = matchedSkills,
                 Warnings = warnings,
-                RemainingFreeAiGenerationCredits = clientProfile.FreeAiGenerationCredits,
-                RemainingPaidAiGenerationCredits = clientProfile.PaidAiGenerationCredits
+
+                RemainingFreeAiGenerationCredits =
+                    clientProfile.FreeAiGenerationCredits,
+
+                RemainingPaidAiGenerationCredits =
+                    clientProfile.PaidAiGenerationCredits
             };
         }
         catch
         {
-            await RefundAiGenerationCreditAsync(clientProfile, reservedCreditType);
+            await RefundAiGenerationCreditAsync(
+                clientProfile,
+                reservedCreditType
+            );
+
             throw;
         }
     }
 
-    private async Task<ClientProfile> GetEligibleClientProfileForAiAssistantAsync(
-        int userId)
+    private async Task<ClientProfile>
+        GetEligibleClientProfileForAiAssistantAsync(int userId)
     {
         var clientProfile = await _context.ClientProfiles
-            .Include(x => x.User)
-            .Include(x => x.BusinessProfile)
-            .FirstOrDefaultAsync(x => x.UserId == userId);
+            .Include(profile => profile.User)
+            .Include(profile => profile.BusinessProfile)
+            .FirstOrDefaultAsync(profile => profile.UserId == userId);
 
         if (clientProfile == null)
         {
-            throw new InvalidOperationException("Client profile not found.");
+            throw new InvalidOperationException(
+                "Client profile not found."
+            );
         }
 
         if (clientProfile.User == null ||
             clientProfile.User.Status != UserStatusActive)
         {
-            throw new InvalidOperationException("Your account must be active before using AI Job Assistant.");
+            throw new InvalidOperationException(
+                "Your account must be active before using AI Job Assistant."
+            );
         }
 
-        var clientType = clientProfile.ClientType.Trim().ToUpperInvariant();
+        var clientType = clientProfile.ClientType
+            .Trim()
+            .ToUpperInvariant();
 
         if (clientType == ClientTypeBusiness)
         {
             if (clientProfile.BusinessProfile == null)
             {
-                throw new InvalidOperationException("Business profile not found.");
+                throw new InvalidOperationException(
+                    "Business profile not found."
+                );
             }
 
-            if (clientProfile.BusinessProfile.VerificationStatus != BusinessVerificationVerified)
+            if (clientProfile.BusinessProfile.VerificationStatus !=
+                BusinessVerificationVerified)
             {
-                throw new InvalidOperationException("Business profile must be verified before using AI Job Assistant.");
+                throw new InvalidOperationException(
+                    "Business profile must be verified before using AI Job Assistant."
+                );
             }
         }
 
@@ -193,6 +277,7 @@ public class JobAssistantService : IJobAssistantService
         {
             clientProfile.FreeAiGenerationCredits -= 1;
             clientProfile.UpdatedAt = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
             return "FREE";
         }
@@ -201,6 +286,7 @@ public class JobAssistantService : IJobAssistantService
         {
             clientProfile.PaidAiGenerationCredits -= 1;
             clientProfile.UpdatedAt = DateTime.UtcNow;
+
             await _context.SaveChangesAsync();
             return "PAID";
         }
@@ -227,79 +313,143 @@ public class JobAssistantService : IJobAssistantService
         await _context.SaveChangesAsync();
     }
 
+    private static void NormalizeRequestBudget(
+        JobAssistantRequest request)
+    {
+        request.BudgetMin = NormalizePositiveBudget(
+            request.BudgetMin
+        );
+
+        request.BudgetMax = NormalizePositiveBudget(
+            request.BudgetMax
+        );
+    }
+
+    private static void ValidateRequestBudgetRange(
+        JobAssistantRequest request)
+    {
+        if (request.BudgetMin.HasValue &&
+            request.BudgetMax.HasValue &&
+            request.BudgetMin.Value > request.BudgetMax.Value)
+        {
+            throw new InvalidOperationException(
+                "BudgetMin must be less than or equal to BudgetMax."
+            );
+        }
+    }
+
     private static (
-        decimal? Min,
-        decimal? Max,
+        decimal Min,
+        decimal Max,
         string Source,
         bool IsEstimated,
         string Note
     ) ResolveSuggestedBudget(
-        JobAssistantRequest request,
         JobAiAnalysisResult aiResult,
         List<string> warnings)
     {
-        var hasFormBudget = request.BudgetMin.HasValue || request.BudgetMax.HasValue;
+        var budgetMin = NormalizePositiveBudget(
+            aiResult.SuggestedBudgetMin
+        );
 
-        var budgetMin = hasFormBudget
-            ? request.BudgetMin
-            : aiResult.SuggestedBudgetMin;
-
-        var budgetMax = hasFormBudget
-            ? request.BudgetMax
-            : aiResult.SuggestedBudgetMax;
-
-        var source = hasFormBudget
-            ? "FORM"
-            : NormalizeBudgetSource(aiResult.SuggestedBudgetSource);
-
-        var note = string.IsNullOrWhiteSpace(aiResult.BudgetSuggestionNote)
-            ? string.Empty
-            : aiResult.BudgetSuggestionNote.Trim();
-
-        if (budgetMin.HasValue && budgetMin.Value < 0)
-        {
-            warnings.Add("BudgetMin was ignored because it is negative.");
-            budgetMin = null;
-        }
-
-        if (budgetMax.HasValue && budgetMax.Value < 0)
-        {
-            warnings.Add("BudgetMax was ignored because it is negative.");
-            budgetMax = null;
-        }
-
-        if (budgetMin.HasValue && budgetMax.HasValue && budgetMin.Value > budgetMax.Value)
-        {
-            warnings.Add("BudgetMin was greater than BudgetMax, so the suggested budget range was normalized.");
-            (budgetMin, budgetMax) = (budgetMax, budgetMin);
-        }
+        var budgetMax = NormalizePositiveBudget(
+            aiResult.SuggestedBudgetMax
+        );
 
         if (!budgetMin.HasValue && !budgetMax.HasValue)
         {
-            source = "UNKNOWN";
-            note = string.IsNullOrWhiteSpace(note)
-                ? "No budget range could be suggested from the requirement."
-                : note;
+            throw new InvalidOperationException(
+                "AI did not return a valid positive budget range."
+            );
         }
-        else if (source == "AI_ESTIMATE")
-        {
-            var estimateWarning = "Budget is AI-estimated from requirement complexity and should be reviewed by the client.";
-            if (!warnings.Contains(estimateWarning))
-            {
-                warnings.Add(estimateWarning);
-            }
 
-            note = string.IsNullOrWhiteSpace(note)
-                ? "AI estimated this budget range because the client did not provide a clear budget."
-                : note;
+        if (!budgetMin.HasValue)
+        {
+            budgetMin = budgetMax;
+
+            AddWarning(
+                warnings,
+                "AI returned only a maximum budget, so the minimum was set to the same value."
+            );
+        }
+
+        if (!budgetMax.HasValue)
+        {
+            budgetMax = budgetMin;
+
+            AddWarning(
+                warnings,
+                "AI returned only a minimum budget, so the maximum was set to the same value."
+            );
+        }
+
+        if (budgetMin!.Value > budgetMax!.Value)
+        {
+            (
+                budgetMin,
+                budgetMax
+            ) =
+            (
+                budgetMax,
+                budgetMin
+            );
+
+            AddWarning(
+                warnings,
+                "The AI-suggested budget range was reordered because the minimum exceeded the maximum."
+            );
+        }
+
+        var source = NormalizeBudgetSource(
+            aiResult.SuggestedBudgetSource
+        );
+
+        if (source == "UNKNOWN")
+        {
+            source = "AI_ESTIMATE";
+
+            AddWarning(
+                warnings,
+                "The AI returned an unknown budget source, so the suggested range is treated as an AI estimate."
+            );
+        }
+
+        var note = string.IsNullOrWhiteSpace(
+            aiResult.BudgetSuggestionNote
+        )
+            ? source == "AI_ESTIMATE"
+                ? "AI estimated this budget range from the improved requirement, complexity, skills, deliverables, integrations, platforms, and deadline."
+                : "The suggested budget range was derived from the client-provided information."
+            : aiResult.BudgetSuggestionNote.Trim();
+
+        if (source == "AI_ESTIMATE")
+        {
+            AddWarning(
+                warnings,
+                "Budget is AI-estimated and should be reviewed by the client before publishing the job."
+            );
         }
 
         return (
-            budgetMin,
-            budgetMax,
+            budgetMin.Value,
+            budgetMax.Value,
             source,
             source == "AI_ESTIMATE",
             note
+        );
+    }
+
+    private static decimal? NormalizePositiveBudget(decimal? value)
+    {
+        if (!value.HasValue || value.Value <= 0)
+        {
+            return null;
+        }
+
+        return decimal.Round(
+            value.Value,
+            0,
+            MidpointRounding.AwayFromZero
         );
     }
 
@@ -310,7 +460,9 @@ public class JobAssistantService : IJobAssistantService
             return "UNKNOWN";
         }
 
-        var normalized = source.Trim().ToUpperInvariant();
+        var normalized = source
+            .Trim()
+            .ToUpperInvariant();
 
         return normalized switch
         {
@@ -319,5 +471,23 @@ public class JobAssistantService : IJobAssistantService
             "AI_ESTIMATE" => "AI_ESTIMATE",
             _ => "UNKNOWN"
         };
+    }
+
+    private static void AddWarning(
+        List<string> warnings,
+        string warning)
+    {
+        var alreadyExists = warnings.Any(existingWarning =>
+            string.Equals(
+                existingWarning,
+                warning,
+                StringComparison.OrdinalIgnoreCase
+            )
+        );
+
+        if (!alreadyExists)
+        {
+            warnings.Add(warning);
+        }
     }
 }
