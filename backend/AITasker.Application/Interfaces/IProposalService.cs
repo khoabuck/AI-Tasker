@@ -59,6 +59,11 @@ namespace AITasker.Application.Interfaces
             int proposalId,
             string decision);
 
+        Task<ProposalResponse> DeclineAcceptedDealAsync(
+            int userId,
+            int proposalId,
+            DeclineAcceptedProposalDealRequest request);
+
         Task<ProposalWithdrawWarningResponse> GetWithdrawWarningAsync(
             int userId,
             int proposalId);

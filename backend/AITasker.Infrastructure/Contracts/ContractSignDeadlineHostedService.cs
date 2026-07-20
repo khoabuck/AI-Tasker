@@ -10,6 +10,8 @@ namespace AITasker.Infrastructure.Contracts;
 public class ContractSignDeadlineHostedService : BackgroundService
 {
     private const string ContractStatusDraft = "DRAFT";
+    private const string ContractStatusCancelled = "CANCELLED";
+    private const string ProposalStatusAccepted = "ACCEPTED";
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ContractSignDeadlineHostedService> _logger;
@@ -44,7 +46,6 @@ public class ContractSignDeadlineHostedService : BackgroundService
         using var scope = _scopeFactory.CreateScope();
 
         var context = scope.ServiceProvider.GetRequiredService<AITaskerDbContext>();
-        var rollbackService = scope.ServiceProvider.GetRequiredService<IContractFailureRollbackService>();
         var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
 
         var now = DateTime.UtcNow;
@@ -63,7 +64,6 @@ public class ContractSignDeadlineHostedService : BackgroundService
         {
             await ProcessOneAsync(
                 context,
-                rollbackService,
                 notificationService,
                 contract,
                 now,
@@ -73,7 +73,6 @@ public class ContractSignDeadlineHostedService : BackgroundService
 
     private static async Task ProcessOneAsync(
         AITaskerDbContext context,
-        IContractFailureRollbackService rollbackService,
         INotificationService notificationService,
         Domain.Entities.ProjectContract contract,
         DateTime now,
@@ -101,18 +100,21 @@ public class ContractSignDeadlineHostedService : BackgroundService
             return;
         }
 
-        await rollbackService.ReopenJobAfterContractFailureAsync(
-            contract,
-            "SIGN_TIMEOUT",
-            now,
-            cancellationToken);
+        contract.Status = ContractStatusCancelled;
+        contract.ClientConfirmed = false;
+        contract.ExpertConfirmed = false;
+        contract.ConfirmedAt = null;
+        contract.SignExpiredAt = now;
+
+        proposal.Status = ProposalStatusAccepted;
+        job.UpdatedAt = now;
 
         await context.SaveChangesAsync(cancellationToken);
 
         await notificationService.CreateNotificationAsync(
             clientProfile.UserId,
             "Contract signing expired",
-            $"The contract signing deadline for job '{job.Title}' expired. The job has been reopened and proposal states were refreshed.",
+            $"The contract signing deadline for job '{job.Title}' expired. The accepted proposal remains selected, and the client can create a new contract draft later.",
             "CONTRACT_SIGN_EXPIRED",
             relatedEntityType: "CONTRACT",
             relatedEntityId: contract.ContractId,
@@ -123,7 +125,7 @@ public class ContractSignDeadlineHostedService : BackgroundService
         await notificationService.CreateNotificationAsync(
             expertProfile.UserId,
             "Contract signing expired",
-            $"The contract signing deadline for job '{job.Title}' expired. The job has been reopened and proposal states were refreshed.",
+            $"The contract signing deadline for job '{job.Title}' expired. The accepted proposal remains selected, and a new contract draft can be created later.",
             "CONTRACT_SIGN_EXPIRED",
             relatedEntityType: "CONTRACT",
             relatedEntityId: contract.ContractId,

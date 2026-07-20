@@ -1,4 +1,4 @@
-using AITasker.Api.Options;
+﻿using AITasker.Api.Options;
 using System.Text;
 using System.Security.Claims;
 using System.Net;
@@ -482,7 +482,6 @@ builder.Services.AddScoped<IProposalService, AITasker.Infrastructure.Proposals.P
 builder.Services.AddScoped<IProposalCreditPackageService, ProposalCreditPackageService>();
 builder.Services.AddScoped<IExpertEarningEscrowService, ExpertEarningEscrowService>();
 builder.Services.AddScoped<IProjectCompletionService, ProjectCompletionService>();
-builder.Services.AddScoped<IContractFailureRollbackService, ContractFailureRollbackService>();
 builder.Services.AddScoped<IProjectContractService, AITasker.Infrastructure.Contracts.ProjectContractService>();
 builder.Services.AddScoped<IProjectService, AITasker.Infrastructure.Projects.ProjectService>();
 builder.Services.AddHostedService<MilestoneDeadlineHostedService>();

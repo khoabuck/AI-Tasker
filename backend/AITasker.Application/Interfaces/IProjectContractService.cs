@@ -21,10 +21,15 @@ namespace AITasker.Application.Interfaces
             int contractId,
             int userId);
 
-        Task<ProjectContractResponse> CancelContractAsync(
+        Task<ProjectContractResponse> CancelContractDraftAsync(
             int userId,
             int contractId,
-            CancelContractRequest request);
+            CancelContractDraftRequest request);
+
+        Task<ProjectContractResponse> DeclineDealAsync(
+            int userId,
+            int contractId,
+            DeclineContractDealRequest request);
 
         Task<IReadOnlyList<ContractMilestoneDraftResponse>> GetContractMilestoneDraftsAsync(
             int userId,
