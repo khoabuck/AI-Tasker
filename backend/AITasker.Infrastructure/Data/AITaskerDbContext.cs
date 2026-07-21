@@ -358,6 +358,10 @@ public class AITaskerDbContext : DbContext
             entity.Property(x => x.ContractSignWindowHours)
                 .IsRequired();
 
+            entity.Property(x => x.ContractSignMissLimit)
+                .HasDefaultValue(3)
+                .IsRequired();
+
             entity.Property(x => x.DeliverableArtifactLimit)
                 .HasDefaultValue(10)
                 .IsRequired();
@@ -1502,7 +1506,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                     "CK_Proposals_StatusReason",
-                    "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED')");
+                    "[StatusReason] IS NULL OR [StatusReason] IN ('CLIENT_ACCEPTED','CLIENT_REJECTED','AUTO_NOT_SELECTED','EXPERT_WITHDRAWN','CONTRACT_CANCELLED','CONTRACT_EXPIRED','CLIENT_SIGN_TIMEOUT_LIMIT_EXCEEDED','EXPERT_SIGN_TIMEOUT_LIMIT_EXCEEDED')");
 
             });
 
@@ -1523,6 +1527,14 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(e => e.StatusReason)
                 .HasMaxLength(50);
+
+            entity.Property(e => e.ClientMissSignCount)
+                .HasDefaultValue(0)
+                .IsRequired();
+
+            entity.Property(e => e.ExpertMissSignCount)
+                .HasDefaultValue(0)
+                .IsRequired();
 
             entity.Property(e => e.ProposedPrice)
                 .HasColumnType("decimal(18,2)")
@@ -2005,7 +2017,8 @@ public class AITaskerDbContext : DbContext
             entity.HasKey(e => e.ContractId);
 
             entity.HasIndex(e => e.ProposalId)
-                .IsUnique();
+                .IsUnique()
+                .HasFilter("[Status] IN ('DRAFT','CONFIRMED')");
 
             entity.HasIndex(e => new
             {
@@ -2068,9 +2081,20 @@ public class AITaskerDbContext : DbContext
                 .HasMaxLength(50)
                 .IsRequired();
 
+            entity.Property(e => e.ClientSignDeadlineAt);
+
+            entity.Property(e => e.ExpertSignDeadlineAt);
+
+            entity.Property(e => e.ClientSignedAt);
+
+            entity.Property(e => e.ExpertSignedAt);
+
             entity.Property(e => e.SignDeadlineAt);
 
             entity.Property(e => e.SignExpiredAt);
+
+            entity.Property(e => e.CancelledReason)
+                .HasMaxLength(100);
 
             entity.Property(e => e.CreatedAt)
                 .IsRequired();
@@ -2084,8 +2108,8 @@ public class AITaskerDbContext : DbContext
             entity.HasIndex(e => e.SignDeadlineAt);
 
             entity.HasOne(e => e.Proposal)
-                .WithOne(p => p.ProjectContract)
-                .HasForeignKey<ProjectContract>(e => e.ProposalId)
+                .WithMany(p => p.ProjectContracts)
+                .HasForeignKey(e => e.ProposalId)
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne(e => e.ClientProfile)
@@ -2231,7 +2255,7 @@ public class AITaskerDbContext : DbContext
 
                 t.HasCheckConstraint(
                 "CK_Milestones_Status",
-                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','OVERDUE','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED')");
+                "[Status] IN ('PENDING','FUNDED','IN_PROGRESS','OVERDUE','SUBMITTED','REVISION_REQUESTED','APPROVED','DISPUTED','RESOLVED','DISPUTE_RESOLVED','RELEASED','REFUNDED','CANCELLED')");
 
                 t.HasCheckConstraint(
                 "CK_Milestones_PaymentStatus",
@@ -2839,6 +2863,10 @@ public class AITaskerDbContext : DbContext
                 t.HasCheckConstraint(
                 "CK_Disputes_ResolutionType",
                 "[ResolutionType] IS NULL OR [ResolutionType] IN ('RELEASE_TO_EXPERT','REFUND_TO_CLIENT')");
+
+                t.HasCheckConstraint(
+                "CK_Disputes_PostResolutionDecision",
+                "[PostResolutionDecision] IS NULL OR [PostResolutionDecision] IN ('CONTINUE','END')");
             });
 
             entity.HasKey(d => d.DisputeId);
@@ -2860,6 +2888,13 @@ public class AITaskerDbContext : DbContext
 
             entity.Property(d => d.AdminDecision)
                 .HasMaxLength(4000);
+
+            entity.Property(d => d.PostResolutionDecision)
+                .HasMaxLength(20);
+
+            entity.Property(d => d.PostResolutionDecisionAt);
+
+            entity.Property(d => d.PostResolutionDecisionByUserId);
 
             entity.Property(d => d.CreatedAt)
                 .IsRequired();

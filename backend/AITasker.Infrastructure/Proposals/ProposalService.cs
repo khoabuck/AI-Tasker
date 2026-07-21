@@ -1121,6 +1121,9 @@ namespace AITasker.Infrastructure.Proposals
             var contractId = await _context.ProjectContracts
                 .AsNoTracking()
                 .Where(x => x.ProposalId == proposal.ProposalId)
+                .OrderByDescending(x => x.Status == "DRAFT" || x.Status == "CONFIRMED")
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.ContractId)
                 .Select(x => (int?)x.ContractId)
                 .FirstOrDefaultAsync();
 
@@ -1186,6 +1189,8 @@ namespace AITasker.Infrastructure.Proposals
                 Status = proposal.Status,
                 StatusReason = proposal.StatusReason,
                 ContractId = contractId,
+                ClientMissSignCount = proposal.ClientMissSignCount,
+                ExpertMissSignCount = proposal.ExpertMissSignCount,
 
                 LatestVersionNumber = latestVersionNumber,
                 TotalVersions = totalVersions,

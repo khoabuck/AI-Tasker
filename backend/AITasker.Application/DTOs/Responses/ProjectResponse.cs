@@ -48,6 +48,10 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime? EscrowLockedAt { get; set; }
 
+        public bool RequiresPostDisputeDecision { get; set; }
+
+        public int? LatestResolvedDisputeId { get; set; }
+
         public DateTime CreatedAt { get; set; }
 
         public List<MilestoneResponse> Milestones { get; set; } = new();

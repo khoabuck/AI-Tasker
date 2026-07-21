@@ -58,9 +58,19 @@ namespace AITasker.Application.DTOs.Responses
 
         public string Status { get; set; } = string.Empty;
 
+        public DateTime? ClientSignDeadlineAt { get; set; }
+
+        public DateTime? ExpertSignDeadlineAt { get; set; }
+
+        public DateTime? ClientSignedAt { get; set; }
+
+        public DateTime? ExpertSignedAt { get; set; }
+
         public DateTime? SignDeadlineAt { get; set; }
 
         public DateTime? SignExpiredAt { get; set; }
+
+        public string? CancelledReason { get; set; }
 
         public int? ProjectId { get; set; }
 
