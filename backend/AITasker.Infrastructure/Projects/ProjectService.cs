@@ -8,15 +8,41 @@ namespace AITasker.Infrastructure.Projects
 {
     public class ProjectService : IProjectService
     {
+        private const string ProjectStatusActive = "ACTIVE";
+        private const string ProjectStatusDisputed = "DISPUTED";
+        private const string ProjectStatusCancelled = "CANCELLED";
+        private const string ContractStatusCancelled = "CANCELLED";
+        private const string JobStatusActive = "ACTIVE";
+        private const string JobStatusCancelled = "CANCELLED";
+        private const string DisputeStatusOpen = "OPEN";
+        private const string DisputeStatusResolved = "RESOLVED";
+        private const string ResolutionReleaseToExpert = "RELEASE_TO_EXPERT";
+        private const string EscrowStatusLocked = "LOCKED";
+        private const string EscrowStatusFrozen = "FROZEN";
+        private const string EscrowStatusRefunded = "REFUNDED";
+        private const string MilestoneStatusCancelled = "CANCELLED";
+        private const string PaymentStatusRefunded = "REFUNDED";
+        private const string TransactionStatusSuccess = "SUCCESS";
+        private const string TxRefund = "REFUND";
+
         private readonly AITaskerDbContext _context;
         private readonly IProjectCompletionService _projectCompletionService;
+        private readonly IWalletService _walletService;
+        private readonly IExpertEarningEscrowService _expertEarningEscrowService;
+        private readonly INotificationService _notificationService;
 
         public ProjectService(
             AITaskerDbContext context,
-            IProjectCompletionService projectCompletionService)
+            IProjectCompletionService projectCompletionService,
+            IWalletService walletService,
+            IExpertEarningEscrowService expertEarningEscrowService,
+            INotificationService notificationService)
         {
             _context = context;
             _projectCompletionService = projectCompletionService;
+            _walletService = walletService;
+            _expertEarningEscrowService = expertEarningEscrowService;
+            _notificationService = notificationService;
         }
 
         public async Task<IReadOnlyList<ProjectResponse>> GetMyProjectsAsync(
@@ -136,6 +162,236 @@ namespace AITasker.Infrastructure.Projects
                 throwIfNotReady: true);
 
             return await MapToProjectResponseAsync(project);
+        }
+
+        public async Task<ProjectResponse> ContinueAfterDisputeAsync(
+            int currentUserId,
+            int projectId)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var transactionCompleted = false;
+
+            try
+            {
+                var project = await GetProjectByIdInternalAsync(projectId);
+                var contract = await GetContractByIdAsync(project.ContractId);
+                var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
+
+                if (clientProfile.UserId != currentUserId)
+                {
+                    throw new UnauthorizedAccessException("Only the project Client can continue after dispute resolution.");
+                }
+
+                if (!string.Equals(project.Status, ProjectStatusDisputed, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Project must be waiting after a resolved dispute before it can continue.");
+                }
+
+                if (await _context.Disputes.AnyAsync(x =>
+                    x.ProjectId == projectId &&
+                    x.Status == DisputeStatusOpen))
+                {
+                    throw new InvalidOperationException("Resolve all open disputes before continuing the project.");
+                }
+
+                var dispute = await GetPendingPostResolutionDecisionAsync(projectId);
+
+                var remainingLockedEscrowExists = await _context.Escrows.AnyAsync(x =>
+                    x.ProjectId == projectId &&
+                    (x.Status == EscrowStatusLocked || x.Status == EscrowStatusFrozen));
+
+                if (!remainingLockedEscrowExists)
+                {
+                    throw new InvalidOperationException(
+                        "No remaining locked project escrow is available. End the contract instead.");
+                }
+
+                var now = DateTime.UtcNow;
+                dispute.PostResolutionDecision = "CONTINUE";
+                dispute.PostResolutionDecisionAt = now;
+                dispute.PostResolutionDecisionByUserId = currentUserId;
+                project.Status = ProjectStatusActive;
+                project.EndDate = null;
+
+                var proposal = await GetProposalByIdAsync(contract.ProposalId);
+                var job = await GetJobByIdAsync(proposal.JobId);
+                job.Status = JobStatusActive;
+                job.UpdatedAt = now;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                transactionCompleted = true;
+
+                var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
+
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Project continued",
+                    $"The client chose to continue project '{project.Title}'. The remaining project escrow stays locked and work may continue.",
+                    "PROJECT_CONTINUED_AFTER_DISPUTE",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId,
+                    relatedDisputeId: dispute.DisputeId);
+
+                return await MapToProjectResponseAsync(project);
+            }
+            catch
+            {
+                if (!transactionCompleted)
+                {
+                    await transaction.RollbackAsync();
+                }
+
+                throw;
+            }
+        }
+
+        public async Task<ProjectResponse> EndAfterDisputeAsync(
+            int currentUserId,
+            int projectId)
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var transactionCompleted = false;
+
+            try
+            {
+                var project = await GetProjectByIdInternalAsync(projectId);
+                var contract = await GetContractByIdAsync(project.ContractId);
+                var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
+                var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
+
+                if (clientProfile.UserId != currentUserId)
+                {
+                    throw new UnauthorizedAccessException("Only the project Client can end the contract after dispute resolution.");
+                }
+
+                if (!string.Equals(project.Status, ProjectStatusDisputed, StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException("Project must be waiting after a resolved dispute before it can be ended here.");
+                }
+
+                if (await _context.Disputes.AnyAsync(x =>
+                    x.ProjectId == projectId &&
+                    x.Status == DisputeStatusOpen))
+                {
+                    throw new InvalidOperationException("Resolve all open disputes before ending the project.");
+                }
+
+                var dispute = await GetPendingPostResolutionDecisionAsync(projectId);
+                var now = DateTime.UtcNow;
+
+                var clientWallet = await _walletService.GetWalletByUserIdAsync(clientProfile.UserId);
+                var remainingEscrows = await _context.Escrows
+                    .Where(x =>
+                        x.ProjectId == projectId &&
+                        (x.Status == EscrowStatusLocked || x.Status == EscrowStatusFrozen))
+                    .ToListAsync();
+                var refundAmount = remainingEscrows.Sum(x => x.Amount);
+
+                if (refundAmount > 0)
+                {
+                    if (clientWallet.LockedBalance < refundAmount)
+                    {
+                        throw new InvalidOperationException("Client locked balance is insufficient to refund remaining milestone escrow.");
+                    }
+
+                    clientWallet.LockedBalance -= refundAmount;
+                    clientWallet.AvailableBalance += refundAmount;
+                    clientWallet.UpdatedAt = now;
+                }
+
+                foreach (var escrow in remainingEscrows)
+                {
+                    escrow.Status = EscrowStatusRefunded;
+                    escrow.UpdatedAt = now;
+
+                    if (escrow.MilestoneId.HasValue)
+                    {
+                        var milestone = await GetMilestoneByIdInternalAsync(escrow.MilestoneId.Value);
+                        milestone.Status = MilestoneStatusCancelled;
+                        milestone.PaymentStatus = PaymentStatusRefunded;
+                    }
+
+                    _context.Transactions.Add(new Transaction
+                    {
+                        UserId = clientProfile.UserId,
+                        ProjectId = projectId,
+                        MilestoneId = escrow.MilestoneId,
+                        EscrowId = escrow.EscrowId,
+                        Amount = escrow.Amount,
+                        Type = TxRefund,
+                        Status = TransactionStatusSuccess,
+                        Description = $"[End After Dispute] Refunded unused milestone escrow for Project ID {projectId}",
+                        ReferenceId = escrow.MilestoneId.HasValue
+                            ? $"MILESTONE_{escrow.MilestoneId.Value}"
+                            : $"PROJECT_{projectId}",
+                        CreatedAt = now
+                    });
+                }
+
+                await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(
+                    project,
+                    expertProfile);
+
+                dispute.PostResolutionDecision = "END";
+                dispute.PostResolutionDecisionAt = now;
+                dispute.PostResolutionDecisionByUserId = currentUserId;
+                project.Status = ProjectStatusCancelled;
+                project.EndDate = now;
+                contract.Status = ContractStatusCancelled;
+                contract.CancelledReason = "CLIENT_END_AFTER_DISPUTE";
+
+                var proposal = await GetProposalByIdAsync(contract.ProposalId);
+                var job = await GetJobByIdAsync(proposal.JobId);
+                job.Status = JobStatusCancelled;
+                job.UpdatedAt = now;
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                transactionCompleted = true;
+
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Contract ended",
+                    $"The client ended project '{project.Title}' after dispute resolution. Future milestones were cancelled and unused escrow was refunded.",
+                    "PROJECT_ENDED_AFTER_DISPUTE",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedProjectId: project.ProjectId,
+                    relatedDisputeId: dispute.DisputeId);
+
+                return await MapToProjectResponseAsync(project);
+            }
+            catch
+            {
+                if (!transactionCompleted)
+                {
+                    await transaction.RollbackAsync();
+                }
+
+                throw;
+            }
+        }
+
+        private async Task<Dispute> GetPendingPostResolutionDecisionAsync(int projectId)
+        {
+            var dispute = await _context.Disputes
+                .Where(x =>
+                    x.ProjectId == projectId &&
+                    x.Status == DisputeStatusResolved &&
+                    x.ResolutionType == ResolutionReleaseToExpert &&
+                    x.PostResolutionDecision == null)
+                .OrderByDescending(x => x.ResolvedAt)
+                .ThenByDescending(x => x.DisputeId)
+                .FirstOrDefaultAsync();
+
+            if (dispute == null)
+            {
+                throw new InvalidOperationException("No resolved RELEASE_TO_EXPERT dispute is waiting for the Client's decision.");
+            }
+
+            return dispute;
         }
 
         private async Task<bool> CanAccessProjectAsync(
@@ -315,6 +571,22 @@ namespace AITasker.Infrastructure.Projects
                 StartDate = project.StartDate,
                 EndDate = project.EndDate,
                 EscrowLockedAt = project.EscrowLockedAt,
+                RequiresPostDisputeDecision = await _context.Disputes
+                    .AsNoTracking()
+                    .AnyAsync(x =>
+                        x.ProjectId == project.ProjectId &&
+                        x.Status == DisputeStatusResolved &&
+                        x.ResolutionType == ResolutionReleaseToExpert &&
+                        x.PostResolutionDecision == null),
+                LatestResolvedDisputeId = await _context.Disputes
+                    .AsNoTracking()
+                    .Where(x =>
+                        x.ProjectId == project.ProjectId &&
+                        x.Status == DisputeStatusResolved)
+                    .OrderByDescending(x => x.ResolvedAt)
+                    .ThenByDescending(x => x.DisputeId)
+                    .Select(x => (int?)x.DisputeId)
+                    .FirstOrDefaultAsync(),
                 CreatedAt = project.CreatedAt,
                 Milestones = milestoneResponses
             };

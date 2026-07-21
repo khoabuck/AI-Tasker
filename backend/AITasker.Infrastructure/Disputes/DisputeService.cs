@@ -17,9 +17,11 @@ namespace AITasker.Infrastructure.Disputes
         private const string ProjectStatusCancelled = "CANCELLED";
 
         private const string ContractStatusConfirmed = "CONFIRMED";
+        private const string ContractStatusCancelled = "CANCELLED";
 
         private const string JobStatusActive = "ACTIVE";
         private const string JobStatusDisputed = "DISPUTED";
+        private const string JobStatusCancelled = "CANCELLED";
 
         private const string MilestoneStatusApproved = "APPROVED";
         private const string MilestoneStatusResolved = "RESOLVED";
@@ -27,6 +29,7 @@ namespace AITasker.Infrastructure.Disputes
         private const string MilestoneStatusDisputeResolved = "DISPUTE_RESOLVED";
         private const string MilestoneStatusReleased = "RELEASED";
         private const string MilestoneStatusRefunded = "REFUNDED";
+        private const string MilestoneStatusCancelled = "CANCELLED";
 
         private const string PaymentStatusLocked = "LOCKED";
         private const string PaymentStatusFrozen = "FROZEN";
@@ -57,13 +60,14 @@ namespace AITasker.Infrastructure.Disputes
         private const string TxEscrowFreeze = "ESCROW_FREEZE";
         private const string TxEscrowRelease = "ESCROW_RELEASE";
         private const string TxExpertPendingEarningHold = "EXPERT_PENDING_EARNING_HOLD";
+        private const string TxExpertServiceFee = "EXPERT_SERVICE_FEE";
         private const string TxRefund = "REFUND";
 
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
         private readonly IExpertEarningEscrowService _expertEarningEscrowService;
-        private readonly IProjectCompletionService _projectCompletionService;
+        private readonly IPlatformWalletService _platformWalletService;
         private readonly IExternalUrlValidator _externalUrlValidator;
 
         public DisputeService(
@@ -71,14 +75,14 @@ namespace AITasker.Infrastructure.Disputes
             INotificationService notificationService,
             IMarketplaceWorkflowPolicyService workflowPolicyService,
             IExpertEarningEscrowService expertEarningEscrowService,
-            IProjectCompletionService projectCompletionService,
+            IPlatformWalletService platformWalletService,
             IExternalUrlValidator externalUrlValidator)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
             _expertEarningEscrowService = expertEarningEscrowService;
-            _projectCompletionService = projectCompletionService;
+            _platformWalletService = platformWalletService;
             _externalUrlValidator = externalUrlValidator;
         }
 
@@ -240,19 +244,16 @@ namespace AITasker.Infrastructure.Disputes
                         .ToListAsync();
 
                     var lockedAmount = lockedEscrows.Sum(e => e.Amount);
-                    var pendingEarningsAmount = await _expertEarningEscrowService
-                        .GetPendingEarningsForProjectAsync(project.ProjectId, expertProfile.UserId);
-                    var totalDisputableAmount = lockedAmount + pendingEarningsAmount;
 
-                    if (totalDisputableAmount <= 0)
+                    if (lockedAmount <= 0)
                     {
-                        throw new InvalidOperationException("No locked escrow or expert pending earnings found for project-level dispute.");
+                        throw new InvalidOperationException("No locked milestone escrow found for project-level dispute.");
                     }
 
-                    if (request.DisputedAmount != totalDisputableAmount)
+                    if (request.DisputedAmount != lockedAmount)
                     {
                         throw new InvalidOperationException(
-                            $"Project-level dispute amount must equal total disputable amount ({totalDisputableAmount}). This includes locked escrow and expert pending earnings.");
+                            $"Project-level dispute amount must equal the currently locked milestone escrow amount ({lockedAmount}). Earnings from already released milestones are closed and cannot be disputed again.");
                     }
 
                     foreach (var projectEscrow in lockedEscrows)
@@ -545,10 +546,7 @@ namespace AITasker.Infrastructure.Disputes
             int? notificationMilestoneId = null;
             var notificationClientAmount = 0m;
             var notificationExpertAmount = 0m;
-            var completedProject = false;
-            var completedProjectTitle = string.Empty;
-            var completedContractId = 0;
-            var completedProposalId = 0;
+            var requiresClientDecision = false;
 
             await using var dbTransaction = await _context.Database.BeginTransactionAsync();
 
@@ -585,204 +583,177 @@ namespace AITasker.Infrastructure.Disputes
 
                 var normalizedResolutionType = request.ResolutionType.Trim().ToUpperInvariant();
 
-                decimal expertAmount;
-                decimal clientAmount;
-                int loserUserId;
-
-                if (normalizedResolutionType == ResolutionReleaseToExpert)
-                {
-                    expertAmount = dispute.DisputedAmount;
-                    clientAmount = 0;
-                    loserUserId = clientProfile.UserId;
-                }
-                else if (normalizedResolutionType == ResolutionRefundToClient)
-                {
-                    expertAmount = 0;
-                    clientAmount = dispute.DisputedAmount;
-                    loserUserId = expertProfile.UserId;
-                }
-                else
+                if (normalizedResolutionType != ResolutionReleaseToExpert &&
+                    normalizedResolutionType != ResolutionRefundToClient)
                 {
                     throw new InvalidOperationException("ResolutionType must be RELEASE_TO_EXPERT or REFUND_TO_CLIENT.");
                 }
 
-                Milestone? milestone = null;
-                Escrow? escrow = null;
-                var projectEscrows = new List<Escrow>();
+                var loserUserId = normalizedResolutionType == ResolutionReleaseToExpert
+                    ? clientProfile.UserId
+                    : expertProfile.UserId;
 
-                if (dispute.MilestoneId.HasValue)
-                {
-                    milestone = await GetMilestoneAsync(dispute.MilestoneId.Value);
-
-                    escrow = await _context.Escrows
-                        .FirstOrDefaultAsync(e =>
-                            e.MilestoneId == milestone.MilestoneId &&
-                            e.Status == EscrowStatusFrozen);
-
-                    if (escrow == null)
-                    {
-                        throw new InvalidOperationException("Frozen escrow not found for dispute milestone.");
-                    }
-
-                    if (dispute.DisputedAmount != escrow.Amount)
-                    {
-                        throw new InvalidOperationException("Milestone dispute amount must equal escrow amount before resolution.");
-                    }
-                }
-                else
-                {
-                    projectEscrows = await _context.Escrows
+                var frozenEscrows = dispute.MilestoneId.HasValue
+                    ? await _context.Escrows
+                        .Where(e =>
+                            e.MilestoneId == dispute.MilestoneId.Value &&
+                            e.Status == EscrowStatusFrozen)
+                        .ToListAsync()
+                    : await _context.Escrows
                         .Where(e =>
                             e.ProjectId == project.ProjectId &&
                             e.Status == EscrowStatusFrozen)
                         .ToListAsync();
 
-                    var projectEscrowTotal = projectEscrows.Sum(e => e.Amount);
-                    var pendingEarningsAmount = await _expertEarningEscrowService
-                        .GetPendingEarningsForProjectAsync(project.ProjectId, expertProfile.UserId);
-                    var totalDisputableAmount = projectEscrowTotal + pendingEarningsAmount;
+                if (frozenEscrows.Count == 0)
+                {
+                    throw new InvalidOperationException("Frozen milestone escrow not found for dispute resolution.");
+                }
 
-                    if (totalDisputableAmount <= 0)
-                    {
-                        throw new InvalidOperationException("Frozen escrows or expert pending earnings not found for project-level dispute.");
-                    }
+                var lockedDisputedAmount = frozenEscrows.Sum(x => x.Amount);
 
-                    if (dispute.DisputedAmount != totalDisputableAmount)
-                    {
-                        throw new InvalidOperationException("Project-level dispute amount must equal total frozen escrow plus expert pending earnings before resolution.");
-                    }
+                if (dispute.DisputedAmount != lockedDisputedAmount)
+                {
+                    throw new InvalidOperationException("Disputed amount must equal the frozen milestone escrow amount before resolution.");
                 }
 
                 var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
                 var expertWallet = await GetOrCreateWalletAsync(expertProfile.UserId);
-
-                var lockedDisputedAmount = escrow?.Amount ?? projectEscrows.Sum(x => x.Amount);
-                var pendingDisputedAmount = dispute.MilestoneId.HasValue
-                    ? 0m
-                    : await _expertEarningEscrowService.GetPendingEarningsForProjectAsync(
-                        project.ProjectId,
-                        expertProfile.UserId);
 
                 if (clientWallet.LockedBalance < lockedDisputedAmount)
                 {
                     throw new InvalidOperationException("Client locked balance is insufficient for dispute resolution.");
                 }
 
-                if (lockedDisputedAmount > 0)
-                {
-                    clientWallet.LockedBalance -= lockedDisputedAmount;
-                    clientWallet.UpdatedAt = DateTime.UtcNow;
-                }
+                var now = DateTime.UtcNow;
+                clientWallet.LockedBalance -= lockedDisputedAmount;
+                clientWallet.UpdatedAt = now;
 
-                var referenceId = dispute.MilestoneId.HasValue
-                    ? $"MILESTONE_{dispute.MilestoneId.Value}"
-                    : $"DISPUTE_{dispute.DisputeId}";
+                decimal clientAmount = 0m;
+                decimal expertAmount = 0m;
 
-                if (normalizedResolutionType == ResolutionRefundToClient)
+                foreach (var frozenEscrow in frozenEscrows)
                 {
-                    if (lockedDisputedAmount > 0)
+                    var milestone = frozenEscrow.MilestoneId.HasValue
+                        ? await GetMilestoneAsync(frozenEscrow.MilestoneId.Value)
+                        : null;
+                    var referenceId = milestone != null
+                        ? $"MILESTONE_{milestone.MilestoneId}"
+                        : $"DISPUTE_{dispute.DisputeId}";
+
+                    if (normalizedResolutionType == ResolutionRefundToClient)
                     {
-                        clientWallet.AvailableBalance += lockedDisputedAmount;
-                        clientWallet.UpdatedAt = DateTime.UtcNow;
+                        clientWallet.AvailableBalance += frozenEscrow.Amount;
+                        clientWallet.UpdatedAt = now;
+                        clientAmount += frozenEscrow.Amount;
+                        frozenEscrow.Status = EscrowStatusRefunded;
 
                         _context.Transactions.Add(new Transaction
                         {
                             UserId = clientProfile.UserId,
                             ProjectId = project.ProjectId,
-                            MilestoneId = dispute.MilestoneId,
-                            EscrowId = escrow?.EscrowId,
-                            Amount = lockedDisputedAmount,
+                            MilestoneId = milestone?.MilestoneId,
+                            EscrowId = frozenEscrow.EscrowId,
+                            Amount = frozenEscrow.Amount,
                             Type = TxRefund,
                             Status = TransactionStatusSuccess,
-                            Description = $"[Dispute Resolution] Client refund from locked escrow in Dispute ID {dispute.DisputeId}",
+                            Description = $"[Dispute Resolution] Full milestone refund from Dispute ID {dispute.DisputeId}",
                             ReferenceId = referenceId,
-                            CreatedAt = DateTime.UtcNow
+                            CreatedAt = now
                         });
+
+                        if (milestone != null)
+                        {
+                            milestone.Status = MilestoneStatusRefunded;
+                            milestone.PaymentStatus = PaymentStatusRefunded;
+                            await MarkDisputedDeliverableAfterResolutionAsync(
+                                dispute,
+                                milestone.MilestoneId,
+                                normalizedResolutionType);
+                        }
+                    }
+                    else
+                    {
+                        var expertFeeAmount = CalculateExpertServiceFee(
+                            frozenEscrow.Amount,
+                            contract.ExpertFeeRate);
+                        var expertNetAmount = frozenEscrow.Amount - expertFeeAmount;
+
+                        expertWallet.PendingEarningsBalance += expertNetAmount;
+                        expertWallet.TotalEarning += expertNetAmount;
+                        expertWallet.UpdatedAt = now;
+                        expertAmount += expertNetAmount;
+                        frozenEscrow.Status = EscrowStatusReleased;
+
+                        _context.Transactions.Add(new Transaction
+                        {
+                            UserId = clientProfile.UserId,
+                            ProjectId = project.ProjectId,
+                            MilestoneId = milestone?.MilestoneId,
+                            EscrowId = frozenEscrow.EscrowId,
+                            Amount = frozenEscrow.Amount,
+                            Type = TxEscrowRelease,
+                            Status = TransactionStatusSuccess,
+                            Description = $"[Dispute Resolution] Released milestone escrow in Dispute ID {dispute.DisputeId}",
+                            ReferenceId = referenceId,
+                            CreatedAt = now
+                        });
+
+                        _context.Transactions.Add(new Transaction
+                        {
+                            UserId = expertProfile.UserId,
+                            ProjectId = project.ProjectId,
+                            MilestoneId = milestone?.MilestoneId,
+                            EscrowId = frozenEscrow.EscrowId,
+                            Amount = expertNetAmount,
+                            Type = TxExpertPendingEarningHold,
+                            Status = TransactionStatusSuccess,
+                            Description = $"[Dispute Resolution] Net expert earning held after fee for Dispute ID {dispute.DisputeId}",
+                            ReferenceId = referenceId,
+                            CreatedAt = now
+                        });
+
+                        if (expertFeeAmount > 0)
+                        {
+                            var feeReferenceId = milestone != null
+                                ? $"MILESTONE_{milestone.MilestoneId}_EXPERT_FEE"
+                                : $"DISPUTE_{dispute.DisputeId}_EXPERT_FEE";
+
+                            _context.Transactions.Add(new Transaction
+                            {
+                                UserId = expertProfile.UserId,
+                                ProjectId = project.ProjectId,
+                                MilestoneId = milestone?.MilestoneId,
+                                EscrowId = frozenEscrow.EscrowId,
+                                Amount = -expertFeeAmount,
+                                Type = TxExpertServiceFee,
+                                Status = TransactionStatusSuccess,
+                                Description = $"[Expert Service Fee] Deducted fee for Dispute ID {dispute.DisputeId}",
+                                ReferenceId = feeReferenceId,
+                                CreatedAt = now
+                            });
+
+                            await _platformWalletService.RecordExpertServiceFeeAsync(
+                                project.ProjectId,
+                                contract.ContractId,
+                                expertProfile.UserId,
+                                expertFeeAmount,
+                                feeReferenceId,
+                                now);
+                        }
+
+                        if (milestone != null)
+                        {
+                            milestone.Status = MilestoneStatusResolved;
+                            milestone.PaymentStatus = PaymentStatusReleased;
+                            await MarkDisputedDeliverableAfterResolutionAsync(
+                                dispute,
+                                milestone.MilestoneId,
+                                normalizedResolutionType);
+                        }
                     }
 
-                    if (pendingDisputedAmount > 0)
-                    {
-                        await _expertEarningEscrowService.RefundProjectPendingEarningsToClientAsync(
-                            project,
-                            expertProfile,
-                            clientProfile,
-                            dispute.DisputeId);
-                    }
-                }
-
-                if (normalizedResolutionType == ResolutionReleaseToExpert && lockedDisputedAmount > 0)
-                {
-                    expertWallet.PendingEarningsBalance += lockedDisputedAmount;
-                    expertWallet.TotalEarning += lockedDisputedAmount;
-                    expertWallet.UpdatedAt = DateTime.UtcNow;
-
-                    _context.Transactions.Add(new Transaction
-                    {
-                        UserId = expertProfile.UserId,
-                        ProjectId = project.ProjectId,
-                        MilestoneId = dispute.MilestoneId,
-                        EscrowId = escrow?.EscrowId,
-                        Amount = lockedDisputedAmount,
-                        Type = TxExpertPendingEarningHold,
-                        Status = TransactionStatusSuccess,
-                        Description = $"[Dispute Resolution] Expert earning held from locked escrow in Dispute ID {dispute.DisputeId} until project completion",
-                        ReferenceId = referenceId,
-                        CreatedAt = DateTime.UtcNow
-                    });
-                }
-
-                clientAmount = normalizedResolutionType == ResolutionRefundToClient
-                    ? lockedDisputedAmount + pendingDisputedAmount
-                    : 0m;
-
-                expertAmount = normalizedResolutionType == ResolutionReleaseToExpert
-                    ? lockedDisputedAmount + pendingDisputedAmount
-                    : 0m;
-
-                if (escrow != null)
-                {
-                    escrow.Status = normalizedResolutionType == ResolutionReleaseToExpert
-                        ? EscrowStatusReleased
-                        : EscrowStatusRefunded;
-
-                    escrow.UpdatedAt = DateTime.UtcNow;
-                }
-
-                foreach (var projectEscrow in projectEscrows)
-                {
-                    projectEscrow.Status = normalizedResolutionType == ResolutionReleaseToExpert
-                        ? EscrowStatusReleased
-                        : EscrowStatusRefunded;
-
-                    projectEscrow.UpdatedAt = DateTime.UtcNow;
-
-                    if (projectEscrow.MilestoneId.HasValue)
-                    {
-                        var projectMilestone = await GetMilestoneAsync(projectEscrow.MilestoneId.Value);
-
-                        projectMilestone.Status = MilestoneStatusResolved;
-                        projectMilestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
-                            ? PaymentStatusReleased
-                            : PaymentStatusRefunded;
-
-                        await MarkDisputedDeliverableAfterResolutionAsync(
-                            dispute,
-                            projectMilestone.MilestoneId,
-                            normalizedResolutionType);
-                    }
-                }
-
-                if (milestone != null)
-                {
-                    milestone.Status = MilestoneStatusResolved;
-                    milestone.PaymentStatus = normalizedResolutionType == ResolutionReleaseToExpert
-                        ? PaymentStatusReleased
-                        : PaymentStatusRefunded;
-
-                    await MarkDisputedDeliverableAfterResolutionAsync(
-                        dispute,
-                        milestone.MilestoneId,
-                        normalizedResolutionType);
+                    frozenEscrow.UpdatedAt = now;
                 }
 
                 dispute.Status = DisputeStatusResolved;
@@ -790,21 +761,44 @@ namespace AITasker.Infrastructure.Disputes
                 dispute.AdminDecision = string.IsNullOrWhiteSpace(request.AdminDecision)
                     ? $"Admin resolved dispute with {normalizedResolutionType}."
                     : request.AdminDecision.Trim();
-                dispute.ResolvedAt = DateTime.UtcNow;
+                dispute.ResolvedAt = now;
+                dispute.PostResolutionDecision = null;
+                dispute.PostResolutionDecisionAt = null;
+                dispute.PostResolutionDecisionByUserId = null;
 
-                await ApplyLostDisputePolicyAsync(
-                    loserUserId,
-                    dispute.DisputeId);
+                await ApplyLostDisputePolicyAsync(loserUserId, dispute.DisputeId);
 
-                await UpdateProjectStatusAfterResolutionAsync(
-                    project,
-                    dispute.DisputeId);
+                if (normalizedResolutionType == ResolutionRefundToClient)
+                {
+                    clientAmount += await RefundRemainingLockedEscrowsAndCancelFutureMilestonesAsync(
+                        project,
+                        clientProfile,
+                        frozenEscrows.Select(x => x.EscrowId).ToHashSet(),
+                        now);
+
+                    await _expertEarningEscrowService.ReleaseProjectPendingEarningsAsync(
+                        project,
+                        expertProfile);
+
+                    project.Status = ProjectStatusCancelled;
+                    project.EndDate = now;
+                    contract.Status = ContractStatusCancelled;
+                    contract.CancelledReason = ResolutionRefundToClient;
+                    dispute.PostResolutionDecision = "END";
+                    dispute.PostResolutionDecisionAt = now;
+                    dispute.PostResolutionDecisionByUserId = adminUserId;
+                    await UpdateJobStatusByProjectAsync(project, JobStatusCancelled);
+                }
+                else
+                {
+                    // Expert won this milestone, but the project stays paused until Client chooses Continue or End.
+                    project.Status = ProjectStatusDisputed;
+                    project.EndDate = null;
+                    await UpdateJobStatusByProjectAsync(project, JobStatusDisputed);
+                    requiresClientDecision = true;
+                }
 
                 await _context.SaveChangesAsync();
-
-                completedProject = await _projectCompletionService.TryCompleteProjectAsync(
-                    project.ProjectId,
-                    sendNotifications: false);
 
                 resolvedDisputeId = dispute.DisputeId;
                 notificationClientUserId = clientProfile.UserId;
@@ -813,9 +807,6 @@ namespace AITasker.Infrastructure.Disputes
                 notificationMilestoneId = dispute.MilestoneId;
                 notificationClientAmount = clientAmount;
                 notificationExpertAmount = expertAmount;
-                completedProjectTitle = project.Title;
-                completedContractId = contract.ContractId;
-                completedProposalId = contract.ProposalId;
 
                 await dbTransaction.CommitAsync();
             }
@@ -825,8 +816,9 @@ namespace AITasker.Infrastructure.Disputes
                 throw;
             }
 
-            var resolutionMessage =
-                $"Dispute #{resolvedDisputeId} has been resolved. Client receives {notificationClientAmount}, Expert receives {notificationExpertAmount}.";
+            var resolutionMessage = requiresClientDecision
+                ? $"Dispute #{resolvedDisputeId} was released to the Expert. Expert net amount: {notificationExpertAmount:N0} VND. The Client must choose Continue Project or End Contract."
+                : $"Dispute #{resolvedDisputeId} was refunded to the Client. Total returned amount: {notificationClientAmount:N0} VND. The project has ended.";
 
             await _notificationService.CreateNotificationAsync(
                 notificationClientUserId,
@@ -849,37 +841,6 @@ namespace AITasker.Infrastructure.Disputes
                 relatedProjectId: notificationProjectId,
                 relatedMilestoneId: notificationMilestoneId,
                 relatedDisputeId: resolvedDisputeId);
-
-            if (completedProject)
-            {
-                var proposal = await _context.Proposals
-                    .AsNoTracking()
-                    .FirstAsync(x => x.ProposalId == completedProposalId);
-
-                await _notificationService.CreateNotificationAsync(
-                    notificationClientUserId,
-                    "Project completed",
-                    $"Project '{completedProjectTitle}' has been completed.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: notificationProjectId,
-                    relatedJobId: proposal.JobId,
-                    relatedProposalId: completedProposalId,
-                    relatedContractId: completedContractId,
-                    relatedProjectId: notificationProjectId);
-
-                await _notificationService.CreateNotificationAsync(
-                    notificationExpertUserId,
-                    "Project completed",
-                    $"Project '{completedProjectTitle}' has been completed.",
-                    "PROJECT_COMPLETED",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: notificationProjectId,
-                    relatedJobId: proposal.JobId,
-                    relatedProposalId: completedProposalId,
-                    relatedContractId: completedContractId,
-                    relatedProjectId: notificationProjectId);
-            }
 
             return await MapToDisputeResponseAsync(resolvedDisputeId);
         }
@@ -1070,7 +1031,8 @@ namespace AITasker.Infrastructure.Disputes
                    status == MilestoneStatusResolved ||
                    status == MilestoneStatusDisputeResolved ||
                    status == MilestoneStatusReleased ||
-                   status == MilestoneStatusRefunded;
+                   status == MilestoneStatusRefunded ||
+                   status == MilestoneStatusCancelled;
         }
 
         private static void EnsureProjectReadyForDispute(
@@ -1134,39 +1096,91 @@ namespace AITasker.Infrastructure.Disputes
                 status == MilestoneStatusDisputeResolved ||
                 status == MilestoneStatusReleased ||
                 status == MilestoneStatusRefunded ||
+                status == MilestoneStatusCancelled ||
                 paymentStatus == PaymentStatusReleased ||
                 paymentStatus == PaymentStatusRefunded;
         }
 
-        private async Task UpdateProjectStatusAfterResolutionAsync(
-            Project project,
-            int resolvedDisputeId)
+        private static decimal CalculateExpertServiceFee(decimal amount, decimal expertFeeRate)
         {
-            var hasOpenDispute = await _context.Disputes.AnyAsync(d =>
-                d.ProjectId == project.ProjectId &&
-                d.DisputeId != resolvedDisputeId &&
-                d.Status == DisputeStatusOpen);
-
-            if (hasOpenDispute)
+            if (amount <= 0 || expertFeeRate <= 0)
             {
-                project.Status = ProjectStatusDisputed;
-
-                await UpdateJobStatusByProjectAsync(
-                    project,
-                    JobStatusDisputed);
-
-                return;
+                return 0m;
             }
 
-            // Do not mark the project/job as COMPLETED here.
-            // The centralized ProjectCompletionService must be the only place that completes
-            // projects, releases pending earnings and sends project-completed notifications.
-            project.Status = ProjectStatusActive;
-            project.EndDate = null;
+            return Math.Round(amount * expertFeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+        }
 
-            await UpdateJobStatusByProjectAsync(
-                project,
-                JobStatusActive);
+        private async Task<decimal> RefundRemainingLockedEscrowsAndCancelFutureMilestonesAsync(
+            Project project,
+            ClientProfile clientProfile,
+            ISet<int> excludedEscrowIds,
+            DateTime now)
+        {
+            var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
+            var remainingEscrows = await _context.Escrows
+                .Where(x =>
+                    x.ProjectId == project.ProjectId &&
+                    !excludedEscrowIds.Contains(x.EscrowId) &&
+                    (x.Status == EscrowStatusLocked || x.Status == EscrowStatusFrozen))
+                .ToListAsync();
+
+            var refundAmount = remainingEscrows.Sum(x => x.Amount);
+
+            if (refundAmount > 0)
+            {
+                if (clientWallet.LockedBalance < refundAmount)
+                {
+                    throw new InvalidOperationException("Client locked balance is insufficient to refund remaining milestone escrow.");
+                }
+
+                clientWallet.LockedBalance -= refundAmount;
+                clientWallet.AvailableBalance += refundAmount;
+                clientWallet.UpdatedAt = now;
+            }
+
+            foreach (var escrow in remainingEscrows)
+            {
+                escrow.Status = EscrowStatusRefunded;
+                escrow.UpdatedAt = now;
+
+                if (escrow.MilestoneId.HasValue)
+                {
+                    var milestone = await GetMilestoneAsync(escrow.MilestoneId.Value);
+                    milestone.Status = MilestoneStatusCancelled;
+                    milestone.PaymentStatus = PaymentStatusRefunded;
+                }
+
+                _context.Transactions.Add(new Transaction
+                {
+                    UserId = clientProfile.UserId,
+                    ProjectId = project.ProjectId,
+                    MilestoneId = escrow.MilestoneId,
+                    EscrowId = escrow.EscrowId,
+                    Amount = escrow.Amount,
+                    Type = TxRefund,
+                    Status = TransactionStatusSuccess,
+                    Description = $"[Project End] Refunded unused milestone escrow for Project ID {project.ProjectId}",
+                    ReferenceId = escrow.MilestoneId.HasValue
+                        ? $"MILESTONE_{escrow.MilestoneId.Value}"
+                        : $"PROJECT_{project.ProjectId}",
+                    CreatedAt = now
+                });
+            }
+
+            var futureMilestones = await _context.Milestones
+                .Where(x =>
+                    x.ProjectId == project.ProjectId &&
+                    x.Status == "PENDING" &&
+                    x.PaymentStatus == "PENDING")
+                .ToListAsync();
+
+            foreach (var futureMilestone in futureMilestones)
+            {
+                futureMilestone.Status = MilestoneStatusCancelled;
+            }
+
+            return refundAmount;
         }
 
         private async Task NotifyAdminsAsync(
@@ -1432,7 +1446,7 @@ namespace AITasker.Infrastructure.Disputes
                 MilestoneId = dispute.MilestoneId,
                 MilestoneTitle = milestone?.Title,
                 DeliverableId = dispute.DeliverableId,
-                DeliverableVersionNumber = dispute.Deliverable?.VersionNumber,
+                DeliverableVersionNumber = disputedDeliverable?.VersionNumber,
                 DeliverableStatus = disputedDeliverable?.Status,
 
                 ClientProfileId = clientProfile.ClientProfileId,
@@ -1455,6 +1469,13 @@ namespace AITasker.Infrastructure.Disputes
                 AdminDecision = dispute.AdminDecision,
                 CreatedAt = dispute.CreatedAt,
                 ResolvedAt = dispute.ResolvedAt,
+                RequiresClientDecision =
+                    dispute.Status == DisputeStatusResolved &&
+                    dispute.ResolutionType == ResolutionReleaseToExpert &&
+                    dispute.PostResolutionDecision == null,
+                PostResolutionDecision = dispute.PostResolutionDecision,
+                PostResolutionDecisionAt = dispute.PostResolutionDecisionAt,
+                PostResolutionDecisionByUserId = dispute.PostResolutionDecisionByUserId,
                 Evidences = evidenceResponses
             };
         }

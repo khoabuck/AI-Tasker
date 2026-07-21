@@ -42,8 +42,11 @@ namespace AITasker.Application.DTOs.Responses
 
         public string? StatusReason { get; set; }
 
-
         public int? ContractId { get; set; }
+
+        public int ClientMissSignCount { get; set; }
+
+        public int ExpertMissSignCount { get; set; }
 
         public int LatestVersionNumber { get; set; }
 
