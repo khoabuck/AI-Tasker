@@ -65,6 +65,11 @@ public class ExpertDirectoryItemResponse
 
     public DateTime? UpdatedAt { get; set; }
 
+    // Điểm review công khai của Client, chỉ tính review VISIBLE.
+    public decimal AverageRating { get; set; }
+
+    public int TotalReviews { get; set; }
+
     public List<ExpertDirectorySkillResponse> ExpertSkills { get; set; } = new();
 
     public List<ExpertDirectoryCertificateResponse> Certificates { get; set; } = new();
@@ -72,10 +77,6 @@ public class ExpertDirectoryItemResponse
 
 public class ExpertDirectoryDetailResponse : ExpertDirectoryItemResponse
 {
-    public decimal AverageRating { get; set; }
-
-    public int TotalReviews { get; set; }
-
     public List<ExpertPublicReviewResponse> Reviews { get; set; } = new();
 }
 
