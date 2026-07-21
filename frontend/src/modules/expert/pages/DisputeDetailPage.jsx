@@ -8,19 +8,25 @@ import {
 } from "../../../constants/disputeStatus";
 
 import { compareDateAsc, formatDateTime, parseUtcDate } from "../../../utils/dateTime.utils";
+
+// ===== Evidence form defaults =====
 const emptyEvidenceForm = {
   evidenceText: "",
   fileUrl: "",
   images: [],
 };
 
+// ===== Expert dispute detail page: evidence timeline and submissions =====
 export default function DisputeDetailPage() {
+  // ===== Route params =====
   const { disputeId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Dispute data and evidence form state =====
   const [dispute, setDispute] = useState(null);
   const [evidenceForm, setEvidenceForm] = useState(emptyEvidenceForm);
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [showEvidenceModal, setShowEvidenceModal] = useState(false);
@@ -46,6 +52,7 @@ export default function DisputeDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [disputeId]);
 
+  // ===== Derived dispute status and grouped evidence =====
   const status = String(dispute?.status || "").trim().toUpperCase();
   const resolved = status === "RESOLVED";
   const evidences = useMemo(
@@ -58,6 +65,7 @@ export default function DisputeDetailPage() {
     [evidences]
   );
 
+  // ===== API loading: dispute detail =====
   const loadDispute = async ({ preserveMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -78,6 +86,7 @@ export default function DisputeDetailPage() {
     }
   };
 
+  // ===== Evidence form helpers =====
   const updateEvidenceField = (name, value) => {
     setError("");
     setMessage("");
@@ -358,6 +367,7 @@ export default function DisputeDetailPage() {
     }
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -434,6 +444,10 @@ export default function DisputeDetailPage() {
                       {dispute.respondentName || "Respondent"}
                     </span>
                   </p>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-gray-500">
+                    Track the dispute timeline, review submitted evidence, and
+                    add supporting details while the case is still open.
+                  </p>
                 </div>
 
                 <div className="flex shrink-0 flex-wrap gap-2">
@@ -443,7 +457,7 @@ export default function DisputeDetailPage() {
                       onClick={() =>
                         navigate(`/expert/projects/${dispute.projectId}`)
                       }
-                      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
+                      className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
                       Project
                     </button>
@@ -455,7 +469,7 @@ export default function DisputeDetailPage() {
                       onClick={() =>
                         navigate(`/expert/milestones/${dispute.milestoneId}`)
                       }
-                      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
+                      className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
                       Milestone
                     </button>
@@ -464,7 +478,7 @@ export default function DisputeDetailPage() {
                   <button
                     type="button"
                     onClick={() => loadDispute()}
-                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-3 text-xs font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                   >
                     <span className="material-symbols-outlined text-[17px]">
                       refresh
@@ -477,7 +491,7 @@ export default function DisputeDetailPage() {
 
             <div className="grid grid-cols-1 divide-y divide-white/10 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
               <HeroInfo
-                label="Disputed Amount"
+                label="Disputed amount"
                 value={formatMoney(dispute.disputedAmount)}
               />
               <HeroInfo
@@ -630,18 +644,19 @@ export default function DisputeDetailPage() {
                 ) : (
                   <div>
                     <p className="text-sm leading-6 text-gray-400">
-                      Add supporting details while the dispute is open.
+                      Add supporting details, links, or images while the dispute
+                      is open.
                     </p>
 
                     <button
                       type="button"
                       onClick={openEvidenceModal}
-                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300"
+                      className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
                     >
                       <span className="material-symbols-outlined text-[18px]">
                         add_circle
                       </span>
-                      Add Evidence
+                      Add evidence
                     </button>
                   </div>
                 )}
@@ -738,6 +753,7 @@ function SuccessToast({ message, onClose }) {
 }
 
 
+// ===== Evidence modal: text, supporting link, or images =====
 function EvidenceModal({
   formData,
   fieldErrors,
@@ -753,16 +769,20 @@ function EvidenceModal({
     <div className="fixed inset-0 z-[1050] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm">
       <form
         onSubmit={onSubmit}
-        className="max-h-[88vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.65)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="max-h-[88vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#151a22] p-5 shadow-[0_30px_90px_rgba(0,0,0,0.65)] [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
       >
         <div className="mb-4 flex items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
-              Add Evidence
+              Add evidence
             </p>
             <h2 className="mt-1 text-xl font-black text-white">
               Add supporting evidence
             </h2>
+            <p className="mt-1.5 text-sm leading-5 text-gray-500">
+              Add a clear explanation first, then attach either a supporting
+              link or images.
+            </p>
           </div>
 
           <button
@@ -810,7 +830,7 @@ function EvidenceModal({
                 onChange("evidenceText", event.target.value)
               }
               placeholder="Explain what this evidence shows..."
-              className="w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-3 py-2.5 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60"
+              className="min-h-[132px] w-full resize-none rounded-xl border border-white/10 bg-[#0f141d] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60"
             />
           </Field>
 
@@ -821,7 +841,7 @@ function EvidenceModal({
               disabled={submitting || formData.images.length > 0}
               onChange={(event) => onChange("fileUrl", event.target.value)}
               placeholder="https://drive.google.com/..."
-              className={`w-full rounded-xl border bg-[#0f141d] px-3 py-2.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 disabled:cursor-not-allowed disabled:opacity-60 ${
+              className={`min-h-[52px] w-full rounded-xl border bg-[#0f141d] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-cyan-400 focus:ring-2 focus:ring-cyan-400/15 disabled:cursor-not-allowed disabled:opacity-60 ${
                 fieldErrors.fileUrl
                   ? "border-red-400/60"
                   : "border-white/10"
@@ -845,7 +865,7 @@ function EvidenceModal({
               </span>
             </div>
 
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-400/30 bg-cyan-400/[0.05] px-3 py-3 text-sm font-bold text-cyan-300 transition hover:border-cyan-400/60 hover:bg-cyan-400/10">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-cyan-400/30 bg-cyan-400/[0.05] px-4 py-4 text-sm font-bold text-cyan-300 transition hover:border-cyan-400/60 hover:bg-cyan-400/10">
               <span className="material-symbols-outlined text-[18px]">
                 add_photo_alternate
               </span>
@@ -905,7 +925,7 @@ function EvidenceModal({
             type="button"
             onClick={onClose}
             disabled={submitting}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -913,10 +933,10 @@ function EvidenceModal({
           <button
             type="submit"
             disabled={submitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="material-symbols-outlined text-[18px]">send</span>
-            Continue
+            Review evidence
           </button>
         </div>
       </form>
@@ -924,6 +944,7 @@ function EvidenceModal({
   );
 }
 
+// ===== Confirmation dialog before submitting evidence =====
 function ConfirmDialog({
   title,
   message,
@@ -955,7 +976,7 @@ function ConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-white/20 hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -964,7 +985,7 @@ function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Submitting..." : confirmLabel}
           </button>
@@ -974,6 +995,7 @@ function ConfirmDialog({
   );
 }
 
+// ===== Evidence submission card in the timeline =====
 function EvidenceSubmission({ submission, index }) {
   const images = Array.isArray(submission.images) ? submission.images : [];
   const files = Array.isArray(submission.files) ? submission.files : [];
@@ -1145,6 +1167,7 @@ function groupEvidenceSubmissions(evidences = []) {
   return groups.reverse();
 }
 
+// ===== Shared detail card wrapper =====
 function Card({ title, icon, action, children }) {
   return (
     <section className="min-w-0 rounded-2xl border border-white/10 bg-[#151a22] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.16)]">
@@ -1171,6 +1194,7 @@ function Card({ title, icon, action, children }) {
   );
 }
 
+// ===== Shared field wrapper inside evidence modal =====
 function Field({ label, error, children }) {
   return (
     <div>
@@ -1183,6 +1207,7 @@ function Field({ label, error, children }) {
   );
 }
 
+// ===== Sidebar info row =====
 function Info({ label, value }) {
   return (
     <div className="mb-2 rounded-xl border border-white/10 bg-white/[0.025] p-3 last:mb-0">
@@ -1196,6 +1221,7 @@ function Info({ label, value }) {
   );
 }
 
+// ===== Hero summary value =====
 function HeroInfo({ label, value }) {
   return (
     <div className="min-w-0 p-3">
@@ -1209,6 +1235,7 @@ function HeroInfo({ label, value }) {
   );
 }
 
+// ===== Readable multiline text block =====
 function ReadableText({ children, className = "" }) {
   return (
     <p
@@ -1219,6 +1246,7 @@ function ReadableText({ children, className = "" }) {
   );
 }
 
+// ===== External supporting file link =====
 function ExternalLink({ href, label, icon }) {
   return (
     <a

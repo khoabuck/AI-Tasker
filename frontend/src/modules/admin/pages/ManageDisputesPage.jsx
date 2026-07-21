@@ -7,6 +7,8 @@ import {
   formatDateTime,
   parseUtcDate,
 } from "../../../utils/dateTime.utils";
+
+// ===== Filter and resolution options =====
 const STATUS_OPTIONS = ["ALL", "OPEN", "UNDER_REVIEW", "RESOLVED", "CLOSED"];
 
 const RESOLUTION_OPTIONS = [
@@ -27,17 +29,22 @@ const EMPTY_RESOLVE_FORM = {
   adminDecision: "",
 };
 
+// ===== Admin dispute management page: evidence review and final resolution =====
 export default function ManageDisputesPage() {
+  // ===== Dispute data and selection state =====
   const [disputes, setDisputes] = useState([]);
   const [selectedDispute, setSelectedDispute] = useState(null);
   const [resolveTarget, setResolveTarget] = useState(null);
 
+  // ===== Filter state =====
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  // ===== Resolve form state =====
   const [resolveForm, setResolveForm] = useState(EMPTY_RESOLVE_FORM);
   const [resolveErrors, setResolveErrors] = useState({});
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -60,6 +67,7 @@ export default function ManageDisputesPage() {
     loadDisputes();
   }, []);
 
+  // ===== Derived list and dispute stats =====
   const filteredDisputes = useMemo(() => {
     const search = keyword.trim().toLowerCase();
 
@@ -108,6 +116,7 @@ export default function ManageDisputesPage() {
     );
   }, [disputes]);
 
+  // ===== API loading: dispute list =====
   const loadDisputes = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -127,6 +136,7 @@ export default function ManageDisputesPage() {
     }
   };
 
+  // ===== Detail expansion and resolve actions =====
   const toggleDisputeDetail = async (dispute) => {
     if (!dispute?.disputeId) return;
 
@@ -222,6 +232,7 @@ export default function ManageDisputesPage() {
     }
   };
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -236,7 +247,8 @@ export default function ManageDisputesPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review evidence and issue final decisions.
+              Review dispute statements, evidence, attachments, disputed
+              amounts, and issue final release/refund decisions.
             </p>
           </div>
 
@@ -264,7 +276,7 @@ export default function ManageDisputesPage() {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon="gavel"
-            label="Cases"
+            label="Total cases"
             value={stats.total}
             description="All dispute records"
             tone="cyan"
@@ -272,7 +284,7 @@ export default function ManageDisputesPage() {
 
           <StatCard
             icon="priority_high"
-            label="Open"
+            label="Needs review"
             value={stats.open}
             description="Need admin review"
             tone="yellow"
@@ -280,7 +292,7 @@ export default function ManageDisputesPage() {
 
           <StatCard
             icon="verified"
-            label="Resolved"
+            label="Resolved cases"
             value={stats.resolved}
             description="Completed decisions"
             tone="green"
@@ -302,7 +314,7 @@ export default function ManageDisputesPage() {
                 Search
               </label>
 
-              <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
+              <div className="flex h-14 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition focus-within:border-cyan-400/50 focus-within:ring-2 focus-within:ring-cyan-400/15">
                 <span className="material-symbols-outlined text-[20px] text-gray-500">
                   search
                 </span>
@@ -328,7 +340,7 @@ export default function ManageDisputesPage() {
         <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">Disputes</h2>
+              <h2 className="text-lg font-bold text-white">Dispute case list</h2>
               <p className="mt-1 text-sm text-gray-500">
                 Showing {filteredDisputes.length} of {disputes.length} records.
               </p>
@@ -408,7 +420,7 @@ export default function ManageDisputesPage() {
                     : "Refund funds to Client",
               },
               {
-                label: "Admin Decision",
+                label: "Admin decision",
                 value: resolveForm.adminDecision.trim(),
               },
             ]}
@@ -432,6 +444,7 @@ export default function ManageDisputesPage() {
   );
 }
 
+// ===== Final confirmation modal before resolving a dispute =====
 function ReviewConfirmationModal({
   title,
   description,
@@ -520,7 +533,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -529,7 +542,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -623,6 +636,7 @@ function PageSkeleton({ rows = 4 }) {
 }
 
 
+// ===== Dispute row with expandable evidence detail =====
 function DisputeRow({
   dispute,
   detail,
@@ -674,7 +688,7 @@ function DisputeRow({
               type="button"
               onClick={onView}
               disabled={disabled}
-              className={`inline-flex items-center justify-center gap-1 rounded-xl border px-4 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+              className={`inline-flex items-center justify-center gap-1 rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 expanded
                   ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300"
                   : "border-white/10 bg-white/[0.04] text-gray-300 hover:border-cyan-400/40 hover:text-cyan-300"
@@ -694,7 +708,7 @@ function DisputeRow({
               type="button"
               onClick={onResolve}
               disabled={disabled || !canResolve}
-              className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
               Resolve
             </button>
@@ -731,6 +745,7 @@ function CompactInfo({ label, value }) {
   );
 }
 
+// ===== Expanded dispute detail: evidence grouped into submissions =====
 function InlineDisputeDetail({ dispute, loading, onResolve }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
@@ -798,7 +813,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
               <span className="material-symbols-outlined text-[18px]">
                 task_alt
               </span>
-              Resolve
+              Resolve case
             </button>
           )}
         </div>
@@ -844,7 +859,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
           </DetailSection>
 
           {dispute.adminDecision && (
-            <DetailSection title="Admin Decision" icon="gavel" tone="green">
+            <DetailSection title="Admin decision" icon="gavel" tone="green">
               <div className="rounded-xl border border-green-400/20 bg-green-400/[0.06] p-4">
                 <p className="whitespace-pre-wrap break-words text-sm leading-6 text-green-100/80">
                   {dispute.adminDecision}
@@ -907,6 +922,7 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
 }
 
 
+// ===== Detail section wrapper inside expanded dispute row =====
 function DetailSection({ title, icon, tone = "default", children }) {
   const toneClass =
     tone === "green"
@@ -926,6 +942,7 @@ function DetailSection({ title, icon, tone = "default", children }) {
   );
 }
 
+// ===== Resolve dispute modal: choose fund destination and write decision =====
 function ResolveDisputeModal({
   dispute,
   form,
@@ -939,7 +956,7 @@ function ResolveDisputeModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
       <div className="w-full max-w-2xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
-          <h2 className="text-xl font-bold text-white">Resolve</h2>
+          <h2 className="text-xl font-bold text-white">Resolve dispute case</h2>
           <p className="mt-1 text-sm text-gray-400">
             {dispute.projectTitle || "Project"}
           </p>
@@ -948,7 +965,7 @@ function ResolveDisputeModal({
         <div className="space-y-5 px-6 py-5">
           <div>
             <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
-              Resolution Type
+              Resolution type
             </label>
 
             {errors.resolutionType && (
@@ -963,7 +980,7 @@ function ResolveDisputeModal({
                   key={item.value}
                   type="button"
                   onClick={() => onChange("resolutionType", item.value)}
-                  className={`rounded-xl border p-4 text-left transition ${
+                  className={`rounded-xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-cyan-400/15 ${
                     form.resolutionType === item.value
                       ? "border-cyan-400/50 bg-cyan-400/10"
                       : "border-white/10 bg-white/[0.03] hover:border-cyan-400/30"
@@ -977,11 +994,11 @@ function ResolveDisputeModal({
           </div>
 
           <TextArea
-            label="Admin Decision"
+            label="Admin decision"
             value={form.adminDecision}
             error={errors.adminDecision}
             onChange={(value) => onChange("adminDecision", value)}
-            placeholder="Explain the reason for this final decision."
+            placeholder="Explain the evidence, amount, and reason for this final decision."
           />
 
           <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
@@ -1006,7 +1023,7 @@ function ResolveDisputeModal({
             disabled={loading}
             className="rounded-xl border border-green-400/50 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? "Resolving..." : "Submit Decision"}
+            {loading ? "Resolving..." : "Review decision"}
           </button>
         </div>
       </div>
@@ -1014,6 +1031,7 @@ function ResolveDisputeModal({
   );
 }
 
+// ===== Dashboard statistic card =====
 function StatCard({ icon, label, value, description, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
@@ -1041,6 +1059,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   );
 }
 
+// ===== Filter select with larger tap target =====
 function FilterSelect({ label, value, options, onChange }) {
   return (
     <div>
@@ -1051,7 +1070,7 @@ function FilterSelect({ label, value, options, onChange }) {
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+        className="h-14 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/15"
       >
         {options.map((item) => (
           <option key={item} value={item}>
@@ -1411,6 +1430,7 @@ function Badge({ label }) {
   );
 }
 
+// ===== Shared textarea for admin resolution decision =====
 function TextArea({ label, value, error, onChange, placeholder }) {
   return (
     <div>
@@ -1421,9 +1441,9 @@ function TextArea({ label, value, error, onChange, placeholder }) {
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={4}
+        rows={5}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border px-4 py-4 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/60 bg-red-500/10 focus:border-red-400"
             : "border-white/10 bg-white/[0.04] focus:border-cyan-400/50"

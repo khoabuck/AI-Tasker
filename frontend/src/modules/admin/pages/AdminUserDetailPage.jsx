@@ -5,6 +5,8 @@ import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Action form defaults =====
 const EMPTY_ACTION = {
   type: "",
 };
@@ -22,13 +24,17 @@ const EMPTY_BAN_FORM = {
   reason: "",
 };
 
+// ===== Admin user detail page: account, wallet, and restriction actions =====
 export default function AdminUserDetailPage() {
+  // ===== Route params =====
   const { userId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Account and wallet state =====
   const [user, setUser] = useState(null);
   const [wallet, setWallet] = useState(null);
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -43,6 +49,7 @@ export default function AdminUserDetailPage() {
   const [banForm, setBanForm] = useState(EMPTY_BAN_FORM);
   const [confirmAction, setConfirmAction] = useState(null);
 
+  // ===== Derived account status flags =====
   const userStatus = useMemo(() => getUserStatus(user), [user]);
   const userRole = String(user?.role || "").trim().toUpperCase();
   const isExpert = userRole === "EXPERT";
@@ -64,6 +71,7 @@ export default function AdminUserDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  // ===== API loading: wallet snapshot for this user =====
   const loadUserWallet = async () => {
     try {
       const response = await axiosInstance.get("/admin/dashboard/user-wallets", {
@@ -92,6 +100,7 @@ export default function AdminUserDetailPage() {
     }
   };
 
+  // ===== API loading: user detail plus wallet data =====
   const loadUser = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -115,6 +124,7 @@ export default function AdminUserDetailPage() {
     }
   };
 
+  // ===== Action modal openers =====
   const openLockModal = () => {
     setAction({ type: "LOCK" });
     setLockForm(EMPTY_LOCK_FORM);
@@ -168,7 +178,7 @@ export default function AdminUserDetailPage() {
     }
 
     if (!lockForm.reason.trim()) {
-      errors.reason = "Lock Reason is required.";
+      errors.reason = "Lock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -206,7 +216,7 @@ export default function AdminUserDetailPage() {
     const errors = {};
 
     if (!unlockForm.reason.trim()) {
-      errors.reason = "Unlock Reason is required.";
+      errors.reason = "Unlock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -243,7 +253,7 @@ export default function AdminUserDetailPage() {
     const errors = {};
 
     if (!banForm.reason.trim()) {
-      errors.reason = "Ban Reason is required.";
+      errors.reason = "Ban reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -289,7 +299,7 @@ const requestLockUser = () => {
     }
 
     if (!lockForm.reason.trim()) {
-      errors.reason = "Lock Reason is required.";
+      errors.reason = "Lock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -324,7 +334,7 @@ const requestLockUser = () => {
     const errors = {};
 
     if (!unlockForm.reason.trim()) {
-      errors.reason = "Unlock Reason is required.";
+      errors.reason = "Unlock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -359,7 +369,7 @@ const requestLockUser = () => {
     const errors = {};
 
     if (!banForm.reason.trim()) {
-      errors.reason = "Ban Reason is required.";
+      errors.reason = "Ban reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -408,6 +418,7 @@ const requestLockUser = () => {
     }
   };
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -433,7 +444,8 @@ const requestLockUser = () => {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review account details, wallet balances, and restrictions.
+              Review account identity, wallet balances, restriction history,
+              and apply moderation actions with a clear audit reason.
             </p>
           </div>
 
@@ -563,33 +575,33 @@ const requestLockUser = () => {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Current account balances.
+                    Current available, locked, and pending balance snapshot.
                   </p>
                 </div>
 
                 <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                  {wallet ? "Wallet Available" : "No Wallet Data"}
+                  {wallet ? "Wallet data available" : "No wallet data"}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <InfoCard
                   icon="account_balance_wallet"
-                  label="Available Balance"
+                  label="Available balance"
                   value={formatMoney(getWalletValue(wallet, "availableBalance"))}
                   tone="green"
                 />
 
                 <InfoCard
                   icon="lock"
-                  label="Locked Balance"
+                  label="Locked balance"
                   value={formatMoney(getWalletValue(wallet, "lockedBalance"))}
                   tone="yellow"
                 />
 
                 <InfoCard
                   icon="pending_actions"
-                  label="Pending Earnings"
+                  label="Pending expert earnings"
                   value={formatMoney(
                     getWalletValue(wallet, "pendingEarningsBalance")
                   )}
@@ -598,7 +610,7 @@ const requestLockUser = () => {
 
                 <InfoCard
                   icon="savings"
-                  label="Total earnings"
+                  label="Total expert earnings"
                   value={formatMoney(getWalletValue(wallet, "totalEarning"))}
                   tone="green"
                 />
@@ -618,18 +630,18 @@ const requestLockUser = () => {
                 </h2>
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <DetailItem label="Full Name" value={user.fullName} />
+                  <DetailItem label="Full name" value={user.fullName} />
                   <DetailItem label="Email" value={user.email} />
 
                   {!isExpert && (
                     <DetailItem
-                      label="Phone Number"
+                      label="Phone number"
                       value={user.phoneNumber}
                     />
                   )}
 
                   <DetailItem
-                    label="Sign-in Method"
+                    label="Sign-in method"
                     value={
                       user.authProvider
                         ? formatLabel(user.authProvider)
@@ -647,17 +659,17 @@ const requestLockUser = () => {
 
                   <div className="space-y-4">
                     <DetailItem
-                      label="Lockout End"
+                      label="Lockout end"
                       value={formatDateTime(user.lockoutEnd)}
                     />
 
                     <DetailItem
-                      label="Last Locked At"
+                      label="Last locked at"
                       value={formatDateTime(user.lastLockedAt)}
                     />
 
                     <DetailItem
-                      label="Banned At"
+                      label="Banned at"
                       value={formatDateTime(user.bannedAt)}
                     />
                   </div>
@@ -671,7 +683,7 @@ const requestLockUser = () => {
 
                     {user.lockReason && (
                       <ReasonBox
-                        title="Lock Reason"
+                        title="Lock reason"
                         value={user.lockReason}
                         tone="yellow"
                       />
@@ -679,7 +691,7 @@ const requestLockUser = () => {
 
                     {user.banReason && (
                       <ReasonBox
-                        title="Ban Reason"
+                        title="Ban reason"
                         value={user.banReason}
                         tone="red"
                       />
@@ -693,9 +705,9 @@ const requestLockUser = () => {
 
         {action.type === "LOCK" && (
           <ActionModal
-            title="Lock"
+            title="Lock user account"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Lock"
+            confirmLabel="Lock account"
             confirmTone="yellow"
             loading={actionLoading}
             error={modalError}
@@ -704,7 +716,7 @@ const requestLockUser = () => {
           >
             <div className="space-y-4">
               <NumberInput
-                label="Lock Duration (minutes)"
+                label="Lock duration (minutes)"
                 required
                 value={lockForm.durationMinutes}
                 error={fieldErrors.durationMinutes}
@@ -723,7 +735,7 @@ const requestLockUser = () => {
               />
 
               <TextArea
-                label="Lock Reason"
+                label="Lock reason"
                 required
                 value={lockForm.reason}
                 error={fieldErrors.reason}
@@ -746,9 +758,9 @@ const requestLockUser = () => {
 
         {action.type === "UNLOCK" && (
           <ActionModal
-            title="Unlock"
+            title="Unlock user account"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Unlock"
+            confirmLabel="Unlock account"
             confirmTone="green"
             loading={actionLoading}
             error={modalError}
@@ -756,7 +768,7 @@ const requestLockUser = () => {
             onConfirm={requestUnlockUser}
           >
             <TextArea
-              label="Unlock Reason"
+              label="Unlock reason"
               required
               value={unlockForm.reason}
               error={fieldErrors.reason}
@@ -778,9 +790,9 @@ const requestLockUser = () => {
 
         {action.type === "BAN" && (
           <ActionModal
-            title="Ban"
+            title="Ban user account"
             subtitle={user?.email || user?.fullName}
-            confirmLabel="Ban"
+            confirmLabel="Ban account"
             confirmTone="red"
             loading={actionLoading}
             error={modalError}
@@ -788,7 +800,7 @@ const requestLockUser = () => {
             onConfirm={requestBanUser}
           >
             <TextArea
-              label="Ban Reason"
+              label="Ban reason"
               required
               value={banForm.reason}
               error={fieldErrors.reason}
@@ -828,6 +840,7 @@ const requestLockUser = () => {
     </AdminLayout>
   );
 }
+// ===== Final confirmation modal before applying user restriction actions =====
 function ReviewConfirmationModal({
   title,
   description,
@@ -916,7 +929,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -925,7 +938,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -1037,6 +1050,7 @@ function UserAvatar({ name, avatarUrl }) {
   );
 }
 
+// ===== Account and wallet metric card =====
 function InfoCard({ icon, label, value, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
@@ -1064,6 +1078,7 @@ function InfoCard({ icon, label, value, tone = "cyan" }) {
   );
 }
 
+// ===== Small label/value detail block =====
 function DetailItem({ label, value }) {
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -1078,6 +1093,7 @@ function DetailItem({ label, value }) {
   );
 }
 
+// ===== Existing restriction reason block =====
 function ReasonBox({ title, value, tone = "yellow" }) {
   const className =
     tone === "red"
@@ -1137,6 +1153,7 @@ function StatusBadge({ status }) {
   );
 }
 
+// ===== Restriction action modal wrapper =====
 function ActionModal({
   title,
   subtitle,
@@ -1159,7 +1176,7 @@ function ActionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
@@ -1199,6 +1216,7 @@ function ActionModal({
   );
 }
 
+// ===== Numeric duration input for temporary locks =====
 function NumberInput({
   label,
   value,
@@ -1220,7 +1238,7 @@ function NumberInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+        className={`h-14 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400/50"
@@ -1238,6 +1256,7 @@ function NumberInput({
   );
 }
 
+// ===== Shared textarea for moderation reasons =====
 function TextArea({
   label,
   value,
@@ -1256,9 +1275,9 @@ function TextArea({
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={4}
+        rows={5}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400/50"

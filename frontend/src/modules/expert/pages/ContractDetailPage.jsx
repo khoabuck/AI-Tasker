@@ -4,13 +4,18 @@ import ExpertLayout from "../../../components/layout/ExpertLayout";
 import contractService from "../../../services/contract.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Expert contract page: review terms and respond to client offer =====
 export default function ContractDetailPage() {
+  // ===== Route params =====
   const { contractId, proposalId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Contract data state =====
   const [contract, setContract] = useState(null);
   const [milestoneDrafts, setMilestoneDrafts] = useState([]);
 
+  // ===== UI and action state =====
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
   const [acceptSuccessModal, setAcceptSuccessModal] = useState(null);
@@ -23,6 +28,7 @@ export default function ContractDetailPage() {
   const [error, setError] = useState("");
   const refreshInFlightRef = useRef(false);
 
+  // ===== Resolved IDs and status used by render/actions =====
   const realContractId = getContractId(contract) || contractId;
   const realProposalId = getProposalId(contract) || proposalId;
   const realProjectId = getProjectId(contract);
@@ -192,6 +198,7 @@ export default function ContractDetailPage() {
     showDeclineBox,
   ]);
 
+  // ===== API loading: contract detail and milestone drafts =====
   const loadContract = async ({
     silent = false,
     preserveMessage = false,
@@ -292,6 +299,7 @@ export default function ContractDetailPage() {
     }
   };
 
+  // ===== Accept/decline actions keep API logic unchanged =====
   const requestAcceptContract = () => {
     if (!realContractId) {
       setError(
@@ -413,6 +421,7 @@ export default function ContractDetailPage() {
     }
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -481,7 +490,8 @@ export default function ContractDetailPage() {
                 </h1>
 
                 <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                  Review the scope, milestones, payment, and response options.
+                  Review the scope, milestones, contract value, service fee,
+                  net earnings, and response deadline before you decide.
                 </p>
 
                 <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -491,7 +501,7 @@ export default function ContractDetailPage() {
                     value={`${getTimelineDays(contract)} days`}
                   />
                   <QuickStat
-                    label="Your earnings"
+                    label="Net earnings"
                     value={formatMoney(
                       getExpertReceivable(
                         contract,
@@ -509,12 +519,12 @@ export default function ContractDetailPage() {
 
               <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-5 lg:w-[320px]">
                 <p className="text-sm font-bold text-cyan-100">
-                  Next step
+                  Required action
                 </p>
 
                 <p className="mt-2 text-sm leading-6 text-cyan-100/80">
                   {canRespond
-                    ? "The client has sent this contract for your confirmation. Review it carefully before accepting or declining."
+                    ? "The client has sent this contract for your confirmation. Review the scope, milestone plan, payout amount, and deadline before accepting or declining."
                     : isDraftContract(status)
                       ? "This is still a draft contract. You can review the details."
                       : "This contract is no longer waiting for your response."}
@@ -576,11 +586,12 @@ export default function ContractDetailPage() {
                 }}
                 rows={4}
                 placeholder="Explain why you cannot accept this contract."
-                className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300"
+                className="min-h-[132px] w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-red-300 focus:ring-2 focus:ring-red-300/20"
               />
 
               <p className="mt-2 text-xs text-red-100/70">
-                
+                This note will be shared with the client so they understand why
+                the contract cannot move forward.
               </p>
 
               <div className="mt-4 flex justify-end gap-3">
@@ -590,7 +601,7 @@ export default function ContractDetailPage() {
                     setShowDeclineBox(false);
                     setDeclineReason("");
                   }}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:text-white"
+                  className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white"
                 >
                   Cancel
                 </button>
@@ -599,7 +610,7 @@ export default function ContractDetailPage() {
                   type="button"
                   disabled={actionLoading === "decline"}
                   onClick={requestDeclineContract}
-                  className="rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {actionLoading === "decline" ? "Declining..." : "Submit Reason"}
                 </button>
@@ -694,7 +705,7 @@ export default function ContractDetailPage() {
                   ""
                 ) && (
                   <Info
-                    label="Response Deadline"
+                    label="Response deadline"
                     value={formatDate(
                       getField(
                         contract,
@@ -835,6 +846,7 @@ function ContractProgress({ status, contract, projectId }) {
   ];
 }
 
+// ===== Confirmation modal used by accept/decline actions =====
 function ConfirmActionModal({
   title,
   message,
@@ -866,7 +878,7 @@ function ConfirmActionModal({
             type="button"
             onClick={onCancel}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -875,7 +887,7 @@ function ConfirmActionModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -914,6 +926,7 @@ function AcceptSuccessModal({ projectId }) {
   );
 }
 
+// ===== Payment summary: contract value, service fee, and net expert earnings =====
 function PaymentSummary({ contract, milestones = [] }) {
   const contractAmount = getFinalPrice(contract, milestones);
   const expertFeeRate = getExpertFeeRate(contract);
@@ -935,16 +948,16 @@ function PaymentSummary({ contract, milestones = [] }) {
           </div>
 
           <div>
-            <h2 className="font-extrabold text-white">Your Earnings</h2>
+            <h2 className="font-extrabold text-white">Your net earnings</h2>
             <p className="mt-1 text-xs text-green-100/70">
-              Amount you receive after the expert service fee
+              Estimated amount you receive after the expert service fee is deducted.
             </p>
           </div>
         </div>
 
         <div className="mt-5 rounded-2xl border border-green-400/30 bg-black/20 p-5">
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-green-100/70">
-            Your earnings
+            Net earnings you receive
           </p>
 
           <p className="mt-2 break-words text-3xl font-black text-green-300">
@@ -952,7 +965,7 @@ function PaymentSummary({ contract, milestones = [] }) {
           </p>
 
           <p className="mt-2 text-xs leading-5 text-green-100/70">
-            This is your estimated net earning for the full contract.
+            This is your estimated take-home amount for the full contract.
           </p>
         </div>
       </div>
@@ -960,12 +973,12 @@ function PaymentSummary({ contract, milestones = [] }) {
       <div className="p-5">
         <div className="space-y-3">
           <PaymentRow
-            label="Contract Value"
+            label="Contract value"
             value={formatMoney(contractAmount)}
           />
 
           <PaymentRow
-            label={`Service fee${
+            label={`Expert service fee${
               expertFeeRate > 0 ? ` (${formatPercentage(expertFeeRate)})` : ""
             }`}
             value={`-${formatMoney(expertServiceFee)}`}
@@ -974,7 +987,7 @@ function PaymentSummary({ contract, milestones = [] }) {
 
           <div className="border-t border-green-400/20 pt-3">
             <PaymentRow
-              label="Net Earnings"
+              label="Net earnings you receive"
               value={formatMoney(expertReceivable)}
               tone="success"
               strong
@@ -1043,6 +1056,7 @@ function QuickStat({ label, value, tone = "default" }) {
   );
 }
 
+// ===== Shared card wrapper for contract detail sections =====
 function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
@@ -1063,6 +1077,7 @@ function Card({ title, icon, children }) {
   );
 }
 
+// ===== Milestone draft card with per-milestone earning breakdown =====
 function MilestoneDraftCard({
   milestone,
   index,
@@ -1097,7 +1112,7 @@ function MilestoneDraftCard({
 
       <div className="mt-4 rounded-xl border border-green-400/25 bg-green-400/10 p-4">
         <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-green-100/70">
-          Your earnings
+          Net earnings
         </p>
 
         <p className="mt-1 text-xl font-black text-green-300">
@@ -1106,7 +1121,7 @@ function MilestoneDraftCard({
 
         <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-            <p className="text-gray-500">Milestone Value</p>
+            <p className="text-gray-500">Milestone value</p>
             <p className="mt-1 font-bold text-white">
               {formatMoney(milestoneAmount)}
             </p>
@@ -1114,7 +1129,7 @@ function MilestoneDraftCard({
 
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
             <p className="text-gray-500">
-              Expert Fee
+              Expert service fee
               {expertFeeRate > 0
                 ? ` (${formatPercentage(expertFeeRate)})`
                 : ""}

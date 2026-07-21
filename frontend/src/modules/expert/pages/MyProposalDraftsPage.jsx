@@ -10,9 +10,13 @@ import proposalCreditPackageService from "../../../services/proposalCreditPackag
 import expertWalletService from "../../../services/expertWallet.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Expert proposal drafts page: saved drafts, credit access, submit/delete =====
 export default function MyProposalDraftsPage() {
+  // ===== Routing =====
   const navigate = useNavigate();
 
+  // ===== Drafts and credit data =====
   const [drafts, setDrafts] = useState([]);
   const [proposalCredits, setProposalCredits] = useState(null);
   const [creditPackages, setCreditPackages] = useState([]);
@@ -32,6 +36,7 @@ export default function MyProposalDraftsPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // ===== Derived available submissions =====
   const submissionsLeft = useMemo(() => {
     return (
       getAvailableProposalCredits(proposalCredits) +
@@ -53,6 +58,7 @@ export default function MyProposalDraftsPage() {
     loadPage();
   }, []);
 
+  // ===== API loading: drafts, credits, packages, and wallet balance =====
   const loadPage = async ({ silent = false } = {}) => {
     try {
       if (silent) {
@@ -100,6 +106,7 @@ export default function MyProposalDraftsPage() {
     }
   };
 
+  // ===== Draft actions =====
   const editDraft = (draft) => {
     const jobId = getDraftJobId(draft);
 
@@ -292,6 +299,7 @@ export default function MyProposalDraftsPage() {
     }
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -307,7 +315,7 @@ export default function MyProposalDraftsPage() {
           <section className="mb-8 flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div>
               <p className="mb-3 text-xs font-black uppercase tracking-[0.18em] text-[#00F0FF]">
-                Saved Proposals
+                Saved proposals
               </p>
 
               <h1 className="text-3xl font-black text-white md:text-3xl">
@@ -315,7 +323,8 @@ export default function MyProposalDraftsPage() {
               </h1>
 
               <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-                Continue editing or submit when ready.
+                Continue editing private drafts, check available proposal
+                credits, and submit only when the proposal is ready.
               </p>
             </div>
 
@@ -325,7 +334,7 @@ export default function MyProposalDraftsPage() {
                 onClick={() => navigate("/expert/proposal-credit-packages")}
                 className="rounded-2xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Buy Credits
+                Buy proposal credits
               </button>
 
               <button
@@ -333,7 +342,7 @@ export default function MyProposalDraftsPage() {
                 onClick={() => navigate("/expert/jobs")}
                 className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
               >
-                Browse Jobs
+                Browse jobs
               </button>
             </div>
           </section>
@@ -349,7 +358,7 @@ export default function MyProposalDraftsPage() {
             />
 
             <SummaryCard
-              label="Applications available"
+              label="Proposal submissions left"
               value={formatNumber(submissionsLeft)}
               icon="workspace_premium"
             />
@@ -366,7 +375,7 @@ export default function MyProposalDraftsPage() {
               <div>
                 <h2 className="text-xl font-black text-white">Saved drafts</h2>
                 <p className="mt-1 text-sm text-gray-500">
-                  {drafts.length} draft(s)
+                  {drafts.length} saved draft(s)
                 </p>
               </div>
 
@@ -497,6 +506,7 @@ function SuccessToast({ message, onClose }) {
 }
 
 
+// ===== Draft card with edit, submit, and delete actions =====
 function DraftCard({
   draft,
   submitting,
@@ -526,7 +536,7 @@ function DraftCard({
       </div>
 
       <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2">
-        <Info label="Proposed Price" value={formatMoney(draft.proposedPrice)} />
+        <Info label="Proposed price" value={formatMoney(draft.proposedPrice)} />
         <Info
           label="Timeline"
           value={
@@ -545,33 +555,34 @@ function DraftCard({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+          className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
         >
-          Continue
+          Continue editing
         </button>
 
         <button
           type="button"
           onClick={onSubmit}
           disabled={submitting || deleting}
-          className="rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting ? "Submitting..." : "Submit"}
+          {submitting ? "Submitting..." : "Submit draft"}
         </button>
 
         <button
           type="button"
           onClick={onDelete}
           disabled={submitting || deleting}
-          className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2.5 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+          className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {deleting ? "Deleting..." : "Delete"}
+          {deleting ? "Deleting..." : "Delete draft"}
         </button>
       </div>
     </article>
   );
 }
 
+// ===== Confirmation modal for draft submit/delete actions =====
 function ConfirmModal({
   title,
   message,
@@ -601,7 +612,7 @@ function ConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -609,7 +620,7 @@ function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
           >
             {busy ? "Processing..." : confirmLabel}
           </button>
@@ -619,6 +630,7 @@ function ConfirmModal({
   );
 }
 
+// ===== Proposal credit upgrade modal for draft submission =====
 function UpgradeDraftModal({
   packages,
   walletBalance,
@@ -637,7 +649,7 @@ function UpgradeDraftModal({
         <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
           <div>
             <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
-              Credits Required
+              Credits required
             </p>
 
             <h2 className="text-2xl font-black text-white">
@@ -755,6 +767,7 @@ function UpgradeDraftModal({
   );
 }
 
+// ===== Summary counter card =====
 function SummaryCard({ label, value, icon }) {
   return (
     <article className="rounded-[1.4rem] border border-white/10 bg-[#151a22] p-5">
@@ -780,6 +793,7 @@ function Info({ label, value }) {
   );
 }
 
+// ===== Draft status badge =====
 function StatusBadge({ status }) {
   const value = String(status || "DRAFT").toUpperCase();
 
@@ -815,7 +829,7 @@ function EmptyDrafts({ onBrowse }) {
         onClick={onBrowse}
         className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
       >
-        Browse Jobs
+        Browse jobs
       </button>
     </div>
   );

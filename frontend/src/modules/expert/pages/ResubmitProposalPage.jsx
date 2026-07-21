@@ -6,6 +6,7 @@ import proposalService, {
 } from "../../../services/proposal.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
+// ===== Proposal revision form defaults =====
 const createEmptyMilestone = () => ({
   title: "",
   amount: "",
@@ -23,13 +24,17 @@ const createEmptyForm = () => ({
   milestones: [createEmptyMilestone()],
 });
 
+// ===== Expert resubmit proposal page: revise rejected proposal and send new version =====
 export default function ResubmitProposalPage() {
+  // ===== Route params =====
   const { proposalId } = useParams();
   const navigate = useNavigate();
 
+  // ===== Proposal and form state =====
   const [proposal, setProposal] = useState(null);
   const [formData, setFormData] = useState(createEmptyForm);
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,6 +44,7 @@ export default function ResubmitProposalPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // ===== Derived validation and milestone totals =====
   const formErrors = useMemo(
     () =>
       validateProposalForm(formData, {
@@ -68,6 +74,7 @@ export default function ResubmitProposalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [proposalId]);
 
+  // ===== API loading: proposal detail for revision =====
   const loadProposal = async () => {
     try {
       setLoading(true);
@@ -87,6 +94,7 @@ export default function ResubmitProposalPage() {
     }
   };
 
+  // ===== Revision form update helpers =====
   const updateField = (name, value) => {
     setMessage("");
     setError("");
@@ -220,6 +228,7 @@ export default function ResubmitProposalPage() {
     }
   };
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -247,7 +256,7 @@ export default function ResubmitProposalPage() {
 
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
-              Revise Proposal
+              Revise proposal
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-3xl">
@@ -255,7 +264,8 @@ export default function ResubmitProposalPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Address the client feedback and send a revised version.
+              Address the client feedback, clarify your delivery plan, and send
+              a revised proposal version.
             </p>
           </div>
 
@@ -296,7 +306,7 @@ export default function ResubmitProposalPage() {
                   />
                 )}
 
-                <Card title="Revision Summary" icon="edit_note">
+                <Card title="Revision summary" icon="edit_note">
                   <TextArea
                     label="What changed?"
                     required
@@ -309,9 +319,9 @@ export default function ResubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Cover Letter" icon="description">
+                <Card title="Client-facing cover letter" icon="description">
                   <TextArea
-                    label="Cover Letter"
+                    label="Cover letter"
                     required
                     value={formData.coverLetter}
                     onChange={(value) => updateField("coverLetter", value)}
@@ -322,10 +332,10 @@ export default function ResubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Terms" icon="payments">
+                <Card title="Price and timeline" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <NumberInput
-                      label="Proposed Price"
+                      label="Proposed price (VND)"
                       required
                       min="0"
                       value={formData.proposedPrice}
@@ -336,7 +346,7 @@ export default function ResubmitProposalPage() {
                     />
 
                     <NumberInput
-                      label="Proposed Timeline Days"
+                      label="Timeline (days)"
                       required
                       min="1"
                       value={formData.proposedTimelineDays}
@@ -358,10 +368,10 @@ export default function ResubmitProposalPage() {
                   </button>
                 </Card>
 
-                <Card title="Project Plan" icon="task_alt">
+                <Card title="Delivery plan" icon="task_alt">
                   <div className="space-y-5">
                     <TextArea
-                      label="Expected Outputs"
+                      label="Deliverables"
                       required
                       value={formData.expectedOutputs}
                       onChange={(value) =>
@@ -374,7 +384,7 @@ export default function ResubmitProposalPage() {
                     />
 
                     <TextArea
-                      label="Working Approach"
+                      label="Working approach"
                       required
                       value={formData.workingApproach}
                       onChange={(value) =>
@@ -387,7 +397,7 @@ export default function ResubmitProposalPage() {
                     />
 
                     <TextArea
-                      label="Preliminary Milestone Plan"
+                      label="Milestone overview"
                       required
                       value={formData.preliminaryMilestonePlan}
                       onChange={(value) =>
@@ -404,11 +414,12 @@ export default function ResubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Milestone details
+                      Milestone breakdown
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Add a title, amount, and duration for each milestone.
+                      Add a clear title, payment amount, and estimated duration
+                      for each revised milestone.
                     </p>
                   </div>
 
@@ -434,18 +445,18 @@ export default function ResubmitProposalPage() {
                       <span className="material-symbols-outlined text-[18px]">
                         add
                       </span>
-                      Add Milestone
+                      Add milestone
                     </button>
                   </div>
 
                   <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
                     <Info
-                      label="Proposed Price"
+                      label="Proposed price"
                       value={formatMoney(formData.proposedPrice)}
                     />
 
                     <Info
-                      label="Milestone Total"
+                      label="Milestone total"
                       value={formatMoney(milestoneTotal)}
                     />
 
@@ -477,7 +488,7 @@ export default function ResubmitProposalPage() {
                     disabled={submitting}
                     className="rounded-xl border border-cyan-400/60 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    {submitting ? "Resubmitting..." : "Revise Proposal"}
+                    {submitting ? "Submitting revision..." : "Submit revision"}
                   </button>
                 </div>
               </form>
@@ -496,12 +507,12 @@ export default function ResubmitProposalPage() {
                     <Info label="Status" value={formatStatus(proposal.status)} />
 
                     <Info
-                      label="Current Price"
+                      label="Current price"
                       value={formatMoney(proposal.proposedPrice)}
                     />
 
                     <Info
-                      label="Current Timeline"
+                      label="Current timeline"
                       value={`${proposal.proposedTimelineDays || 0} days`}
                     />
 
@@ -528,6 +539,7 @@ export default function ResubmitProposalPage() {
   );
 }
 
+// ===== Shared revision form card =====
 function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8">
@@ -546,6 +558,7 @@ function Card({ title, icon, children }) {
   );
 }
 
+// ===== Milestone editor row =====
 function MilestoneEditor({
   index,
   milestone,
@@ -564,7 +577,7 @@ function MilestoneEditor({
           </p>
 
           <p className="mt-1 text-xs text-gray-500">
-            Define title, payment amount and estimated duration.
+            Define title, payment amount, and estimated duration.
           </p>
         </div>
 
@@ -572,7 +585,7 @@ function MilestoneEditor({
           <button
             type="button"
             onClick={() => onRemove(index)}
-            className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+            className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2.5 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
           >
             Remove
           </button>
@@ -581,7 +594,7 @@ function MilestoneEditor({
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_180px_180px]">
         <TextInput
-          label="Title"
+          label="Milestone title"
           required
           value={milestone.title}
           onChange={(value) => onChange(index, "title", value)}
@@ -591,7 +604,7 @@ function MilestoneEditor({
         />
 
         <NumberInput
-          label="Amount"
+          label="Amount (VND)"
           required
           min="0"
           value={milestone.amount}
@@ -602,7 +615,7 @@ function MilestoneEditor({
         />
 
         <NumberInput
-          label="Duration Days"
+          label="Duration (days)"
           required
           min="1"
           value={milestone.durationDays}
@@ -616,6 +629,7 @@ function MilestoneEditor({
   );
 }
 
+// ===== Shared text input for revision and milestone fields =====
 function TextInput({
   label,
   value,
@@ -637,7 +651,7 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[52px] w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />
@@ -647,6 +661,7 @@ function TextInput({
   );
 }
 
+// ===== Shared textarea for long revision content =====
 function TextArea({
   label,
   value,
@@ -669,7 +684,7 @@ function TextArea({
         onBlur={onBlur}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />
@@ -679,6 +694,7 @@ function TextArea({
   );
 }
 
+// ===== Shared numeric input for price, timeline, and milestone values =====
 function NumberInput({
   label,
   value,
@@ -703,7 +719,7 @@ function NumberInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[52px] w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />

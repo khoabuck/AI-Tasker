@@ -284,7 +284,7 @@ export default function ClientJobDetailPage() {
               <div style={{ display: "flex", gap: 28 }}>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#00F0FF" }}>${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}</div>
-                  <div style={{ fontSize: 11, color: "#8c90a0", marginTop: 2 }}>USD/month</div>
+                  
                 </div>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 18, fontWeight: 700, color: "#facc15" }}>{proposals.length}</div>

@@ -15,6 +15,8 @@ import expertWalletService from "../../../services/expertWallet.service";
 import { validateProposalForm } from "../../../utils/validateProposal";
 
 import { formatDateTime, isExpired } from "../../../utils/dateTime.utils";
+
+// ===== Proposal form defaults =====
 const createEmptyMilestone = () => ({
   title: "",
   amount: "",
@@ -31,16 +33,20 @@ const createEmptyForm = () => ({
   milestones: [createEmptyMilestone()],
 });
 
+// ===== Expert submit proposal page: draft, proposal form, credits, and submit flow =====
 export default function SubmitProposalPage() {
+  // ===== Route and query params =====
   const { jobId } = useParams();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const draftId = searchParams.get("draftId") || "";
 
+  // ===== Job and proposal form state =====
   const [job, setJob] = useState(null);
   const [formData, setFormData] = useState(createEmptyForm);
 
+  // ===== Draft and credit state =====
   const [currentDraftId, setCurrentDraftId] = useState(draftId);
   const [savingDraft, setSavingDraft] = useState(false);
   const [submittingDraft, setSubmittingDraft] = useState(false);
@@ -62,6 +68,7 @@ export default function SubmitProposalPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
+  // ===== Derived validation, milestone totals, and credit access =====
   const formErrors = useMemo(() => validateProposalForm(formData), [formData]);
 
   const milestoneTotal = useMemo(() => {
@@ -109,6 +116,7 @@ export default function SubmitProposalPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId, draftId]);
 
+  // ===== API loading: job detail, proposal access, and optional draft =====
   const loadInitialData = async () => {
     try {
       setLoading(true);
@@ -189,6 +197,7 @@ export default function SubmitProposalPage() {
     }
   };
 
+  // ===== Proposal form update helpers =====
   const updateField = (name, value) => {
     setMessage("");
     setError("");
@@ -272,6 +281,7 @@ export default function SubmitProposalPage() {
     return formErrors?.milestones?.[index]?.[name] || "";
   };
 
+  // ===== Draft and submit actions =====
   const handleSaveDraft = async () => {
     if (!jobId) {
       setError("Job information is missing. Please go back and choose a job.");
@@ -450,7 +460,7 @@ export default function SubmitProposalPage() {
       title: "Submit this proposal draft?",
       message:
         "Your draft will be sent to the client and one proposal submission will be used. Please confirm that the price, timeline, and milestones are final.",
-      confirmLabel: "Send Draft",
+      confirmLabel: "Submit draft",
       tone: "cyan",
     });
   };
@@ -462,7 +472,7 @@ export default function SubmitProposalPage() {
       title: "Submit this proposal?",
       message:
         "Your proposal will be sent to the client and one proposal submission will be used. Please review the price, timeline, and milestones before continuing.",
-      confirmLabel: "Send Proposal",
+      confirmLabel: "Submit proposal",
       tone: "cyan",
     });
   };
@@ -473,7 +483,7 @@ export default function SubmitProposalPage() {
       title: "Leave this proposal?",
       message:
         "Any changes that have not been saved as a draft will be lost.",
-      confirmLabel: "Leave Page",
+      confirmLabel: "Leave page",
       tone: "red",
     });
   };
@@ -630,6 +640,7 @@ export default function SubmitProposalPage() {
 
   const isJobOpen = String(getJobStatus(job) || "").toUpperCase() === "OPEN";
 
+  // ===== Main render =====
   if (loading) {
     return (
       <ExpertLayout>
@@ -655,7 +666,7 @@ export default function SubmitProposalPage() {
 
           <div className="mb-8">
             <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
-              {currentDraftId ? "Edit Proposal Draft" : "Send Proposal"}
+              {currentDraftId ? "Edit proposal draft" : "Submit proposal"}
             </p>
 
             <h1 className="text-3xl font-bold text-white md:text-3xl">
@@ -666,8 +677,8 @@ export default function SubmitProposalPage() {
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
               {currentDraftId
-                ? "Update your saved draft, then submit it when you are ready."
-                : "Present your approach, price, timeline, and milestones."}
+                ? "Update your saved draft, review pricing and milestones, then submit it when it is ready."
+                : "Present your fit, delivery approach, price, timeline, and milestone plan clearly for the client."}
             </p>
           </div>
 
@@ -686,7 +697,7 @@ export default function SubmitProposalPage() {
                 onClick={() => navigate("/expert/jobs")}
                 className="mt-5 rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Back 
+                Back to jobs
               </button>
             </div>
           )}
@@ -720,7 +731,7 @@ export default function SubmitProposalPage() {
                         onClick={() => navigate("/expert/proposal/drafts")}
                         className="rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                       >
-                        My Drafts
+                        My drafts
                       </button>
                     </div>
                   </section>
@@ -745,15 +756,15 @@ export default function SubmitProposalPage() {
                         onClick={() => setShowUpgradeModal(true)}
                         className="rounded-xl bg-yellow-300 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-200"
                       >
-                        Get Credits
+                        Get proposal credits
                       </button>
                     </div>
                   </section>
                 )}
 
-                <Card title="Cover Letter" icon="description">
+                <Card title="Client-facing cover letter" icon="description">
                   <TextArea
-                    label="Cover Letter"
+                    label="Cover letter"
                     required
                     value={formData.coverLetter}
                     onChange={(value) => updateField("coverLetter", value)}
@@ -764,10 +775,10 @@ export default function SubmitProposalPage() {
                   />
                 </Card>
 
-                <Card title="Terms" icon="payments">
+                <Card title="Price and timeline" icon="payments">
                   <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                     <NumberInput
-                      label="Proposed Price"
+                      label="Proposed price (VND)"
                       required
                       min="0"
                       value={formData.proposedPrice}
@@ -778,7 +789,7 @@ export default function SubmitProposalPage() {
                     />
 
                     <NumberInput
-                      label="Proposed Timeline Days"
+                      label="Timeline (days)"
                       required
                       min="1"
                       value={formData.proposedTimelineDays}
@@ -800,10 +811,10 @@ export default function SubmitProposalPage() {
                   </button>
                 </Card>
 
-                <Card title="Project Plan" icon="task_alt">
+                <Card title="Delivery plan" icon="task_alt">
                   <div className="space-y-5">
                     <TextArea
-                      label="Expected Outputs"
+                      label="Deliverables"
                       required
                       value={formData.expectedOutputs}
                       onChange={(value) =>
@@ -816,7 +827,7 @@ export default function SubmitProposalPage() {
                     />
 
                     <TextArea
-                      label="Working Approach"
+                      label="Working approach"
                       required
                       value={formData.workingApproach}
                       onChange={(value) =>
@@ -829,7 +840,7 @@ export default function SubmitProposalPage() {
                     />
 
                     <TextArea
-                      label="Preliminary Milestone Plan"
+                      label="Milestone overview"
                       required
                       value={formData.preliminaryMilestonePlan}
                       onChange={(value) =>
@@ -846,11 +857,12 @@ export default function SubmitProposalPage() {
                 <Card title="Milestones" icon="flag">
                   <div className="mb-5 rounded-xl border border-cyan-400/20 bg-cyan-400/10 p-4">
                     <p className="text-sm font-bold text-cyan-300">
-                      Milestone details
+                      Milestone breakdown
                     </p>
 
                     <p className="mt-2 text-xs leading-5 text-gray-400">
-                      Add a title, amount, and duration for each milestone.
+                      Add a clear title, payment amount, and estimated duration
+                      for each milestone.
                     </p>
                   </div>
 
@@ -876,18 +888,18 @@ export default function SubmitProposalPage() {
                       <span className="material-symbols-outlined text-[18px]">
                         add
                       </span>
-                      Add Milestone
+                      Add milestone
                     </button>
                   </div>
 
                   <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
                     <Info
-                      label="Proposed Price"
+                      label="Proposed price"
                       value={formatMoney(formData.proposedPrice)}
                     />
 
                     <Info
-                      label="Milestone Total"
+                      label="Milestone total"
                       value={formatMoney(milestoneTotal)}
                     />
 
@@ -944,7 +956,7 @@ export default function SubmitProposalPage() {
                         ? "Submitting..."
                         : accessLoading
                         ? "Checking..."
-                        : "Send Draft"}
+                        : "Submit draft"}
                     </button>
                   ) : (
                     <button
@@ -962,7 +974,7 @@ export default function SubmitProposalPage() {
                         ? "Submitting..."
                         : accessLoading
                         ? "Checking..."
-                        : "Send Proposal"}
+                        : "Submit proposal"}
                     </button>
                   )}
                 </div>
@@ -976,7 +988,7 @@ export default function SubmitProposalPage() {
 
                   <div className="grid grid-cols-1 gap-3">
                     <Info
-                      label="Submissions Left"
+                      label="Submissions left"
                       value={`${submissionsLeft || 0}`}
                       tone={submissionsLeft > 0 ? "green" : "warning"}
                     />
@@ -996,7 +1008,7 @@ export default function SubmitProposalPage() {
                       onClick={() => setShowUpgradeModal(true)}
                       className="mt-5 w-full rounded-xl bg-cyan-400 px-5 py-3 text-sm font-black text-black transition hover:bg-cyan-300"
                     >
-                      Buy Proposal Credits
+                      Buy proposal credits
                     </button>
                   )}
                 </section>
@@ -1143,6 +1155,7 @@ function SuccessToast({ message, onClose }) {
 }
 
 
+// ===== Confirmation modal for cancel/submit/buy actions =====
 function ConfirmModal({
   title,
   message,
@@ -1172,7 +1185,7 @@ function ConfirmModal({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:opacity-50"
           >
             Cancel
           </button>
@@ -1180,7 +1193,7 @@ function ConfirmModal({
             type="button"
             onClick={onConfirm}
             disabled={busy}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
           >
             {busy ? "Processing..." : confirmLabel}
           </button>
@@ -1190,6 +1203,7 @@ function ConfirmModal({
   );
 }
 
+// ===== Proposal credit upgrade modal =====
 function UpgradeProposalModal({
   packages,
   walletBalance,
@@ -1207,7 +1221,7 @@ function UpgradeProposalModal({
         <div className="flex items-start justify-between gap-5 border-b border-white/10 px-7 py-6">
           <div>
             <p className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-300">
-              Credits Required
+              Credits required
             </p>
 
             <h2 className="text-2xl font-black text-white">
@@ -1231,7 +1245,7 @@ function UpgradeProposalModal({
 
         <div className="px-7 py-6">
           <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-            <p className="text-sm text-gray-400">Wallet Balance</p>
+            <p className="text-sm text-gray-400">Available wallet balance</p>
 
             <p className="mt-1 text-3xl font-black text-cyan-300">
               {formatMoney(balance)}
@@ -1300,7 +1314,7 @@ function UpgradeProposalModal({
                         onClick={() => onGoWallet(pkg)}
                         className="w-full rounded-2xl border border-yellow-400/40 bg-yellow-400/10 px-4 py-3 text-sm font-black text-yellow-300 transition hover:bg-yellow-400 hover:text-black"
                       >
-                        Add Money
+                        Deposit wallet
                       </button>
                     ) : (
                       <button
@@ -1313,7 +1327,7 @@ function UpgradeProposalModal({
                       >
                         {String(buyingPackageId) === String(pkg.packageId)
                           ? "Purchasing..."
-                          : "Buy Now"}
+                          : "Buy package"}
                       </button>
                     )}
                   </article>
@@ -1327,6 +1341,7 @@ function UpgradeProposalModal({
   );
 }
 
+// ===== Shared proposal form card =====
 function Card({ title, icon, children }) {
   return (
     <section className="rounded-2xl border border-white/10 bg-[#151a22] p-6 shadow-[0_18px_50px_rgba(0,0,0,0.3)] md:p-8">
@@ -1345,6 +1360,7 @@ function Card({ title, icon, children }) {
   );
 }
 
+// ===== Milestone editor row =====
 function MilestoneEditor({
   index,
   milestone,
@@ -1363,7 +1379,7 @@ function MilestoneEditor({
           </p>
 
           <p className="mt-1 text-xs text-gray-500">
-            Define title, payment amount and estimated duration.
+            Define title, payment amount, and estimated duration.
           </p>
         </div>
 
@@ -1371,7 +1387,7 @@ function MilestoneEditor({
           <button
             type="button"
             onClick={() => onRemove(index)}
-            className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+            className="rounded-lg border border-red-400/40 bg-red-400/10 px-3 py-2.5 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
           >
             Remove
           </button>
@@ -1380,7 +1396,7 @@ function MilestoneEditor({
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-[1fr_180px_180px]">
         <TextInput
-          label="Title"
+          label="Milestone title"
           required
           value={milestone.title}
           onChange={(value) => onChange(index, "title", value)}
@@ -1390,7 +1406,7 @@ function MilestoneEditor({
         />
 
         <NumberInput
-          label="Amount"
+          label="Amount (VND)"
           required
           min="0"
           value={milestone.amount}
@@ -1401,7 +1417,7 @@ function MilestoneEditor({
         />
 
         <NumberInput
-          label="Duration Days"
+          label="Duration (days)"
           required
           min="1"
           value={milestone.durationDays}
@@ -1415,6 +1431,7 @@ function MilestoneEditor({
   );
 }
 
+// ===== Shared text input for proposal and milestone fields =====
 function TextInput({
   label,
   value,
@@ -1436,7 +1453,7 @@ function TextInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[52px] w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />
@@ -1446,6 +1463,7 @@ function TextInput({
   );
 }
 
+// ===== Shared textarea for long proposal content =====
 function TextArea({
   label,
   value,
@@ -1468,7 +1486,7 @@ function TextArea({
         onBlur={onBlur}
         rows={rows}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />
@@ -1478,6 +1496,7 @@ function TextArea({
   );
 }
 
+// ===== Shared numeric input for price, timeline, and milestone values =====
 function NumberInput({
   label,
   value,
@@ -1502,7 +1521,7 @@ function NumberInput({
         onChange={(event) => onChange(event.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
-        className={`w-full rounded-xl border bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] ${
+        className={`min-h-[52px] w-full rounded-xl border bg-white/[0.04] px-4 py-3.5 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:ring-2 focus:ring-cyan-400/15 ${
           error ? "border-red-400/60" : "border-white/10"
         }`}
       />

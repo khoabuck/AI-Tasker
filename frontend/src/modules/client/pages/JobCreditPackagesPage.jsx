@@ -13,16 +13,16 @@ import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
-const FREE_PACKAGE = {
-  jobCreditPackageId: null, // không có ID thật — không mua được qua API
-  packageName: "Free",
-  description: "Included by default for every Client account.",
-  jobPostCredits: 1,
-  aiGenerationCredits: 3,
-  price: 0,
-  currency: "VND",
-  isFreeTier: true,
-};
+const FREE_PACKAGE = (policy) => ({
+    jobCreditPackageId: null,
+    packageName: "Free",
+    description: "Included by default for every Client account.",
+    jobPostCredits: policy?.initialFreeJobPostCredits ?? 0,
+    aiGenerationCredits: policy?.initialFreeAiGenerationCredits ?? 0,
+    price: 0,
+    currency: "VND",
+    isFreeTier: true,
+});
 
 const cardStyle = {
   background: "rgba(16,19,25,0.85)",
@@ -41,6 +41,7 @@ export default function JobCreditPackagesPage() {
   const navigate = useNavigate();
 
   const [packages, setPackages] = useState([]);
+  const [freePolicy, setFreePolicy] = useState(null);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,18 +53,24 @@ export default function JobCreditPackagesPage() {
     setLoading(true);
     setError("");
     try {
-      const [pkgRes, purchaseRes] = await Promise.all([
-        axiosInstance.get("/job-credit-packages"),
-        axiosInstance.get("/job-credit-packages/my-purchases"),
-      ]);
+      const [pkgRes, purchaseRes, policyRes] = await Promise.all([
+    axiosInstance.get("/job-credit-packages"),
+    axiosInstance.get("/job-credit-packages/my-purchases"),
+    axiosInstance.get("/admin/job-posting-ai-policy"),
+]);
 
       const pkgRaw = pkgRes.data?.data ?? pkgRes.data;
       const pkgList = Array.isArray(pkgRaw) ? pkgRaw : pkgRaw?.items ?? [];
       // Sắp theo displayOrder BE trả về, rồi luôn chèn Free lên đầu danh sách.
       const sorted = [...pkgList].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0));
-      setPackages([FREE_PACKAGE, ...sorted]);
+      setPackages([
+    FREE_PACKAGE(policy),
+    ...sorted,
+]);
 
       const purchaseRaw = purchaseRes.data?.data ?? purchaseRes.data;
+      const policy = policyRes.data?.data ?? policyRes.data;
+setFreePolicy(policy);
       setPurchases(Array.isArray(purchaseRaw) ? purchaseRaw : purchaseRaw?.items ?? []);
     } catch (err) {
       setError(err?.response?.data?.message || "Unable to load the package list. Please try again.");

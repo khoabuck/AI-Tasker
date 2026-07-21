@@ -3,6 +3,8 @@ import AdminLayout from "../../../components/layout/AdminLayout";
 import adminService from "../../../services/admin.service";
 
 import { compareDateDesc, formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Dashboard fallback data =====
 const EMPTY_SUMMARY = {
   totalUsers: 0,
   totalClients: 0,
@@ -45,7 +47,9 @@ const EMPTY_PLATFORM_WALLET = {
   totalRevenue: 0,
 };
 
+// ===== Admin dashboard page: platform health, finance, and activity =====
 export default function AdminDashboard() {
+  // ===== Dashboard data state =====
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [revenue, setRevenue] = useState(EMPTY_REVENUE);
   const [projects, setProjects] = useState([]);
@@ -58,6 +62,7 @@ export default function AdminDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  // ===== Derived project and activity metrics =====
   const projectStatusSummary = useMemo(() => {
     return {
       total: summary.totalProjects || projects.length,
@@ -98,6 +103,7 @@ export default function AdminDashboard() {
     loadDashboard();
   }, []);
 
+  // ===== API loading: dashboard overview sections =====
   const loadDashboard = async () => {
     try {
       setLoading(true);
@@ -161,6 +167,7 @@ export default function AdminDashboard() {
   const cardStyle =
     "rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]";
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -175,7 +182,8 @@ export default function AdminDashboard() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Monitor users, projects, finance, disputes, and recent activity.
+              Monitor users, project flow, platform balances, escrow, disputes,
+              and the latest money movement.
             </p>
           </div>
 
@@ -203,7 +211,7 @@ export default function AdminDashboard() {
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
               <SummaryCard
                 icon="groups"
-                label="Total Users"
+                label="Total users"
                 value={formatNumber(summary.totalUsers)}
                 description={`${formatNumber(
                   summary.totalClients
@@ -214,24 +222,27 @@ export default function AdminDashboard() {
 
               <SummaryCard
                 icon="payments"
-                label="Platform Balance"
+                label="Platform available balance"
                 value={formatMoney(
-                  finance.platformAvailableBalance ||
-                    platformWallet.availableBalance
+                  firstNumber(
+                    finance.platformAvailableBalance,
+                    platformWallet.availableBalance,
+                    0
+                  )
                 )}
                 tone="green"
               />
 
               <SummaryCard
                 icon="folder_managed"
-                label="Active Projects"
+                label="Active projects"
                 value={formatNumber(projectStatusSummary.active)}
                 tone="purple"
               />
 
               <SummaryCard
                 icon="gavel"
-                label="Open Disputes"
+                label="Open disputes"
                 value={formatNumber(summary.openDisputes)}
                 tone="yellow"
               />
@@ -254,9 +265,13 @@ export default function AdminDashboard() {
 
               <SummaryCard
                 icon="lock"
-                label="Escrow Locked"
+                label="Escrow locked"
                 value={formatMoney(
-                  finance.totalEscrowLocked || summary.escrowLockedAmount
+                  firstNumber(
+                    finance.totalEscrowLocked,
+                    summary.escrowLockedAmount,
+                    0
+                  )
                 )}
                 tone="purple"
               />
@@ -265,8 +280,11 @@ export default function AdminDashboard() {
                 icon="pending_actions"
                 label="Pending payouts"
                 value={formatNumber(
-                  finance.pendingWithdrawalCount ||
-                    summary.pendingWithdrawalCount
+                  firstNumber(
+                    finance.pendingWithdrawalCount,
+                    summary.pendingWithdrawalCount,
+                    0
+                  )
                 )}
                 tone="yellow"
               />
@@ -275,36 +293,49 @@ export default function AdminDashboard() {
             <section className="mb-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
               <SnapshotCard
                 title="Finance"
-                subtitle="Current financial summary"
+                subtitle="Revenue, escrow, and pending payout snapshot"
                 icon="monitoring"
                 items={[
                   {
-                    label: "Revenue",
+                    label: "Total platform revenue",
                     value: formatMoney(
-                      finance.platformTotalRevenue ||
-                        platformWallet.totalRevenue ||
-                        revenue.platformFeeCollected
+                      firstNumber(
+                        finance.platformTotalRevenue,
+                        platformWallet.totalRevenue,
+                        revenue.platformFeeCollected,
+                        0
+                      )
                     ),
                   },
                   {
-                    label: "Platform Fee",
+                    label: "Platform fee revenue",
                     value: formatMoney(
-                      finance.platformFeeRevenue ||
-                        revenue.platformFeeCollected ||
-                        revenue.platformFeeExpected
+                      firstNumber(
+                        finance.platformFeeRevenue,
+                        revenue.platformFeeCollected,
+                        revenue.platformFeeExpected,
+                        0
+                      )
                     ),
                   },
                   {
-                    label: "Escrow Locked",
+                    label: "Escrow locked",
                     value: formatMoney(
-                      finance.totalEscrowLocked || summary.escrowLockedAmount
+                      firstNumber(
+                        finance.totalEscrowLocked,
+                        summary.escrowLockedAmount,
+                        0
+                      )
                     ),
                   },
                   {
                     label: "Pending payouts",
                     value: formatMoney(
-                      finance.pendingWithdrawalAmount ||
-                        summary.pendingWithdrawalAmount
+                      firstNumber(
+                        finance.pendingWithdrawalAmount,
+                        summary.pendingWithdrawalAmount,
+                        0
+                      )
                     ),
                   },
                 ]}
@@ -312,11 +343,11 @@ export default function AdminDashboard() {
 
               <SnapshotCard
                 title="Projects"
-                subtitle="Current project summary"
+                subtitle="Project pipeline and risk status"
                 icon="folder_copy"
                 items={[
                   {
-                    label: "Total Projects",
+                    label: "Total projects",
                     value: formatNumber(projectStatusSummary.total),
                   },
                   {
@@ -343,7 +374,7 @@ export default function AdminDashboard() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Latest financial activity.
+                    Latest wallet and platform transactions returned by the backend.
                   </p>
                 </div>
 
@@ -391,6 +422,7 @@ export default function AdminDashboard() {
 }
 
 
+// ===== Loading skeleton =====
 function PageSkeleton({ cards = 4, admin = false }) {
   return (
     <div className="animate-pulse px-5 py-8 md:px-8">
@@ -419,6 +451,7 @@ function PageSkeleton({ cards = 4, admin = false }) {
 }
 
 
+// ===== Top-level dashboard metric card =====
 function SummaryCard({
   icon,
   label,
@@ -436,11 +469,10 @@ function SummaryCard({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
+    <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-5 shadow-[0_14px_42px_rgba(0,0,0,0.24)] transition hover:border-cyan-400/20">
       <div
-        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${
-          toneClass[tone] || toneClass.cyan
-        }`}
+        className={`mb-4 flex h-11 w-11 items-center justify-center rounded-xl border ${toneClass[tone] || toneClass.cyan
+          }`}
       >
         <span className="material-symbols-outlined">{icon}</span>
       </div>
@@ -458,6 +490,7 @@ function SummaryCard({
   );
 }
 
+// ===== Snapshot card for grouped finance/project data =====
 function SnapshotCard({ title, subtitle, icon, items }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-[#151a22]/95 p-6 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
@@ -489,22 +522,72 @@ function SnapshotCard({ title, subtitle, icon, items }) {
   );
 }
 
+// ===== Recent activity row =====
 function ActivityRow({ item }) {
-  const type = item.type || item.transactionType || "ACTIVITY";
-  const status = item.status || "UNKNOWN";
+  const type = String(
+    item.type || item.transactionType || "ACTIVITY"
+  )
+    .trim()
+    .toUpperCase();
+
+  const status = String(item.status || "UNKNOWN")
+    .trim()
+    .toUpperCase();
+
+  const amount = Math.abs(Number(item.amount || 0));
+  const direction = getTransactionDirection(item, type);
+
+  const amountPrefix =
+    direction === "IN"
+      ? "+"
+      : direction === "OUT"
+        ? "-"
+        : "";
+
+  const amountClass =
+    direction === "IN"
+      ? "text-green-300"
+      : direction === "OUT"
+        ? "text-red-300"
+        : "text-white";
+
+  const title =
+    item.displayTitle ||
+    item.referenceDisplayName ||
+    formatLabel(type);
+
+  const description =
+    item.displayDescription ||
+    item.displaySubtitle ||
+    item.description ||
+    "";
 
   return (
     <div className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.4fr_1fr_1fr_120px] md:items-center">
       <div className="min-w-0">
-        <p className="truncate font-bold text-white">{formatLabel(type)}</p>
-        {item.description && (
-          <p className="mt-1 truncate text-xs text-gray-500">
-            {item.description}
-          </p>
-        )}
+        <p className="truncate font-bold text-white">{title}</p>
+
+        {description && (
+  <p
+    className="mt-1 text-xs leading-5 text-gray-400"
+    title={description}
+    style={{
+      display: "-webkit-box",
+      WebkitLineClamp: 2,
+      WebkitBoxOrient: "vertical",
+      overflow: "hidden",
+      wordBreak: "break-word",
+    }}
+  >
+    {description}
+  </p>
+)}
       </div>
 
-      <div className="font-bold text-white">{formatMoney(item.amount)}</div>
+      <div className={`font-extrabold ${amountClass}`}>
+        {amountPrefix}
+        {formatMoney(amount)}
+      </div>
 
       <div>
         <span
@@ -535,6 +618,75 @@ function EmptyState({ icon, title, description }) {
       <p className="mt-2 text-sm text-gray-400">{description}</p>
     </div>
   );
+}
+
+function firstNumber(...values) {
+  for (const value of values) {
+    if (value === undefined || value === null || value === "") {
+      continue;
+    }
+
+    const number = Number(value);
+
+    if (Number.isFinite(number)) {
+      return number;
+    }
+  }
+
+  return 0;
+}
+
+function getTransactionDirection(item, normalizedType = "") {
+  const explicitDirection = String(
+    item?.direction ||
+    item?.flowDirection ||
+    item?.transactionDirection ||
+    ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (["IN", "CREDIT", "INCOME", "PLUS"].includes(explicitDirection)) {
+    return "IN";
+  }
+
+  if (["OUT", "DEBIT", "EXPENSE", "MINUS"].includes(explicitDirection)) {
+    return "OUT";
+  }
+
+  const type = String(normalizedType || "")
+    .trim()
+    .toUpperCase();
+
+  const incomeTypes = new Set([
+    "PLATFORM_FEE",
+    "EXPERT_SERVICE_FEE",
+    "WITHDRAWAL_FEE",
+    "PLATFORM_REVENUE",
+    "FEE_COLLECTED",
+    "ADJUSTMENT_CREDIT",
+    "PLATFORM_ADJUSTMENT_CREDIT",
+  ]);
+
+  const expenseTypes = new Set([
+    "PLATFORM_REFUND",
+    "FEE_REFUND",
+    "ADJUSTMENT_DEBIT",
+    "PLATFORM_ADJUSTMENT_DEBIT",
+    "PAYOUT",
+    "WITHDRAWAL_PAYOUT",
+    "CLIENT_REFUND",
+  ]);
+
+  if (incomeTypes.has(type)) {
+    return "IN";
+  }
+
+  if (expenseTypes.has(type)) {
+    return "OUT";
+  }
+
+  return "NEUTRAL";
 }
 
 function countByStatus(items, statuses) {

@@ -4,6 +4,8 @@ import AdminLayout from "../../../components/layout/AdminLayout";
 import adminUserService from "../../../services/adminUser.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Filter options and action form defaults =====
 const ROLE_OPTIONS = ["ALL", "CLIENT", "EXPERT", "USER"];
 const STATUS_OPTIONS = ["ALL", "ACTIVE", "LOCKED", "BANNED"];
 
@@ -25,14 +27,18 @@ const EMPTY_BAN_FORM = {
   reason: "",
 };
 
+// ===== Admin user management page: search, filter, lock, unlock, ban =====
 export default function ManageUsersPage() {
+  // ===== Routing =====
   const navigate = useNavigate();
 
+  // ===== User list and filters =====
   const [users, setUsers] = useState([]);
   const [keyword, setKeyword] = useState("");
   const [roleFilter, setRoleFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
 
+  // ===== Loading and feedback state =====
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -61,6 +67,7 @@ export default function ManageUsersPage() {
     loadUsers();
   }, []);
 
+  // ===== Derived list and dashboard stats =====
   const filteredUsers = useMemo(() => {
     const search = keyword.trim().toLowerCase();
 
@@ -111,6 +118,7 @@ export default function ManageUsersPage() {
     );
   }, [users]);
 
+  // ===== API loading: all non-admin users =====
   const loadUsers = async ({ keepMessage = false } = {}) => {
     try {
       setLoading(true);
@@ -120,13 +128,13 @@ export default function ManageUsersPage() {
         setSuccess("");
       }
 
-     const data = await adminUserService.getAllUsers();
+      const data = await adminUserService.getAllUsers();
 
-const visibleUsers = Array.isArray(data)
-  ? data.filter((user) => String(user.role || "").toUpperCase() !== "ADMIN")
-  : [];
+      const visibleUsers = Array.isArray(data)
+        ? data.filter((user) => String(user.role || "").toUpperCase() !== "ADMIN")
+        : [];
 
-setUsers(visibleUsers);
+      setUsers(visibleUsers);
     } catch (err) {
       console.error("LOAD ADMIN USERS ERROR:", err?.response?.data || err);
       setError(getFriendlyError(err, "Cannot load users."));
@@ -135,6 +143,7 @@ setUsers(visibleUsers);
     }
   };
 
+  // ===== Action modal openers =====
   const openLockModal = (user) => {
     setAction({
       type: "LOCK",
@@ -200,7 +209,7 @@ setUsers(visibleUsers);
     }
 
     if (!lockForm.reason.trim()) {
-      errors.reason = "Lock Reason is required.";
+      errors.reason = "Lock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -240,7 +249,7 @@ setUsers(visibleUsers);
     const errors = {};
 
     if (!unlockForm.reason.trim()) {
-      errors.reason = "Unlock Reason is required.";
+      errors.reason = "Unlock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -279,7 +288,7 @@ setUsers(visibleUsers);
     const errors = {};
 
     if (!banForm.reason.trim()) {
-      errors.reason = "Ban Reason is required.";
+      errors.reason = "Ban reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -327,7 +336,7 @@ const requestLockUser = () => {
     }
 
     if (!lockForm.reason.trim()) {
-      errors.reason = "Lock Reason is required.";
+      errors.reason = "Lock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -362,7 +371,7 @@ const requestLockUser = () => {
     const errors = {};
 
     if (!unlockForm.reason.trim()) {
-      errors.reason = "Unlock Reason is required.";
+      errors.reason = "Unlock reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -397,7 +406,7 @@ const requestLockUser = () => {
     const errors = {};
 
     if (!banForm.reason.trim()) {
-      errors.reason = "Ban Reason is required.";
+      errors.reason = "Ban reason is required.";
     }
 
     if (Object.keys(errors).length > 0) {
@@ -446,6 +455,7 @@ const requestLockUser = () => {
     }
   };
 
+  // ===== Main render =====
   return (
     <AdminLayout>
       <div className="mx-auto max-w-7xl">
@@ -460,7 +470,8 @@ const requestLockUser = () => {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-gray-400">
-              Review accounts, filter users, and manage restrictions.
+              Review client and expert accounts, filter by role/status, and
+              apply temporary or permanent restrictions with a clear reason.
             </p>
           </div>
 
@@ -488,7 +499,7 @@ const requestLockUser = () => {
         <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard
             icon="groups"
-            label="Users"
+            label="Visible users"
             value={stats.total}
             description={`${stats.clients} clients · ${stats.experts} experts`}
             tone="cyan"
@@ -496,7 +507,7 @@ const requestLockUser = () => {
 
           <StatCard
             icon="verified_user"
-            label="Active"
+            label="Active accounts"
             value={stats.active}
             description="Active accounts"
             tone="green"
@@ -504,7 +515,7 @@ const requestLockUser = () => {
 
           <StatCard
             icon="lock"
-            label="Locked"
+            label="Temporarily locked"
             value={stats.locked}
             description="Temporary restrictions"
             tone="yellow"
@@ -512,7 +523,7 @@ const requestLockUser = () => {
 
           <StatCard
             icon="block"
-            label="Banned"
+            label="Banned accounts"
             value={stats.banned}
             description="Permanent restrictions"
             tone="red"
@@ -526,7 +537,7 @@ const requestLockUser = () => {
                 Search
               </label>
 
-              <div className="flex h-12 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4">
+              <div className="flex h-14 items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 transition focus-within:border-cyan-400/50 focus-within:ring-2 focus-within:ring-cyan-400/15">
                 <span className="material-symbols-outlined text-[20px] text-gray-500">
                   search
                 </span>
@@ -559,7 +570,7 @@ const requestLockUser = () => {
         <section className="rounded-2xl border border-white/10 bg-[#151a22]/95 shadow-[0_14px_42px_rgba(0,0,0,0.24)]">
           <div className="flex flex-col gap-3 border-b border-white/10 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
-              <h2 className="text-lg font-bold text-white">Users</h2>
+              <h2 className="text-lg font-bold text-white">User account list</h2>
               <p className="mt-1 text-sm text-gray-500">
                 Showing {filteredUsers.length} of {users.length} accounts.
               </p>
@@ -589,9 +600,9 @@ const requestLockUser = () => {
 
         {action.type === "LOCK" && (
           <ActionModal
-            title="Lock User"
+            title="Lock user account"
             subtitle={action.user?.email || action.user?.fullName}
-            confirmLabel="Lock User"
+            confirmLabel="Lock account"
             confirmTone="yellow"
             loading={actionLoading}
             error={modalError}
@@ -600,7 +611,7 @@ const requestLockUser = () => {
           >
             <div className="space-y-4">
               <NumberInput
-                label="Lock Duration (minutes)"
+                label="Lock duration (minutes)"
                 required
                 value={lockForm.durationMinutes}
                 error={fieldErrors.durationMinutes}
@@ -619,7 +630,7 @@ const requestLockUser = () => {
               />
 
               <TextArea
-                label="Lock Reason"
+                label="Lock reason"
                 required
                 value={lockForm.reason}
                 error={fieldErrors.reason}
@@ -642,9 +653,9 @@ const requestLockUser = () => {
 
         {action.type === "UNLOCK" && (
           <ActionModal
-            title="Unlock User"
+            title="Unlock user account"
             subtitle={action.user?.email || action.user?.fullName}
-            confirmLabel="Unlock User"
+            confirmLabel="Unlock account"
             confirmTone="green"
             loading={actionLoading}
             error={modalError}
@@ -652,7 +663,7 @@ const requestLockUser = () => {
             onConfirm={requestUnlockUser}
           >
             <TextArea
-              label="Unlock Reason"
+              label="Unlock reason"
               required
               value={unlockForm.reason}
               error={fieldErrors.reason}
@@ -674,9 +685,9 @@ const requestLockUser = () => {
 
         {action.type === "BAN" && (
           <ActionModal
-            title="Ban User"
+            title="Ban user account"
             subtitle={action.user?.email || action.user?.fullName}
-            confirmLabel="Ban User"
+            confirmLabel="Ban account"
             confirmTone="red"
             loading={actionLoading}
             error={modalError}
@@ -684,7 +695,7 @@ const requestLockUser = () => {
             onConfirm={requestBanUser}
           >
             <TextArea
-              label="Ban Reason"
+              label="Ban reason"
               required
               value={banForm.reason}
               error={fieldErrors.reason}
@@ -725,6 +736,7 @@ const requestLockUser = () => {
   );
 }
 
+// ===== Final confirmation modal before applying user restriction actions =====
 function ReviewConfirmationModal({
   title,
   description,
@@ -813,7 +825,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -822,7 +834,7 @@ function ReviewConfirmationModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className={`rounded-xl border px-4 py-2.5 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
+            className={`rounded-xl border px-5 py-3 text-sm font-black transition disabled:cursor-not-allowed disabled:opacity-50 ${config.button}`}
           >
             {loading ? "Processing..." : confirmLabel}
           </button>
@@ -916,6 +928,7 @@ function PageSkeleton({ rows = 4 }) {
 }
 
 
+// ===== User row with quick moderation actions =====
 function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
   const status = getUserStatus(user);
   const isLocked = status === "LOCKED";
@@ -966,7 +979,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
             type="button"
             onClick={onView}
             disabled={disabled}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/40 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
             View
           </button>
@@ -976,7 +989,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
               type="button"
               onClick={onUnlock}
               disabled={disabled || isBanned}
-              className="rounded-xl border border-green-400/40 bg-green-400/10 px-4 py-2 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
               Unlock
             </button>
@@ -985,7 +998,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
               type="button"
               onClick={onLock}
               disabled={disabled || isBanned}
-              className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-4 py-2 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
             >
               Lock
             </button>
@@ -995,7 +1008,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
             type="button"
             onClick={onBan}
             disabled={disabled || isBanned}
-            className="rounded-xl border border-red-400/40 bg-red-400/10 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             Ban
           </button>
@@ -1030,6 +1043,7 @@ function UserRow({ user, disabled, onView, onLock, onUnlock, onBan }) {
   );
 }
 
+// ===== Dashboard statistic card =====
 function StatCard({ icon, label, value, description, tone = "cyan" }) {
   const toneClass = {
     cyan: "border-cyan-400/20 bg-cyan-400/10 text-cyan-300",
@@ -1059,6 +1073,7 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
   );
 }
 
+// ===== Filter select with larger tap target =====
 function FilterSelect({ label, value, options, onChange }) {
   return (
     <div>
@@ -1069,7 +1084,7 @@ function FilterSelect({ label, value, options, onChange }) {
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50"
+        className="h-14 w-full rounded-xl border border-white/10 bg-[#0d1117] px-4 text-sm font-bold text-white outline-none focus:border-cyan-400/50 focus:ring-2 focus:ring-cyan-400/15"
       >
         {options.map((item) => (
           <option key={item} value={item}>
@@ -1081,6 +1096,7 @@ function FilterSelect({ label, value, options, onChange }) {
   );
 }
 
+// ===== Restriction action modal wrapper =====
 function ActionModal({
   title,
   subtitle,
@@ -1103,7 +1119,7 @@ function ActionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
-      <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
+      <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm text-gray-400">{subtitle}</p>
@@ -1143,6 +1159,7 @@ function ActionModal({
   );
 }
 
+// ===== Numeric duration input for temporary locks =====
 function NumberInput({
   label,
   value,
@@ -1164,7 +1181,7 @@ function NumberInput({
         value={value}
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
-        className={`h-12 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 ${
+        className={`h-14 w-full rounded-xl border bg-white/[0.04] px-4 text-sm text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400/50"
@@ -1182,6 +1199,7 @@ function NumberInput({
   );
 }
 
+// ===== Shared textarea for moderation reasons =====
 function TextArea({
   label,
   value,
@@ -1200,9 +1218,9 @@ function TextArea({
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={4}
+        rows={5}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+        className={`min-h-[132px] w-full resize-none rounded-xl border bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none placeholder:text-gray-600 focus:ring-2 focus:ring-cyan-400/15 ${
           error
             ? "border-red-400/70 focus:border-red-400"
             : "border-white/10 focus:border-cyan-400/50"

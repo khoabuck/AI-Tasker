@@ -160,7 +160,7 @@ function JobCard({ job, onStatusChange }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 14, fontWeight: 700, color: "#00F0FF" }}>
-            ${job.budgetMin?.toLocaleString()}–${job.budgetMax?.toLocaleString()}
+            {job.budgetMin?.toLocaleString()} - {job.budgetMax?.toLocaleString()} VND
           </span>
           {job.projectType && <span style={{ fontSize: 12, color: "#8c90a0" }}>{job.projectType}</span>}
           {checkingProposal && (

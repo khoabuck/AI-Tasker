@@ -6,6 +6,8 @@ import proposalService, {
 } from "../../../services/proposal.service";
 
 import { formatDateTime } from "../../../utils/dateTime.utils";
+
+// ===== Proposal status filters =====
 const FILTERS = [
   { key: "ALL", label: "All" },
   { key: "SUBMITTED", label: "Submitted" },
@@ -14,9 +16,12 @@ const FILTERS = [
   { key: "CANCELLED", label: "Cancelled" },
 ];
 
+// ===== Expert proposal list page: submitted proposals, versions, drafts, and actions =====
 export default function MyProposalsPage() {
+  // ===== Routing =====
   const navigate = useNavigate();
 
+  // ===== Proposal list and filter state =====
   const [proposals, setProposals] = useState([]);
   const [draftCount, setDraftCount] = useState(0);
 
@@ -34,6 +39,7 @@ export default function MyProposalsPage() {
     loadPage();
   }, []);
 
+  // ===== Derived filtered proposals and counters =====
   const filteredProposals = useMemo(() => {
     if (filter === "ALL") return proposals;
 
@@ -62,6 +68,7 @@ export default function MyProposalsPage() {
     );
   }, [proposals]);
 
+  // ===== API loading: proposals plus draft count =====
   const loadPage = async ({ silent = false } = {}) => {
     try {
       if (silent) {
@@ -104,6 +111,7 @@ export default function MyProposalsPage() {
     }
   };
 
+  // ===== Navigation helpers =====
   const goToProposalDetail = (proposal) => {
     const proposalId = getProposalId(proposal);
 
@@ -232,6 +240,7 @@ export default function MyProposalsPage() {
     }
   };
 
+  // ===== Main render =====
   return (
     <ExpertLayout>
       <div className="px-5 py-8 md:px-8">
@@ -247,8 +256,8 @@ export default function MyProposalsPage() {
               </h1>
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
-                Track submitted proposals, update versions, manage drafts, or
-                open contracts for accepted proposals.
+                Track submitted proposals, review versions, continue drafts,
+                resubmit rejected proposals, or open contracts after acceptance.
               </p>
             </div>
 
@@ -256,9 +265,9 @@ export default function MyProposalsPage() {
               <button
                 type="button"
                 onClick={() => navigate("/expert/proposal/drafts")}
-                className="relative w-fit rounded-xl border border-purple-400/50 bg-purple-400/10 px-4 py-2.5 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
+                className="relative w-fit rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
               >
-                My Drafts
+                My drafts
                 {draftCount > 0 && (
                   <span className="ml-2 rounded-full bg-purple-300 px-2 py-0.5 text-[11px] font-black text-black">
                     {draftCount}
@@ -269,9 +278,9 @@ export default function MyProposalsPage() {
               <button
                 type="button"
                 onClick={() => navigate("/expert/jobs")}
-                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-4 py-2.5 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
+                className="w-fit rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
               >
-                Browse Jobs
+                Browse jobs
               </button>
             </div>
           </div>
@@ -306,7 +315,7 @@ export default function MyProposalsPage() {
                   key={item.key}
                   type="button"
                   onClick={() => setFilter(item.key)}
-                  className={`rounded-full border px-4 py-2 text-xs font-bold uppercase tracking-wider transition ${
+                  className={`rounded-full border px-4 py-2.5 text-xs font-bold uppercase tracking-wider transition ${
                     filter === item.key
                       ? "border-cyan-400/60 bg-cyan-400/10 text-cyan-300"
                       : "border-white/10 bg-white/[0.03] text-gray-400 hover:text-white"
@@ -356,7 +365,7 @@ export default function MyProposalsPage() {
                   onClick={() => navigate("/expert/proposal/drafts")}
                   className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
                 >
-                  View Drafts
+                  View drafts
                 </button>
 
                 <button
@@ -364,7 +373,7 @@ export default function MyProposalsPage() {
                   onClick={() => navigate("/expert/jobs")}
                   className="rounded-xl border border-cyan-400/50 bg-cyan-400/10 px-5 py-3 text-sm font-bold text-cyan-300 transition hover:bg-cyan-400 hover:text-black"
                 >
-                  Browse Jobs
+                  Browse jobs
                 </button>
               </div>
             </div>
@@ -408,6 +417,7 @@ export default function MyProposalsPage() {
   );
 }
 
+// ===== Proposal row with proposal actions =====
 function ProposalRow({
   proposal,
   actionLoadingId,
@@ -515,16 +525,16 @@ function ProposalRow({
         </div>
 
         <div className="flex flex-wrap justify-start gap-2 lg:justify-end">
-          <ActionButton label="Detail" tone="cyan" onClick={onDetail} />
+          <ActionButton label="View detail" tone="cyan" onClick={onDetail} />
 
           {statusGroup !== "REJECTED" && (
             <ActionButton label="Versions" tone="purple" onClick={onVersions} />
           )}
 
-          {jobId && <ActionButton label="Job" tone="gray" onClick={onJob} />}
+          {jobId && <ActionButton label="View job" tone="gray" onClick={onJob} />}
 
           {shouldShowContract && statusGroup !== "REJECTED" && (
-            <ActionButton label="Contract" tone="green" onClick={onContract} />
+            <ActionButton label="Open contract" tone="green" onClick={onContract} />
           )}
 
           {canResubmitProposal(statusGroup) && (
@@ -536,7 +546,7 @@ function ProposalRow({
               label={
                 String(actionLoadingId) === String(proposalId)
                   ? "Loading..."
-                  : "Cancel Proposal"
+                  : "Cancel proposal"
               }
               tone="red"
               disabled={String(actionLoadingId) === String(proposalId)}
@@ -549,6 +559,7 @@ function ProposalRow({
   );
 }
 
+// ===== Cancel proposal modal =====
 function CancelProposalModal({
   modal,
   actionLoadingId,
@@ -586,7 +597,7 @@ function CancelProposalModal({
 
             <div>
               <p className="text-xs font-black uppercase tracking-[0.2em] text-red-300">
-                Cancel Proposal
+                Cancel proposal
               </p>
 
               <h2 className="mt-2 text-xl font-extrabold text-white">
@@ -661,9 +672,9 @@ function CancelProposalModal({
             <textarea
               value={modal.reason || ""}
               onChange={(event) => onReasonChange(event.target.value)}
-              rows={3}
+              rows={5}
               placeholder="Example: I am no longer available for this project."
-              className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-red-300 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              className="min-h-[132px] w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-4 py-4 text-sm leading-6 text-white outline-none transition placeholder:text-gray-600 focus:border-red-300 focus:ring-2 focus:ring-red-300/20 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             />
           </div>
         </div>
@@ -675,7 +686,7 @@ function CancelProposalModal({
             onClick={onClose}
             className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:border-cyan-400/50 hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Keep Proposal
+            Keep proposal
           </button>
 
           <button
@@ -684,7 +695,7 @@ function CancelProposalModal({
             onClick={onConfirm}
             className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isLoading ? "Cancelling..." : "Cancel Proposal"}
+            {isLoading ? "Cancelling..." : "Cancel proposal"}
           </button>
         </div>
       </div>
@@ -692,6 +703,7 @@ function CancelProposalModal({
   );
 }
 
+// ===== Summary counter card =====
 function SummaryCard({ label, value, icon }) {
   return (
     <article className="rounded-2xl border border-white/10 bg-[#151a22] p-5">
@@ -721,6 +733,7 @@ function MiniInfo({ label, value }) {
   );
 }
 
+// ===== Compact row action button =====
 function ActionButton({ label, tone = "gray", disabled = false, onClick }) {
   const styleMap = {
     cyan: "border-cyan-400/40 bg-cyan-400/10 text-cyan-300 hover:bg-cyan-400 hover:text-black",
@@ -739,7 +752,7 @@ function ActionButton({ label, tone = "gray", disabled = false, onClick }) {
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className={`rounded-lg border px-4 py-2 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${styleMap[tone]}`}
+      className={`rounded-xl border px-4 py-2.5 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${styleMap[tone]}`}
     >
       {label}
     </button>
@@ -798,7 +811,7 @@ function normalizeCancelWarning(warning) {
       raw.canWithdraw === undefined && raw.CanWithdraw === undefined
         ? true
         : Boolean(raw.canWithdraw ?? raw.CanWithdraw),
-    title: raw.title || raw.Title || "Cancel Proposal",
+    title: raw.title || raw.Title || "Cancel proposal",
     message:
       raw.message ||
       raw.Message ||
