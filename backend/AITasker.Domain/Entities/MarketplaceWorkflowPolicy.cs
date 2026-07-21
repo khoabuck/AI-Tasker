@@ -20,6 +20,7 @@ public class MarketplaceWorkflowPolicy
 
     public int ContractSignWindowHours { get; set; } = 24;
 
+    public int ContractSignMissLimit { get; set; } = 3;
 
     public int ExpertMaxActiveProjects { get; set; } = 3;
 

@@ -27,9 +27,13 @@ namespace AITasker.Domain.Entities
 
         public string? StatusReason { get; set; }
 
+        public int ClientMissSignCount { get; set; } = 0;
+
+        public int ExpertMissSignCount { get; set; } = 0;
+
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
-        public ProjectContract? ProjectContract { get; set; }
+        public ICollection<ProjectContract> ProjectContracts { get; set; } = new List<ProjectContract>();
 
         public JobPosting? JobPosting { get; set; }
 

@@ -49,9 +49,20 @@ namespace AITasker.Domain.Entities
 
         public string Status { get; set; } = "DRAFT";
 
+        public DateTime? ClientSignDeadlineAt { get; set; }
+
+        public DateTime? ExpertSignDeadlineAt { get; set; }
+
+        public DateTime? ClientSignedAt { get; set; }
+
+        public DateTime? ExpertSignedAt { get; set; }
+
+        // Backward-compatible current phase deadline.
         public DateTime? SignDeadlineAt { get; set; }
 
         public DateTime? SignExpiredAt { get; set; }
+
+        public string? CancelledReason { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

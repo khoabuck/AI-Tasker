@@ -52,6 +52,14 @@ namespace AITasker.Application.DTOs.Responses
 
         public DateTime? ResolvedAt { get; set; }
 
+        public bool RequiresClientDecision { get; set; }
+
+        public string? PostResolutionDecision { get; set; }
+
+        public DateTime? PostResolutionDecisionAt { get; set; }
+
+        public int? PostResolutionDecisionByUserId { get; set; }
+
         public List<DisputeEvidenceResponse> Evidences { get; set; } = new();
     }
 }

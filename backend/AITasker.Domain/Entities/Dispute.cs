@@ -31,6 +31,12 @@ namespace AITasker.Domain.Entities
 
         public DateTime? ResolvedAt { get; set; }
 
+        public string? PostResolutionDecision { get; set; }
+
+        public DateTime? PostResolutionDecisionAt { get; set; }
+
+        public int? PostResolutionDecisionByUserId { get; set; }
+
         public Project? Project { get; set; }
 
         public Milestone? Milestone { get; set; }
