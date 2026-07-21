@@ -150,6 +150,74 @@ namespace AITasker.Api.Controllers
             }
         }
 
+        [HttpPost("{projectId:int}/continue-after-dispute")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> ContinueAfterDispute(int projectId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+                var result = await _projectService.ContinueAfterDisputeAsync(currentUserId, projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Project continued. The remaining project escrow stays locked.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
+        [HttpPost("{projectId:int}/end-after-dispute")]
+        [Authorize(Roles = "CLIENT")]
+        public async Task<IActionResult> EndAfterDispute(int projectId)
+        {
+            try
+            {
+                var currentUserId = GetCurrentUserId();
+                var result = await _projectService.EndAfterDisputeAsync(currentUserId, projectId);
+
+                return Ok(new
+                {
+                    success = true,
+                    message = "Contract ended after dispute resolution.",
+                    data = result
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(StatusCodes.Status403Forbidden, new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new
+                {
+                    success = false,
+                    message = ex.Message
+                });
+            }
+        }
+
         [HttpGet("/api/milestones/{milestoneId:int}")]
         public async Task<IActionResult> GetMilestoneById(int milestoneId)
         {

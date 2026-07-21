@@ -18,6 +18,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
     private const int DefaultProposalResubmitWindowHours = 0;
     private const int DefaultProposalCreditLowWarningThreshold = 3;
     private const int DefaultContractSignWindowHours = 24;
+    private const int DefaultContractSignMissLimit = 3;
     private const int DefaultExpertMaxActiveProjects = 3;
     private const int DefaultDeliverableReviewWindowHours = 24;
     private const int DefaultDeliverableAutoApproveGraceHours = 6;
@@ -68,6 +69,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         policy.ProposalResubmitWindowHours = request.ProposalResubmitWindowHours ?? policy.ProposalResubmitWindowHours;
         policy.ProposalCreditLowWarningThreshold = request.ProposalCreditLowWarningThreshold ?? policy.ProposalCreditLowWarningThreshold;
         policy.ContractSignWindowHours = request.ContractSignWindowHours;
+        policy.ContractSignMissLimit = request.ContractSignMissLimit ?? policy.ContractSignMissLimit;
         policy.ExpertMaxActiveProjects = request.ExpertMaxActiveProjects;
         policy.DeliverableReviewWindowHours = request.DeliverableReviewWindowHours;
         policy.DeliverableAutoApproveGraceHours = request.DeliverableAutoApproveGraceHours;
@@ -143,6 +145,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
         if (policy.ProposalResubmitWindowHours < 0) { policy.ProposalResubmitWindowHours = DefaultProposalResubmitWindowHours; changed = true; }
         if (policy.ProposalCreditLowWarningThreshold < 0) { policy.ProposalCreditLowWarningThreshold = DefaultProposalCreditLowWarningThreshold; changed = true; }
         if (policy.ContractSignWindowHours <= 0) { policy.ContractSignWindowHours = DefaultContractSignWindowHours; changed = true; }
+        if (policy.ContractSignMissLimit <= 0) { policy.ContractSignMissLimit = DefaultContractSignMissLimit; changed = true; }
         if (policy.ExpertMaxActiveProjects <= 0) { policy.ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects; changed = true; }
         if (policy.DeliverableReviewWindowHours <= 0) { policy.DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours; changed = true; }
         if (policy.DeliverableAutoApproveGraceHours <= 0) { policy.DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours; changed = true; }
@@ -173,6 +176,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalResubmitWindowHours = DefaultProposalResubmitWindowHours,
             ProposalCreditLowWarningThreshold = DefaultProposalCreditLowWarningThreshold,
             ContractSignWindowHours = DefaultContractSignWindowHours,
+            ContractSignMissLimit = DefaultContractSignMissLimit,
             ExpertMaxActiveProjects = DefaultExpertMaxActiveProjects,
             DeliverableReviewWindowHours = DefaultDeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = DefaultDeliverableAutoApproveGraceHours,
@@ -237,6 +241,11 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Contract sign window hours must be between 1 and 720.");
         }
 
+        if (request.ContractSignMissLimit.HasValue &&
+            (request.ContractSignMissLimit.Value <= 0 || request.ContractSignMissLimit.Value > 20))
+        {
+            throw new InvalidOperationException("Contract sign miss limit must be between 1 and 20.");
+        }
 
         if (request.ExpertMaxActiveProjects <= 0 || request.ExpertMaxActiveProjects > 50)
         {
@@ -317,6 +326,11 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             throw new InvalidOperationException("Proposal credit low warning threshold cannot be negative.");
         }
 
+        if (policy.ContractSignMissLimit <= 0)
+        {
+            throw new InvalidOperationException("Contract sign miss limit must be greater than 0.");
+        }
+
         if (policy.DeliverableArtifactLimit <= 0)
         {
             throw new InvalidOperationException("Deliverable artifact limit must be greater than 0.");
@@ -337,6 +351,7 @@ public class MarketplaceWorkflowPolicyService : IMarketplaceWorkflowPolicyServic
             ProposalResubmitWindowHours = policy.ProposalResubmitWindowHours,
             ProposalCreditLowWarningThreshold = policy.ProposalCreditLowWarningThreshold,
             ContractSignWindowHours = policy.ContractSignWindowHours,
+            ContractSignMissLimit = policy.ContractSignMissLimit,
             ExpertMaxActiveProjects = policy.ExpertMaxActiveProjects,
             DeliverableReviewWindowHours = policy.DeliverableReviewWindowHours,
             DeliverableAutoApproveGraceHours = policy.DeliverableAutoApproveGraceHours,

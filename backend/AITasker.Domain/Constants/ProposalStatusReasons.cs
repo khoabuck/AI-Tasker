@@ -7,5 +7,8 @@ public static class ProposalStatusReasons
     public const string AutoNotSelected = "AUTO_NOT_SELECTED";
     public const string ExpertWithdrawn = "EXPERT_WITHDRAWN";
     public const string ContractCancelled = "CONTRACT_CANCELLED";
+    public const string ContractRevisionRequested = "CONTRACT_REVISION_REQUESTED";
     public const string ContractExpired = "CONTRACT_EXPIRED";
+    public const string ClientSignTimeoutLimitExceeded = "CLIENT_SIGN_TIMEOUT_LIMIT_EXCEEDED";
+    public const string ExpertSignTimeoutLimitExceeded = "EXPERT_SIGN_TIMEOUT_LIMIT_EXCEEDED";
 }

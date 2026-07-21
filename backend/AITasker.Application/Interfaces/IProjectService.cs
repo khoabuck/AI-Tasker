@@ -22,5 +22,13 @@ namespace AITasker.Application.Interfaces
         Task<ProjectResponse> CompleteProjectCheckAsync(
             int currentUserId,
             int projectId);
+
+        Task<ProjectResponse> ContinueAfterDisputeAsync(
+            int currentUserId,
+            int projectId);
+
+        Task<ProjectResponse> EndAfterDisputeAsync(
+            int currentUserId,
+            int projectId);
     }
 }

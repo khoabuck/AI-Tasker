@@ -27,11 +27,15 @@ namespace AITasker.Infrastructure.Contracts
         private const string ProjectStatusPendingEscrow = "PENDING_ESCROW";
         private const string ProjectStatusCancelled = "CANCELLED";
 
+        private const string CancelReasonClientCancelDraft = "CLIENT_CANCEL_DRAFT";
+        private const string CancelReasonExpertCancelDraft = "EXPERT_CANCEL_DRAFT";
+        private const string CancelReasonClientDeclineDeal = "CLIENT_DECLINE_DEAL";
+        private const string CancelReasonExpertDeclineDeal = "EXPERT_DECLINE_DEAL";
+
         private readonly AITaskerDbContext _context;
         private readonly INotificationService _notificationService;
         private readonly IMarketplaceWorkflowPolicyService _workflowPolicyService;
         private readonly IPlatformFeePolicyService _platformFeePolicyService;
-        private readonly IContractFailureRollbackService _contractFailureRollbackService;
         private readonly IWalletService _walletService;
 
         public ProjectContractService(
@@ -39,14 +43,12 @@ namespace AITasker.Infrastructure.Contracts
             INotificationService notificationService,
             IMarketplaceWorkflowPolicyService workflowPolicyService,
             IPlatformFeePolicyService platformFeePolicyService,
-            IContractFailureRollbackService contractFailureRollbackService,
             IWalletService walletService)
         {
             _context = context;
             _notificationService = notificationService;
             _workflowPolicyService = workflowPolicyService;
             _platformFeePolicyService = platformFeePolicyService;
-            _contractFailureRollbackService = contractFailureRollbackService;
             _walletService = walletService;
         }
 
@@ -75,58 +77,17 @@ namespace AITasker.Infrastructure.Contracts
             var expertFeeRate = await _platformFeePolicyService.GetExpertFeeRateAsync();
             var platformFeeRate = await ResolvePlatformFeeRateAsync(clientProfile);
 
-            var existingContract = await _context.ProjectContracts
-                .FirstOrDefaultAsync(x => x.ProposalId == proposal.ProposalId);
+            var activeContractExists = await _context.ProjectContracts
+                .AnyAsync(x =>
+                    x.ProposalId == proposal.ProposalId &&
+                    (
+                        x.Status == ContractStatusDraft ||
+                        x.Status == ContractStatusConfirmed
+                    ));
 
-            if (existingContract != null)
+            if (activeContractExists)
             {
-                if (string.Equals(existingContract.Status, ContractStatusCancelled, StringComparison.OrdinalIgnoreCase))
-                {
-                    existingContract.Status = ContractStatusDraft;
-                    existingContract.ClientConfirmed = false;
-                    existingContract.ExpertConfirmed = false;
-                    existingContract.ConfirmedAt = null;
-                    existingContract.SignDeadlineAt = DateTime.UtcNow.AddHours(workflowPolicy.ContractSignWindowHours);
-                    existingContract.SignExpiredAt = null;
-                    existingContract.CreatedAt = DateTime.UtcNow;
-                }
-
-                if (string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
-                {
-                    await EnsureProposalBaseVersionExistsAsync(proposal);
-                    existingContract.SourceProposalVersionNumber = await GetLatestProposalVersionNumberAsync(proposal.ProposalId);
-                    existingContract.ProjectScope = proposal.WorkingApproach;
-                    existingContract.FinalPrice = proposal.ProposedPrice;
-                    existingContract.FinalTimelineDays = proposal.ProposedTimelineDays;
-                    existingContract.Deliverables = proposal.ExpectedOutputs;
-                    existingContract.AcceptanceCriteria = "Acceptance criteria must be confirmed by Client and Expert before project starts.";
-                    existingContract.PaymentTerms = "Milestone-based escrow payment managed through AITasker escrow.";
-                    existingContract.PlatformFeeRate = platformFeeRate;
-                    existingContract.PlatformFeeAmount = existingContract.FinalPrice * existingContract.PlatformFeeRate / 100m;
-                    existingContract.TotalClientPayment = existingContract.FinalPrice + existingContract.PlatformFeeAmount;
-                    ApplyExpertFee(existingContract, expertFeeRate);
-
-                }
-
-                var hasMilestoneDrafts = await _context.ContractMilestoneDrafts
-                    .AnyAsync(x => x.ContractId == existingContract.ContractId);
-
-                if (!hasMilestoneDrafts ||
-                    string.Equals(existingContract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
-                {
-                    await CopyLatestProposalMilestonesToContractDraftAsync(
-                        proposal.ProposalId,
-                        existingContract.ContractId);
-                }
-
-                await NotifyContractDraftCreatedAsync(
-                    userId,
-                    existingContract,
-                    job,
-                    clientProfile,
-                    expertProfile);
-
-                return await MapToContractResponseAsync(existingContract);
+                throw new InvalidOperationException("This accepted proposal already has an active contract draft or confirmed contract.");
             }
 
             await EnsureProposalBaseVersionExistsAsync(proposal);
@@ -190,7 +151,11 @@ namespace AITasker.Infrastructure.Contracts
             int proposalId)
         {
             var contract = await _context.ProjectContracts
-                .FirstOrDefaultAsync(x => x.ProposalId == proposalId);
+                .Where(x => x.ProposalId == proposalId)
+                .OrderByDescending(x => x.Status == ContractStatusDraft || x.Status == ContractStatusConfirmed)
+                .ThenByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.ContractId)
+                .FirstOrDefaultAsync();
 
             if (contract == null)
             {
@@ -232,16 +197,7 @@ namespace AITasker.Infrastructure.Contracts
             var job = await GetJobByIdAsync(proposal.JobId);
             var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
             var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
-
-            if (!contract.SignDeadlineAt.HasValue)
-            {
-                throw new InvalidOperationException("Contract signing deadline is missing. Recreate the contract draft instead of silently extending it.");
-            }
-
-            if (contract.SignDeadlineAt.Value <= DateTime.UtcNow)
-            {
-                throw new InvalidOperationException("Contract signing deadline has expired. The contract will be cancelled by the deadline job and the job will be reopened.");
-            }
+            var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
 
             var userIsClient = clientProfile.UserId == userId;
             var userIsExpert = expertProfile.UserId == userId;
@@ -250,6 +206,8 @@ namespace AITasker.Infrastructure.Contracts
             {
                 throw new UnauthorizedAccessException("Only the contract Client or Expert can sign this contract.");
             }
+
+            var now = DateTime.UtcNow;
 
             if (userIsClient)
             {
@@ -263,20 +221,32 @@ namespace AITasker.Infrastructure.Contracts
                     throw new InvalidOperationException("Invalid contract state: Expert cannot sign before Client.");
                 }
 
-                await EnsureContractMilestoneDraftsReadyAsync(contract);
+                var clientDeadline = contract.ClientSignDeadlineAt ?? contract.SignDeadlineAt;
 
-                await EnsureClientWalletCanCoverContractAsync(
-                    clientProfile.UserId,
-                    contract);
+                if (!clientDeadline.HasValue)
+                {
+                    throw new InvalidOperationException("Client signing deadline is missing. Recreate the contract draft instead of silently extending it.");
+                }
+
+                if (clientDeadline.Value <= now)
+                {
+                    throw new InvalidOperationException("Client signing deadline has expired. Create a new contract draft from the accepted proposal.");
+                }
+
+                await EnsureContractMilestoneDraftsReadyAsync(contract);
+                await EnsureClientWalletCanCoverContractAsync(clientProfile.UserId, contract);
 
                 contract.ClientConfirmed = true;
+                contract.ClientSignedAt = now;
+                contract.ExpertSignDeadlineAt = now.AddHours(workflowPolicy.ContractSignWindowHours);
+                contract.SignDeadlineAt = contract.ExpertSignDeadlineAt;
 
                 await _context.SaveChangesAsync();
 
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
                     "Contract signed by Client",
-                    $"The client signed the contract for job: {job.Title}. Please review and sign to create the project.",
+                    $"The client signed the contract for job: {job.Title}. Please review and sign within {workflowPolicy.ContractSignWindowHours} hours to create the project.",
                     "CONTRACT_SIGNED_BY_CLIENT",
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
@@ -287,118 +257,118 @@ namespace AITasker.Infrastructure.Contracts
                 return await MapToContractResponseAsync(contract);
             }
 
-            if (userIsExpert)
+            if (!contract.ClientConfirmed || !contract.ClientSignedAt.HasValue)
             {
-                if (!contract.ClientConfirmed)
-                {
-                    throw new InvalidOperationException("Client must sign the contract before Expert can sign.");
-                }
-
-                if (contract.ExpertConfirmed)
-                {
-                    throw new InvalidOperationException("Expert has already signed this contract.");
-                }
-
-                var workflowPolicy = await _workflowPolicyService.GetActivePolicyAsync();
-
-                await EnsureExpertCanAcceptNewProjectAsync(
-                    contract.ExpertId,
-                    workflowPolicy.ExpertMaxActiveProjects);
-
-                await EnsureContractMilestoneDraftsReadyAsync(contract);
-
-                await EnsureClientWalletCanCoverContractAsync(
-                    clientProfile.UserId,
-                    contract);
-
-                await using var dbTransaction = await _context.Database.BeginTransactionAsync(
-                    IsolationLevel.Serializable);
-
-                Project project;
-
-                try
-                {
-                    await _context.Entry(contract).ReloadAsync();
-
-                    if (!string.Equals(contract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase) ||
-                        !contract.ClientConfirmed ||
-                        contract.ExpertConfirmed)
-                    {
-                        throw new InvalidOperationException("Contract state changed while it was being confirmed. Reload and try again.");
-                    }
-
-                    if (!contract.SignDeadlineAt.HasValue || contract.SignDeadlineAt.Value <= DateTime.UtcNow)
-                    {
-                        throw new InvalidOperationException("Contract signing deadline has expired. The contract cannot be revived automatically.");
-                    }
-
-                    contract.ExpertConfirmed = true;
-                    contract.Status = ContractStatusConfirmed;
-                    contract.ConfirmedAt = DateTime.UtcNow;
-
-                    job.Status = JobStatusActive;
-                    job.UpdatedAt = DateTime.UtcNow;
-
-                    project = await EnsureProjectForAutomaticEscrowAsync(
-                        contract,
-                        job);
-
-                    await _context.SaveChangesAsync();
-
-                    await EnsureProjectMilestonesCreatedFromDraftsAsync(
-                        contract,
-                        project);
-
-                    await _context.SaveChangesAsync();
-
-                    await _walletService.LockProjectEscrowAsync(
-                        clientProfile.UserId,
-                        project.ProjectId,
-                        sendNotifications: false);
-
-                    await _context.SaveChangesAsync();
-                    await dbTransaction.CommitAsync();
-                }
-                catch
-                {
-                    await dbTransaction.RollbackAsync();
-                    throw;
-                }
-
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Contract fully confirmed and escrow locked",
-                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically and the project has started.",
-                    "CONTRACT_CONFIRMED_ESCROW_LOCKED",
-                    relatedEntityType: "CONTRACT",
-                    relatedEntityId: contract.ContractId,
-                    relatedJobId: job.JobPostingId,
-                    relatedProposalId: contract.ProposalId,
-                    relatedContractId: contract.ContractId,
-                    relatedProjectId: project.ProjectId);
-
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project started",
-                    $"The contract for job '{job.Title}' is fully confirmed. Escrow was locked automatically, so you can start working on milestones.",
-                    "CONTRACT_CONFIRMED_ESCROW_LOCKED",
-                    relatedEntityType: "CONTRACT",
-                    relatedEntityId: contract.ContractId,
-                    relatedJobId: job.JobPostingId,
-                    relatedProposalId: contract.ProposalId,
-                    relatedContractId: contract.ContractId,
-                    relatedProjectId: project.ProjectId);
-
-                return await MapToContractResponseAsync(contract);
+                throw new InvalidOperationException("Client must sign the contract before Expert can sign.");
             }
 
-            throw new UnauthorizedAccessException("You do not have permission to sign this contract.");
+            if (contract.ExpertConfirmed)
+            {
+                throw new InvalidOperationException("Expert has already signed this contract.");
+            }
+
+            if (!contract.ExpertSignDeadlineAt.HasValue)
+            {
+                throw new InvalidOperationException("Expert signing deadline is missing. The contract draft must be recreated.");
+            }
+
+            if (contract.ExpertSignDeadlineAt.Value <= now)
+            {
+                throw new InvalidOperationException("Expert signing deadline has expired. Create a new contract draft from the accepted proposal.");
+            }
+
+            await EnsureExpertCanAcceptNewProjectAsync(
+                contract.ExpertId,
+                workflowPolicy.ExpertMaxActiveProjects);
+
+            await EnsureContractMilestoneDraftsReadyAsync(contract);
+            await EnsureClientWalletCanCoverContractAsync(clientProfile.UserId, contract);
+
+            await using var dbTransaction = await _context.Database.BeginTransactionAsync(
+                IsolationLevel.Serializable);
+
+            Project project;
+
+            try
+            {
+                await _context.Entry(contract).ReloadAsync();
+
+                if (!string.Equals(contract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase) ||
+                    !contract.ClientConfirmed ||
+                    contract.ExpertConfirmed)
+                {
+                    throw new InvalidOperationException("Contract state changed while it was being confirmed. Reload and try again.");
+                }
+
+                if (!contract.ExpertSignDeadlineAt.HasValue || contract.ExpertSignDeadlineAt.Value <= DateTime.UtcNow)
+                {
+                    throw new InvalidOperationException("Expert signing deadline has expired. The contract cannot be revived automatically.");
+                }
+
+                var confirmedAt = DateTime.UtcNow;
+                contract.ExpertConfirmed = true;
+                contract.ExpertSignedAt = confirmedAt;
+                contract.Status = ContractStatusConfirmed;
+                contract.ConfirmedAt = confirmedAt;
+                contract.SignDeadlineAt = null;
+                contract.SignExpiredAt = null;
+                contract.CancelledReason = null;
+
+                job.Status = JobStatusActive;
+                job.UpdatedAt = confirmedAt;
+
+                project = await EnsureProjectForAutomaticEscrowAsync(contract, job);
+
+                await _context.SaveChangesAsync();
+
+                await EnsureProjectMilestonesCreatedFromDraftsAsync(contract, project);
+                await _context.SaveChangesAsync();
+
+                await _walletService.LockProjectEscrowAsync(
+                    clientProfile.UserId,
+                    project.ProjectId,
+                    sendNotifications: false);
+
+                await _context.SaveChangesAsync();
+                await dbTransaction.CommitAsync();
+            }
+            catch
+            {
+                await dbTransaction.RollbackAsync();
+                throw;
+            }
+
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "Contract fully confirmed and escrow locked",
+                $"The contract for job '{job.Title}' is fully confirmed. Escrow for the full project was locked automatically and the project has started.",
+                "CONTRACT_CONFIRMED_ESCROW_LOCKED",
+                relatedEntityType: "CONTRACT",
+                relatedEntityId: contract.ContractId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
+
+            await _notificationService.CreateNotificationAsync(
+                expertProfile.UserId,
+                "Project started",
+                $"The contract for job '{job.Title}' is fully confirmed. Escrow for the full project was locked automatically, so you can start working on milestones.",
+                "CONTRACT_CONFIRMED_ESCROW_LOCKED",
+                relatedEntityType: "CONTRACT",
+                relatedEntityId: contract.ContractId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId,
+                relatedProjectId: project.ProjectId);
+
+            return await MapToContractResponseAsync(contract);
         }
 
-        public async Task<ProjectContractResponse> CancelContractAsync(
+        public async Task<ProjectContractResponse> CancelContractDraftAsync(
             int userId,
             int contractId,
-            CancelContractRequest request)
+            CancelContractDraftRequest request)
         {
             var contract = await GetContractByIdInternalAsync(contractId);
             var proposal = await GetProposalByIdAsync(contract.ProposalId);
@@ -411,64 +381,230 @@ namespace AITasker.Infrastructure.Contracts
 
             if (!userIsClient && !userIsExpert)
             {
-                throw new UnauthorizedAccessException("Only the contract Client or Expert can cancel this contract.");
+                throw new UnauthorizedAccessException("Only the contract Client or Expert can cancel this contract draft.");
             }
 
-            if (string.Equals(contract.Status, ContractStatusCancelled, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(contract.Status, ContractStatusDraft, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Contract is already cancelled.");
+                throw new InvalidOperationException("Only DRAFT contracts can be cancelled as a draft.");
             }
 
+            if (contract.ClientConfirmed || contract.ExpertConfirmed ||
+                contract.ClientSignedAt.HasValue || contract.ExpertSignedAt.HasValue)
+            {
+                throw new InvalidOperationException("Cancel Draft is only available before signing starts. Use Decline Deal to stop the pre-confirmed deal after a signature exists.");
+            }
+
+            await EnsureContractCanBeCancelledBeforeProjectStartAsync(contract);
+
+            var now = DateTime.UtcNow;
+            var reason = NormalizeReason(request?.Reason);
+
+            contract.Status = ContractStatusCancelled;
+            contract.ClientConfirmed = false;
+            contract.ExpertConfirmed = false;
+            contract.ConfirmedAt = null;
+            contract.SignExpiredAt = null;
+            contract.SignDeadlineAt = null;
+            contract.CancelledReason = userIsClient
+                ? CancelReasonClientCancelDraft
+                : CancelReasonExpertCancelDraft;
+
+            proposal.Status = ProposalStatusAccepted;
+            proposal.StatusReason = ProposalStatusReasons.ClientAccepted;
+
+            job.UpdatedAt = now;
+
+            await _context.SaveChangesAsync();
+
+            await NotifyContractDraftCancelledAsync(
+                userIsClient,
+                reason,
+                contract,
+                job,
+                clientProfile,
+                expertProfile);
+
+            return await MapToContractResponseAsync(contract);
+        }
+
+        public async Task<ProjectContractResponse> DeclineDealAsync(
+            int userId,
+            int contractId,
+            DeclineContractDealRequest request)
+        {
+            var contract = await GetContractByIdInternalAsync(contractId);
+            var proposal = await GetProposalByIdAsync(contract.ProposalId);
+            var job = await GetJobByIdAsync(proposal.JobId);
+            var clientProfile = await GetClientProfileByIdAsync(contract.ClientId);
+            var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
+
+            var userIsClient = clientProfile.UserId == userId;
+            var userIsExpert = expertProfile.UserId == userId;
+
+            if (!userIsClient && !userIsExpert)
+            {
+                throw new UnauthorizedAccessException("Only the contract Client or Expert can decline this deal.");
+            }
+
+            if (string.Equals(contract.Status, ContractStatusConfirmed, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Confirmed contracts cannot be declined through the pre-signing deal flow.");
+            }
+
+            if (string.Equals(contract.Status, ContractStatusCancelled, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(proposal.Status, ProposalStatusRejected, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("This deal has already been declined.");
+            }
+
+            await EnsureContractCanBeCancelledBeforeProjectStartAsync(contract);
+
+            var now = DateTime.UtcNow;
+            var reason = NormalizeReason(request?.Reason);
+
+            contract.Status = ContractStatusCancelled;
+            contract.ConfirmedAt = null;
+            contract.SignDeadlineAt = null;
+            contract.CancelledReason = userIsClient
+                ? CancelReasonClientDeclineDeal
+                : CancelReasonExpertDeclineDeal;
+
+            proposal.Status = ProposalStatusRejected;
+            proposal.StatusReason = ProposalStatusReasons.ContractCancelled;
+
+            job.Status = JobStatusOpen;
+            job.UpdatedAt = now;
+
+            await ReopenAutoNotSelectedProposalsAsync(job.JobPostingId, proposal.ProposalId);
+
+            await _context.SaveChangesAsync();
+
+            await NotifyDealDeclinedAsync(
+                userIsClient,
+                reason,
+                contract,
+                job,
+                clientProfile,
+                expertProfile);
+
+            return await MapToContractResponseAsync(contract);
+        }
+
+        private async Task EnsureContractCanBeCancelledBeforeProjectStartAsync(ProjectContract contract)
+        {
             var project = await _context.Projects
                 .FirstOrDefaultAsync(x => x.ContractId == contract.ContractId);
 
             if (project != null &&
                 !string.Equals(project.Status, ProjectStatusPendingEscrow, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Cannot cancel contract after the project has started. Please use dispute or project cancellation flow.");
+                throw new InvalidOperationException("Cannot cancel this contract after the project has started. Please use the project or dispute flow.");
             }
 
-            var now = DateTime.UtcNow;
+            if (project != null)
+            {
+                project.Status = ProjectStatusCancelled;
+                project.EndDate = DateTime.UtcNow;
+            }
+        }
 
-            await _contractFailureRollbackService.ReopenJobAfterContractFailureAsync(
-                contract,
-                userIsClient ? "CLIENT_CANCELLED" : "EXPERT_CANCELLED",
-                now);
+        private async Task ReopenAutoNotSelectedProposalsAsync(
+            int jobId,
+            int selectedProposalId)
+        {
+            var autoRejectedProposals = await _context.Proposals
+                .Where(x =>
+                    x.JobId == jobId &&
+                    x.ProposalId != selectedProposalId &&
+                    x.Status == ProposalStatusRejected &&
+                    x.StatusReason == ProposalStatusReasons.AutoNotSelected)
+                .ToListAsync();
 
-            await _context.SaveChangesAsync();
+            foreach (var autoRejectedProposal in autoRejectedProposals)
+            {
+                autoRejectedProposal.Status = ProposalStatusSubmitted;
+                autoRejectedProposal.StatusReason = null;
+            }
+        }
 
-            var reason = request == null || string.IsNullOrWhiteSpace(request.Reason)
+        private static string NormalizeReason(string? reason)
+        {
+            return string.IsNullOrWhiteSpace(reason)
                 ? "No reason provided."
-                : request.Reason.Trim();
+                : reason.Trim();
+        }
 
-            if (userIsClient)
+        private async Task NotifyContractDraftCancelledAsync(
+            bool cancelledByClient,
+            string reason,
+            ProjectContract contract,
+            JobPosting job,
+            ClientProfile clientProfile,
+            ExpertProfile expertProfile)
+        {
+            if (cancelledByClient)
             {
                 await _notificationService.CreateNotificationAsync(
                     expertProfile.UserId,
-                    "Contract cancelled by Client",
-                    $"The client cancelled the contract for job '{job.Title}'. Reason: {reason}",
+                    "Contract draft cancelled",
+                    $"The client cancelled the current contract draft for job '{job.Title}'. The accepted proposal remains selected and a new contract draft can be created later. Reason: {reason}",
                     NotificationTypes.ContractCancelled,
                     relatedEntityType: "CONTRACT",
                     relatedEntityId: contract.ContractId,
                     relatedJobId: job.JobPostingId,
                     relatedProposalId: contract.ProposalId,
                     relatedContractId: contract.ContractId);
-            }
-            else
-            {
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Contract cancelled by Expert",
-                    $"The expert cancelled the contract for job '{job.Title}'. Reason: {reason}",
-                    NotificationTypes.ContractCancelled,
-                    relatedEntityType: "CONTRACT",
-                    relatedEntityId: contract.ContractId,
-                    relatedJobId: job.JobPostingId,
-                    relatedProposalId: contract.ProposalId,
-                    relatedContractId: contract.ContractId);
+
+                return;
             }
 
-            return await MapToContractResponseAsync(contract);
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "Contract draft cancelled",
+                $"The expert cancelled the current contract draft for job '{job.Title}'. The accepted proposal remains selected and a new contract draft can be created later. Reason: {reason}",
+                NotificationTypes.ContractCancelled,
+                relatedEntityType: "CONTRACT",
+                relatedEntityId: contract.ContractId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId);
+        }
+
+        private async Task NotifyDealDeclinedAsync(
+            bool declinedByClient,
+            string reason,
+            ProjectContract contract,
+            JobPosting job,
+            ClientProfile clientProfile,
+            ExpertProfile expertProfile)
+        {
+            if (declinedByClient)
+            {
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Deal declined by Client",
+                    $"The client declined the accepted deal for job '{job.Title}'. The contract draft was cancelled and the job was reopened. Reason: {reason}",
+                    NotificationTypes.ContractCancelled,
+                    relatedEntityType: "CONTRACT",
+                    relatedEntityId: contract.ContractId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: contract.ProposalId,
+                    relatedContractId: contract.ContractId);
+
+                return;
+            }
+
+            await _notificationService.CreateNotificationAsync(
+                clientProfile.UserId,
+                "Deal declined by Expert",
+                $"The expert declined the accepted deal for job '{job.Title}'. The contract draft was cancelled and the job was reopened. Reason: {reason}",
+                NotificationTypes.ContractCancelled,
+                relatedEntityType: "CONTRACT",
+                relatedEntityId: contract.ContractId,
+                relatedJobId: job.JobPostingId,
+                relatedProposalId: contract.ProposalId,
+                relatedContractId: contract.ContractId);
         }
 
         private static void ValidateProposalPriceWithinJobBudget(decimal proposedPrice, JobPosting job)
@@ -510,6 +646,9 @@ namespace AITasker.Infrastructure.Contracts
             var expertFeeAmount = CalculateExpertFee(finalPrice, expertFeeRate);
             var expertReceivableAmount = finalPrice - expertFeeAmount;
 
+            var now = DateTime.UtcNow;
+            var clientSignDeadlineAt = now.AddHours(contractSignWindowHours);
+
             return new ProjectContract
             {
                 ProposalId = proposal.ProposalId,
@@ -535,9 +674,14 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = false,
                 ExpertConfirmed = false,
                 Status = ContractStatusDraft,
-                SignDeadlineAt = DateTime.UtcNow.AddHours(contractSignWindowHours),
+                ClientSignDeadlineAt = clientSignDeadlineAt,
+                ExpertSignDeadlineAt = null,
+                ClientSignedAt = null,
+                ExpertSignedAt = null,
+                SignDeadlineAt = clientSignDeadlineAt,
                 SignExpiredAt = null,
-                CreatedAt = DateTime.UtcNow
+                CancelledReason = null,
+                CreatedAt = now
             };
         }
 
@@ -843,8 +987,13 @@ namespace AITasker.Infrastructure.Contracts
                 ClientConfirmed = contract.ClientConfirmed,
                 ExpertConfirmed = contract.ExpertConfirmed,
                 Status = contract.Status,
+                ClientSignDeadlineAt = contract.ClientSignDeadlineAt,
+                ExpertSignDeadlineAt = contract.ExpertSignDeadlineAt,
+                ClientSignedAt = contract.ClientSignedAt,
+                ExpertSignedAt = contract.ExpertSignedAt,
                 SignDeadlineAt = contract.SignDeadlineAt,
                 SignExpiredAt = contract.SignExpiredAt,
+                CancelledReason = contract.CancelledReason,
 
                 ProjectId = project?.ProjectId,
                 ProjectStatus = project?.Status,
@@ -1150,5 +1299,6 @@ namespace AITasker.Infrastructure.Contracts
                     $"Client wallet balance is not enough to sign this contract. Required: {contract.TotalClientPayment:N0} VND, Available: {availableBalance:N0} VND. Please deposit more before signing.");
             }
         }
+
     }
 }
