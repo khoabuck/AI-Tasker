@@ -23,17 +23,11 @@ export default function ProposalDetailPage() {
   const statusGroup = getProposalStatusGroup(status);
   const contractId = getContractId(proposal);
   const currentProposalId = getProposalId(proposal) || proposalId;
+  const proposalReference = formatReference(currentProposalId, "PRP");
 
   const milestones = useMemo(() => {
     return Array.isArray(proposal?.milestones) ? proposal.milestones : [];
   }, [proposal]);
-
-  const milestoneTotal = useMemo(() => {
-    return milestones.reduce((total, milestone) => {
-      const amount = Number(milestone?.amount || 0);
-      return total + (Number.isNaN(amount) ? 0 : amount);
-    }, 0);
-  }, [milestones]);
 
   useEffect(() => {
     if (!message) return;
@@ -218,6 +212,10 @@ export default function ProposalDetailPage() {
                     <div className="mb-4 flex flex-wrap items-center gap-2">
                       <StatusBadge status={status} />
 
+                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-400">
+                        {proposalReference}
+                      </span>
+
                       <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-gray-400">
                         Submitted{" "}
                         {formatDate(proposal?.submittedAt || proposal?.createdAt)}
@@ -225,16 +223,16 @@ export default function ProposalDetailPage() {
                     </div>
 
                     <p className="mb-3 text-xs font-bold uppercase tracking-[0.25em] text-[#00F0FF]">
-                      Proposal Workspace
+                      Proposal
                     </p>
 
                     <h1 className="text-3xl font-bold text-white md:text-4xl">
                       {formatDisplayValue(
                         proposal?.jobTitle ||
-                          proposal?.JobTitle ||
-                          proposal?.projectTitle ||
-                          proposal?.ProjectTitle ||
-                          "Untitled Job"
+                        proposal?.JobTitle ||
+                        proposal?.projectTitle ||
+                        proposal?.ProjectTitle ||
+                        "Untitled Job"
                       )}
                     </h1>
 
@@ -243,10 +241,10 @@ export default function ProposalDetailPage() {
                       <span className="font-bold text-gray-300">
                         {formatDisplayValue(
                           proposal?.clientName ||
-                            proposal?.ClientName ||
-                            proposal?.client?.fullName ||
-                            proposal?.Client?.FullName ||
-                            "Client"
+                          proposal?.ClientName ||
+                          proposal?.client?.fullName ||
+                          proposal?.Client?.FullName ||
+                          "Client"
                         )}
                       </span>
                     </p>
@@ -260,10 +258,10 @@ export default function ProposalDetailPage() {
                       }
                       className="rounded-xl border border-purple-400/50 bg-purple-400/10 px-5 py-3 text-sm font-bold text-purple-300 transition hover:bg-purple-400 hover:text-black"
                     >
-                      View Versions
+                      Proposal History
                     </button>
 
-                    {canViewContract(contractId) && (
+                    {canViewContract(statusGroup, currentProposalId) && (
                       <button
                         type="button"
                         onClick={handleViewContract}
@@ -314,9 +312,12 @@ export default function ProposalDetailPage() {
               {statusGroup === "ACCEPTED" && (
                 <AcceptedContractNotice
                   contractId={contractId}
+                  proposalId={currentProposalId}
                   onViewContract={handleViewContract}
                 />
               )}
+
+              <ProposalSigningNotice proposal={proposal} statusGroup={statusGroup} />
 
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_340px]">
                 <main className="space-y-6">
@@ -358,36 +359,26 @@ export default function ProposalDetailPage() {
                     )}
                   </Card>
 
-                  {(proposal?.counterMessage ||
-                    proposal?.decisionNote ||
-                    proposal?.rejectionReason) && (
-                    <Card title="Client Message" icon="chat">
-                      <p className="whitespace-pre-line text-sm leading-7 text-yellow-100">
-                        {formatDisplayValue(
-                          proposal?.counterMessage ||
-                            proposal?.decisionNote ||
-                            proposal?.rejectionReason
-                        )}
-                      </p>
-                    </Card>
-                  )}
+
                 </main>
 
                 <aside className="space-y-6">
                   <Card title="Summary" icon="monitoring">
                     <div className="space-y-4">
+                      <Info label="Reference" value={proposalReference} />
+
                       <Info
                         label="Status"
                         value={getProposalStatusLabel(statusGroup)}
                       />
 
                       <Info
-                        label="Proposed Price"
+                        label="Your bid"
                         value={formatMoney(
                           proposal?.proposedPrice ||
-                            proposal?.ProposedPrice ||
-                            proposal?.bidAmount ||
-                            proposal?.BidAmount
+                          proposal?.ProposedPrice ||
+                          proposal?.bidAmount ||
+                          proposal?.BidAmount
                         )}
                       />
 
@@ -395,28 +386,32 @@ export default function ProposalDetailPage() {
                         label="Timeline"
                         value={`${formatNumber(
                           proposal?.proposedTimelineDays ||
-                            proposal?.ProposedTimelineDays ||
-                            proposal?.estimatedDurationDays ||
-                            proposal?.EstimatedDurationDays ||
-                            0
+                          proposal?.ProposedTimelineDays ||
+                          proposal?.estimatedDurationDays ||
+                          proposal?.EstimatedDurationDays ||
+                          0
                         )} days`}
                       />
 
-                      <Info label="Milestones" value={`${milestones.length}`} />
-
                       <Info
-                        label="Milestone Total"
-                        value={formatMoney(milestoneTotal)}
+                        label="Delivery plan"
+                        value={`${milestones.length} milestone${milestones.length === 1 ? "" : "s"}`}
                       />
 
                       <Info
-                        label="Contract"
-                        value={contractId ? "Available" : "No contract yet"}
+                        label="Next step"
+                        value={
+                          contractId
+                            ? "Available"
+                            : statusGroup === "ACCEPTED"
+                              ? "Waiting for client draft"
+                              : "No contract yet"
+                        }
                       />
                     </div>
                   </Card>
 
-                  <Card title="Important Date" icon="event">
+                  <Card title="Key dates" icon="event">
                     <div className="space-y-4">
                       <Info
                         label="Submitted"
@@ -562,7 +557,9 @@ function ProposalConfirmModal({ loading, onCancel, onConfirm }) {
   );
 }
 
-function AcceptedContractNotice({ contractId, onViewContract }) {
+function AcceptedContractNotice({ contractId, proposalId, onViewContract }) {
+  const canOpenContract = Boolean(contractId || proposalId);
+
   return (
     <section className="mb-6 rounded-3xl border border-green-400/30 bg-green-400/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.25)] md:p-7">
       <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
@@ -584,13 +581,13 @@ function AcceptedContractNotice({ contractId, onViewContract }) {
 
             {!contractId && (
               <p className="mt-2 text-xs font-semibold text-green-200/80">
-                The contract is being prepared by the client.
+                The client still needs to create and sign the contract draft.
               </p>
             )}
           </div>
         </div>
 
-        {contractId && (
+        {canOpenContract && (
           <button
             type="button"
             onClick={onViewContract}
@@ -601,6 +598,55 @@ function AcceptedContractNotice({ contractId, onViewContract }) {
         )}
       </div>
     </section>
+  );
+}
+
+function ProposalSigningNotice({ proposal, statusGroup }) {
+  const statusReason =
+    proposal?.statusReason ||
+    proposal?.StatusReason ||
+    proposal?.raw?.statusReason ||
+    proposal?.raw?.StatusReason ||
+    "";
+
+  const clientMissCount = Number(
+    proposal?.clientMissSignCount ||
+    proposal?.ClientMissSignCount ||
+    proposal?.raw?.clientMissSignCount ||
+    proposal?.raw?.ClientMissSignCount ||
+    0
+  );
+
+  const expertMissCount = Number(
+    proposal?.expertMissSignCount ||
+    proposal?.ExpertMissSignCount ||
+    proposal?.raw?.expertMissSignCount ||
+    proposal?.raw?.ExpertMissSignCount ||
+    0
+  );
+
+  if (
+    statusGroup !== "ACCEPTED" &&
+    !statusReason &&
+    clientMissCount === 0 &&
+    expertMissCount === 0
+  ) {
+    return null;
+  }
+
+
+}
+
+function MiniInfo({ label, value }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/15 px-4 py-3">
+      <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-100/60">
+        {label}
+      </p>
+      <p className="mt-1 break-words text-sm font-black text-white">
+        {formatDisplayValue(value)}
+      </p>
+    </div>
   );
 }
 
@@ -663,10 +709,10 @@ function MilestoneCard({ milestone, index }) {
           label="Duration"
           value={`${formatNumber(
             milestone?.durationDays ||
-              milestone?.DurationDays ||
-              milestone?.deadlineOffsetDays ||
-              milestone?.DeadlineOffsetDays ||
-              0
+            milestone?.DurationDays ||
+            milestone?.deadlineOffsetDays ||
+            milestone?.DeadlineOffsetDays ||
+            0
           )} days`}
         />
       </div>
@@ -698,9 +744,8 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
-        map[group] || "border-white/10 bg-white/[0.04] text-gray-300"
-      }`}
+      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${map[group] || "border-white/10 bg-white/[0.04] text-gray-300"
+        }`}
     >
       {getProposalStatusLabel(group)}
     </span>
@@ -801,8 +846,8 @@ function getProposalStatusGroup(status) {
   return "SUBMITTED";
 }
 
-function canViewContract(contractId) {
-  return Boolean(contractId);
+function canViewContract(statusGroup, proposalId) {
+  return statusGroup === "ACCEPTED" && Boolean(proposalId);
 }
 
 function canResubmitProposal(statusGroup) {
@@ -872,4 +917,14 @@ function formatDisplayValue(value) {
   }
 
   return String(value);
+}
+
+function formatReference(value, prefix = "REF") {
+  const raw = String(value || "").trim();
+  if (!raw) return "N/A";
+
+  const clean = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const compact = clean.length > 6 ? clean.slice(-6) : clean;
+
+  return `${prefix}-${compact || raw.toUpperCase()}`;
 }

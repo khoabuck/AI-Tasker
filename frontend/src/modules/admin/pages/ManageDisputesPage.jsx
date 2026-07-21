@@ -15,12 +15,14 @@ const RESOLUTION_OPTIONS = [
   {
     value: "RELEASE_TO_EXPERT",
     label: "Release to Expert",
-    description: "The dispute is resolved in favor of the expert.",
+    description:
+      "Release the disputed milestone to the expert. Client must later choose Continue Project or End Contract.",
   },
   {
     value: "REFUND_TO_CLIENT",
     label: "Refund to Client",
-    description: "The dispute is resolved in favor of the client.",
+    description:
+      "Refund the disputed amount to the client and end the project with remaining escrow refunded.",
   },
 ];
 
@@ -278,7 +280,7 @@ export default function ManageDisputesPage() {
             icon="gavel"
             label="Total cases"
             value={stats.total}
-            description="All dispute records"
+            description="All dispute cases"
             tone="cyan"
           />
 
@@ -342,7 +344,7 @@ export default function ManageDisputesPage() {
             <div>
               <h2 className="text-lg font-bold text-white">Dispute case list</h2>
               <p className="mt-1 text-sm text-gray-500">
-                Showing {filteredDisputes.length} of {disputes.length} records.
+                Showing {filteredDisputes.length} of {disputes.length} cases.
               </p>
             </div>
           </div>
@@ -405,6 +407,10 @@ export default function ManageDisputesPage() {
             title="Confirm final dispute resolution"
             description="This decision determines which party receives the disputed funds and records the final admin explanation."
             rows={[
+              {
+                label: "Case",
+                value: formatReference(resolveTarget.disputeId || resolveTarget.id, "DSP"),
+              },
               { label: "Project", value: resolveTarget.projectTitle },
               { label: "Client", value: resolveTarget.clientName },
               { label: "Expert", value: resolveTarget.expertName },
@@ -424,7 +430,11 @@ export default function ManageDisputesPage() {
                 value: resolveForm.adminDecision.trim(),
               },
             ]}
-            warning="This is a financial decision. Verify the evidence, amount, recipient, and explanation before continuing."
+            warning={
+              resolveForm.resolutionType === "RELEASE_TO_EXPERT"
+                ? "This releases the disputed milestone to the expert. The project will wait for the client to choose Continue Project or End Contract."
+                : "This refunds the client and ends the project. Remaining locked escrow will be returned according to backend flow."
+            }
             confirmLabel="Confirm Resolution"
             tone={
               resolveForm.resolutionType === "RELEASE_TO_EXPERT"
@@ -647,6 +657,7 @@ function DisputeRow({
   onResolve,
 }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
+  const disputeReference = formatReference(dispute.disputeId || dispute.id, "DSP");
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
     status
   );
@@ -658,6 +669,9 @@ function DisputeRow({
           <div className="min-w-0">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <StatusBadge status={status} />
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-400">
+                {disputeReference}
+              </span>
             </div>
 
             <h3 className="line-clamp-1 font-bold text-white">
@@ -681,7 +695,7 @@ function DisputeRow({
             value={formatMoney(dispute.disputedAmount)}
           />
 
-          <CompactInfo label="Created" value={formatDate(dispute.createdAt)} />
+          <CompactInfo label="Opened" value={formatDate(dispute.createdAt)} />
 
           <div className="flex flex-col gap-2 sm:flex-row xl:justify-end">
             <button
@@ -729,6 +743,13 @@ function DisputeRow({
             {dispute.adminDecision}
           </div>
         )}
+
+        {!expanded && dispute.requiresClientDecision && (
+          <div className="mt-3 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-100/80">
+            <span className="font-bold text-yellow-200">Next step:</span>{" "}
+            Waiting for the client to choose Continue Project or End Contract.
+          </div>
+        )}
       </div>
     </article>
   );
@@ -748,6 +769,7 @@ function CompactInfo({ label, value }) {
 // ===== Expanded dispute detail: evidence grouped into submissions =====
 function InlineDisputeDetail({ dispute, loading, onResolve }) {
   const status = String(dispute.status || "OPEN").toUpperCase();
+  const disputeReference = formatReference(dispute.disputeId || dispute.id, "DSP");
   const canResolve = ["OPEN", "UNDER_REVIEW", "PENDING", "IN_REVIEW"].includes(
     status
   );
@@ -782,6 +804,10 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
               <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">
                 Case review
               </p>
+
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
+                {disputeReference}
+              </span>
 
               <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
                 {evidenceSubmissions.length} submission
@@ -885,17 +911,32 @@ function InlineDisputeDetail({ dispute, loading, onResolve }) {
               </div>
             </div>
 
+            <InfoBox label="Case reference" value={disputeReference} />
             <InfoBox label="Status" value={formatLabel(status)} />
             <InfoBox
-              label="Total amount"
+              label="Disputed funds"
               value={formatMoney(dispute.disputedAmount)}
             />
-            <InfoBox label="Created" value={formatDate(dispute.createdAt)} />
+            <InfoBox label="Opened" value={formatDate(dispute.createdAt)} />
             <InfoBox label="Client" value={dispute.clientName || "Client"} />
             <InfoBox label="Expert" value={dispute.expertName || "Expert"} />
 
             {dispute.milestoneTitle && (
               <InfoBox label="Milestone" value={dispute.milestoneTitle} />
+            )}
+
+            {dispute.requiresClientDecision && (
+              <InfoBox
+                label="Next step"
+                value="Client must choose Continue Project or End Contract"
+              />
+            )}
+
+            {dispute.postResolutionDecision && (
+              <InfoBox
+                label="Client decision"
+                value={formatLabel(dispute.postResolutionDecision)}
+              />
             )}
           </div>
 
@@ -958,6 +999,7 @@ function ResolveDisputeModal({
         <div className="border-b border-white/10 px-6 py-5">
           <h2 className="text-xl font-bold text-white">Resolve dispute case</h2>
           <p className="mt-1 text-sm text-gray-400">
+            {formatReference(dispute.disputeId || dispute.id, "DSP")} ·{" "}
             {dispute.projectTitle || "Project"}
           </p>
         </div>
@@ -1529,6 +1571,16 @@ function formatLabel(value) {
     .replaceAll("_", " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatReference(value, prefix = "REF") {
+  const raw = String(value || "").trim();
+  if (!raw) return "N/A";
+
+  const clean = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const compact = clean.length > 6 ? clean.slice(-6) : clean;
+
+  return `${prefix}-${compact || raw.toUpperCase()}`;
 }
 
 function getFriendlyError(err, fallback = "Something went wrong.") {

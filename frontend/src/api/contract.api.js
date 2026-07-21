@@ -43,10 +43,18 @@ const contractApi = {
 
   /**
    * CLIENT or EXPERT.
-   * POST /api/contracts/{contractId}/cancel
+   * POST /api/contracts/{contractId}/cancel-draft
    */
-  cancelContract(contractId, data) {
-    return axiosInstance.post(`/contracts/${contractId}/cancel`, data);
+  cancelDraftContract(contractId, data = {}) {
+    return axiosInstance.post(`/contracts/${contractId}/cancel-draft`, data);
+  },
+
+  /**
+   * CLIENT or EXPERT.
+   * POST /api/contracts/{contractId}/decline-deal
+   */
+  declineContractDeal(contractId, data = {}) {
+    return axiosInstance.post(`/contracts/${contractId}/decline-deal`, data);
   },
 };
 

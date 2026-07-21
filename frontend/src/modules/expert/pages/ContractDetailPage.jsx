@@ -42,6 +42,9 @@ export default function ContractDetailPage() {
     return canAcceptContract(status, contract) || canDeclineContract(status, contract);
   }, [status, contract, realContractId]);
 
+  const activeSigningDeadline = getActiveSigningDeadline(contract);
+  const contractReference = formatReference(realContractId, "CTR");
+
   const contractTitle = getField(
     contract,
     [
@@ -311,10 +314,10 @@ export default function ContractDetailPage() {
     setError("");
     setConfirmAction({
       type: "accept",
-      title: "Accept this contract?",
+      title: "Sign this contract?",
       message:
-        "By accepting, you confirm the scope, milestones, timeline, and payment terms shown on this page.",
-      confirmLabel: "Accept Contract",
+        "Your signature confirms the contract. Backend will create the project, create all milestones, and lock the full project escrow from the client wallet in one transaction.",
+      confirmLabel: "Sign Contract",
       tone: "success",
     });
   };
@@ -390,7 +393,7 @@ export default function ContractDetailPage() {
       setMessage("");
       setConfirmAction(null);
 
-      const updatedContract = await contractService.cancelContract(
+      const updatedContract = await contractService.declineContractDeal(
         realContractId,
         {
           reason: declineReason.trim(),
@@ -479,6 +482,9 @@ export default function ContractDetailPage() {
               <div>
                 <div className="mb-4 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} contract={contract} />
+                  <span className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold text-gray-400">
+                    {contractReference}
+                  </span>
                 </div>
 
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-[#00F0FF]">
@@ -524,11 +530,20 @@ export default function ContractDetailPage() {
 
                 <p className="mt-2 text-sm leading-6 text-cyan-100/80">
                   {canRespond
-                    ? "The client has sent this contract for your confirmation. Review the scope, milestone plan, payout amount, and deadline before accepting or declining."
+                    ? "The client has signed. Review the scope, milestone plan, payout amount, and deadline before you sign or decline the deal."
                     : isDraftContract(status)
-                      ? "This is still a draft contract. You can review the details."
+                      ? "Waiting for the client signature. You can review the terms, but only the client can sign first."
                       : "This contract is no longer waiting for your response."}
                 </p>
+
+                {activeSigningDeadline && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-gray-300">
+                    Sign by{" "}
+                    <span className="font-bold text-white">
+                      {formatDate(activeSigningDeadline)}
+                    </span>
+                  </div>
+                )}
 
                 {canRespond && (
                   <div className="mt-4 flex flex-col gap-2">
@@ -540,8 +555,8 @@ export default function ContractDetailPage() {
                         className="rounded-xl border border-green-400/50 bg-green-400/10 px-4 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {actionLoading === "accept"
-                          ? "Accepting..."
-                          : "Accept Contract"}
+                          ? "Signing..."
+                          : "Sign Contract"}
                       </button>
                     )}
 
@@ -564,13 +579,7 @@ export default function ContractDetailPage() {
           {message && <SuccessToast message={message} onClose={() => setMessage("")} />}
           {error && <Alert type="danger" title="Contract error" message={error} />}
 
-          {isContractDeclined(status) && getCancelReason(contract) && (
-            <Alert
-              type="warning"
-              title="Contract declined"
-              message={getCancelReason(contract)}
-            />
-          )}
+          <SigningFlowNotice contract={contract} status={status} />
 
           {showDeclineBox && canDeclineContract(status, contract) && (
             <section className="mb-6 rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
@@ -681,6 +690,7 @@ export default function ContractDetailPage() {
               <PaymentSummary contract={contract} milestones={milestoneDrafts} />
 
               <Card title="Contract details" icon="info">
+                <Info label="Reference" value={contractReference} />
                 <Info label="Status" value={getContractStatusLabel(status, contract)} />
                 <Info label="Client" value={clientName} />
                 <Info
@@ -688,7 +698,7 @@ export default function ContractDetailPage() {
                   value={`${getTimelineDays(contract)} days`}
                 />
                 <Info
-                  label="Created"
+                  label="Offer sent"
                   value={formatDate(
                     getField(contract, ["createdAt", "CreatedAt"], "")
                   )}
@@ -705,7 +715,7 @@ export default function ContractDetailPage() {
                   ""
                 ) && (
                   <Info
-                    label="Response deadline"
+                    label="Sign by"
                     value={formatDate(
                       getField(
                         contract,
@@ -715,6 +725,41 @@ export default function ContractDetailPage() {
                           "signatureDeadlineAt",
                           "SignatureDeadlineAt",
                         ],
+                        ""
+                      )
+                    )}
+                  />
+                )}
+
+                {getField(contract, ["clientSignedAt", "ClientSignedAt"], "") && (
+                  <Info
+                    label="Client signed"
+                    value={formatDate(
+                      getField(contract, ["clientSignedAt", "ClientSignedAt"], "")
+                    )}
+                  />
+                )}
+
+                {getField(contract, ["expertSignedAt", "ExpertSignedAt"], "") && (
+                  <Info
+                    label="Expert signed"
+                    value={formatDate(
+                      getField(contract, ["expertSignedAt", "ExpertSignedAt"], "")
+                    )}
+                  />
+                )}
+
+                {getField(
+                  contract,
+                  ["projectEscrowLockedAt", "ProjectEscrowLockedAt"],
+                  ""
+                ) && (
+                  <Info
+                    label="Funding secured"
+                    value={formatDate(
+                      getField(
+                        contract,
+                        ["projectEscrowLockedAt", "ProjectEscrowLockedAt"],
                         ""
                       )
                     )}
@@ -808,42 +853,185 @@ function SuccessToast({ message, onClose }) {
   );
 }
 
+function SigningFlowNotice({ contract, status }) {
+  const waitingForClient =
+    isDraftContract(status) &&
+    !isClientConfirmed(contract) &&
+    !isContractDeclined(status);
+
+  const waitingForExpert = isWaitingForExpert(status, contract);
+  const confirmed = isContractAccepted(status);
+  const expired = isSigningExpired(contract) && !confirmed;
+
+  if (!waitingForClient && !waitingForExpert && !confirmed && !expired) {
+    return null;
+  }
+
+  const config = expired
+    ? {
+        tone: "red",
+        icon: "timer_off",
+        title: "Signing window expired",
+        message:
+          "This contract signing attempt is no longer active. Backend will cancel the draft and apply miss-signing policy.",
+      }
+    : waitingForClient
+      ? {
+          tone: "yellow",
+          icon: "signature",
+          title: "Waiting for client signature",
+          message:
+            "Client must sign first. Their signature only records intent and checks wallet capacity; it does not lock escrow yet.",
+        }
+      : waitingForExpert
+        ? {
+            tone: "cyan",
+            icon: "edit_square",
+            title: "Your signature is required",
+            message:
+              "When you sign, backend confirms the contract, creates the project and milestones, then locks the full project escrow in one transaction.",
+          }
+        : {
+            tone: "green",
+            icon: "lock",
+            title: "Project escrow is locked",
+            message:
+              "The full project value was locked at contract confirmation. Expert service fee is deducted only from milestones released to you.",
+          };
+
+  const toneClass =
+    config.tone === "green"
+      ? "border-green-400/30 bg-green-400/10 text-green-100"
+      : config.tone === "yellow"
+        ? "border-yellow-400/30 bg-yellow-400/10 text-yellow-100"
+        : config.tone === "red"
+          ? "border-red-400/30 bg-red-400/10 text-red-100"
+          : "border-cyan-400/30 bg-cyan-400/10 text-cyan-100";
+
+  return (
+    <section className={`mb-6 rounded-2xl border px-5 py-4 ${toneClass}`}>
+      <div className="flex gap-3">
+        <span className="material-symbols-outlined mt-0.5 text-[22px]">
+          {config.icon}
+        </span>
+        <div>
+          <p className="text-sm font-black text-white">{config.title}</p>
+          <p className="mt-1 text-sm leading-6 opacity-85">{config.message}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 
 function ContractProgress({ status, contract, projectId }) {
   const accepted = isContractAccepted(status);
   const waiting = isWaitingForExpert(status, contract);
   const declined = isContractDeclined(status);
+  const waitingForClient =
+    isDraftContract(status) &&
+    !isClientConfirmed(contract) &&
+    !declined &&
+    !accepted;
+  const expired = isSigningExpired(contract) && !accepted;
 
   const steps = [
     {
-      label: "Proposal accepted",
-      helper: "The client selected your proposal.",
-      complete: true,
+      label: "Client signature",
+      helper: isClientConfirmed(contract)
+        ? "Client signed and wallet capacity was checked."
+        : expired
+          ? "Client signing window expired."
+          : "Client signs first.",
+      complete: isClientConfirmed(contract),
+      active: waitingForClient,
+      danger: expired && !isClientConfirmed(contract),
     },
     {
-      label: "Contract review",
+      label: "Expert signature",
       helper: waiting
-        ? "Your confirmation is required."
+        ? "Your signature confirms the contract."
         : accepted
-          ? "Contract terms were confirmed."
+          ? "You signed the contract."
           : declined
             ? "The contract was declined."
-            : "The client is preparing the final terms.",
-      complete: waiting || accepted || declined,
+            : expired
+              ? "Expert signing window expired."
+              : "Available after the client signs.",
+      complete: accepted || isExpertConfirmed(contract),
       active: waiting,
-      danger: declined,
+      danger: declined || (expired && isClientConfirmed(contract)),
     },
     {
-      label: "Project workspace",
-      helper: accepted
-        ? projectId
-          ? "Your project workspace is ready."
-          : "The project is being prepared."
-        : "Available after both parties confirm.",
-      complete: accepted,
+      label: "Project escrow",
+      helper:
+        accepted && projectId
+          ? "Project and all milestone escrows are ready."
+          : accepted
+            ? "Project workspace is being prepared."
+            : "Full project escrow locks only after both signatures.",
+      complete: accepted && Boolean(projectId),
       active: accepted,
     },
   ];
+
+  return (
+    <section className="mb-6 rounded-2xl border border-white/10 bg-[#151a22] p-5">
+      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-black text-white">Signing progress</h2>
+          <p className="mt-1 text-sm text-gray-500">
+            Contract moves to project only after client and expert signatures.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {steps.map((step, index) => (
+          <div
+            key={step.label}
+            className={`rounded-xl border p-4 ${
+              step.danger
+                ? "border-red-400/30 bg-red-400/10"
+                : step.complete
+                  ? "border-green-400/30 bg-green-400/10"
+                  : step.active
+                    ? "border-cyan-400/30 bg-cyan-400/10"
+                    : "border-white/10 bg-white/[0.03]"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div
+                className={`flex h-9 w-9 items-center justify-center rounded-full border text-sm font-black ${
+                  step.danger
+                    ? "border-red-400/30 text-red-300"
+                    : step.complete
+                      ? "border-green-400/30 text-green-300"
+                      : step.active
+                        ? "border-cyan-400/30 text-cyan-300"
+                        : "border-white/10 text-gray-500"
+                }`}
+              >
+                {step.complete ? (
+                  <span className="material-symbols-outlined text-[18px]">
+                    check
+                  </span>
+                ) : (
+                  index + 1
+                )}
+              </div>
+
+              <p className="font-bold text-white">{step.label}</p>
+            </div>
+
+            <p className="mt-3 text-sm leading-6 text-gray-400">
+              {step.helper}
+            </p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 // ===== Confirmation modal used by accept/decline actions =====
@@ -950,7 +1138,7 @@ function PaymentSummary({ contract, milestones = [] }) {
           <div>
             <h2 className="font-extrabold text-white">Your net earnings</h2>
             <p className="mt-1 text-xs text-green-100/70">
-              Estimated amount you receive after the expert service fee is deducted.
+              Estimated amount after service fee. The fee is deducted only when each milestone is released.
             </p>
           </div>
         </div>
@@ -978,7 +1166,7 @@ function PaymentSummary({ contract, milestones = [] }) {
           />
 
           <PaymentRow
-            label={`Expert service fee${
+            label={`Service fee${
               expertFeeRate > 0 ? ` (${formatPercentage(expertFeeRate)})` : ""
             }`}
             value={`-${formatMoney(expertServiceFee)}`}
@@ -1129,7 +1317,7 @@ function MilestoneDraftCard({
 
           <div className="rounded-lg border border-white/10 bg-black/20 p-3">
             <p className="text-gray-500">
-              Expert service fee
+              Service fee
               {expertFeeRate > 0
                 ? ` (${formatPercentage(expertFeeRate)})`
                 : ""}
@@ -1365,6 +1553,8 @@ function getCancelReason(contract) {
   return getField(
     contract,
     [
+      "cancelledReason",
+      "CancelledReason",
       "cancelReason",
       "CancelReason",
       "cancellationReason",
@@ -1374,6 +1564,46 @@ function getCancelReason(contract) {
     ],
     ""
   );
+}
+
+function getActiveSigningDeadline(contract) {
+  if (!contract) return "";
+
+  if (!isClientConfirmed(contract)) {
+    return getField(
+      contract,
+      ["clientSignDeadlineAt", "ClientSignDeadlineAt", "signDeadlineAt", "SignDeadlineAt"],
+      ""
+    );
+  }
+
+  if (!isExpertConfirmed(contract)) {
+    return getField(
+      contract,
+      ["expertSignDeadlineAt", "ExpertSignDeadlineAt", "signDeadlineAt", "SignDeadlineAt"],
+      ""
+    );
+  }
+
+  return "";
+}
+
+function isSigningExpired(contract) {
+  const explicitExpiredAt = getField(
+    contract,
+    ["signExpiredAt", "SignExpiredAt"],
+    ""
+  );
+
+  if (explicitExpiredAt) return true;
+
+  const deadline = getActiveSigningDeadline(contract);
+  if (!deadline) return false;
+
+  const date = new Date(deadline);
+  if (Number.isNaN(date.getTime())) return false;
+
+  return date.getTime() < Date.now();
 }
 
 function getMilestonesFromContract(contract) {
@@ -1598,11 +1828,11 @@ function isContractDeclined(status) {
 }
 
 function canAcceptContract(status, contract) {
-  return isWaitingForExpert(status, contract);
+  return isWaitingForExpert(status, contract) && !isSigningExpired(contract);
 }
 
 function canDeclineContract(status, contract) {
-  return isWaitingForExpert(status, contract);
+  return isWaitingForExpert(status, contract) && !isSigningExpired(contract);
 }
 
 function getContractStatusLabel(status, contract) {
@@ -1690,6 +1920,16 @@ function formatDisplayValue(value) {
   }
 
   return String(value);
+}
+
+function formatReference(value, prefix = "REF") {
+  const raw = String(value || "").trim();
+  if (!raw) return "N/A";
+
+  const clean = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const compact = clean.length > 6 ? clean.slice(-6) : clean;
+
+  return `${prefix}-${compact || raw.toUpperCase()}`;
 }
 
 function getFriendlyError(error, fallback = "Something went wrong.") {

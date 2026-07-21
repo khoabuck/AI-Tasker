@@ -1,6 +1,8 @@
 import adminDisputeApi from "../api/adminDispute.api";
-
 import { compareDateAsc, compareDateDesc } from "../utils/dateTime.utils";
+
+const RESOLUTION_TYPES = ["RELEASE_TO_EXPERT", "REFUND_TO_CLIENT"];
+
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -8,6 +10,33 @@ const getValue = (...values) => {
 };
 
 const trim = (value) => String(value || "").trim();
+
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+
+  return fallback;
+};
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
+};
 
 const unwrapData = (response) => {
   const data = response?.data;
@@ -45,11 +74,7 @@ const unwrapListData = (response) => {
 
 const normalizeResolutionType = (value) => {
   const type = String(value || "").trim().toUpperCase();
-
-  if (type === "RELEASE_TO_EXPERT") return "RELEASE_TO_EXPERT";
-  if (type === "REFUND_TO_CLIENT") return "REFUND_TO_CLIENT";
-
-  return "RELEASE_TO_EXPERT";
+  return RESOLUTION_TYPES.includes(type) ? type : "";
 };
 
 const normalizeEvidence = (evidence) => {
@@ -67,9 +92,7 @@ const normalizeEvidence = (evidence) => {
   return {
     evidenceId,
     id: evidenceId,
-
     disputeId: getValue(evidence.disputeId, evidence.DisputeId, null),
-
     uploadedByUserId: getValue(
       evidence.uploadedByUserId,
       evidence.UploadedByUserId,
@@ -77,7 +100,6 @@ const normalizeEvidence = (evidence) => {
       evidence.UserId,
       null
     ),
-
     uploadedByName: getValue(
       evidence.uploadedByName,
       evidence.UploadedByName,
@@ -85,7 +107,6 @@ const normalizeEvidence = (evidence) => {
       evidence.UserName,
       "User"
     ),
-
     evidenceText: getValue(
       evidence.evidenceText,
       evidence.EvidenceText,
@@ -97,7 +118,6 @@ const normalizeEvidence = (evidence) => {
       evidence.Text,
       ""
     ),
-
     fileUrl: getValue(
       evidence.fileUrl,
       evidence.FileUrl,
@@ -107,7 +127,6 @@ const normalizeEvidence = (evidence) => {
       evidence.Url,
       ""
     ),
-
     imageUrl: getValue(
       evidence.imageUrl,
       evidence.ImageUrl,
@@ -115,9 +134,7 @@ const normalizeEvidence = (evidence) => {
       evidence.EvidenceImageUrl,
       ""
     ),
-
     createdAt: getValue(evidence.createdAt, evidence.CreatedAt, ""),
-
     raw: evidence,
   };
 };
@@ -133,12 +150,7 @@ const normalizeDispute = (dispute) => {
   );
 
   const projectId = getValue(dispute.projectId, dispute.ProjectId, null);
-
-  const milestoneId = getValue(
-    dispute.milestoneId,
-    dispute.MilestoneId,
-    null
-  );
+  const milestoneId = getValue(dispute.milestoneId, dispute.MilestoneId, null);
 
   const status = String(getValue(dispute.status, dispute.Status, "OPEN"))
     .trim()
@@ -155,9 +167,19 @@ const normalizeDispute = (dispute) => {
   return {
     disputeId,
     id: disputeId,
-
     projectId,
     milestoneId,
+    deliverableId: getValue(dispute.deliverableId, dispute.DeliverableId, null),
+    deliverableVersionNumber: getValue(
+      dispute.deliverableVersionNumber,
+      dispute.DeliverableVersionNumber,
+      null
+    ),
+    deliverableStatus: getValue(
+      dispute.deliverableStatus,
+      dispute.DeliverableStatus,
+      ""
+    ),
 
     projectTitle: getValue(
       dispute.projectTitle,
@@ -166,7 +188,6 @@ const normalizeDispute = (dispute) => {
       dispute.Project?.Title,
       projectId ? `Project #${projectId}` : "Project"
     ),
-
     milestoneTitle: getValue(
       dispute.milestoneTitle,
       dispute.MilestoneTitle,
@@ -175,6 +196,12 @@ const normalizeDispute = (dispute) => {
       milestoneId ? `Milestone #${milestoneId}` : ""
     ),
 
+    clientProfileId: getValue(
+      dispute.clientProfileId,
+      dispute.ClientProfileId,
+      null
+    ),
+    clientUserId: getValue(dispute.clientUserId, dispute.ClientUserId, null),
     clientName: getValue(
       dispute.clientName,
       dispute.ClientName,
@@ -182,7 +209,12 @@ const normalizeDispute = (dispute) => {
       dispute.Client?.FullName,
       "Client"
     ),
-
+    expertProfileId: getValue(
+      dispute.expertProfileId,
+      dispute.ExpertProfileId,
+      null
+    ),
+    expertUserId: getValue(dispute.expertUserId, dispute.ExpertUserId, null),
     expertName: getValue(
       dispute.expertName,
       dispute.ExpertName,
@@ -196,13 +228,11 @@ const normalizeDispute = (dispute) => {
       dispute.OpenedByUserId,
       null
     ),
-
     respondentUserId: getValue(
       dispute.respondentUserId,
       dispute.RespondentUserId,
       null
     ),
-
     openedByName: getValue(
       dispute.openedByName,
       dispute.OpenedByName,
@@ -210,7 +240,6 @@ const normalizeDispute = (dispute) => {
       dispute.OpenedBy?.FullName,
       "User"
     ),
-
     respondentName: getValue(
       dispute.respondentName,
       dispute.RespondentName,
@@ -221,13 +250,7 @@ const normalizeDispute = (dispute) => {
 
     reason: getValue(dispute.reason, dispute.Reason, ""),
     description: getValue(dispute.description, dispute.Description, ""),
-
-    evidenceText: getValue(
-      dispute.evidenceText,
-      dispute.EvidenceText,
-      ""
-    ),
-
+    evidenceText: getValue(dispute.evidenceText, dispute.EvidenceText, ""),
     fileUrl: getValue(
       dispute.fileUrl,
       dispute.FileUrl,
@@ -235,7 +258,6 @@ const normalizeDispute = (dispute) => {
       dispute.EvidenceFileUrl,
       ""
     ),
-
     imageUrl: getValue(
       dispute.imageUrl,
       dispute.ImageUrl,
@@ -244,26 +266,43 @@ const normalizeDispute = (dispute) => {
       ""
     ),
 
-    disputedAmount: Number(
+    disputedAmount: toNumber(
       getValue(dispute.disputedAmount, dispute.DisputedAmount, 0)
     ),
-
     status,
-
-    resolutionType: getValue(
-      dispute.resolutionType,
-      dispute.ResolutionType,
-      ""
+    resolutionType: normalizeResolutionType(
+      getValue(dispute.resolutionType, dispute.ResolutionType, "")
     ),
-
     adminDecision: getValue(
       dispute.adminDecision,
       dispute.AdminDecision,
       ""
     ),
-
     createdAt: getValue(dispute.createdAt, dispute.CreatedAt, ""),
     resolvedAt: getValue(dispute.resolvedAt, dispute.ResolvedAt, ""),
+
+    requiresClientDecision: toBoolean(
+      getValue(
+        dispute.requiresClientDecision,
+        dispute.RequiresClientDecision,
+        false
+      )
+    ),
+    postResolutionDecision: getValue(
+      dispute.postResolutionDecision,
+      dispute.PostResolutionDecision,
+      ""
+    ),
+    postResolutionDecisionAt: getValue(
+      dispute.postResolutionDecisionAt,
+      dispute.PostResolutionDecisionAt,
+      ""
+    ),
+    postResolutionDecisionByUserId: getValue(
+      dispute.postResolutionDecisionByUserId,
+      dispute.PostResolutionDecisionByUserId,
+      null
+    ),
 
     evidences: Array.isArray(evidencesRaw)
       ? evidencesRaw
@@ -271,16 +310,32 @@ const normalizeDispute = (dispute) => {
           .filter(Boolean)
           .sort((a, b) => compareDateAsc(a.createdAt, b.createdAt))
       : [],
-
     raw: dispute,
   };
 };
 
-const buildResolvePayload = (formData) => {
+const buildResolvePayload = (formData = {}) => {
+  const resolutionType = normalizeResolutionType(formData.resolutionType);
+  const adminDecision = trim(formData.adminDecision);
+
+  if (!resolutionType) {
+    throw new Error("Resolution type must be RELEASE_TO_EXPERT or REFUND_TO_CLIENT.");
+  }
+
+  if (!adminDecision) {
+    throw new Error("Admin decision is required.");
+  }
+
   return {
-    resolutionType: normalizeResolutionType(formData.resolutionType),
-    adminDecision: trim(formData.adminDecision),
+    resolutionType,
+    adminDecision,
   };
+};
+
+const ensureId = (id, message) => {
+  if (isInvalidId(id)) {
+    throw new Error(message);
+  }
 };
 
 const adminDisputeService = {
@@ -299,22 +354,16 @@ const adminDisputeService = {
   },
 
   async getDisputeById(disputeId) {
-    if (!disputeId || disputeId === "undefined" || disputeId === "null") {
-      throw new Error("Invalid dispute id.");
-    }
+    ensureId(disputeId, "Invalid dispute id.");
 
     const response = await adminDisputeApi.getDisputeById(disputeId);
-
     return normalizeDispute(unwrapData(response));
   },
 
   async resolveDispute(disputeId, formData) {
-    if (!disputeId || disputeId === "undefined" || disputeId === "null") {
-      throw new Error("Invalid dispute id.");
-    }
+    ensureId(disputeId, "Invalid dispute id.");
 
     const payload = buildResolvePayload(formData);
-
     const response = await adminDisputeApi.resolveDispute(disputeId, payload);
 
     return normalizeDispute(unwrapData(response));

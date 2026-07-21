@@ -400,6 +400,11 @@ export default function DisputeDetailPage() {
     );
   }
 
+  const disputeReference = formatReference(
+    dispute.disputeId || dispute.id || disputeId,
+    "DSP"
+  );
+
   return (
     <ExpertLayout>
       <div className="overflow-x-hidden px-4 py-5 md:px-6">
@@ -427,6 +432,9 @@ export default function DisputeDetailPage() {
                       Dispute
                     </p>
                     <StatusBadge status={status} />
+                    <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-gray-400">
+                      {disputeReference}
+                    </span>
                   </div>
 
                   <h1 className="break-words text-xl font-black leading-tight text-white md:text-2xl">
@@ -459,7 +467,7 @@ export default function DisputeDetailPage() {
                       }
                       className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
-                      Project
+                      View Project
                     </button>
                   )}
 
@@ -471,7 +479,7 @@ export default function DisputeDetailPage() {
                       }
                       className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-xs font-bold text-gray-300 transition hover:border-white/20 hover:text-white"
                     >
-                      Milestone
+                      View Milestone
                     </button>
                   )}
 
@@ -495,7 +503,7 @@ export default function DisputeDetailPage() {
                 value={formatMoney(dispute.disputedAmount)}
               />
               <HeroInfo
-                label="Milestone"
+                label="Scope"
                 value={
                   dispute.milestoneId
                     ? dispute.milestoneTitle || "Milestone"
@@ -514,6 +522,8 @@ export default function DisputeDetailPage() {
           {error && (
             <Alert type="danger" title="Dispute error" message={error} />
           )}
+
+          <PostResolutionNotice dispute={dispute} />
 
           <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
             <main className="min-w-0 space-y-4">
@@ -590,16 +600,13 @@ export default function DisputeDetailPage() {
 
             <aside className="min-w-0 space-y-4">
               <Card title="Summary" icon="summarize">
+                <Info label="Case reference" value={disputeReference} />
                 <Info
                   label="Status"
                   value={DISPUTE_STATUS_LABEL[status] || status}
                 />
                 <Info
-                  label="Project"
-                  value={dispute.projectTitle || "Project"}
-                />
-                <Info
-                  label="Dispute at"
+                  label="Scope"
                   value={
                     dispute.milestoneId
                       ? dispute.milestoneTitle || "Milestone"
@@ -607,15 +614,22 @@ export default function DisputeDetailPage() {
                   }
                 />
                 <Info
-                  label="Amount"
+                  label="Disputed amount"
                   value={formatMoney(dispute.disputedAmount)}
                 />
-                <Info label="Created" value={formatDate(dispute.createdAt)} />
+                <Info label="Opened" value={formatDate(dispute.createdAt)} />
 
                 {resolved && (
                   <Info
                     label="Resolved"
                     value={formatDate(dispute.resolvedAt)}
+                  />
+                )}
+
+                {dispute.postResolutionDecision && (
+                  <Info
+                    label="Post-dispute decision"
+                    value={formatStatusLabel(dispute.postResolutionDecision)}
                   />
                 )}
               </Card>
@@ -1297,6 +1311,45 @@ function StatusBadge({ status }) {
   );
 }
 
+function PostResolutionNotice({ dispute }) {
+  if (!dispute?.requiresClientDecision && !dispute?.postResolutionDecision) {
+    return null;
+  }
+
+  const decided = Boolean(dispute?.postResolutionDecision);
+
+  const title = decided
+    ? "Client post-dispute decision recorded"
+    : "Waiting for client decision";
+
+  const message = decided
+    ? `Client chose ${formatStatusLabel(
+        dispute.postResolutionDecision
+      )}. The project state will follow that decision.`
+    : "Admin released the disputed milestone to the expert. The client must choose Continue Project or End Contract before the project can leave disputed status.";
+
+  return (
+    <section className="mb-4 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4">
+      <div className="flex gap-3">
+        <span className="material-symbols-outlined mt-0.5 text-yellow-300">
+          pending_actions
+        </span>
+        <div>
+          <p className="text-sm font-black text-white">{title}</p>
+          <p className="mt-1 text-sm leading-6 text-yellow-100/80">
+            {message}
+          </p>
+          {dispute.postResolutionDecisionAt && (
+            <p className="mt-2 text-xs font-semibold text-yellow-100/65">
+              Decision time: {formatDate(dispute.postResolutionDecisionAt)}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Alert({ type, title, message }) {
   const style =
     type === "success"
@@ -1348,6 +1401,16 @@ function formatStatusLabel(status) {
     .replace(/_/g, " ")
     .toLowerCase()
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function formatReference(value, prefix = "REF") {
+  const raw = String(value || "").trim();
+  if (!raw) return "N/A";
+
+  const clean = raw.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const compact = clean.length > 6 ? clean.slice(-6) : clean;
+
+  return `${prefix}-${compact || raw.toUpperCase()}`;
 }
 
 function getFriendlyError(err, fallback) {

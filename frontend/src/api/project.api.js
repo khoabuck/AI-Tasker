@@ -20,6 +20,14 @@ const projectApi = {
   completeCheck(projectId) {
     return axiosInstance.post(`/projects/${projectId}/complete-check`);
   },
+
+  continueAfterDispute(projectId) {
+    return axiosInstance.post(`/projects/${projectId}/continue-after-dispute`);
+  },
+
+  endAfterDispute(projectId) {
+    return axiosInstance.post(`/projects/${projectId}/end-after-dispute`);
+  },
 };
 
 export default projectApi;

@@ -1,33 +1,48 @@
 import disputeApi from "../api/dispute.api";
-
-import {
-  compareDateAsc,
-  compareDateDesc,
-} from "../utils/dateTime.utils";
+import { compareDateAsc, compareDateDesc } from "../utils/dateTime.utils";
 
 const getValue = (...values) => {
   return values.find(
-    (value) =>
-      value !== undefined &&
-      value !== null &&
-      value !== ""
+    (value) => value !== undefined && value !== null && value !== ""
   );
 };
 
 const trim = (value) => String(value || "").trim();
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
 const toNumberOrNull = (value) => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
+  if (value === undefined || value === null || value === "") {
     return null;
   }
 
   const number = Number(value);
-
   return Number.isNaN(number) ? null : number;
+};
+
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+
+  return fallback;
+};
+
+const isInvalidId = (value) => {
+  return (
+    value === undefined ||
+    value === null ||
+    value === "" ||
+    value === "undefined" ||
+    value === "null"
+  );
 };
 
 const unwrapData = (response) => {
@@ -38,7 +53,7 @@ const unwrapData = (response) => {
   if (data?.data?.dispute) return data.data.dispute;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
+  if (data?.data !== undefined) return data.data;
 
   if (data?.dispute) return data.dispute;
   if (data?.item) return data.item;
@@ -55,21 +70,11 @@ const unwrapListData = (response) => {
   if (Array.isArray(data?.data)) return data.data;
   if (Array.isArray(data?.items)) return data.items;
   if (Array.isArray(data?.result)) return data.result;
-  if (Array.isArray(data?.disputes)) {
-    return data.disputes;
-  }
+  if (Array.isArray(data?.disputes)) return data.disputes;
 
-  if (Array.isArray(data?.data?.items)) {
-    return data.data.items;
-  }
-
-  if (Array.isArray(data?.data?.result)) {
-    return data.data.result;
-  }
-
-  if (Array.isArray(data?.data?.disputes)) {
-    return data.data.disputes;
-  }
+  if (Array.isArray(data?.data?.items)) return data.data.items;
+  if (Array.isArray(data?.data?.result)) return data.data.result;
+  if (Array.isArray(data?.data?.disputes)) return data.data.disputes;
 
   return [];
 };
@@ -79,6 +84,8 @@ const normalizeEvidence = (evidence) => {
 
   const evidenceId = getValue(
     evidence.evidenceId,
+    evidence.disputeEvidenceId,
+    evidence.DisputeEvidenceId,
     evidence.EvidenceId,
     evidence.id,
     evidence.Id
@@ -87,13 +94,7 @@ const normalizeEvidence = (evidence) => {
   return {
     evidenceId,
     id: evidenceId,
-
-    disputeId: getValue(
-      evidence.disputeId,
-      evidence.DisputeId,
-      null
-    ),
-
+    disputeId: getValue(evidence.disputeId, evidence.DisputeId, null),
     uploadedByUserId: getValue(
       evidence.uploadedByUserId,
       evidence.UploadedByUserId,
@@ -101,7 +102,6 @@ const normalizeEvidence = (evidence) => {
       evidence.UserId,
       null
     ),
-
     uploadedByName: getValue(
       evidence.uploadedByName,
       evidence.UploadedByName,
@@ -109,15 +109,17 @@ const normalizeEvidence = (evidence) => {
       evidence.UserName,
       "User"
     ),
-
     evidenceText: getValue(
       evidence.evidenceText,
       evidence.EvidenceText,
+      evidence.description,
+      evidence.Description,
+      evidence.note,
+      evidence.Note,
       evidence.text,
       evidence.Text,
       ""
     ),
-
     fileUrl: getValue(
       evidence.fileUrl,
       evidence.FileUrl,
@@ -125,9 +127,10 @@ const normalizeEvidence = (evidence) => {
       evidence.EvidenceFileUrl,
       evidence.evidenceUrl,
       evidence.EvidenceUrl,
+      evidence.url,
+      evidence.Url,
       ""
     ),
-
     imageUrl: getValue(
       evidence.imageUrl,
       evidence.ImageUrl,
@@ -135,13 +138,7 @@ const normalizeEvidence = (evidence) => {
       evidence.EvidenceImageUrl,
       ""
     ),
-
-    createdAt: getValue(
-      evidence.createdAt,
-      evidence.CreatedAt,
-      ""
-    ),
-
+    createdAt: getValue(evidence.createdAt, evidence.CreatedAt, ""),
     raw: evidence,
   };
 };
@@ -156,25 +153,10 @@ const normalizeDispute = (dispute) => {
     dispute.Id
   );
 
-  const projectId = getValue(
-    dispute.projectId,
-    dispute.ProjectId,
-    null
-  );
+  const projectId = getValue(dispute.projectId, dispute.ProjectId, null);
+  const milestoneId = getValue(dispute.milestoneId, dispute.MilestoneId, null);
 
-  const milestoneId = getValue(
-    dispute.milestoneId,
-    dispute.MilestoneId,
-    null
-  );
-
-  const status = String(
-    getValue(
-      dispute.status,
-      dispute.Status,
-      "OPEN"
-    )
-  )
+  const status = String(getValue(dispute.status, dispute.Status, "OPEN"))
     .trim()
     .toUpperCase();
 
@@ -189,26 +171,60 @@ const normalizeDispute = (dispute) => {
   return {
     disputeId,
     id: disputeId,
-
     projectId,
     milestoneId,
+    deliverableId: getValue(dispute.deliverableId, dispute.DeliverableId, null),
+    deliverableVersionNumber: getValue(
+      dispute.deliverableVersionNumber,
+      dispute.DeliverableVersionNumber,
+      null
+    ),
+    deliverableStatus: getValue(
+      dispute.deliverableStatus,
+      dispute.DeliverableStatus,
+      ""
+    ),
 
     projectTitle: getValue(
       dispute.projectTitle,
       dispute.ProjectTitle,
       dispute.project?.title,
       dispute.Project?.Title,
-      `Project #${projectId || ""}`
+      projectId ? `Project #${projectId}` : "Project"
     ),
-
     milestoneTitle: getValue(
       dispute.milestoneTitle,
       dispute.MilestoneTitle,
       dispute.milestone?.title,
       dispute.Milestone?.Title,
-      milestoneId
-        ? `Milestone #${milestoneId}`
-        : ""
+      milestoneId ? `Milestone #${milestoneId}` : ""
+    ),
+
+    clientProfileId: getValue(
+      dispute.clientProfileId,
+      dispute.ClientProfileId,
+      null
+    ),
+    clientUserId: getValue(dispute.clientUserId, dispute.ClientUserId, null),
+    clientName: getValue(
+      dispute.clientName,
+      dispute.ClientName,
+      dispute.client?.fullName,
+      dispute.Client?.FullName,
+      "Client"
+    ),
+    expertProfileId: getValue(
+      dispute.expertProfileId,
+      dispute.ExpertProfileId,
+      null
+    ),
+    expertUserId: getValue(dispute.expertUserId, dispute.ExpertUserId, null),
+    expertName: getValue(
+      dispute.expertName,
+      dispute.ExpertName,
+      dispute.expert?.fullName,
+      dispute.Expert?.FullName,
+      "Expert"
     ),
 
     openedByUserId: getValue(
@@ -216,13 +232,11 @@ const normalizeDispute = (dispute) => {
       dispute.OpenedByUserId,
       null
     ),
-
     respondentUserId: getValue(
       dispute.respondentUserId,
       dispute.RespondentUserId,
       null
     ),
-
     openedByName: getValue(
       dispute.openedByName,
       dispute.OpenedByName,
@@ -230,7 +244,6 @@ const normalizeDispute = (dispute) => {
       dispute.OpenedBy?.FullName,
       "User"
     ),
-
     respondentName: getValue(
       dispute.respondentName,
       dispute.RespondentName,
@@ -239,18 +252,9 @@ const normalizeDispute = (dispute) => {
       "Respondent"
     ),
 
-    reason: getValue(
-      dispute.reason,
-      dispute.Reason,
-      ""
-    ),
-
-    evidenceText: getValue(
-      dispute.evidenceText,
-      dispute.EvidenceText,
-      ""
-    ),
-
+    reason: getValue(dispute.reason, dispute.Reason, ""),
+    description: getValue(dispute.description, dispute.Description, ""),
+    evidenceText: getValue(dispute.evidenceText, dispute.EvidenceText, ""),
     fileUrl: getValue(
       dispute.fileUrl,
       dispute.FileUrl,
@@ -260,7 +264,6 @@ const normalizeDispute = (dispute) => {
       dispute.EvidenceUrl,
       ""
     ),
-
     imageUrl: getValue(
       dispute.imageUrl,
       dispute.ImageUrl,
@@ -269,101 +272,72 @@ const normalizeDispute = (dispute) => {
       ""
     ),
 
-    disputedAmount: Number(
-      getValue(
-        dispute.disputedAmount,
-        dispute.DisputedAmount,
-        0
-      )
+    disputedAmount: toNumber(
+      getValue(dispute.disputedAmount, dispute.DisputedAmount, 0)
     ),
-
     status,
-
     resolutionType: getValue(
       dispute.resolutionType,
       dispute.ResolutionType,
       ""
     ),
-
     adminDecision: getValue(
       dispute.adminDecision,
       dispute.AdminDecision,
       ""
     ),
+    createdAt: getValue(dispute.createdAt, dispute.CreatedAt, ""),
+    resolvedAt: getValue(dispute.resolvedAt, dispute.ResolvedAt, ""),
 
-    createdAt: getValue(
-      dispute.createdAt,
-      dispute.CreatedAt,
+    requiresClientDecision: toBoolean(
+      getValue(
+        dispute.requiresClientDecision,
+        dispute.RequiresClientDecision,
+        false
+      )
+    ),
+    postResolutionDecision: getValue(
+      dispute.postResolutionDecision,
+      dispute.PostResolutionDecision,
       ""
     ),
-
-    resolvedAt: getValue(
-      dispute.resolvedAt,
-      dispute.ResolvedAt,
+    postResolutionDecisionAt: getValue(
+      dispute.postResolutionDecisionAt,
+      dispute.PostResolutionDecisionAt,
       ""
+    ),
+    postResolutionDecisionByUserId: getValue(
+      dispute.postResolutionDecisionByUserId,
+      dispute.PostResolutionDecisionByUserId,
+      null
     ),
 
     evidences: Array.isArray(evidencesRaw)
       ? evidencesRaw
           .map(normalizeEvidence)
           .filter(Boolean)
-          .sort((a, b) =>
-            compareDateAsc(
-              a.createdAt,
-              b.createdAt
-            )
-          )
+          .sort((a, b) => compareDateAsc(a.createdAt, b.createdAt))
       : [],
-
     raw: dispute,
   };
 };
 
-const appendIfHasValue = (
-  formData,
-  key,
-  value
-) => {
-  if (
-    value === undefined ||
-    value === null ||
-    value === ""
-  ) {
-    return;
-  }
-
+const appendIfHasValue = (formData, key, value) => {
+  if (value === undefined || value === null || value === "") return;
   formData.append(key, value);
 };
 
-const buildCreateDisputeFormData = (
-  projectId,
-  formData = {}
-) => {
+const buildCreateDisputeFormData = (projectId, formData = {}) => {
   const payload = new FormData();
 
-  appendIfHasValue(
-    payload,
-    "ProjectId",
-    Number(
-      projectId ||
-        formData.projectId
-    )
-  );
+  appendIfHasValue(payload, "ProjectId", Number(projectId || formData.projectId));
 
   if (formData.milestoneId) {
-    appendIfHasValue(
-      payload,
-      "MilestoneId",
-      Number(formData.milestoneId)
-    );
+    appendIfHasValue(payload, "MilestoneId", Number(formData.milestoneId));
   }
 
   if (formData.deliverableId) {
-    appendIfHasValue(
-      payload,
-      "DeliverableId",
-      Number(formData.deliverableId)
-    );
+    appendIfHasValue(payload, "DeliverableId", Number(formData.deliverableId));
   }
 
   if (formData.respondentUserId) {
@@ -374,266 +348,155 @@ const buildCreateDisputeFormData = (
     );
   }
 
-  const disputedAmount =
-    toNumberOrNull(
-      formData.disputedAmount
-    );
-
+  const disputedAmount = toNumberOrNull(formData.disputedAmount);
   if (disputedAmount !== null) {
-    appendIfHasValue(
-      payload,
-      "DisputedAmount",
-      disputedAmount
-    );
+    appendIfHasValue(payload, "DisputedAmount", disputedAmount);
   }
 
-  appendIfHasValue(
-    payload,
-    "Reason",
-    trim(formData.reason)
-  );
-
-  appendIfHasValue(
-    payload,
-    "EvidenceText",
-    trim(formData.evidenceText)
-  );
-
+  appendIfHasValue(payload, "Reason", trim(formData.reason));
+  appendIfHasValue(payload, "EvidenceText", trim(formData.evidenceText));
   appendIfHasValue(
     payload,
     "EvidenceFileUrl",
-    trim(
-      formData.evidenceFileUrl ||
-        formData.fileUrl
-    )
+    trim(formData.evidenceFileUrl || formData.fileUrl)
   );
-
   appendIfHasValue(
     payload,
     "EvidenceImageUrl",
-    trim(
-      formData.evidenceImageUrl ||
-        formData.imageUrl
-    )
+    trim(formData.evidenceImageUrl || formData.imageUrl)
   );
 
-  const images = Array.isArray(
-    formData.images
-  )
+  const images = Array.isArray(formData.images)
     ? formData.images
     : formData.image instanceof File
-      ? [formData.image]
-      : [];
+    ? [formData.image]
+    : [];
 
   images.forEach((image) => {
     if (image instanceof File) {
-      payload.append(
-        "Images",
-        image
-      );
+      payload.append("Images", image);
     }
   });
 
   return payload;
 };
 
-const buildEvidencePayload = (
-  formData = {}
-) => ({
-  evidenceText: trim(
-    formData.evidenceText
-  ),
+const buildEvidencePayload = (formData = {}) => {
+  const payload = {
+    evidenceText: trim(formData.evidenceText),
+    fileUrl: trim(formData.fileUrl) || null,
+    imageUrl: trim(formData.imageUrl) || null,
+  };
 
-  fileUrl:
-    trim(formData.fileUrl) ||
-    null,
+  if (Array.isArray(formData.imageUrls)) {
+    payload.imageUrls = formData.imageUrls
+      .map((url) => trim(url))
+      .filter(Boolean);
+  }
 
-  imageUrl:
-    trim(formData.imageUrl) ||
-    null,
-});
+  return payload;
+};
 
-const buildEvidenceImageFormData = (
-  formData = {}
-) => {
+const buildEvidenceImageFormData = (formData = {}) => {
   const payload = new FormData();
 
-  appendIfHasValue(
-    payload,
-    "EvidenceText",
-    trim(formData.evidenceText)
-  );
+  appendIfHasValue(payload, "EvidenceText", trim(formData.evidenceText));
 
-  const images = Array.isArray(
-    formData.images
-  )
+  const images = Array.isArray(formData.images)
     ? formData.images
     : formData.image instanceof File
-      ? [formData.image]
-      : [];
+    ? [formData.image]
+    : [];
 
   images.forEach((image) => {
     if (image instanceof File) {
-      payload.append(
-        "Images",
-        image
-      );
+      payload.append("Images", image);
     }
   });
 
   return payload;
+};
+
+const ensureId = (id, message) => {
+  if (isInvalidId(id)) {
+    throw new Error(message);
+  }
 };
 
 const disputeService = {
-  async createDispute(
-    projectId,
-    formData
-  ) {
-    const payload =
-      buildCreateDisputeFormData(
-        projectId,
-        formData
-      );
+  async createDispute(projectId, formData) {
+    ensureId(projectId || formData?.projectId, "Invalid project id.");
 
-    const response =
-      await disputeApi.createDispute(
-        payload
-      );
+    const payload = buildCreateDisputeFormData(projectId, formData);
+    const response = await disputeApi.createDispute(payload);
 
-    return normalizeDispute(
-      unwrapData(response)
-    );
+    return normalizeDispute(unwrapData(response));
   },
 
   async getMyDisputes() {
-    const response =
-      await disputeApi.getMyDisputes();
+    const response = await disputeApi.getMyDisputes();
 
     return unwrapListData(response)
       .map(normalizeDispute)
       .filter(Boolean)
       .sort((a, b) =>
         compareDateDesc(
-          a?.resolvedAt ||
-            a?.createdAt,
-          b?.resolvedAt ||
-            b?.createdAt
+          a?.resolvedAt || a?.createdAt,
+          b?.resolvedAt || b?.createdAt
         )
       );
   },
 
-  async getDisputesByProject(
-    projectId
-  ) {
-    const disputes =
-      await this.getMyDisputes();
+  async getDisputesByProject(projectId) {
+    ensureId(projectId, "Invalid project id.");
+
+    const disputes = await this.getMyDisputes();
 
     return disputes.filter(
-      (item) =>
-        String(item.projectId) ===
-        String(projectId)
+      (item) => String(item.projectId) === String(projectId)
     );
   },
 
-  async getDisputeById(
-    disputeId
-  ) {
-    if (
-      !disputeId ||
-      disputeId === "undefined" ||
-      disputeId === "null"
-    ) {
-      throw new Error(
-        "Invalid dispute id."
-      );
-    }
+  async getDisputeById(disputeId) {
+    ensureId(disputeId, "Invalid dispute id.");
 
-    const response =
-      await disputeApi.getDisputeById(
-        disputeId
-      );
-
-    return normalizeDispute(
-      unwrapData(response)
-    );
+    const response = await disputeApi.getDisputeById(disputeId);
+    return normalizeDispute(unwrapData(response));
   },
 
-  async addDisputeEvidence(
-    disputeId,
-    formData
-  ) {
-    if (
-      !disputeId ||
-      disputeId === "undefined" ||
-      disputeId === "null"
-    ) {
-      throw new Error(
-        "Invalid dispute id."
-      );
-    }
+  async addDisputeEvidence(disputeId, formData) {
+    ensureId(disputeId, "Invalid dispute id.");
 
-    const payload =
-      buildEvidencePayload(
-        formData
-      );
+    const payload = buildEvidencePayload(formData);
+    const response = await disputeApi.addDisputeEvidence(disputeId, payload);
 
-    const response =
-      await disputeApi.addDisputeEvidence(
-        disputeId,
-        payload
-      );
-
-    return normalizeDispute(
-      unwrapData(response)
-    );
+    return normalizeDispute(unwrapData(response));
   },
 
-  async addDisputeImageEvidence(
-    disputeId,
-    formData
-  ) {
-    if (
-      !disputeId ||
-      disputeId === "undefined" ||
-      disputeId === "null"
-    ) {
-      throw new Error(
-        "Invalid dispute id."
-      );
-    }
+  async addDisputeImageEvidence(disputeId, formData) {
+    ensureId(disputeId, "Invalid dispute id.");
 
-    const images = Array.isArray(
-      formData?.images
-    )
-      ? formData.images.filter(
-          (image) =>
-            image instanceof File
-        )
+    const images = Array.isArray(formData?.images)
+      ? formData.images.filter((image) => image instanceof File)
       : formData?.image instanceof File
-        ? [formData.image]
-        : [];
+      ? [formData.image]
+      : [];
 
     if (images.length === 0) {
-      throw new Error(
-        "At least one evidence image is required."
-      );
+      throw new Error("At least one evidence image is required.");
     }
 
-    const payload =
-      buildEvidenceImageFormData({
-        ...formData,
-        images,
-      });
+    const payload = buildEvidenceImageFormData({
+      ...formData,
+      images,
+    });
 
-    const response =
-      await disputeApi.addDisputeImageEvidence(
-        disputeId,
-        payload
-      );
-
-    return normalizeDispute(
-      unwrapData(response)
+    const response = await disputeApi.addDisputeImageEvidence(
+      disputeId,
+      payload
     );
+
+    return normalizeDispute(unwrapData(response));
   },
 
   normalizeDispute,

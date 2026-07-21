@@ -1,6 +1,6 @@
 import projectApi from "../api/project.api";
-
 import { compareDateDesc } from "../utils/dateTime.utils";
+
 const getValue = (...values) => {
   return values.find(
     (value) => value !== undefined && value !== null && value !== ""
@@ -16,6 +16,18 @@ const toInteger = (value, fallback = 0) => {
   const number = Number(value);
   if (Number.isNaN(number)) return fallback;
   return Math.trunc(number);
+};
+
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["true", "1", "yes", "y"].includes(normalized)) return true;
+  if (["false", "0", "no", "n"].includes(normalized)) return false;
+
+  return fallback;
 };
 
 const isInvalidId = (value) => {
@@ -36,7 +48,7 @@ const unwrapData = (response) => {
   if (data?.data?.project) return data.data.project;
   if (data?.data?.item) return data.data.item;
   if (data?.data?.result) return data.data.result;
-  if (data?.data) return data.data;
+  if (data?.data !== undefined) return data.data;
 
   if (data?.project) return data.project;
   if (data?.item) return data.item;
@@ -102,12 +114,18 @@ export const normalizeMilestone = (milestone, index = 0) => {
     .trim()
     .toUpperCase();
 
-  const order = toInteger(
+  const paymentStatus = String(
+    getValue(milestone.paymentStatus, milestone.PaymentStatus, "")
+  )
+    .trim()
+    .toUpperCase();
+
+  const orderIndex = toInteger(
     getValue(
-      milestone.order,
-      milestone.Order,
       milestone.orderIndex,
       milestone.OrderIndex,
+      milestone.order,
+      milestone.Order,
       milestone.displayOrder,
       milestone.DisplayOrder,
       index + 1
@@ -115,19 +133,35 @@ export const normalizeMilestone = (milestone, index = 0) => {
     index + 1
   );
 
+  const deadline = getValue(
+    milestone.deadline,
+    milestone.Deadline,
+    milestone.dueDate,
+    milestone.DueDate,
+    milestone.endDate,
+    milestone.EndDate,
+    ""
+  );
+
   return {
     milestoneId,
     id: milestoneId,
     projectId,
 
+    projectTitle: getValue(
+      milestone.projectTitle,
+      milestone.ProjectTitle,
+      milestone.project?.title,
+      milestone.Project?.Title,
+      ""
+    ),
     title: getValue(
       milestone.title,
       milestone.Title,
       milestone.name,
       milestone.Name,
-      `Milestone ${order || index + 1}`
+      `Milestone ${orderIndex || index + 1}`
     ),
-
     description: getValue(
       milestone.description,
       milestone.Description,
@@ -135,13 +169,11 @@ export const normalizeMilestone = (milestone, index = 0) => {
       milestone.ExpectedDeliverable,
       ""
     ),
-
     acceptanceCriteria: getValue(
       milestone.acceptanceCriteria,
       milestone.AcceptanceCriteria,
       ""
     ),
-
     amount: toNumber(
       getValue(
         milestone.amount,
@@ -151,20 +183,10 @@ export const normalizeMilestone = (milestone, index = 0) => {
         milestone.budget,
         milestone.Budget,
         0
-      ),
-      0
+      )
     ),
-
-    dueDate: getValue(
-      milestone.dueDate,
-      milestone.DueDate,
-      milestone.deadline,
-      milestone.Deadline,
-      milestone.endDate,
-      milestone.EndDate,
-      ""
-    ),
-
+    deadline,
+    dueDate: deadline,
     durationDays: toInteger(
       getValue(
         milestone.durationDays,
@@ -172,20 +194,23 @@ export const normalizeMilestone = (milestone, index = 0) => {
         milestone.deadlineOffsetDays,
         milestone.DeadlineOffsetDays,
         0
-      ),
-      0
+      )
     ),
-
-    order,
-    orderIndex: order,
+    revisionUsed: toInteger(
+      getValue(milestone.revisionUsed, milestone.RevisionUsed, 0)
+    ),
+    revisionLimit: toInteger(
+      getValue(milestone.revisionLimit, milestone.RevisionLimit, 0)
+    ),
+    order: orderIndex,
+    orderIndex,
     status,
-
+    paymentStatus,
     escrowStatus: String(
-      getValue(milestone.escrowStatus, milestone.EscrowStatus, "")
+      getValue(milestone.escrowStatus, milestone.EscrowStatus, paymentStatus)
     )
       .trim()
       .toUpperCase(),
-
     deliverableCount: toInteger(
       getValue(
         milestone.deliverableCount,
@@ -193,15 +218,23 @@ export const normalizeMilestone = (milestone, index = 0) => {
         milestone.deliverablesCount,
         milestone.DeliverablesCount,
         0
-      ),
-      0
+      )
     ),
-
     createdAt: getValue(milestone.createdAt, milestone.CreatedAt, ""),
     updatedAt: getValue(milestone.updatedAt, milestone.UpdatedAt, ""),
-
     raw: milestone,
   };
+};
+
+const calculateProgress = (milestones) => {
+  if (!Array.isArray(milestones) || milestones.length === 0) return 0;
+
+  const doneStatuses = ["ACCEPTED", "COMPLETED", "PAID"];
+  const doneCount = milestones.filter((milestone) =>
+    doneStatuses.includes(String(milestone.status || "").toUpperCase())
+  ).length;
+
+  return Math.round((doneCount / milestones.length) * 100);
 };
 
 export const normalizeProject = (project) => {
@@ -228,6 +261,12 @@ export const normalizeProject = (project) => {
     null
   );
 
+  const milestones = Array.isArray(project.milestones)
+    ? project.milestones.map(normalizeMilestone).filter(Boolean)
+    : Array.isArray(project.Milestones)
+    ? project.Milestones.map(normalizeMilestone).filter(Boolean)
+    : [];
+
   const status = String(
     getValue(
       project.status,
@@ -240,17 +279,10 @@ export const normalizeProject = (project) => {
     .trim()
     .toUpperCase();
 
-  const milestones = Array.isArray(project.milestones)
-    ? project.milestones.map(normalizeMilestone).filter(Boolean)
-    : Array.isArray(project.Milestones)
-    ? project.Milestones.map(normalizeMilestone).filter(Boolean)
-    : [];
-
   return {
     projectId,
     id: projectId,
     contractId,
-
     proposalId: getValue(
       project.proposalId,
       project.ProposalId,
@@ -260,7 +292,6 @@ export const normalizeProject = (project) => {
       project.Contract?.ProposalId,
       null
     ),
-
     jobId: getValue(
       project.jobId,
       project.JobId,
@@ -273,6 +304,7 @@ export const normalizeProject = (project) => {
       null
     ),
 
+    jobTitle: getValue(project.jobTitle, project.JobTitle, ""),
     title: getValue(
       project.title,
       project.Title,
@@ -286,7 +318,6 @@ export const normalizeProject = (project) => {
       project.Job?.Title,
       `Project #${projectId || ""}`
     ),
-
     description: getValue(
       project.description,
       project.Description,
@@ -297,6 +328,12 @@ export const normalizeProject = (project) => {
       ""
     ),
 
+    clientProfileId: getValue(
+      project.clientProfileId,
+      project.ClientProfileId,
+      null
+    ),
+    clientUserId: getValue(project.clientUserId, project.ClientUserId, null),
     clientName: getValue(
       project.clientName,
       project.ClientName,
@@ -306,7 +343,18 @@ export const normalizeProject = (project) => {
       project.Client?.Name,
       "Client"
     ),
+    clientAvatarUrl: getValue(
+      project.clientAvatarUrl,
+      project.ClientAvatarUrl,
+      ""
+    ),
 
+    expertProfileId: getValue(
+      project.expertProfileId,
+      project.ExpertProfileId,
+      null
+    ),
+    expertUserId: getValue(project.expertUserId, project.ExpertUserId, null),
     expertName: getValue(
       project.expertName,
       project.ExpertName,
@@ -315,6 +363,11 @@ export const normalizeProject = (project) => {
       project.expert?.name,
       project.Expert?.Name,
       "Expert"
+    ),
+    expertAvatarUrl: getValue(
+      project.expertAvatarUrl,
+      project.ExpertAvatarUrl,
+      ""
     ),
 
     totalBudget: toNumber(
@@ -330,23 +383,41 @@ export const normalizeProject = (project) => {
         project.amount,
         project.Amount,
         0
-      ),
-      0
+      )
     ),
-
+    milestoneTotalAmount: toNumber(
+      getValue(
+        project.milestoneTotalAmount,
+        project.MilestoneTotalAmount,
+        0
+      )
+    ),
+    remainingMilestoneAmount: toNumber(
+      getValue(
+        project.remainingMilestoneAmount,
+        project.RemainingMilestoneAmount,
+        0
+      )
+    ),
     progressPercent: toNumber(
       getValue(
         project.progressPercent,
         project.ProgressPercent,
         project.progress,
         project.Progress,
-        0
-      ),
-      0
+        calculateProgress(milestones)
+      )
     ),
 
+    status,
+    contractStatus: String(
+      getValue(project.contractStatus, project.ContractStatus, "")
+    )
+      .trim()
+      .toUpperCase(),
     startDate: getValue(project.startDate, project.StartDate, ""),
     endDate: getValue(project.endDate, project.EndDate, ""),
+    escrowLockedAt: getValue(project.escrowLockedAt, project.EscrowLockedAt, ""),
     deadline: getValue(
       project.deadline,
       project.Deadline,
@@ -354,9 +425,18 @@ export const normalizeProject = (project) => {
       project.EndDate,
       ""
     ),
-
-    status,
-
+    requiresPostDisputeDecision: toBoolean(
+      getValue(
+        project.requiresPostDisputeDecision,
+        project.RequiresPostDisputeDecision,
+        false
+      )
+    ),
+    latestResolvedDisputeId: getValue(
+      project.latestResolvedDisputeId,
+      project.LatestResolvedDisputeId,
+      null
+    ),
     milestoneCount: toInteger(
       getValue(
         project.milestoneCount,
@@ -367,13 +447,17 @@ export const normalizeProject = (project) => {
       ),
       milestones.length
     ),
-
     createdAt: getValue(project.createdAt, project.CreatedAt, ""),
     updatedAt: getValue(project.updatedAt, project.UpdatedAt, ""),
-
     milestones,
     raw: project,
   };
+};
+
+const ensureId = (id, message) => {
+  if (isInvalidId(id)) {
+    throw new Error(message);
+  }
 };
 
 const projectService = {
@@ -392,19 +476,14 @@ const projectService = {
   },
 
   async getProjectById(projectId) {
-    if (isInvalidId(projectId)) {
-      throw new Error("Invalid project id.");
-    }
+    ensureId(projectId, "Invalid project id.");
 
     const response = await projectApi.getProjectById(projectId);
-
     return normalizeProject(unwrapData(response));
   },
 
   async getProjectMilestones(projectId) {
-    if (isInvalidId(projectId)) {
-      throw new Error("Invalid project id.");
-    }
+    ensureId(projectId, "Invalid project id.");
 
     const response = await projectApi.getProjectMilestones(projectId);
 
@@ -415,23 +494,31 @@ const projectService = {
   },
 
   async createMilestone(projectId, payload) {
-    if (isInvalidId(projectId)) {
-      throw new Error("Invalid project id.");
-    }
+    ensureId(projectId, "Invalid project id.");
 
     const response = await projectApi.createMilestone(projectId, payload);
-
     return normalizeMilestone(unwrapData(response));
   },
 
   async completeCheck(projectId) {
-    if (isInvalidId(projectId)) {
-      throw new Error("Invalid project id.");
-    }
+    ensureId(projectId, "Invalid project id.");
 
     const response = await projectApi.completeCheck(projectId);
-
     return unwrapData(response);
+  },
+
+  async continueAfterDispute(projectId) {
+    ensureId(projectId, "Invalid project id.");
+
+    const response = await projectApi.continueAfterDispute(projectId);
+    return normalizeProject(unwrapData(response));
+  },
+
+  async endAfterDispute(projectId) {
+    ensureId(projectId, "Invalid project id.");
+
+    const response = await projectApi.endAfterDispute(projectId);
+    return normalizeProject(unwrapData(response));
   },
 };
 

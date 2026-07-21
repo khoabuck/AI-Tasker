@@ -49,8 +49,20 @@ const proposalApi = {
     return axiosInstance.post(`/proposals/${proposalId}/resubmit`, data);
   },
 
-  decisionProposal(proposalId, data) {
-    return axiosInstance.post(`/proposals/${proposalId}/decision`, data);
+  decisionProposal(proposalId, decision) {
+    const normalizedDecision =
+      typeof decision === "object" ? decision?.decision : decision;
+
+    return axiosInstance.post(`/proposals/${proposalId}/decision`, null, {
+      params: { decision: normalizedDecision },
+    });
+  },
+
+  declineAcceptedDeal(proposalId, data = {}) {
+    return axiosInstance.post(
+      `/proposals/${proposalId}/decline-accepted-deal`,
+      data
+    );
   },
 
   getWithdrawWarning(proposalId) {
