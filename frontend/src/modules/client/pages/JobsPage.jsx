@@ -3,10 +3,15 @@
 // PUT /api/jobs/{id}/submit  ← submit draft
 // PUT /api/jobs/{id}/cancel  ← cancel job
 // GET /api/jobs/{jobId}/proposals  ← job không tự biết proposal nào ACCEPTED
-//   (đã xác nhận response /jobs/my không có field này) → mỗi job đang OPEN tự
-//   check ngay khi render (không đợi click nữa) để: (1) ẩn 4 nút hành động nếu
-//   đã có proposal ACCEPTED (đang chờ ký / chờ đối phương ký), (2) khi bấm vào
-//   card thì nhảy thẳng vào trang ký hợp đồng của đúng proposal đó.
+// GET /api/proposals/{proposalId}   ← lấy contractId mới nhất nếu list proposals chưa có
+// GET /api/contracts/{contractId}   ← lấy trạng thái contract thật
+//
+// Job OPEN có thể có proposal ACCEPTED.
+// Nhưng proposal ACCEPTED không đồng nghĩa luôn là "Awaiting signature":
+// - ACCEPTED + chưa có contract      → click về Proposal Detail để Create Contract
+// - ACCEPTED + contract DRAFT        → click vào trang ký Contract
+// - ACCEPTED + contract CANCELLED    → click về Proposal Detail để Create Contract Again
+// - ACCEPTED + contract CONFIRMED    → nếu Project ACTIVE thì đi Project
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
@@ -19,6 +24,14 @@ const formatCurrency = (value) => {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+};
+
+const ACCEPTED_DEAL_STATE = {
+  NO_CONTRACT: "NO_CONTRACT",
+  CONTRACT_DRAFT: "CONTRACT_DRAFT",
+  CONTRACT_CANCELLED: "CONTRACT_CANCELLED",
+  PROJECT_ACTIVE: "PROJECT_ACTIVE",
+  UNKNOWN: "UNKNOWN",
 };
 
 const STATUS_TABS = [
@@ -48,40 +61,253 @@ function JobCard({ job, onStatusChange }) {
   const navigate = useNavigate();
   const [actionLoading, setActionLoading] = useState(false);
   const [checkingProposal, setCheckingProposal] = useState(false);
-  const [acceptedProposalId, setAcceptedProposalId] = useState(null);
+
+  // Lưu đủ trạng thái của proposal ACCEPTED.
+  // Không chỉ lưu proposalId, vì còn phải biết contract đang DRAFT hay CANCELLED.
+  const [acceptedDeal, setAcceptedDeal] = useState(null);
   const normStatus = normalizeJobStatus(job.status);
   const cfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.OPEN;
 
-  // Job OPEN không tự biết có proposal ACCEPTED hay chưa (response /jobs/my
-  // không có field này) → check ngay khi card render, để quyết định ẩn 4 nút
-  // hành động (AI Recommend/Proposals/Edit/Cancel) khi job đang trong quá
-  // trình ký hợp đồng dở dang.
   useEffect(() => {
-    if (normStatus !== "OPEN") return;
+    if (normStatus !== "OPEN") {
+      setAcceptedDeal(null);
+      setCheckingProposal(false);
+      return;
+    }
 
     let cancelled = false;
-    setCheckingProposal(true);
 
-    axiosInstance.get(`/jobs/${job.jobPostingId}/proposals`)
-      .then((res) => {
+    const fetchAcceptedDeal = async () => {
+      setCheckingProposal(true);
+
+      try {
+        const proposalsRes = await axiosInstance.get(
+          `/jobs/${job.jobPostingId}/proposals`
+        );
+
         if (cancelled) return;
-        const raw = res.data?.data ?? res.data;
-        const list = Array.isArray(raw) ? raw : raw?.items ?? [];
-        const accepted = list.find((p) => (p.status || "").toUpperCase() === "ACCEPTED");
-        setAcceptedProposalId(accepted?.proposalId ?? null);
-      })
-      .catch((err) => {
-        console.error("Check accepted proposal failed:", err);
-        // Lỗi tra cứu → coi như không có proposal ACCEPTED, vẫn hiện job bình thường.
-      })
-      .finally(() => {
-        if (!cancelled) setCheckingProposal(false);
-      });
 
-    return () => { cancelled = true; };
+        const raw =
+          proposalsRes.data?.data ??
+          proposalsRes.data;
+
+        const list = Array.isArray(raw)
+          ? raw
+          : raw?.items ?? [];
+
+        const accepted = list.find(
+          (p) =>
+            String(p?.status ?? "")
+              .trim()
+              .toUpperCase() === "ACCEPTED"
+        );
+
+        if (!accepted) {
+          setAcceptedDeal(null);
+          return;
+        }
+
+        const proposalId =
+          accepted?.proposalId ??
+          accepted?.id ??
+          null;
+
+        if (!proposalId) {
+          setAcceptedDeal(null);
+          return;
+        }
+
+        /*
+        * Một số API list proposals có thể chưa trả contractId.
+        * Vì vậy nếu accepted.contractId chưa có thì gọi detail proposal
+        * để lấy contractId mới nhất.
+        */
+        let contractId =
+          accepted?.contractId ??
+          accepted?.projectContractId ??
+          null;
+
+        if (!contractId) {
+          try {
+            const proposalRes = await axiosInstance.get(
+              `/proposals/${proposalId}`
+            );
+
+            if (cancelled) return;
+
+            const proposalData =
+              proposalRes.data?.data ??
+              proposalRes.data ??
+              null;
+
+            contractId =
+              proposalData?.contractId ??
+              proposalData?.projectContractId ??
+              null;
+          } catch {
+            // Không lấy được proposal detail thì vẫn cho click về Proposal Detail.
+            contractId = null;
+          }
+        }
+
+        /*
+        * ACCEPTED nhưng chưa có contract:
+        * FE phải đưa user về Proposal Detail để bấm Create Contract.
+        */
+        if (!contractId) {
+          setAcceptedDeal({
+            proposalId,
+            contractId: null,
+            projectId: null,
+            state: ACCEPTED_DEAL_STATE.NO_CONTRACT,
+          });
+          return;
+        }
+
+        /*
+        * Có contractId thì phải đọc contract thật.
+        * Không được tự hiểu ACCEPTED là đang chờ ký.
+        */
+        try {
+          const contractRes = await axiosInstance.get(
+            `/contracts/${contractId}`
+          );
+
+          if (cancelled) return;
+
+          const contract =
+            contractRes.data?.data ??
+            contractRes.data ??
+            null;
+
+          const contractStatus = String(
+            contract?.status ?? ""
+          )
+            .trim()
+            .toUpperCase();
+
+          const projectStatus = String(
+            contract?.projectStatus ?? ""
+          )
+            .trim()
+            .toUpperCase();
+
+          if (
+            contractStatus === "CONFIRMED" &&
+            projectStatus === "ACTIVE" &&
+            contract?.projectId
+          ) {
+            setAcceptedDeal({
+              proposalId,
+              contractId,
+              projectId: contract.projectId,
+              state: ACCEPTED_DEAL_STATE.PROJECT_ACTIVE,
+            });
+            return;
+          }
+
+          if (contractStatus === "DRAFT") {
+            setAcceptedDeal({
+              proposalId,
+              contractId,
+              projectId: null,
+              state: ACCEPTED_DEAL_STATE.CONTRACT_DRAFT,
+            });
+            return;
+          }
+
+          if (
+            contractStatus === "CANCELLED" ||
+            contractStatus === "EXPIRED"
+          ) {
+            setAcceptedDeal({
+              proposalId,
+              contractId,
+              projectId: null,
+              state: ACCEPTED_DEAL_STATE.CONTRACT_CANCELLED,
+            });
+            return;
+          }
+
+          setAcceptedDeal({
+            proposalId,
+            contractId,
+            projectId: contract?.projectId ?? null,
+            state: ACCEPTED_DEAL_STATE.UNKNOWN,
+          });
+        } catch {
+          /*
+          * Nếu contract API lỗi, vẫn không nên hiện Awaiting Signature.
+          * Cho user quay về Proposal Detail để kiểm tra / tạo lại contract.
+          */
+          setAcceptedDeal({
+            proposalId,
+            contractId,
+            projectId: null,
+            state: ACCEPTED_DEAL_STATE.UNKNOWN,
+          });
+        }
+      } catch {
+        // Lỗi tra cứu proposal → coi như chưa có accepted deal để job vẫn hiện bình thường.
+        setAcceptedDeal(null);
+      } finally {
+        if (!cancelled) {
+          setCheckingProposal(false);
+        }
+      }
+    };
+
+    fetchAcceptedDeal();
+
+    return () => {
+      cancelled = true;
+    };
   }, [job.jobPostingId, normStatus]);
 
-  const hasAcceptedProposal = !!acceptedProposalId;
+  const hasAcceptedProposal =
+  Boolean(acceptedDeal?.proposalId);
+
+const acceptedDealState =
+  acceptedDeal?.state ?? null;
+
+const acceptedDealLabel =
+  acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT
+    ? "Awaiting contract signature"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_CANCELLED
+    ? "Contract draft cancelled"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.NO_CONTRACT
+    ? "Contract not created yet"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE
+    ? "Project active"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.UNKNOWN
+    ? "Review accepted proposal"
+    : "";
+
+    const shouldHideJobActions =
+    acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT ||
+    acceptedDealState === ACCEPTED_DEAL_STATE.NO_CONTRACT ||
+    acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE ||
+    acceptedDealState === ACCEPTED_DEAL_STATE.UNKNOWN;
+
+const acceptedDealIcon =
+  acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT
+    ? "draw"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_CANCELLED
+    ? "history"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.NO_CONTRACT
+    ? "description"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE
+    ? "verified"
+    : "info";
+
+const acceptedDealColor =
+  acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT
+    ? "#00F0FF"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_CANCELLED
+    ? "#facc15"
+    : acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE
+    ? "#22c55e"
+    : "#c0c1ff";
 
   const handleSubmit = async (e) => {
     e.stopPropagation();
@@ -122,7 +348,29 @@ function JobCard({ job, onStatusChange }) {
     if (normStatus === "CANCELLED") return;
 
     if (hasAcceptedProposal) {
-      navigate(`/client/proposals/${acceptedProposalId}/contract`);
+      /*
+      * Chỉ contract DRAFT mới đi thẳng vào trang ký.
+      * Contract CANCELLED hoặc chưa có contract thì về Proposal Detail
+      * để hiện Create Contract / Create Contract Again.
+      */
+      if (
+        acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT
+      ) {
+        navigate(
+          `/client/proposals/${acceptedDeal.proposalId}/contract`
+        );
+        return;
+      }
+
+      if (
+        acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE &&
+        acceptedDeal.projectId
+      ) {
+        navigate(`/client/projects/${acceptedDeal.projectId}`);
+        return;
+      }
+
+      navigate(`/client/proposals/${acceptedDeal.proposalId}`);
       return;
     }
 
@@ -178,17 +426,32 @@ function JobCard({ job, onStatusChange }) {
             </span>
           )}
           {!checkingProposal && hasAcceptedProposal && (
-            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#00F0FF", fontWeight: 600 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>draw</span>
-              Awaiting contract signature
+          <span
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 4,
+              fontSize: 12,
+              color: acceptedDealColor,
+              fontWeight: 600,
+            }}
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{ fontSize: 14 }}
+            >
+              {acceptedDealIcon}
             </span>
-          )}
+
+            {acceptedDealLabel}
+          </span>
+        )}
         </div>
 
-        {/* Ẩn toàn bộ 4 nút hành động (AI Recommend/Proposals/Edit/Cancel) khi
-            job đang có proposal ACCEPTED dở dang — click cả card sẽ đưa thẳng
-            vào trang ký hợp đồng, không cần các thao tác khác trên job nữa. */}
-        {!hasAcceptedProposal && (
+        {/* Ẩn nút hành động chỉ khi accepted deal còn đang cần tiếp tục xử lý.
+            Nếu contract draft đã CANCELLED thì hiện lại các nút như job OPEN ban đầu:
+            AI Recommend / Proposals / Edit / Cancel. */}
+        {!shouldHideJobActions && (
           <div style={{ display: "flex", gap: 8 }}>
             {normStatus === "DRAFT" && (
               <>

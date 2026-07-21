@@ -1,15 +1,20 @@
 // src/modules/client/pages/ClientProposalDetailPage.jsx
-// GET  /api/proposals/{proposalId}
-// GET  /api/proposals/{proposalId}/contract
-// POST /api/proposals/{proposalId}/decision  { decision: "ACCEPT" | "REJECT" }
-// POST /api/contracts/from-proposal/{proposalId}
-// POST /api/conversations, /api/conversations/{id}/messages
 //
-// Việc ký hợp đồng (confirm / lock escrow / chờ expert ký) đã tách sang
-// ClientContractSignPage — trang này chỉ tạo contract khi Accept, rồi điều
-// hướng qua đó. Nếu đã có contract dở dang (client rời trang trước khi ký),
-// nút Accept/Decline tự ẩn (vì proposal.status đã là ACCEPTED) và thay bằng
-// nút "Continue to Contract" để quay lại đúng chỗ đang dang dở.
+// GET  /api/proposals/{proposalId}
+// GET  /api/contracts/{contractId}
+// POST /api/proposals/{proposalId}/decision?decision=ACCEPT|REJECT
+// POST /api/proposals/{proposalId}/decline-accepted-deal
+// POST /api/contracts/from-proposal/{proposalId}
+// POST /api/conversations
+// POST /api/conversations/{conversationId}/messages
+//
+// Luồng mới:
+// 1. Accept Proposal chỉ chuyển Proposal sang ACCEPTED.
+// 2. Accept Proposal không tự tạo Contract.
+// 3. Client chủ động bấm Create Contract.
+// 4. Contract CANCELLED có thể được tạo lại.
+// 5. Contract DRAFT được tiếp tục tại ClientContractSignPage.
+// 6. Backend tự tạo Project và lock Escrow khi hai bên ký đủ.
 
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -59,24 +64,7 @@ const sectionLabel = {
   display: "block",
 };
 
-function readContractSignState(contract) {
-  const clientSigned = contract?.clientConfirmed === true;
-  const expertSigned = contract?.expertConfirmed === true;
-  const contractStatus = (contract?.status || "").toUpperCase();
-  const bothSigned =
-    (clientSigned && expertSigned) || contractStatus === "CONFIRMED";
-  return { clientSigned, expertSigned, bothSigned };
-}
 
-function getProposalContractId(proposal) {
-  return (
-    proposal?.contractId ??
-    proposal?.projectContractId ??
-    proposal?.contract?.contractId ??
-    proposal?.contract?.id ??
-    null
-  );
-}
 
 // ── Message Modal ─────────────────────────────────────────────────────
 function MessageModal({ proposal, onClose, navigate }) {
@@ -251,14 +239,28 @@ export default function ClientProposalDetailPage() {
   const [proposal, setProposal] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [actionLoading, setActionLoading] = useState(null); // "accept" | "decline"
+
+  const [actionLoading, setActionLoading] = useState(null);
+  // "accept" | "decline" | "createContract" | "declineAccepted"
+
   const [showMessage, setShowMessage] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(null);
-  const [walletLoading, setWalletLoading] = useState(false);
-  const [contractCreated, setContractCreated] = useState(null);
+
+  const [contract, setContract] = useState(null);
   const [contractChecked, setContractChecked] = useState(false);
+  const [contractError, setContractError] = useState("");
+
   const [showAcceptModal, setShowAcceptModal] = useState(false);
   const [showDeclineModal, setShowDeclineModal] = useState(false);
+
+  // Modal riêng cho proposal đã ACCEPTED.
+  // Dùng API /decline-accepted-deal để bỏ expert đã chọn và reopen job.
+  const [showDeclineAcceptedModal, setShowDeclineAcceptedModal] =
+    useState(false);
+  const [declineAcceptedReason, setDeclineAcceptedReason] =
+    useState("");
+  const [declineAcceptedError, setDeclineAcceptedError] =
+    useState("");
+
   const [acceptError, setAcceptError] = useState("");
 
   const fetchProposal = useCallback(async (signal, silent = false) => {
@@ -301,130 +303,186 @@ export default function ClientProposalDetailPage() {
     return () => controller.abort();
   }, [fetchProposal]);
 
+
   useEffect(() => {
-    const fetchWalletBalance = async () => {
-      setWalletLoading(true);
+    if (!proposal) {
+      setContract(null);
+      setContractChecked(false);
+      setContractError("");
+      return;
+    }
+
+    const contractId = proposal?.contractId ?? null;
+
+    /*
+    * ACCEPTED nhưng contractId = null là trạng thái hợp lệ:
+    * Proposal đã được chọn nhưng Client chưa tạo Contract.
+    */
+    if (!contractId) {
+      setContract(null);
+      setContractChecked(true);
+      setContractError("");
+      return;
+    }
+
+    const controller = new AbortController();
+
+    const fetchContract = async () => {
+      setContractChecked(false);
+      setContractError("");
 
       try {
-        const res = await axiosInstance.get("/wallets/balance");
-        setWalletBalance(Number(res.data?.balance ?? 0));
-      } catch {
-        setWalletBalance(0);
+        const response = await axiosInstance.get(
+          `/contracts/${contractId}`,
+          {
+            signal: controller.signal,
+          }
+        );
+
+        const contractData =
+          response.data?.data ??
+          response.data ??
+          null;
+
+        setContract(contractData);
+      } catch (err) {
+        if (
+          err?.code === "ERR_CANCELED" ||
+          err?.name === "CanceledError"
+        ) {
+          return;
+        }
+
+        if (err?.response?.status === 404) {
+          setContract(null);
+          return;
+        }
+
+        setContractError(
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to load contract."
+        );
       } finally {
-        setWalletLoading(false);
+        if (!controller.signal.aborted) {
+          setContractChecked(true);
+        }
       }
     };
 
-    fetchWalletBalance();
-  }, []);
+    fetchContract();
 
-  useEffect(() => {
-  if (!proposal) {
-    setContractCreated(null);
-    setContractChecked(false);
-    return;
-  }
-
-  const proposalStatus = String(
-    proposal?.status ?? ""
-  )
-    .trim()
-    .toUpperCase();
-
-  const embeddedContract =
-    proposal?.contract ??
-    null;
-
-  const contractId =
-    getProposalContractId(proposal);
-
-  /*
-   * Trang proposal detail không gọi API contract.
-   * Chỉ sử dụng dữ liệu có sẵn trong response proposal.
-   */
-  if (embeddedContract) {
-    setContractCreated(embeddedContract);
-    setContractChecked(true);
-    return;
-  }
-
-  if (
-    proposalStatus === "ACCEPTED" &&
-    contractId
-  ) {
-    setContractCreated({
-      contractId,
-      projectId:
-        proposal?.projectId ??
-        null,
-      status:
-        proposal?.contractStatus ??
-        "PENDING",
-      clientConfirmed:
-        proposal?.clientConfirmed === true,
-      expertConfirmed:
-        proposal?.expertConfirmed === true,
-      projectEscrowLockedAt:
-        proposal?.projectEscrowLockedAt ??
-        null,
-    });
-
-    setContractChecked(true);
-    return;
-  }
-
-  setContractCreated(null);
-  setContractChecked(true);
-}, [proposal]);
+    return () => controller.abort();
+  }, [proposal]);
 
   // ── Accept ────────────────────────────────────────────────────────
   const handleAccept = async () => {
-  if (actionLoading === "accept") return;
+    if (actionLoading) return;
 
-  setShowAcceptModal(false);
-  setActionLoading("accept");
-  setAcceptError("");
+    setShowAcceptModal(false);
+    setActionLoading("accept");
+    setAcceptError("");
 
     try {
-      await axiosInstance.post(`/proposals/${proposalId}/decision?decision=ACCEPT`);
+      const response = await axiosInstance.post(
+        `/proposals/${proposalId}/decision?decision=ACCEPT`
+      );
 
-      const contractRes = await axiosInstance.post(
+      const acceptedProposal =
+        response.data?.data ??
+        response.data ??
+        null;
+
+      if (!acceptedProposal?.proposalId) {
+        throw new Error(
+          response.data?.message ||
+          "Accepted proposal data was not returned by API."
+        );
+      }
+
+      /*
+      * Chỉ cập nhật Proposal.
+      * Không tạo Contract.
+      * Không chuyển sang trang ký.
+      */
+      setProposal(acceptedProposal);
+      setContract(null);
+      setContractChecked(true);
+    } catch (err) {
+      setAcceptError(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Accept proposal failed."
+      );
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+
+  const handleCreateContract = async () => {
+    if (actionLoading) return;
+
+    const proposalStatus = String(
+      proposal?.status ?? ""
+    )
+      .trim()
+      .toUpperCase();
+
+    if (proposalStatus !== "ACCEPTED") {
+      setAcceptError(
+        "Only an accepted proposal can be used to create a contract."
+      );
+      return;
+    }
+
+    setActionLoading("createContract");
+    setAcceptError("");
+    setContractError("");
+
+    try {
+      const response = await axiosInstance.post(
         `/contracts/from-proposal/${proposalId}`
       );
 
-      const contract =
-        contractRes.data?.data ?? contractRes.data;
+      const createdContract =
+        response.data?.data ??
+        response.data ??
+        null;
 
-      setContractCreated(contract);
+      if (!createdContract?.contractId) {
+        throw new Error(
+          response.data?.message ||
+          "Contract ID was not returned by API."
+        );
+      }
 
-      const refreshed = await axiosInstance.get(
-        `/proposals/${proposalId}`
+      /*
+      * Dùng đúng Contract mới Backend trả về.
+      * Trường hợp Create Contract Again sẽ nhận contractId mới.
+      */
+      setContract(createdContract);
+
+      setProposal((prev) =>
+        prev
+          ? {
+              ...prev,
+              contractId: createdContract.contractId,
+            }
+          : prev
       );
 
-      const refreshedData =
-        refreshed.data?.data ?? refreshed.data;
-
-      setProposal(
-        Array.isArray(refreshedData)
-          ? refreshedData[0] ?? null
-          : refreshedData
-      );
-
-      // Luôn chuyển sang trang ký hợp đồng.
-      // Trang ký sẽ hiển thị đúng phí BE vừa tính và kiểm tra số dư ví.
       navigate(`/client/proposals/${proposalId}/contract`, {
-        replace: true,
         state: {
-          contract,
+          contract: createdContract,
         },
       });
-
-      return;
-      // Không đủ tiền → ở lại trang này, banner "Continue to Contract" bên
-      // dưới sẽ hiện ra (vì contractCreated đã có giá trị), user tự bấm
-      // vào đó khi đã nạp đủ tiền.
     } catch (err) {
-      setAcceptError(err?.response?.data?.message || err?.message || "Accept proposal failed.");
+      setAcceptError(
+        err?.response?.data?.message ||
+        err?.message ||
+        "Create contract failed."
+      );
     } finally {
       setActionLoading(null);
     }
@@ -432,6 +490,7 @@ export default function ClientProposalDetailPage() {
 
   // ── Decline ───────────────────────────────────────────────────────
   const handleDecline = async () => {
+    if (actionLoading) return;
     setShowDeclineModal(false);
     setActionLoading("decline");
     setAcceptError("");
@@ -448,6 +507,82 @@ export default function ClientProposalDetailPage() {
       });
     } catch (err) {
       setAcceptError(err?.response?.data?.message || "Decline proposal failed.");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // ── Decline Accepted Deal ───────────────────────────────────────────
+  // Dùng khi Proposal đã ACCEPTED nhưng Client không muốn tiếp tục với Expert này.
+  // BE sẽ chuyển proposal sang REJECTED và reopen job.
+  const handleDeclineAcceptedDeal = async () => {
+    if (actionLoading) return;
+
+    const trimmedReason = declineAcceptedReason.trim();
+
+    if (!trimmedReason) {
+      setDeclineAcceptedError("Decline reason is required.");
+      return;
+    }
+
+    setActionLoading("declineAccepted");
+    setDeclineAcceptedError("");
+    setAcceptError("");
+
+    try {
+      const response = await axiosInstance.post(
+        `/proposals/${proposalId}/decline-accepted-deal`,
+        {
+          reason: trimmedReason,
+        }
+      );
+
+      const declinedProposal =
+        response.data?.data ??
+        response.data ??
+        null;
+
+      // BE đã test trả status REJECTED.
+      // Cập nhật local state để tránh UI còn giữ ACCEPTED.
+      if (declinedProposal?.proposalId) {
+        setProposal(declinedProposal);
+      } else {
+        setProposal((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: "REJECTED",
+              }
+            : prev
+        );
+      }
+
+      setContract(null);
+      setShowDeclineAcceptedModal(false);
+      setDeclineAcceptedReason("");
+
+      // Báo các trang list refresh lại job/proposal.
+      window.dispatchEvent(new Event("jobs:refresh"));
+      window.dispatchEvent(new Event("projects:refresh"));
+
+      // BE trả "The job was reopened" nên quay về tab OPEN.
+      navigate("/client/jobs?status=OPEN", {
+        replace: true,
+        state: {
+          acceptedDealDeclined: true,
+          jobId:
+            declinedProposal?.jobId ??
+            proposal?.jobId ??
+            null,
+        },
+      });
+    } catch (err) {
+      setDeclineAcceptedError(
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Decline accepted deal failed."
+      );
     } finally {
       setActionLoading(null);
     }
@@ -531,23 +666,86 @@ export default function ClientProposalDetailPage() {
 
   if (!proposal) return null;
 
-  const pStatus = PROPOSAL_STATUS[proposal.status] || PROPOSAL_STATUS.SUBMITTED;
-  const isPending = proposal.status === "SUBMITTED" || proposal.status === "PENDING";
-  const isAccepting = actionLoading === "accept";
-  const isDeclining = actionLoading === "decline";
-  const isProcessing = isAccepting || isDeclining;
-  const expertName = proposal.expertName || proposal.fullName || "Expert";
-  const proposedPrice = Number(proposal.proposedPrice || proposal.bidAmount || 0);
+  const proposalStatus = String(
+    proposal?.status ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const contractStatus = String(
+    contract?.status ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const projectStatus = String(
+    contract?.projectStatus ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const pStatus =
+    PROPOSAL_STATUS[proposalStatus] ||
+    PROPOSAL_STATUS.SUBMITTED;
+
+  const isPending =
+    proposalStatus === "SUBMITTED" ||
+    proposalStatus === "PENDING";
+
+  const isAccepted =
+    proposalStatus === "ACCEPTED";
+
+  const isAccepting =
+    actionLoading === "accept";
+
+  const isDeclining =
+    actionLoading === "decline";
+
+  const isCreatingContract =
+    actionLoading === "createContract";
+
+  const isDecliningAccepted =
+    actionLoading === "declineAccepted";
+
+  const isProcessing =
+    Boolean(actionLoading);
+
+  const expertName =
+    proposal.expertName ||
+    proposal.fullName ||
+    "Expert";
+
+  const proposedPrice = Number(
+    proposal.proposedPrice ||
+    proposal.bidAmount ||
+    0
+  );
 
   const acceptDisabled = isProcessing;
 
-  const { bothSigned } = readContractSignState(contractCreated);
-  const isCancelled = (contractCreated?.status || "").toUpperCase() === "CANCELLED";
-  const isProjectActive = bothSigned && !!contractCreated?.projectEscrowLockedAt;
+  const canCreateContract =
+    isAccepted &&
+    !proposal?.contractId;
 
-  // Có contract (bất kể trạng thái) và chưa tới bước project active
-  // → hiện nút để quay lại đúng trang ký hợp đồng.
-  const showContinueToContract = !!contractCreated && !isProjectActive;
+  const canContinueContract =
+    isAccepted &&
+    contractStatus === "DRAFT";
+
+  const canCreateContractAgain =
+    isAccepted &&
+    contractStatus === "CANCELLED";
+
+  // Chỉ hiện Decline Proposal khi deal đã accepted nhưng chưa có contract
+  // hoặc contract draft đã bị cancel/expired.
+  // Nếu contract còn DRAFT đang chờ ký thì xử lý ở trang Contract riêng.
+  const canDeclineAcceptedDeal =
+    canCreateContract ||
+    canCreateContractAgain;
+
+  const isProjectActive =
+    contractStatus === "CONFIRMED" &&
+    projectStatus === "ACTIVE" &&
+    Boolean(contract?.projectId);
 
   const createdAt = proposal.createdAt
     ? new Date(proposal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })
@@ -621,20 +819,6 @@ export default function ClientProposalDetailPage() {
               </div>
             </div>
 
-            {isPending && (
-              <div
-                style={{
-                  marginTop: 14,
-                  fontSize: 12,
-                  color: "#facc15",
-                }}
-              >
-                Wallet balance:  {" "}
-                {walletLoading
-                  ? "Loading..."
-                  : formatCurrency(walletBalance)}
-              </div>
-            )}
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
               <button onClick={() => setShowMessage(true)}
@@ -700,43 +884,479 @@ export default function ClientProposalDetailPage() {
           )}
         </div>
 
-        {/* Contract status — thay cho card "Contract Preview" cũ */}
-        {contractChecked && contractCreated && (
-          <div style={{ ...cardStyle, marginBottom: 24, border: `1px solid ${isCancelled ? "rgba(239,68,68,0.25)" : isProjectActive ? "rgba(34,197,94,0.25)" : "rgba(0,240,255,0.25)"}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 20, color: isCancelled ? "#f87171" : isProjectActive ? "#22c55e" : "#00F0FF" }}>
-                {isCancelled ? "error_outline" : isProjectActive ? "verified" : "description"}
-              </span>
-              <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: isCancelled ? "#f87171" : isProjectActive ? "#22c55e" : "#00F0FF", margin: 0 }}>
-                {isCancelled ? "Contract Expired" : isProjectActive ? "Project Active" : "Contract In Progress"}
-              </h3>
+          {/* Proposal ACCEPTED nhưng chưa tạo Contract */}
+          {contractChecked && canCreateContract && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: 24,
+                border: "1px solid rgba(34,197,94,0.3)",
+                background: "rgba(34,197,94,0.04)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 21,
+                    color: "#22c55e",
+                  }}
+                >
+                  check_circle
+                </span>
+
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#22c55e",
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }}
+                >
+                  Proposal Accepted
+                </h3>
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  color: "#c2c6d6",
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                }}
+              >
+                This proposal has been accepted. The contract has not been
+                created yet.
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleCreateContract}
+                  disabled={isCreatingContract || isDecliningAccepted}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "11px 20px",
+                    borderRadius: 8,
+                    background: isCreatingContract
+                      ? "rgba(0,240,255,0.08)"
+                      : "#00F0FF",
+                    color: isCreatingContract
+                      ? "#00F0FF"
+                      : "#002022",
+                    border: "1px solid rgba(0,240,255,0.4)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor:
+                      isCreatingContract || isDecliningAccepted
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 17 }}
+                  >
+                    {isCreatingContract
+                      ? "hourglass_empty"
+                      : "description"}
+                  </span>
+
+                  {isCreatingContract
+                    ? "Creating..."
+                    : "Create Contract"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeclineAcceptedReason("");
+                    setDeclineAcceptedError("");
+                    setShowDeclineAcceptedModal(true);
+                  }}
+                  disabled={isCreatingContract || isDecliningAccepted}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "11px 20px",
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.08)",
+                    color: "#f87171",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor:
+                      isCreatingContract || isDecliningAccepted
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      isCreatingContract || isDecliningAccepted
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 17 }}
+                  >
+                    {isDecliningAccepted
+                      ? "hourglass_empty"
+                      : "close"}
+                  </span>
+
+                  {isDecliningAccepted
+                    ? "Declining..."
+                    : "Decline Proposal"}
+                </button>
+              </div>
             </div>
+          )}
 
-            <p style={{ fontSize: 13, color: "#8c90a0", margin: "0 0 16px" }}>
-              {isCancelled
-                ? "The signing deadline expired and the contract was cancelled."
-                : isProjectActive
-                ? "Both sides signed and escrow is locked."
-                : "You have a contract awaiting your signature or the expert's."}
-            </p>
+          {/* Contract DRAFT */}
+          {contractChecked && canContinueContract && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: 24,
+                border: "1px solid rgba(0,240,255,0.3)",
+                background: "rgba(0,240,255,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 21,
+                    color: "#00F0FF",
+                  }}
+                >
+                  description
+                </span>
 
-            {showContinueToContract && (
-              <button onClick={() => navigate(`/client/proposals/${proposalId}/contract`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 20px", background: isCancelled ? "rgba(239,68,68,0.1)" : "#00F0FF", color: isCancelled ? "#f87171" : "#002022", border: isCancelled ? "1px solid rgba(239,68,68,0.3)" : "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_forward</span>
-                {isCancelled ? "View Contract" : "Continue to Contract"}
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#00F0FF",
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }}
+                >
+                  Contract Draft In Progress
+                </h3>
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  color: "#c2c6d6",
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                }}
+              >
+                A contract draft exists and is waiting for the required
+                signatures.
+              </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/client/proposals/${proposalId}/contract`
+                  )
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "11px 20px",
+                  borderRadius: 8,
+                  background: "#00F0FF",
+                  color: "#002022",
+                  border: "none",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 17 }}
+                >
+                  arrow_forward
+                </span>
+
+                Continue to Contract
               </button>
-            )}
+            </div>
+          )}
 
-            {isProjectActive && (
-              <button onClick={() => navigate(`/client/projects/${contractCreated.projectId}`)}
-                style={{ display: "flex", alignItems: "center", gap: 6, padding: "11px 20px", background: "#22c55e", color: "#002022", border: "none", borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_forward</span>
+          {/* Contract cũ đã CANCELLED */}
+          {contractChecked && canCreateContractAgain && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: 24,
+                border: "1px solid rgba(250,204,21,0.3)",
+                background: "rgba(250,204,21,0.04)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 21,
+                    color: "#facc15",
+                  }}
+                >
+                  history
+                </span>
+
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#facc15",
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }}
+                >
+                  Contract Draft Cancelled
+                </h3>
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  color: "#c2c6d6",
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                }}
+              >
+                The previous contract draft was cancelled or expired. The
+                accepted proposal is still valid.
+              </p>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={handleCreateContract}
+                  disabled={isCreatingContract || isDecliningAccepted}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "11px 20px",
+                    borderRadius: 8,
+                    background: isCreatingContract
+                      ? "rgba(250,204,21,0.08)"
+                      : "#facc15",
+                    color: isCreatingContract
+                      ? "#facc15"
+                      : "#292000",
+                    border: "1px solid rgba(250,204,21,0.4)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor:
+                      isCreatingContract || isDecliningAccepted
+                        ? "not-allowed"
+                        : "pointer",
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 17 }}
+                  >
+                    {isCreatingContract
+                      ? "hourglass_empty"
+                      : "refresh"}
+                  </span>
+
+                  {isCreatingContract
+                    ? "Creating..."
+                    : "Create Contract Again"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeclineAcceptedReason("");
+                    setDeclineAcceptedError("");
+                    setShowDeclineAcceptedModal(true);
+                  }}
+                  disabled={isCreatingContract || isDecliningAccepted}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "11px 20px",
+                    borderRadius: 8,
+                    background: "rgba(239,68,68,0.08)",
+                    color: "#f87171",
+                    border: "1px solid rgba(239,68,68,0.3)",
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor:
+                      isCreatingContract || isDecliningAccepted
+                        ? "not-allowed"
+                        : "pointer",
+                    opacity:
+                      isCreatingContract || isDecliningAccepted
+                        ? 0.6
+                        : 1,
+                  }}
+                >
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 17 }}
+                  >
+                    {isDecliningAccepted
+                      ? "hourglass_empty"
+                      : "close"}
+                  </span>
+
+                  {isDecliningAccepted
+                    ? "Declining..."
+                    : "Decline Proposal"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Contract CONFIRMED và Project ACTIVE */}
+          {contractChecked && isProjectActive && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: 24,
+                border: "1px solid rgba(34,197,94,0.3)",
+                background: "rgba(34,197,94,0.04)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  marginBottom: 12,
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: 21,
+                    color: "#22c55e",
+                  }}
+                >
+                  verified
+                </span>
+
+                <h3
+                  style={{
+                    margin: 0,
+                    color: "#22c55e",
+                    fontSize: 16,
+                    fontWeight: 700,
+                  }}
+                >
+                  Project Active
+                </h3>
+              </div>
+
+              <p
+                style={{
+                  margin: "0 0 16px",
+                  color: "#c2c6d6",
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                }}
+              >
+                Both sides signed the contract. The project is active and
+                escrow has been locked by the backend.
+              </p>
+
+              <button
+                type="button"
+                onClick={() =>
+                  navigate(
+                    `/client/projects/${contract.projectId}`
+                  )
+                }
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "11px 20px",
+                  borderRadius: 8,
+                  background: "#22c55e",
+                  color: "#002022",
+                  border: "none",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 17 }}
+                >
+                  arrow_forward
+                </span>
+
                 Go to Project
               </button>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+
+          {/* Lỗi tải Contract */}
+          {contractError && (
+            <div
+              style={{
+                ...cardStyle,
+                marginBottom: 24,
+                border: "1px solid rgba(239,68,68,0.3)",
+                background: "rgba(239,68,68,0.04)",
+                color: "#f87171",
+                fontSize: 13,
+              }}
+            >
+              {contractError}
+            </div>
+          )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
@@ -920,16 +1540,113 @@ export default function ClientProposalDetailPage() {
         </div>
       )}
 
+      {showDeclineAcceptedModal && (
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
+        <div className="w-full max-w-[500px] rounded-2xl border border-red-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-red-500/10">
+          <div className="mb-4 flex items-center gap-3">
+            <span className="material-symbols-outlined text-[28px] text-red-400">
+              warning
+            </span>
+
+            <h2 className="m-0 text-xl font-bold text-red-400">
+              Decline Accepted Proposal
+            </h2>
+          </div>
+
+          <p className="mb-4 leading-relaxed text-slate-300">
+            This will reject the accepted proposal from{" "}
+            <span className="font-bold text-white">
+              {expertName}
+            </span>
+            {" "}and reopen the job.
+          </p>
+
+          <label
+            htmlFor="decline-accepted-reason"
+            className="mb-2 block text-sm font-bold text-slate-300"
+          >
+            Reason
+          </label>
+
+          <textarea
+            id="decline-accepted-reason"
+            value={declineAcceptedReason}
+            onChange={(event) => {
+              setDeclineAcceptedReason(event.target.value);
+
+              if (declineAcceptedError) {
+                setDeclineAcceptedError("");
+              }
+            }}
+            disabled={isDecliningAccepted}
+            rows={4}
+            maxLength={500}
+            placeholder="Enter the reason for declining this accepted proposal..."
+            className="mb-2 w-full resize-y rounded-lg border border-white/15 bg-white/5 px-3 py-3 text-sm text-slate-100 outline-none focus:border-red-400/60 disabled:cursor-not-allowed disabled:opacity-60"
+          />
+
+          <div className="mb-3 text-right text-xs text-slate-500">
+            {declineAcceptedReason.length}/500
+          </div>
+
+          {declineAcceptedError && (
+            <div className="mb-4 rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {declineAcceptedError}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                if (isDecliningAccepted) return;
+
+                setShowDeclineAcceptedModal(false);
+                setDeclineAcceptedReason("");
+                setDeclineAcceptedError("");
+              }}
+              disabled={isDecliningAccepted}
+              className="rounded-lg border border-white/15 px-5 py-2.5 font-semibold text-slate-300 transition hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleDeclineAcceptedDeal}
+              disabled={
+                isDecliningAccepted ||
+                !declineAcceptedReason.trim()
+              }
+              className="rounded-lg bg-red-500 px-5 py-2.5 font-bold text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isDecliningAccepted
+                ? "Declining..."
+                : "Decline Proposal"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
       {showAcceptModal && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/75 px-4">
-          <div className="w-full max-w-[520px] rounded-2xl border border-cyan-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-cyan-500/10">
-            <h2 className="mb-3 text-2xl font-bold text-cyan-400">
-              Create Contract
+          <div className="w-full max-w-[520px] rounded-2xl border border-green-400/25 bg-[#0b1220] p-6 shadow-2xl shadow-green-500/10">
+            <h2 className="mb-3 text-2xl font-bold text-green-400">
+              Accept Proposal
             </h2>
 
             <p className="mb-5 leading-relaxed text-slate-300">
-              Do you want to accept this proposal and create a contract with{" "}
-              <span className="font-bold text-white">{expertName}</span>?
+              Do you want to accept this proposal from{" "}
+              <span className="font-bold text-white">
+                {expertName}
+              </span>
+              ?
+            </p>
+
+            <p className="mb-5 text-sm leading-relaxed text-slate-400">
+              Accepting this proposal selects this expert. A contract will not
+              be created until you click Create Contract afterward.
             </p>
 
             <div className="mb-5 rounded-xl bg-white/5 p-4">
@@ -941,12 +1658,6 @@ export default function ClientProposalDetailPage() {
                 Timeline: {proposal.proposedTimelineDays || proposal.estimatedDays} days
               </div>
 
-              <div className="mt-3 text-sm text-slate-400">
-                Current wallet balance: $
-                {walletLoading
-                  ? "Loading..."
-                  : formatCurrency(walletBalance)}
-              </div>
 
             </div>
 
@@ -959,13 +1670,14 @@ export default function ClientProposalDetailPage() {
               >
                 Cancel
               </button>
-
               <button
                 onClick={handleAccept}
                 disabled={isAccepting}
                 className="rounded-lg bg-green-500 px-5 py-2.5 font-bold text-white transition hover:bg-green-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {isAccepting ? "Creating..." : "Create Contract"}
+                {isAccepting
+                  ? "Accepting..."
+                  : "Accept Proposal"}
               </button>
             </div>
           </div>
