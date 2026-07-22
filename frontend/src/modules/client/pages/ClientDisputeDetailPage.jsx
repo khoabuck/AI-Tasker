@@ -9,8 +9,14 @@
 // POST /api/disputes/{disputeId}/evidences
 //      → thêm evidence bằng link/file URL
 //
-// POST /api/disputes/{disputeId}/evidences/image
+// POST /api/disputes/{disputeId}/evidences/images
 //      → thêm evidence bằng nhiều ảnh upload
+//
+// POST /api/projects/{projectId}/continue-after-dispute
+//      → Client chọn tiếp tục Project sau khi Expert thắng dispute
+//
+// POST /api/projects/{projectId}/end-after-dispute
+//      → Client chọn kết thúc Contract sau khi Expert thắng dispute
 
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
@@ -61,7 +67,9 @@ export default function ClientDisputeDetailPage() {
   const [submittingEvidence, setSubmittingEvidence] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
   const [evidenceSent, setEvidenceSent] = useState(false);
-const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [postDisputeActionLoading, setPostDisputeActionLoading] = useState("");
+  const [postDisputeActionError, setPostDisputeActionError] = useState("");
 
 const normalizedDisputeStatus = String(
   dispute?.status ?? ""
@@ -76,36 +84,17 @@ const isClosed = [
 const normalizedEvidenceText = evidenceText.trim();
 const normalizedEvidenceFileUrl = evidenceFileUrl.trim();
 
-const hasEvidenceText = normalizedEvidenceText.length > 0;
-
 const hasEvidenceUrl = normalizedEvidenceFileUrl.length > 0;
 const hasEvidenceImages = evidenceFiles.length > 0;
 const hasEvidenceAttachment =
   hasEvidenceUrl || hasEvidenceImages;
 
-const isValidEvidenceFileUrl = (() => {
-  if (!normalizedEvidenceFileUrl) {
-    return true;
-  }
 
-  try {
-    const url = new URL(normalizedEvidenceFileUrl);
-
-    return (
-      url.protocol === "http:" ||
-      url.protocol === "https:"
-    );
-  } catch {
-    return false;
-  }
-})();
 
 const canSubmitEvidence =
   !isClosed &&
   Boolean(dispute?.disputeId) &&
-  hasEvidenceText &&
   hasEvidenceAttachment &&
-  isValidEvidenceFileUrl &&
   !submittingEvidence &&
   !evidenceSent;
 
@@ -114,6 +103,13 @@ const isSubmitLocked =
   !Boolean(dispute?.disputeId) ||
   submittingEvidence ||
   evidenceSent;
+
+  const disputeProjectId = projectId || dispute?.projectId;
+
+  const requiresClientDecision =
+    Boolean(dispute?.requiresClientDecision) &&
+    !dispute?.postResolutionDecision &&
+    Boolean(disputeProjectId);
 
   // Tìm dispute đúng theo projectId truyền qua query param — vì hiện tại điều hướng
   // tới trang này chỉ biết projectId (không biết sẵn disputeId), nên phải lấy list
@@ -188,8 +184,16 @@ const isSubmitLocked =
   // xử lý xong (Resolved/Rejected) mà không cần Client tự F5.
   useEffect(() => {
     if (!dispute) return;
-    const isClosed = ["RESOLVED", "REJECTED", "CLOSED"].includes(dispute.status);
-    if (isClosed) return;
+
+    const currentStatus = String(dispute.status ?? "").toUpperCase();
+
+    const disputeClosed = [
+      "RESOLVED",
+      "REJECTED",
+      "CLOSED",
+    ].includes(currentStatus);
+
+    if (disputeClosed) return;
 
     const intervalId = setInterval(() => {
       fetchDispute(undefined, true);
@@ -226,92 +230,127 @@ const isSubmitLocked =
   };
 
   const handleAddEvidence = async () => {
-  if (!canSubmitEvidence) {
-    if (!hasEvidenceText) {
-      setEvidenceError(
-        "Evidence description is required."
-      );
-    } else if (!hasEvidenceAttachment) {
-      setEvidenceError(
-        "Provide a proof link or upload at least one image."
-      );
-    } else if (!isValidEvidenceFileUrl) {
-      setEvidenceError(
-        "Evidence link must be a valid HTTP or HTTPS URL."
-      );
+    if (!canSubmitEvidence) {
+      if (!hasEvidenceAttachment) {
+        setEvidenceError(
+          "Provide a proof link or upload at least one image."
+        );
+      }
+
+      return;
     }
 
+    setSubmittingEvidence(true);
+    setEvidenceError("");
+
+    try {
+      if (normalizedEvidenceFileUrl) {
+        await axiosInstance.post(
+          `/disputes/${dispute.disputeId}/evidences`,
+          {
+            evidenceText: normalizedEvidenceText,
+            fileUrl: normalizedEvidenceFileUrl,
+            imageUrl: null,
+            imageUrls: [],
+          }
+        );
+      }
+
+      if (evidenceFiles.length > 0) {
+        const formData = new FormData();
+
+        formData.append(
+          "EvidenceText",
+          normalizedEvidenceText
+        );
+
+        evidenceFiles.forEach((file) => {
+          formData.append(
+            "Images",
+            file
+          );
+        });
+
+        await axiosInstance.post(
+          `/disputes/${dispute.disputeId}/evidences/images`,
+          formData
+        );
+      }
+
+      await fetchDispute(undefined, true);
+
+      evidencePreviewUrls.forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+
+      setEvidenceSent(true);
+      setEvidenceText("");
+      setEvidenceFileUrl("");
+      setEvidenceFiles([]);
+      setEvidencePreviewUrls([]);
+      setUploadImageError("");
+
+      setTimeout(() => {
+        setEvidenceSent(false);
+      }, 3000);
+    } catch (err) {
+      setEvidenceError(
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Submit evidence failed."
+      );
+    } finally {
+      setSubmittingEvidence(false);
+    }
+  };
+
+  const handleContinueAfterDispute = async () => {
+  if (!disputeProjectId || postDisputeActionLoading) {
     return;
   }
 
-  setSubmittingEvidence(true);
-  setEvidenceError("");
+  setPostDisputeActionLoading("continue");
+  setPostDisputeActionError("");
 
   try {
-    if (normalizedEvidenceFileUrl) {
-  await axiosInstance.post(
-    `/disputes/${dispute.disputeId}/evidences`,
-    {
-      evidenceText: normalizedEvidenceText,
-      fileUrl: normalizedEvidenceFileUrl,
-      imageUrl: null,
-      imageUrls: []
-    }
-  );
-}
-
-
-if (evidenceFiles.length > 0) {
-  const formData = new FormData();
-
-  formData.append(
-    "EvidenceText",
-    normalizedEvidenceText
-  );
-
-  evidenceFiles.forEach((file) => {
-    formData.append(
-      "Images",
-      file
+    await axiosInstance.post(
+      `/projects/${disputeProjectId}/continue-after-dispute`
     );
-  });
 
-  await axiosInstance.post(
-    `/disputes/${dispute.disputeId}/evidences/image`,
-    formData,
-    {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
-    }
-  );
-}
-
-    // API detail trả toàn bộ dispute và evidences.
-    await fetchDispute(undefined, true);
-
-    evidencePreviewUrls.forEach((url) => {
-      URL.revokeObjectURL(url);
-    });
-
-    setEvidenceSent(true);
-    setEvidenceText("");
-    setEvidenceFileUrl("");
-    setEvidenceFiles([]);
-    setEvidencePreviewUrls([]);
-    setUploadImageError("");
-
-    setTimeout(() => {
-      setEvidenceSent(false);
-    }, 3000);
+    navigate(`/client/projects/${disputeProjectId}`);
   } catch (err) {
-    setEvidenceError(
+    setPostDisputeActionError(
       err?.response?.data?.message ||
       err?.response?.data?.title ||
-      "Submit evidence failed."
+      "Continue project failed."
     );
   } finally {
-    setSubmittingEvidence(false);
+    setPostDisputeActionLoading("");
+  }
+};
+
+const handleEndAfterDispute = async () => {
+  if (!disputeProjectId || postDisputeActionLoading) {
+    return;
+  }
+
+  setPostDisputeActionLoading("end");
+  setPostDisputeActionError("");
+
+  try {
+    await axiosInstance.post(
+      `/projects/${disputeProjectId}/end-after-dispute`
+    );
+
+    navigate("/client/projects");
+  } catch (err) {
+    setPostDisputeActionError(
+      err?.response?.data?.message ||
+      err?.response?.data?.title ||
+      "End contract failed."
+    );
+  } finally {
+    setPostDisputeActionLoading("");
   }
 };
 
@@ -684,9 +723,7 @@ if (evidenceFiles.length > 0) {
                         color: "#8c90a0",
                       }}
                     >
-                      {groupIndex === 0
-                        ? "Initial Evidence"
-                        : `Evidence Submission ${groupIndex}`}
+                      {`Evidence Submission ${groupIndex + 1}`}
                     </span>
 
                     {group.createdAt && (
@@ -842,8 +879,107 @@ if (evidenceFiles.length > 0) {
           </div>
         )}
 
+        {requiresClientDecision && (
+        <div
+          style={{
+            ...cardStyle,
+            marginBottom: 20,
+            border: "1px solid rgba(0,240,255,0.22)",
+            background: "rgba(0,240,255,0.03)",
+          }}
+        >
+          <h3
+            style={{
+              fontFamily: "Hanken Grotesk, sans-serif",
+              fontSize: 15,
+              fontWeight: 700,
+              color: "#00F0FF",
+              marginBottom: 10,
+            }}
+          >
+            Project Decision Required
+          </h3>
+
+          <p
+            style={{
+              fontSize: 13,
+              color: "#c2c6d6",
+              lineHeight: 1.7,
+              margin: "0 0 16px",
+            }}
+          >
+            The dispute was resolved in favor of the Expert. Please choose whether
+            you want to continue the project or end the contract.
+          </p>
+
+          {postDisputeActionError && (
+            <div
+              style={{
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                color: "#f87171",
+                fontSize: 13,
+                marginBottom: 12,
+              }}
+            >
+              {postDisputeActionError}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleContinueAfterDispute}
+              disabled={Boolean(postDisputeActionLoading)}
+              style={{
+                padding: "10px 18px",
+                background: "#00F0FF",
+                color: "#002022",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: postDisputeActionLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {postDisputeActionLoading === "continue"
+                ? "Continuing..."
+                : "Continue Project"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleEndAfterDispute}
+              disabled={Boolean(postDisputeActionLoading)}
+              style={{
+                padding: "10px 18px",
+                background: "rgba(239,68,68,0.12)",
+                color: "#f87171",
+                border: "1px solid rgba(239,68,68,0.35)",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: postDisputeActionLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              {postDisputeActionLoading === "end"
+                ? "Ending..."
+                : "End Contract"}
+            </button>
+          </div>
+        </div>
+      )}
+
         {/* Add evidence — chỉ cho phép khi dispute còn đang mở */}
-        {!isClosed && (
+        {!isClosed && !requiresClientDecision && (
           <div style={cardStyle}>
             <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#e1e2eb", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
               Add More Evidence
@@ -888,7 +1024,7 @@ if (evidenceFiles.length > 0) {
               }}
             />
 
-            {/* Upload ảnh bổ sung - BE xử lý qua /evidences/image */}
+            {/* Upload ảnh bổ sung - BE xử lý qua /evidences/images */}
             <div style={{ marginBottom: 12 }}>
               <label
                 style={{

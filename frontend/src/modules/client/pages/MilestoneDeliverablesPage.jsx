@@ -116,6 +116,7 @@ export default function MilestoneDeliverablesPage() {
   const [actionLoading, setActionLoading] = useState(null); // "approve" | "revision"
   const [actionError, setActionError] = useState("");
   const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [showApproveModal, setShowApproveModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState("");
 
   const fetchData = useCallback(async (signal, silent = false) => {
@@ -169,21 +170,28 @@ export default function MilestoneDeliverablesPage() {
 
   const handleApprove = async () => {
     if (!deliverable?.deliverableId) return;
-    if (!confirm("Confirm this deliverable meets requirements? This action cannot be undone.")) return;
 
+    setShowApproveModal(false);
     setActionLoading("approve");
     setActionError("");
+
     try {
-      await axiosInstance.post(`/deliverables/${deliverable.deliverableId}/approve`);
-      // Approve xong → Expert đã được mở khóa làm milestone tiếp theo (và nhận
-      // notification riêng từ BE). Phía Client, đưa thẳng về trang Project Detail
-      // để thấy ngay banner "Expert đang làm tới" đã nhảy sang milestone mới,
-      // không cần ở lại trang deliverable này nữa.
+      await axiosInstance.post(
+        `/deliverables/${deliverable.deliverableId}/approve`
+      );
+
       navigate(`/client/projects/${milestone.projectId}`, {
-        state: { successMsg: "Deliverable approved! Funds have been released and the Expert can start the next milestone." },
+        state: {
+          successMsg:
+            "Deliverable approved! Funds have been released and the Expert can start the next milestone.",
+        },
       });
     } catch (err) {
-      setActionError(err?.response?.data?.message || "Approval failed. Please try again.");
+      setActionError(
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Approval failed. Please try again."
+      );
       setActionLoading(null);
     }
   };
@@ -392,11 +400,43 @@ export default function MilestoneDeliverablesPage() {
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }}>edit_note</span>
                   Request Revision
                 </button>
-                <button onClick={handleApprove} disabled={!!actionLoading}
-                  style={{ flex: 1, padding: "13px", background: actionLoading === "approve" ? "#1d2026" : "#22c55e", color: actionLoading === "approve" ? "#8c90a0" : "#002022", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: actionLoading ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                  {actionLoading === "approve"
-                    ? <><span className="material-symbols-outlined" style={{ fontSize: 18, animation: "spin 1s linear infinite" }}>autorenew</span>Processing...</>
-                    : <><span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>Approve Deliverable</>}
+                <button
+                  onClick={() => setShowApproveModal(true)}
+                  disabled={!!actionLoading}
+                  style={{
+                    flex: 1,
+                    padding: "13px",
+                    background: actionLoading === "approve" ? "#1d2026" : "#22c55e",
+                    color: actionLoading === "approve" ? "#8c90a0" : "#002022",
+                    border: "none",
+                    borderRadius: 10,
+                    fontSize: 14,
+                    fontWeight: 700,
+                    cursor: actionLoading ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 8,
+                  }}
+                >
+                  {actionLoading === "approve" ? (
+                    <>
+                      <span
+                        className="material-symbols-outlined"
+                        style={{ fontSize: 18, animation: "spin 1s linear infinite" }}
+                      >
+                        autorenew
+                      </span>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                        check_circle
+                      </span>
+                      Approve Deliverable
+                    </>
+                  )}
                 </button>
               </div>
             )}
@@ -405,15 +445,158 @@ export default function MilestoneDeliverablesPage() {
       </div>
 
       {showRevisionModal && (
-        <RequestRevisionModal
-          onClose={() => setShowRevisionModal(false)}
-          onSubmit={handleRequestRevision}
-          submitting={actionLoading === "revision"}
-          error={actionError}
-        />
-      )}
+      <RequestRevisionModal
+        onClose={() => setShowRevisionModal(false)}
+        onSubmit={handleRequestRevision}
+        submitting={actionLoading === "revision"}
+        error={actionError}
+      />
+    )}
 
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+    {showApproveModal && (
+      <div
+        onClick={() => setShowApproveModal(false)}
+        style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.7)",
+          backdropFilter: "blur(4px)",
+          zIndex: 1000,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            background: "rgba(16,19,25,0.98)",
+            border: "1px solid rgba(34,197,94,0.28)",
+            borderRadius: 16,
+            padding: 28,
+            width: "100%",
+            maxWidth: 460,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 16,
+            }}
+          >
+            <h3
+              style={{
+                fontFamily: "Hanken Grotesk, sans-serif",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#22c55e",
+                margin: 0,
+              }}
+            >
+              Approve Deliverable
+            </h3>
+
+            <button
+              type="button"
+              onClick={() => setShowApproveModal(false)}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#8c90a0",
+                cursor: "pointer",
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>
+                close
+              </span>
+            </button>
+          </div>
+
+          <p
+            style={{
+              fontSize: 14,
+              color: "#c2c6d6",
+              lineHeight: 1.7,
+              margin: "0 0 20px",
+            }}
+          >
+            Confirm this deliverable meets requirements. This action cannot be
+            undone.
+          </p>
+
+          <div style={{ display: "flex", gap: 10 }}>
+            <button
+              type="button"
+              onClick={() => setShowApproveModal(false)}
+              style={{
+                flex: 1,
+                padding: "12px",
+                background: "transparent",
+                color: "#c2c6d6",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                fontSize: 14,
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleApprove}
+              disabled={actionLoading === "approve"}
+              style={{
+                flex: 2,
+                padding: "12px",
+                background:
+                  actionLoading === "approve" ? "#1d2026" : "#22c55e",
+                color:
+                  actionLoading === "approve" ? "#8c90a0" : "#002022",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 14,
+                fontWeight: 700,
+                cursor:
+                  actionLoading === "approve" ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+              }}
+            >
+              {actionLoading === "approve" ? (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16, animation: "spin 1s linear infinite" }}
+                  >
+                    autorenew
+                  </span>
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16 }}
+                  >
+                    check_circle
+                  </span>
+                  Approve
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </ClientLayout>
   );
 }

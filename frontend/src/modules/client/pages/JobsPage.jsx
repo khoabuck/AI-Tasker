@@ -61,6 +61,8 @@ function JobCard({ job, onStatusChange }) {
   const navigate = useNavigate();
   const [actionLoading, setActionLoading] = useState(false);
   const [checkingProposal, setCheckingProposal] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+  const [cancelError, setCancelError] = useState("");
 
   // Lưu đủ trạng thái của proposal ACCEPTED.
   // Không chỉ lưu proposalId, vì còn phải biết contract đang DRAFT hay CANCELLED.
@@ -329,17 +331,33 @@ const acceptedDealColor =
     }
   };
 
-  const handleCancel = async (e) => {
+  const openCancelConfirm = (e) => {
     e.stopPropagation();
-    if (!confirm("Cancel job ?")) return;
+    setCancelError("");
+    setShowCancelConfirm(true);
+  };
+
+  const handleCancel = async () => {
+    if (actionLoading) return;
+
     setActionLoading(true);
+    setCancelError("");
+
     try {
       await axiosInstance.put(`/jobs/${job.jobPostingId}/cancel`);
+
+      setShowCancelConfirm(false);
       onStatusChange(job.jobPostingId, "CANCELLED");
       navigate("/client/jobs?status=CANCELLED");
     } catch (err) {
-      alert(err?.response?.data?.message || "Cancellation failed.");
-    } finally { setActionLoading(false); }
+      setCancelError(
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Cancellation failed."
+      );
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCardClick = () => {
@@ -378,6 +396,7 @@ const acceptedDealColor =
   };
 
   return (
+    <>
     <div
         onClick={handleCardClick}
         style={{
@@ -474,9 +493,19 @@ const acceptedDealColor =
                 </button>
 
                 <button
-                  onClick={handleCancel}
+                  onClick={openCancelConfirm}
                   disabled={actionLoading}
-                  style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}
+                  style={{
+                    padding: "6px 12px",
+                    background: "rgba(248,113,113,0.08)",
+                    color: "#f87171",
+                    border: "1px solid rgba(248,113,113,0.2)",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: actionLoading ? "not-allowed" : "pointer",
+                    opacity: actionLoading ? 0.6 : 1,
+                  }}
                 >
                   {actionLoading ? "..." : "Cancel"}
                 </button>
@@ -510,17 +539,197 @@ const acceptedDealColor =
                   Edit
                 </button>
                 
-                <button onClick={handleCancel} disabled={actionLoading}
-                  style={{ padding: "6px 12px", background: "rgba(248,113,113,0.08)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: actionLoading ? "not-allowed" : "pointer", opacity: actionLoading ? 0.6 : 1 }}>
+                <button
+                  onClick={openCancelConfirm}
+                  disabled={actionLoading}
+                  style={{
+                    padding: "6px 12px",
+                    background: "rgba(248,113,113,0.08)",
+                    color: "#f87171",
+                    border: "1px solid rgba(248,113,113,0.2)",
+                    borderRadius: 6,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    cursor: actionLoading ? "not-allowed" : "pointer",
+                    opacity: actionLoading ? 0.6 : 1,
+                  }}
+                >
                   {actionLoading ? "..." : "Cancel"}
                 </button>
               </>
+
+
             )}
           </div>
         )}
       </div>
-    </div>
-  );
+
+
+        </div>
+
+    {showCancelConfirm && (
+      <div
+        onClick={() => {
+          if (!actionLoading) {
+            setShowCancelConfirm(false);
+          }
+        }}
+        style={{
+          position: "fixed",
+          inset: 0,
+          zIndex: 2000,
+          background: "rgba(0,0,0,0.7)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            width: "100%",
+            maxWidth: 440,
+            background: "rgba(16,19,25,0.98)",
+            border: "1px solid rgba(248,113,113,0.28)",
+            borderRadius: 16,
+            padding: 24,
+            boxShadow: "0 20px 60px rgba(0,0,0,0.8)",
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 14,
+            }}
+          >
+            <h3
+              style={{
+                fontFamily: "Hanken Grotesk, sans-serif",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#f87171",
+                margin: 0,
+              }}
+            >
+              Cancel Job
+            </h3>
+
+            <button
+              type="button"
+              onClick={() => setShowCancelConfirm(false)}
+              disabled={actionLoading}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#8c90a0",
+                cursor: actionLoading ? "not-allowed" : "pointer",
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 22 }}>
+                close
+              </span>
+            </button>
+          </div>
+
+          <p
+            style={{
+              fontSize: 14,
+              color: "#c2c6d6",
+              lineHeight: 1.7,
+              margin: "0 0 16px",
+            }}
+          >
+            Are you sure you want to cancel this job? This action may make the job unavailable to experts.
+          </p>
+
+          {cancelError && (
+            <div
+              style={{
+                background: "rgba(239,68,68,0.08)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                borderRadius: 8,
+                padding: "10px 14px",
+                color: "#f87171",
+                fontSize: 13,
+                marginBottom: 16,
+              }}
+            >
+              {cancelError}
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: 10,
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowCancelConfirm(false)}
+              disabled={actionLoading}
+              style={{
+                padding: "10px 18px",
+                background: "transparent",
+                color: "#c2c6d6",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 8,
+                cursor: actionLoading ? "not-allowed" : "pointer",
+                fontWeight: 600,
+              }}
+            >
+              Keep Job
+            </button>
+
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={actionLoading}
+              style={{
+                padding: "10px 18px",
+                background: actionLoading
+                  ? "#1d2026"
+                  : "rgba(248,113,113,0.95)",
+                color: actionLoading ? "#8c90a0" : "#1a0000",
+                border: "none",
+                borderRadius: 8,
+                cursor: actionLoading ? "not-allowed" : "pointer",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              {actionLoading ? (
+                <>
+                  <span
+                    className="material-symbols-outlined"
+                    style={{ fontSize: 16, animation: "spin 1s linear infinite" }}
+                  >
+                    autorenew
+                  </span>
+                  Cancelling...
+                </>
+              ) : (
+                <>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>
+                    cancel
+                  </span>
+                  Cancel Job
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
+);
 }
 
 export default function JobsPage() {

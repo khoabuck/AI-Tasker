@@ -18,6 +18,7 @@ const STATUS_TABS = [
   { key: "ACTIVE", label: "Active", icon: "rocket_launch", color: "#00F0FF" },
   { key: "COMPLETED", label: "Completed", icon: "verified", color: "#22c55e" },
   { key: "DISPUTED", label: "Disputed", icon: "gavel", color: "#ef4444" },
+  { key: "CANCELLED", label: "Cancelled", icon: "cancel", color: "#9ca3af" },
 ];
 
 const STATUS_CLASS = {
@@ -36,7 +37,8 @@ const STATUS_CONFIG = {
 
 function ProjectCard({ project, hasReview }) {
   const navigate = useNavigate();
-  const cfg = STATUS_CONFIG[project.status] || STATUS_CONFIG.ACTIVE;
+  const normalizedStatus = String(project.status ?? "").toUpperCase();
+  const cfg = STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.ACTIVE;
   const expertName = project.expertName || project.expert?.fullName || "Expert";
 
   return (
@@ -62,7 +64,7 @@ function ProjectCard({ project, hasReview }) {
         </div>
         <span
           className={`whitespace-nowrap rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase ${
-            STATUS_CLASS[project.status] || STATUS_CLASS.ACTIVE
+            STATUS_CLASS[normalizedStatus] || STATUS_CLASS.ACTIVE
           }`}
         >
           {cfg.label}
@@ -89,7 +91,7 @@ function ProjectCard({ project, hasReview }) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {project.status === "ACTIVE" && (
+          {normalizedStatus === "ACTIVE" && (
             <>
               <button
                 onClick={(e) => {
@@ -104,7 +106,7 @@ function ProjectCard({ project, hasReview }) {
             </>
           )}
 
-          {project.status === "COMPLETED" && (
+          {normalizedStatus === "COMPLETED" && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -116,7 +118,7 @@ function ProjectCard({ project, hasReview }) {
             </button>
           )}
 
-          {project.status === "DISPUTED" && (
+          {normalizedStatus === "DISPUTED" && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -125,6 +127,18 @@ function ProjectCard({ project, hasReview }) {
               className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-xs font-bold text-red-400 transition hover:bg-red-500/20"
             >
               View Dispute
+            </button>
+          )}
+
+          {normalizedStatus === "CANCELLED" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                navigate(`/client/projects/${project.projectId}`);
+              }}
+              className="rounded-lg border border-gray-400/30 bg-gray-400/10 px-4 py-2 text-xs font-bold text-gray-400 transition hover:bg-gray-400/20"
+            >
+              View Detail
             </button>
           )}
         </div>
@@ -137,6 +151,7 @@ export default function ProjectsListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const activeStatus = searchParams.get("status") || "ACTIVE";
+  const [bannerMsg, setBannerMsg] = useState(location.state?.successMsg || "");
 
   useEffect(() => {
   window.scrollTo(0, 0);
@@ -205,14 +220,42 @@ export default function ProjectsListPage() {
 
         {/* Header */}
         <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>My Projects</h1>
-          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>Monitor the progress of ongoing collaborative projects.</p>
+          <h1 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 30, fontWeight: 700, color: "#e1e2eb", marginBottom: 6 }}>
+            My Projects
+          </h1>
+          <p style={{ color: "#8c90a0", fontSize: 14, margin: 0 }}>
+            Monitor the progress of ongoing collaborative projects.
+          </p>
         </div>
+
+        {bannerMsg && (
+          <div
+            style={{
+              background: "rgba(74,222,128,0.08)",
+              border: "1px solid rgba(74,222,128,0.25)",
+              borderRadius: 10,
+              padding: "12px 16px",
+              color: "#4ade80",
+              fontSize: 14,
+              marginBottom: 20,
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+              check_circle
+            </span>
+            {bannerMsg}
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display: "flex", gap: 8, marginBottom: 28, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           {STATUS_TABS.map((tab) => {
-            const count = allProjects.filter((p) => p.status === tab.key).length;
+            const count = allProjects.filter(
+              (p) => String(p.status ?? "").toUpperCase() === tab.key
+            ).length;
             const active = activeStatus === tab.key;
             return (
               <button key={tab.key}
