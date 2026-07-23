@@ -17,6 +17,38 @@ const LEVEL_CONFIG = {
   EXPERT:  { label: "Expert",  badge: "bg-indigo-300/20 text-indigo-300 border-indigo-300/40" },
 };
 
+function StarRating({ rating }) {
+  const safeRating = Math.max(
+    0,
+    Math.min(5, Number(rating ?? 0))
+  );
+
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isFull = star <= Math.floor(safeRating);
+        const isHalf = !isFull && star - 0.5 <= safeRating;
+
+        return (
+          <span
+            key={star}
+            className={`material-symbols-outlined text-[15px] ${
+              isFull || isHalf ? "text-yellow-400" : "text-gray-600"
+            }`}
+            style={{
+              fontVariationSettings: isFull || isHalf
+                ? "'FILL' 1"
+                : "'FILL' 0",
+            }}
+          >
+            {isHalf ? "star_half" : "star"}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 /*
 Component con: ExpertCard
 
@@ -49,6 +81,19 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   };
   // Lấy điểm matching từ BE.  FE chỉ hiển thị, không tự tính score.
   const matchScore = expert.matchScore ? Math.round(expert.matchScore) : null;
+
+  // Rating/review lấy trực tiếp từ BE.
+  // Không dùng profileScore để tính sao.
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(expert.averageRating ?? 0))
+  );
+
+  const totalReviews = Math.max(
+    0,
+    Number(expert.totalReviews ?? 0)
+  );
+
   // Chọn danh sách skill để hiển thị.
 // Hiện tại ưu tiên matchedSkills nếu AI tìm được skill phù hợp.
 // Nếu không có thì dùng expertSkills.
@@ -56,7 +101,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   const isMatchedSkills = expert.matchedSkills?.length > 0;
 
   return (
-    <div className="relative flex flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#101319]/85 p-6 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
+    <div className="relative flex h-full flex-col gap-4 overflow-hidden rounded-2xl border border-white/10 bg-[#101319]/85 p-6 backdrop-blur-xl transition-all hover:-translate-y-0.5 hover:border-cyan-400/40">
 
       {/* Match score badge */}
       {matchScore !== null && (
@@ -81,19 +126,36 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
             </span>
           </div>
           <p className="font-mono text-xs text-cyan-400">{expert.professionalTitle}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <StarRating rating={rating} />
+
+            {totalReviews > 0 ? (
+              <span className="font-mono text-[11px] text-gray-400">
+                {rating.toFixed(1)} ({totalReviews}{" "}
+                {totalReviews === 1 ? "review" : "reviews"})
+              </span>
+            ) : (
+              <span className="font-mono text-[11px] text-gray-500">
+                No reviews yet
+              </span>
+            )}
+          </div>
+
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <span className="text-[11px] text-gray-400">
               {expert.yearsOfExperience} yr{expert.yearsOfExperience !== 1 ? "s" : ""} exp
             </span>
+
             {expert.availableForWork && (
               <span className="flex items-center gap-1 text-[11px] text-green-400">
                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-400" />
                 Available
               </span>
             )}
+
             {expert.profileScore != null && (
               <span className="text-[11px] text-gray-400">
-                Score: <span className="text-yellow-400">{expert.profileScore}</span>/100
+                Profile score: <span className="text-yellow-400">{expert.profileScore}</span>/100
               </span>
             )}
           </div>
@@ -150,7 +212,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
       )}
 
       {/* Actions */}
-      <div className="flex gap-2.5 pt-1">
+      <div className="mt-auto flex gap-2.5 pt-4">
         <button
           onClick={() => { onViewProfile(); navigate(`/client/experts/${expert.expertProfileId}`); }}
           className="flex-1 rounded-lg border border-white/10 bg-[#1d2026] py-2.5 text-[13px] font-medium text-gray-100 transition-colors hover:bg-[#272a30]">

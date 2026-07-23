@@ -8,6 +8,8 @@
 //   experienceVerificationStatus, experienceVerificationNote, availableForWork,
 //   portfolioUrl, linkedInUrl, gitHubUrl, expertCategory, profileScore, level,
 //   profileReviewStatus, verifiedAt, createdAt, updatedAt,
+//   averageRating, totalReviews,
+//   reviews: [{ reviewId, rating, comment, isVerifiedProjectReview, createdAt }],
 //   expertSkills: [{ skillId, skillName, category, skillLevel, yearsOfExperience, isPrimary }],
 //   certificates: []
 // }
@@ -26,14 +28,28 @@ const SKILL_LEVEL_COLOR = {
   EXPERT:       "text-indigo-300",
 };
 
-function StarRating({ rating }) {
+function StarRating({ rating, sizeClass = "text-[18px]" }) {
+  const safeRating = Math.max(
+    0,
+    Math.min(5, Number(rating ?? 0))
+  );
+
   return (
-    <div className="flex gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <span key={i} className="material-symbols-outlined text-[18px] text-cyan-400" style={{ fontVariationSettings: "'FILL' 1" }}>
-          {i <= Math.floor(rating) ? "star" : i - 0.5 <= rating ? "star_half" : "star_outline"}
-        </span>
-      ))}
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const isActive = star <= Math.floor(safeRating);
+
+        return (
+          <span
+            key={star}
+            className={`${sizeClass} leading-none ${
+              isActive ? "text-yellow-400" : "text-gray-600"
+            }`}
+          >
+            {isActive ? "★" : "☆"}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -138,7 +154,18 @@ export default function ExpertProfileViewPage() {
     );
   }
 
-  const rating = expert.averageRating || 0;
+  const rating = Math.max(
+    0,
+    Math.min(5, Number(expert.averageRating ?? 0))
+  );
+
+  const totalReviews = Math.max(
+    0,
+    Number(expert.totalReviews ?? 0)
+  );
+
+  const reviews = Array.isArray(expert.reviews) ? expert.reviews : [];
+
   const isVerified = expert.experienceVerificationStatus === "VERIFIED";
   const expertSkills = Array.isArray(expert.expertSkills) ? expert.expertSkills : [];
   const certificates = Array.isArray(expert.certificates) ? expert.certificates : [];
@@ -167,19 +194,19 @@ export default function ExpertProfileViewPage() {
 
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex items-center gap-2">
-                  {rating > 0 ? (
-                    <>
-                      <StarRating rating={rating} />
-                      <span className="font-mono text-[13px] text-gray-300">
-                        {expert.averageRating.toFixed(1)}/5
-                      </span>
-                    </>
-                  ) : (
-                    <span className="font-mono text-[13px] text-gray-400">
-                      No reviews
-                    </span>
-                  )}
-                </div>
+                <StarRating rating={rating} />
+
+                {totalReviews > 0 ? (
+                  <span className="font-mono text-[13px] text-gray-300">
+                    {rating.toFixed(1)}/5 ({totalReviews}{" "}
+                    {totalReviews === 1 ? "review" : "reviews"})
+                  </span>
+                ) : (
+                  <span className="font-mono text-[13px] text-gray-400">
+                    No reviews yet
+                  </span>
+                )}
+              </div>
 
                 {expert.availableForWork && (
                   <span className="flex items-center gap-1.5 rounded-full border border-green-500/30 bg-green-500/10 px-2.5 py-0.5 font-mono text-[11px] font-bold uppercase text-green-400">
@@ -260,6 +287,49 @@ export default function ExpertProfileViewPage() {
                   <p className="font-mono text-xl font-bold text-indigo-300">{expert.experienceConfidenceScore}%</p>
                 </div>
               </div>
+
+              {/* Reviews */}
+            <div className="rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-7 backdrop-blur-md">
+              <div className="mb-4 flex items-center justify-between">
+                <span className="block font-mono text-[10px] uppercase tracking-wider text-gray-400">
+                  Reviews
+                </span>
+
+                <span className="font-mono text-[11px] text-gray-400">
+                  {totalReviews} {totalReviews === 1 ? "review" : "reviews"}
+                </span>
+              </div>
+
+              {reviews.length > 0 ? (
+                <div className="flex flex-col gap-3">
+                  {reviews.map((review) => (
+                    <div
+                      key={review.reviewId}
+                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-3.5 py-3"
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <StarRating
+                          rating={review.rating}
+                          sizeClass="text-[15px]"
+                        />
+
+                        <span className="font-mono text-[11px] text-gray-400">
+                          {Number(review.rating ?? 0).toFixed(1)}/5
+                        </span>
+                      </div>
+
+                      <p className="text-sm leading-6 text-gray-300">
+                        {review.comment || "No comment."}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400">
+                  No reviews yet.
+                </p>
+              )}
+            </div>
 
             </div>
 

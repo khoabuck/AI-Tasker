@@ -12,7 +12,6 @@ const LEVEL_CONFIG = {
   EXPERT: { label: "Expert", color: "#c0c1ff" },
 };
 
-const MESSAGE_MAX_LENGTH = 500;
 
 function normalizeExpertLevel(level) {
   const normalizedLevel = String(level || "")
@@ -319,7 +318,6 @@ function MessageModal({ expert, jobId, jobTitle, navigate, onClose }) {
             onChange={(e) => setMessage(e.target.value)}
             placeholder={`Hi ${firstName}, I would like to invite you to apply for my project...`}
             rows={5}
-            maxLength={MESSAGE_MAX_LENGTH}
             style={{
               width: "100%",
               background: "#1d2026",
@@ -344,15 +342,6 @@ function MessageModal({ expert, jobId, jobTitle, navigate, onClose }) {
             }}
           />
 
-          <p
-            style={{
-              fontSize: 11,
-              color: "#8c90a0",
-              marginTop: 6,
-            }}
-          >
-            {message.length}/{MESSAGE_MAX_LENGTH} characters
-          </p>
         </div>
 
         {/* Send error */}
@@ -585,9 +574,6 @@ export default function ClientJobRecommendationPage() {
                     expert.yearsOfExperience
                   );
 
-                const profileScore =
-                  getFiniteNumber(expert.profileScore);
-
                 return (
                   <div
                     key={
@@ -630,25 +616,10 @@ export default function ClientJobRecommendationPage() {
                             }}
                           >
                             {yearsOfExperience !== null
-                            ? `${yearsOfExperience} yrs exp`
-                            : "Experience not provided"}
+                              ? `${yearsOfExperience} yrs exp`
+                              : "Experience not provided"}
                           </span>
 
-                          <span
-                            style={{
-                              fontSize: 12,
-                              color: "#8c90a0",
-                            }}
-                          >
-                            Score:{" "}
-                            <span style={{ color: "#facc15" }}>
-                              {profileScore !== null
-                              ? profileScore
-                              : "N/A"}
-                            </span>
-                            /100
-                          </span>
-                         
                           {expert.availableForWork === false && (
                             <span
                               style={{
