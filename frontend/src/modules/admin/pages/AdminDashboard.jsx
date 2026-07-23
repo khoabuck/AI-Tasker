@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import AdminLayout from "../../../components/layout/AdminLayout";
 import adminService from "../../../services/admin.service";
 
@@ -85,11 +86,7 @@ export default function AdminDashboard() {
     const uniqueMap = new Map();
 
     merged.forEach((item, index) => {
-      const key =
-        item.transactionId ||
-        item.platformTransactionId ||
-        item.id ||
-        `${item.type}-${item.createdAt}-${index}`;
+      const key = getActivityKey(item, index);
 
       uniqueMap.set(key, item);
     });
@@ -374,13 +371,26 @@ export default function AdminDashboard() {
                   </h2>
 
                   <p className="mt-1 text-sm text-gray-400">
-                    Latest wallet and platform transactions returned by the backend.
+                    Latest money movements, marked by how they affect platform
+                    revenue, escrow, and user-held balances.
                   </p>
                 </div>
 
-                <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                  {recentActivity.length} items
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
+                    Latest {recentActivity.length} items
+                  </span>
+
+                  <Link
+                    to="/admin/dashboard/recent-activity"
+                    className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs font-bold uppercase tracking-wider text-gray-300 transition hover:border-cyan-400/30 hover:text-cyan-300"
+                  >
+                    View all activity
+                    <span className="material-symbols-outlined text-sm">
+                      arrow_forward
+                    </span>
+                  </Link>
+                </div>
               </div>
 
               {recentActivity.length === 0 ? (
@@ -391,8 +401,9 @@ export default function AdminDashboard() {
                 />
               ) : (
                 <div className="overflow-hidden rounded-xl border border-white/10">
-                  <div className="hidden grid-cols-[1.4fr_1fr_1fr_120px] border-b border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid">
+                  <div className="hidden grid-cols-[1.35fr_0.8fr_1fr_0.9fr_120px] border-b border-white/10 bg-white/[0.03] px-4 py-3 text-xs font-bold uppercase tracking-wider text-gray-500 md:grid">
                     <span>Activity</span>
+                    <span>Impact</span>
                     <span>Amount</span>
                     <span>Status</span>
                     <span className="text-right">Date</span>
@@ -401,12 +412,7 @@ export default function AdminDashboard() {
                   <div className="divide-y divide-white/10">
                     {recentActivity.map((item, index) => (
                       <ActivityRow
-                        key={
-                          item.transactionId ||
-                          item.platformTransactionId ||
-                          item.id ||
-                          index
-                        }
+                        key={getActivityKey(item, index)}
                         item={item}
                       />
                     ))}
@@ -535,53 +541,55 @@ function ActivityRow({ item }) {
     .toUpperCase();
 
   const amount = Math.abs(Number(item.amount || 0));
-  const direction = getTransactionDirection(item, type);
+  const impact = getMoneyImpact(item, type);
 
   const amountPrefix =
-    direction === "IN"
+    impact.direction === "IN"
       ? "+"
-      : direction === "OUT"
+      : impact.direction === "OUT"
         ? "-"
         : "";
 
   const amountClass =
-    direction === "IN"
+    impact.direction === "IN"
       ? "text-green-300"
-      : direction === "OUT"
+      : impact.direction === "OUT"
         ? "text-red-300"
         : "text-white";
 
-  const title =
-    item.displayTitle ||
-    item.referenceDisplayName ||
-    formatLabel(type);
+  const title = getActivityTitle(item, type);
 
-  const description =
-    item.displayDescription ||
-    item.displaySubtitle ||
-    item.description ||
-    "";
+  const description = getActivityDescription(item, type, impact);
 
   return (
-    <div className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.4fr_1fr_1fr_120px] md:items-center">
+    <div className="grid gap-3 px-4 py-4 text-sm md:grid-cols-[1.35fr_0.8fr_1fr_0.9fr_120px] md:items-center">
       <div className="min-w-0">
         <p className="truncate font-bold text-white">{title}</p>
 
         {description && (
-  <p
-    className="mt-1 text-xs leading-5 text-gray-400"
-    title={description}
-    style={{
-      display: "-webkit-box",
-      WebkitLineClamp: 2,
-      WebkitBoxOrient: "vertical",
-      overflow: "hidden",
-      wordBreak: "break-word",
-    }}
-  >
-    {description}
-  </p>
-)}
+          <p
+            className="mt-1 text-xs leading-5 text-gray-400"
+            title={description}
+            style={{
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+              wordBreak: "break-word",
+            }}
+          >
+            {description}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <span
+          className={`inline-flex rounded-full border px-3 py-1 text-xs font-bold uppercase ${impact.className}`}
+          title={impact.helpText}
+        >
+          {impact.label}
+        </span>
       </div>
 
       <div className={`font-extrabold ${amountClass}`}>
@@ -604,6 +612,20 @@ function ActivityRow({ item }) {
       </div>
     </div>
   );
+}
+
+function getActivityKey(item, index) {
+  const source = String(
+    item?.source || (item?.platformTransactionId ? "PLATFORM" : "USER_WALLET")
+  ).toLowerCase();
+
+  const id =
+    item?.platformTransactionId ||
+    item?.transactionId ||
+    item?.id ||
+    `${item?.type || "activity"}-${item?.createdAt || index}`;
+
+  return `${source}-${id}`;
 }
 
 function EmptyState({ icon, title, description }) {
@@ -636,7 +658,7 @@ function firstNumber(...values) {
   return 0;
 }
 
-function getTransactionDirection(item, normalizedType = "") {
+function getMoneyImpact(item, normalizedType = "") {
   const explicitDirection = String(
     item?.direction ||
     item?.flowDirection ||
@@ -647,46 +669,238 @@ function getTransactionDirection(item, normalizedType = "") {
     .toUpperCase();
 
   if (["IN", "CREDIT", "INCOME", "PLUS"].includes(explicitDirection)) {
-    return "IN";
+    return buildMoneyImpact("IN", "Money +", "Explicit positive money movement.");
   }
 
   if (["OUT", "DEBIT", "EXPENSE", "MINUS"].includes(explicitDirection)) {
-    return "OUT";
+    return buildMoneyImpact("OUT", "Money -", "Explicit negative money movement.");
   }
 
   const type = String(normalizedType || "")
     .trim()
     .toUpperCase();
 
-  const incomeTypes = new Set([
-    "PLATFORM_FEE",
-    "EXPERT_SERVICE_FEE",
-    "WITHDRAWAL_FEE",
-    "PLATFORM_REVENUE",
-    "FEE_COLLECTED",
-    "ADJUSTMENT_CREDIT",
-    "PLATFORM_ADJUSTMENT_CREDIT",
-  ]);
-
-  const expenseTypes = new Set([
-    "PLATFORM_REFUND",
-    "FEE_REFUND",
-    "ADJUSTMENT_DEBIT",
-    "PLATFORM_ADJUSTMENT_DEBIT",
-    "PAYOUT",
-    "WITHDRAWAL_PAYOUT",
-    "CLIENT_REFUND",
-  ]);
-
-  if (incomeTypes.has(type)) {
-    return "IN";
+  if (type.includes("ESCROW_LOCK")) {
+    return buildMoneyImpact(
+      "IN",
+      "Escrow +",
+      "Client funds were locked into escrow."
+    );
   }
 
-  if (expenseTypes.has(type)) {
-    return "OUT";
+  if (type.includes("ESCROW_FREEZE")) {
+    return buildMoneyImpact(
+      "IN",
+      "Frozen +",
+      "Disputed funds are frozen and still held by the platform."
+    );
   }
 
-  return "NEUTRAL";
+  if (type.includes("ESCROW_RELEASE")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Escrow -",
+      "Locked escrow funds were released out of escrow."
+    );
+  }
+
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Escrow -",
+      "Escrow funds were received by the expert."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_RELEASE")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Pending -",
+      "Held expert earnings became available to the expert."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_REFUND")) {
+    return buildMoneyImpact(
+      "OUT",
+      "Pending -",
+      "Held expert earnings were removed because the client was refunded."
+    );
+  }
+
+  if (type.includes("PENDING_EARNING_HOLD")) {
+    return buildMoneyImpact(
+      "IN",
+      "Pending +",
+      "Expert net earnings are held until project completion."
+    );
+  }
+
+  if (
+    type.includes("PLATFORM_FEE") ||
+    type.includes("SERVICE_FEE") ||
+    type.includes("WITHDRAWAL_FEE")
+  ) {
+    return buildMoneyImpact(
+      "IN",
+      "Revenue +",
+      "Fee revenue was added to the platform."
+    );
+  }
+
+  if (
+    type.includes("DEPOSIT") ||
+    type.includes("PACKAGE_PURCHASE") ||
+    type.includes("JOB_CREDIT_PACKAGE_PURCHASE") ||
+    type.includes("PROPOSAL_CREDIT_PACKAGE_PURCHASE")
+  ) {
+    return buildMoneyImpact(
+      "IN",
+      "Wallet +",
+      "A user added money or purchased credits on the platform."
+    );
+  }
+
+  if (
+    type.includes("WITHDRAWAL_REJECTED") ||
+    type.includes("WITHDRAWAL_EXPIRED") ||
+    type.includes("WITHDRAWAL_FAILED") ||
+    type.includes("PAYOUT_FAILED")
+  ) {
+    return buildMoneyImpact(
+      "OUT",
+      "Hold -",
+      "Previously held withdrawal funds were released back to the user."
+    );
+  }
+
+  if (type.includes("WITHDRAWAL_HOLD")) {
+    return buildMoneyImpact(
+      "IN",
+      "Hold +",
+      "User withdrawal funds were locked while payout is reviewed."
+    );
+  }
+
+  if (
+    type.includes("REFUND") ||
+    type.includes("WITHDRAWAL_PAID") ||
+    type.includes("PAYOUT") ||
+    type.includes("PLATFORM_REFUND") ||
+    type.includes("CLIENT_REFUND")
+  ) {
+    return buildMoneyImpact(
+      "OUT",
+      "Money -",
+      "Funds left the platform balance or were returned to a user."
+    );
+  }
+
+  const signedAmount = Number(item?.amount || 0);
+
+  if (signedAmount > 0) {
+    return buildMoneyImpact("IN", "Money +", "Positive wallet movement.");
+  }
+
+  if (signedAmount < 0) {
+    return buildMoneyImpact("OUT", "Money -", "Negative wallet movement.");
+  }
+
+  return buildMoneyImpact("NEUTRAL", "No change", "No clear money movement.");
+}
+
+function buildMoneyImpact(direction, label, helpText) {
+  const className =
+    direction === "IN"
+      ? "border-green-400/30 bg-green-400/10 text-green-300"
+      : direction === "OUT"
+        ? "border-red-400/30 bg-red-400/10 text-red-300"
+        : "border-white/15 bg-white/[0.04] text-gray-300";
+
+  return {
+    direction,
+    label,
+    helpText,
+    className,
+  };
+}
+
+function getActivityTitle(item, type) {
+  if (type.includes("ESCROW_LOCK")) return "Client funds locked";
+  if (type.includes("ESCROW_RELEASE")) return "Escrow released";
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return "Expert received escrow";
+  }
+  if (type.includes("ESCROW_FREEZE")) return "Escrow frozen";
+  if (type.includes("PENDING_EARNING_RELEASE")) return "Expert earning released";
+  if (type.includes("PENDING_EARNING_HOLD")) return "Expert earning held";
+  if (type.includes("PENDING_EARNING_REFUND")) return "Expert earning refunded";
+  if (type.includes("EXPERT_SERVICE_FEE")) return "Expert service fee collected";
+  if (type.includes("PLATFORM_FEE")) return "Platform fee collected";
+  if (type.includes("WITHDRAWAL_HOLD")) return "Withdrawal funds held";
+  if (type.includes("PAYOUT_PROCESSING")) return "Withdrawal payout processing";
+  if (type.includes("PAYOUT_FAILED")) return "Withdrawal payout failed";
+  if (type.includes("WITHDRAWAL_PAID")) return "Withdrawal paid";
+  if (type.includes("WITHDRAWAL_REJECTED")) return "Withdrawal rejected";
+  if (type.includes("WITHDRAWAL_EXPIRED")) return "Withdrawal expired";
+  if (type.includes("WITHDRAWAL_FAILED")) return "Withdrawal failed";
+  if (type.includes("REFUND")) return "Refund processed";
+  if (type.includes("DEPOSIT")) return "Wallet deposit";
+  if (type.includes("JOB_CREDIT_PACKAGE_PURCHASE")) {
+    return "Job credit package purchased";
+  }
+  if (type.includes("PROPOSAL_CREDIT_PACKAGE_PURCHASE")) {
+    return "Proposal credit package purchased";
+  }
+
+  return item?.displayTitle || item?.referenceDisplayName || formatLabel(type);
+}
+
+function getActivityDescription(item, type, impact) {
+  const reference =
+    item?.referenceDisplayName ||
+    item?.projectTitle ||
+    item?.milestoneTitle ||
+    item?.jobTitle ||
+    "";
+
+  const suffix = reference ? ` Reference: ${reference}.` : "";
+
+  if (type.includes("ESCROW_LOCK")) {
+    return `Client money was moved from available balance into locked escrow.${suffix}`;
+  }
+
+  if (type.includes("ESCROW_RELEASE")) {
+    return `Locked escrow was released, so the escrow balance goes down.${suffix}`;
+  }
+
+  if (type.includes("ESCROW_RECEIVE") || type.includes("ESCROW_RECEIVED")) {
+    return `Escrow money was received by the expert, so platform-held escrow goes down.${suffix}`;
+  }
+
+  if (type.includes("PLATFORM_FEE") || type.includes("SERVICE_FEE")) {
+    return `Fee income was collected by the platform.${suffix}`;
+  }
+
+  if (type.includes("DEPOSIT")) {
+    return `A user topped up their wallet balance.${suffix}`;
+  }
+
+  if (type.includes("PACKAGE_PURCHASE")) {
+    return `A user paid for a credit package.${suffix}`;
+  }
+
+  if (type.includes("REFUND")) {
+    return `Funds were returned to the client or removed from held earnings.${suffix}`;
+  }
+
+  return (
+    item?.displayDescription ||
+    item?.displaySubtitle ||
+    item?.description ||
+    impact.helpText ||
+    ""
+  );
 }
 
 function countByStatus(items, statuses) {

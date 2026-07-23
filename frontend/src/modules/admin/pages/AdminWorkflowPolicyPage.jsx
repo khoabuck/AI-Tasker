@@ -8,10 +8,15 @@ const DEFAULT_FORM = {
   proposalMilestoneLimit: "",
   freeProposalSubmitCount: "",
   resubmitNoteMaxLength: "",
+  proposalResubmitLimit: "",
+  proposalResubmitWindowHours: "",
+  proposalCreditLowWarningThreshold: "",
   contractSignWindowHours: "",
+  contractSignMissLimit: "",
   expertMaxActiveProjects: "",
   deliverableReviewWindowHours: "",
   deliverableAutoApproveGraceHours: "",
+  deliverableArtifactLimit: "",
   minimumWithdrawalAmount: "",
   withdrawalFeeRate: "",
   minimumDepositAmount: "",
@@ -29,27 +34,57 @@ const POLICY_SECTIONS = [
     icon: "edit_document",
     title: "Proposals",
     description:
-      "Controls expert proposal drafts, proposal milestones, free submissions, and resubmission note length.",
+      "Controls expert proposal drafts, milestones, free submissions, resubmits, and credit warnings.",
     fields: [
       {
         name: "proposalDraftLimit",
         label: "Proposal Draft Limit",
         helper: "Maximum number of saved proposal drafts.",
+        min: 0,
+        max: 100,
       },
       {
         name: "proposalMilestoneLimit",
         label: "Proposal Milestone Limit",
         helper: "Maximum milestone items allowed in a proposal.",
+        min: 1,
+        max: 50,
       },
       {
         name: "freeProposalSubmitCount",
         label: "Free Proposal Submit Count",
         helper: "Free proposal submissions before credits are required.",
+        min: 0,
+        max: 100,
       },
       {
         name: "resubmitNoteMaxLength",
         label: "Resubmit Note Max Length",
         helper: "Maximum characters allowed for resubmission notes.",
+        min: 100,
+        max: 5000,
+      },
+      {
+        name: "proposalResubmitLimit",
+        label: "Proposal Resubmit Limit",
+        helper: "Maximum resubmits in the configured window. Use 0 for unlimited.",
+        min: 0,
+        max: 100,
+      },
+      {
+        name: "proposalResubmitWindowHours",
+        label: "Resubmit Window Hours",
+        helper: "Hours used to count proposal resubmits. Use 0 for lifetime counting.",
+        suffix: "hours",
+        min: 0,
+        max: 8760,
+      },
+      {
+        name: "proposalCreditLowWarningThreshold",
+        label: "Credit Low Warning Threshold",
+        helper: "Show a low-credit warning when remaining proposal credits reach this value.",
+        min: 0,
+        max: 1000,
       },
     ],
   },
@@ -65,11 +100,22 @@ const POLICY_SECTIONS = [
         label: "Contract Sign Window Hours",
         helper: "Hours before the contract signing window expires.",
         suffix: "hours",
+        min: 1,
+        max: 720,
+      },
+      {
+        name: "contractSignMissLimit",
+        label: "Contract Sign Miss Limit",
+        helper: "Missed signing attempts allowed before restriction rules apply.",
+        min: 1,
+        max: 20,
       },
       {
         name: "expertMaxActiveProjects",
         label: "Expert Max Active Projects",
         helper: "Maximum active projects an expert can handle at once.",
+        min: 1,
+        max: 50,
       },
     ],
   },
@@ -85,12 +131,23 @@ const POLICY_SECTIONS = [
         label: "Deliverable Review Window Hours",
         helper: "Time allowed for client to review submitted work.",
         suffix: "hours",
+        min: 1,
+        max: 720,
       },
       {
         name: "deliverableAutoApproveGraceHours",
         label: "Auto Approve Grace Hours",
         helper: "Additional grace hours before auto approval applies.",
         suffix: "hours",
+        min: 1,
+        max: 168,
+      },
+      {
+        name: "deliverableArtifactLimit",
+        label: "Deliverable Artifact Limit",
+        helper: "Maximum product links or files accepted for one deliverable.",
+        min: 1,
+        max: 100,
       },
     ],
   },
@@ -106,42 +163,52 @@ const POLICY_SECTIONS = [
         label: "Minimum Withdrawal Amount",
         helper: "Minimum amount an expert can withdraw.",
         suffix: "VNĐ",
+        min: 0,
       },
       {
         name: "withdrawalFeeRate",
         label: "Withdrawal Fee Rate",
-        helper: "Use decimal rate. Example: 0.1 = 10%.",
+        helper: "Currently disabled by marketplace rule and kept at 0%.",
         step: "0.01",
+        readOnly: true,
       },
       {
         name: "minimumDepositAmount",
         label: "Minimum Deposit Amount",
         helper: "Minimum client wallet deposit amount.",
         suffix: "VNĐ",
+        min: 0,
       },
       {
         name: "maximumDepositAmount",
         label: "Maximum Deposit Amount",
         helper: "Maximum client wallet deposit amount.",
         suffix: "VNĐ",
+        min: 0,
       },
       {
         name: "depositOrderExpireMinutes",
         label: "Deposit Expire Minutes",
         helper: "QR/deposit order expiration time.",
         suffix: "minutes",
+        min: 1,
+        max: 1440,
       },
       {
         name: "withdrawalApprovalWindowHours",
         label: "Withdrawal Approval Window Hours",
         helper: "Time window for admin withdrawal approval.",
         suffix: "hours",
+        min: 1,
+        max: 720,
       },
       {
         name: "withdrawalPayoutSyncWarningHours",
         label: "Withdrawal Sync Warning Hours",
         helper: "Show warning when payout sync takes too long.",
         suffix: "hours",
+        min: 1,
+        max: 720,
       },
     ],
   },
@@ -155,6 +222,8 @@ const POLICY_SECTIONS = [
         name: "disputeLostWarningThreshold",
         label: "Dispute Lost Warning Threshold",
         helper: "Number of lost disputes before warning or admin review.",
+        min: 1,
+        max: 20,
       },
     ],
   },
@@ -244,6 +313,8 @@ export default function AdminWorkflowPolicyPage() {
     if (!editSection) return nextErrors;
 
     editSection.fields.forEach((field) => {
+      if (field.readOnly) return;
+
       const rawValue = editForm[field.name];
       const value = Number(rawValue);
 
@@ -251,35 +322,26 @@ export default function AdminWorkflowPolicyPage() {
         nextErrors[field.name] = "This field is required.";
       } else if (Number.isNaN(value)) {
         nextErrors[field.name] = "Value must be a valid number.";
-      } else if (value < 0) {
-        nextErrors[field.name] = "Value must be 0 or greater.";
+      } else if (field.min !== undefined && value < field.min) {
+        nextErrors[field.name] = `Value must be at least ${field.min}.`;
+      } else if (field.max !== undefined && value > field.max) {
+        nextErrors[field.name] = `Value cannot exceed ${field.max}.`;
       }
     });
 
     if (editSection.key === "wallet") {
       const minDeposit = Number(editForm.minimumDepositAmount);
       const maxDeposit = Number(editForm.maximumDepositAmount);
-      const withdrawalFeeRate = Number(editForm.withdrawalFeeRate);
 
       if (
         editForm.minimumDepositAmount !== "" &&
         editForm.maximumDepositAmount !== "" &&
         !Number.isNaN(minDeposit) &&
         !Number.isNaN(maxDeposit) &&
-        maxDeposit < minDeposit
+        maxDeposit <= minDeposit
       ) {
         nextErrors.maximumDepositAmount =
-          "Maximum deposit must be greater than or equal to minimum deposit.";
-      }
-
-      if (
-        editForm.withdrawalFeeRate === "" ||
-        Number.isNaN(withdrawalFeeRate) ||
-        withdrawalFeeRate < 0 ||
-        withdrawalFeeRate > 1
-      ) {
-        nextErrors.withdrawalFeeRate =
-          "Withdrawal fee rate must be between 0 and 1.";
+          "Maximum deposit must be greater than minimum deposit.";
       }
     }
 
@@ -779,17 +841,22 @@ function PolicyInput({ field, value, error, onChange }) {
   return (
     <label className="block rounded-xl border border-white/10 bg-white/[0.03] p-3">
       <span className="mb-2 block text-[11px] font-bold uppercase tracking-wider text-gray-500">
-        {field.label} <span className="text-red-400">*</span>
+        {field.label} {!field.readOnly && <span className="text-red-400">*</span>}
       </span>
 
       <div className="flex items-center gap-2">
         <input
           type="number"
           step={field.step || "1"}
+          min={field.min}
+          max={field.max}
+          disabled={field.readOnly}
           value={value}
           onChange={(event) => onChange(field.name, event.target.value)}
           className={`w-full rounded-lg border px-3 py-2.5 text-sm font-bold text-white outline-none transition ${
-            error
+            field.readOnly
+              ? "cursor-not-allowed border-white/10 bg-black/20 text-gray-400"
+              : error
               ? "border-red-400/70 bg-red-500/10"
               : "border-white/10 bg-[#0f141d] focus:border-cyan-400/50"
           }`}
@@ -902,11 +969,17 @@ function buildForm(policy) {
     proposalMilestoneLimit: policy.proposalMilestoneLimit ?? "",
     freeProposalSubmitCount: policy.freeProposalSubmitCount ?? "",
     resubmitNoteMaxLength: policy.resubmitNoteMaxLength ?? "",
+    proposalResubmitLimit: policy.proposalResubmitLimit ?? "",
+    proposalResubmitWindowHours: policy.proposalResubmitWindowHours ?? "",
+    proposalCreditLowWarningThreshold:
+      policy.proposalCreditLowWarningThreshold ?? "",
     contractSignWindowHours: policy.contractSignWindowHours ?? "",
+    contractSignMissLimit: policy.contractSignMissLimit ?? "",
     expertMaxActiveProjects: policy.expertMaxActiveProjects ?? "",
     deliverableReviewWindowHours: policy.deliverableReviewWindowHours ?? "",
     deliverableAutoApproveGraceHours:
       policy.deliverableAutoApproveGraceHours ?? "",
+    deliverableArtifactLimit: policy.deliverableArtifactLimit ?? "",
     minimumWithdrawalAmount: policy.minimumWithdrawalAmount ?? "",
     withdrawalFeeRate: policy.withdrawalFeeRate ?? "",
     minimumDepositAmount: policy.minimumDepositAmount ?? "",

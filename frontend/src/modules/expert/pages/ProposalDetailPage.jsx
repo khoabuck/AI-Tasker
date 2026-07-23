@@ -634,7 +634,68 @@ function ProposalSigningNotice({ proposal, statusGroup }) {
     return null;
   }
 
+  return (
+    <section className="mb-6 rounded-2xl border border-cyan-400/25 bg-cyan-400/10 p-5">
+      <div className="flex gap-3">
+        <span className="material-symbols-outlined mt-0.5 text-cyan-300">
+          contract_edit
+        </span>
 
+        <div>
+          <p className="text-sm font-black text-white">Contract signing status</p>
+          <p className="mt-1 text-sm leading-6 text-cyan-100/80">
+            {statusReason
+              ? formatProposalStatusReason(statusReason)
+              : "Your proposal is selected. The contract will move to a project after both sides sign."}
+          </p>
+
+          {(clientMissCount > 0 || expertMissCount > 0) && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {clientMissCount > 0 && (
+                <span className="rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1 text-xs font-bold text-yellow-200">
+                  Client missed signing {clientMissCount} time
+                  {clientMissCount > 1 ? "s" : ""}
+                </span>
+              )}
+
+              {expertMissCount > 0 && (
+                <span className="rounded-full border border-yellow-400/30 bg-yellow-400/10 px-3 py-1 text-xs font-bold text-yellow-200">
+                  You missed signing {expertMissCount} time
+                  {expertMissCount > 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatProposalStatusReason(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+
+  const map = {
+    EXPERT_DECLINE_DEAL:
+      "You declined the contract. The proposal cannot move forward with that draft.",
+    CLIENT_SIGN_TIMEOUT:
+      "The client missed the signing window. The client may need to prepare a new contract draft.",
+    EXPERT_SIGN_TIMEOUT:
+      "You missed the signing window. Please watch for any new contract draft from the client.",
+    CONTRACT_DRAFT_CANCELLED:
+      "The previous contract draft was cancelled. Your accepted proposal can still be used for a new draft.",
+    CONTRACT_CANCELLED:
+      "The related contract was cancelled.",
+  };
+
+  return (
+    normalized
+      .toLowerCase()
+      .split("_")
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(" ") || "Contract status updated."
+  );
 }
 
 function MiniInfo({ label, value }) {

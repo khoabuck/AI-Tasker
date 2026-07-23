@@ -48,8 +48,32 @@ export const normalizeWorkflowPolicy = (policy) => {
       getValue(policy.resubmitNoteMaxLength, policy.ResubmitNoteMaxLength, 0)
     ),
 
+    proposalResubmitLimit: toNumber(
+      getValue(policy.proposalResubmitLimit, policy.ProposalResubmitLimit, 0)
+    ),
+
+    proposalResubmitWindowHours: toNumber(
+      getValue(
+        policy.proposalResubmitWindowHours,
+        policy.ProposalResubmitWindowHours,
+        0
+      )
+    ),
+
+    proposalCreditLowWarningThreshold: toNumber(
+      getValue(
+        policy.proposalCreditLowWarningThreshold,
+        policy.ProposalCreditLowWarningThreshold,
+        0
+      )
+    ),
+
     contractSignWindowHours: toNumber(
       getValue(policy.contractSignWindowHours, policy.ContractSignWindowHours, 0)
+    ),
+
+    contractSignMissLimit: toNumber(
+      getValue(policy.contractSignMissLimit, policy.ContractSignMissLimit, 0)
     ),
 
     expertMaxActiveProjects: toNumber(
@@ -68,6 +92,14 @@ export const normalizeWorkflowPolicy = (policy) => {
       getValue(
         policy.deliverableAutoApproveGraceHours,
         policy.DeliverableAutoApproveGraceHours,
+        0
+      )
+    ),
+
+    deliverableArtifactLimit: toNumber(
+      getValue(
+        policy.deliverableArtifactLimit,
+        policy.DeliverableArtifactLimit,
         0
       )
     ),
@@ -142,14 +174,21 @@ const buildPayload = (form) => ({
   proposalMilestoneLimit: toNumber(form.proposalMilestoneLimit),
   freeProposalSubmitCount: toNumber(form.freeProposalSubmitCount),
   resubmitNoteMaxLength: toNumber(form.resubmitNoteMaxLength),
+  proposalResubmitLimit: toNumber(form.proposalResubmitLimit),
+  proposalResubmitWindowHours: toNumber(form.proposalResubmitWindowHours),
+  proposalCreditLowWarningThreshold: toNumber(
+    form.proposalCreditLowWarningThreshold
+  ),
   contractSignWindowHours: toNumber(form.contractSignWindowHours),
+  contractSignMissLimit: toNumber(form.contractSignMissLimit),
   expertMaxActiveProjects: toNumber(form.expertMaxActiveProjects),
   deliverableReviewWindowHours: toNumber(form.deliverableReviewWindowHours),
   deliverableAutoApproveGraceHours: toNumber(
     form.deliverableAutoApproveGraceHours
   ),
+  deliverableArtifactLimit: toNumber(form.deliverableArtifactLimit),
   minimumWithdrawalAmount: toNumber(form.minimumWithdrawalAmount),
-  withdrawalFeeRate: toNumber(form.withdrawalFeeRate),
+  withdrawalFeeRate: 0,
   minimumDepositAmount: toNumber(form.minimumDepositAmount),
   maximumDepositAmount: toNumber(form.maximumDepositAmount),
   depositOrderExpireMinutes: toNumber(form.depositOrderExpireMinutes),

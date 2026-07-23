@@ -309,7 +309,6 @@ export default function ResubmitProposalPage() {
                 <Card title="Revision summary" icon="edit_note">
                   <TextArea
                     label="What changed?"
-                    required
                     value={formData.resubmitNote}
                     onChange={(value) => updateField("resubmitNote", value)}
                     onBlur={() => markTouched("resubmitNote")}
@@ -398,7 +397,6 @@ export default function ResubmitProposalPage() {
 
                     <TextArea
                       label="Milestone overview"
-                      required
                       value={formData.preliminaryMilestonePlan}
                       onChange={(value) =>
                         updateField("preliminaryMilestonePlan", value)

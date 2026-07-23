@@ -1007,34 +1007,42 @@ export default function MilestoneDetailPage() {
 
           <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_330px] xl:items-start">
             <main className="min-w-0 space-y-5">
-              <Card
-                title="Milestone brief"
-                subtitle="Client requirements and approval criteria for this delivery."
-                icon="task_alt"
-              >
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                  <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
-                    {milestone.description || "No description provided."}
-                  </p>
-                </div>
-
-                {milestone.acceptanceCriteria && (
-                  <div className="mt-4 rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-                    <div className="mb-2 flex items-center gap-2 text-cyan-300">
-                      <span className="material-symbols-outlined text-[18px]">
-                        checklist
-                      </span>
-                      <p className="text-xs font-black uppercase tracking-[0.18em]">
-                        Acceptance Criteria
+              {(milestone.description || milestone.acceptanceCriteria) && (
+                <Card
+                  title="Milestone brief"
+                  subtitle="Client requirements and approval criteria for this delivery."
+                  icon="task_alt"
+                >
+                  {milestone.description && (
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                      <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                        {milestone.description}
                       </p>
                     </div>
+                  )}
 
-                    <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
-                      {milestone.acceptanceCriteria}
-                    </p>
-                  </div>
-                )}
-              </Card>
+                  {milestone.acceptanceCriteria && (
+                    <div
+                      className={`rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4 ${
+                        milestone.description ? "mt-4" : ""
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center gap-2 text-cyan-300">
+                        <span className="material-symbols-outlined text-[18px]">
+                          checklist
+                        </span>
+                        <p className="text-xs font-black uppercase tracking-[0.18em]">
+                          Acceptance Criteria
+                        </p>
+                      </div>
+
+                      <p className="whitespace-pre-line text-sm leading-6 text-gray-300">
+                        {milestone.acceptanceCriteria}
+                      </p>
+                    </div>
+                  )}
+                </Card>
+              )}
 
               <Card
                 title={formTitle}
@@ -2091,7 +2099,16 @@ function SubmissionCard({ submission, submissionNumber, onDetail }) {
           </p>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <LinkPill label="File" url={submission.fileUrl} />
+            {(submission.artifacts?.length
+              ? submission.artifacts
+              : [{ label: "File", url: submission.fileUrl }]
+            ).map((artifact, index) => (
+              <LinkPill
+                key={artifact.deliverableArtifactId || artifact.url || index}
+                label={artifact.label || formatArtifactType(artifact.artifactType)}
+                url={artifact.url}
+              />
+            ))}
             <LinkPill label="Demo" url={submission.demoUrl} />
             <LinkPill label="Test" url={submission.testResultUrl} />
           </div>
@@ -2307,6 +2324,15 @@ function LinkPill({ label, url }) {
       {label}
     </a>
   );
+}
+
+function formatArtifactType(value) {
+  return String(value || "File")
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function EmptyState({ icon, title, description }) {

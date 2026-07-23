@@ -52,7 +52,7 @@ export default function AdminUserDetailPage() {
   // ===== Derived account status flags =====
   const userStatus = useMemo(() => getUserStatus(user), [user]);
   const userRole = String(user?.role || "").trim().toUpperCase();
-  const isExpert = userRole === "EXPERT";
+  const isAdmin = userRole === "ADMIN";
   const isLocked = userStatus === "LOCKED";
   const isBanned = userStatus === "BANNED";
 
@@ -511,36 +511,42 @@ const requestLockUser = () => {
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
-                  {isLocked ? (
-                    <button
-                      type="button"
-                      onClick={openUnlockModal}
-                      disabled={actionLoading || isBanned}
-                      className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Unlock
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={openLockModal}
-                      disabled={actionLoading || isBanned}
-                      className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Lock
-                    </button>
-                  )}
+                {isAdmin ? (
+                  <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-sm font-semibold text-yellow-100/80">
+                    Admin accounts are protected from moderation actions here.
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 sm:flex-row lg:justify-end">
+                    {isLocked ? (
+                      <button
+                        type="button"
+                        onClick={openUnlockModal}
+                        disabled={actionLoading || isBanned}
+                        className="rounded-xl border border-green-400/40 bg-green-400/10 px-5 py-3 text-sm font-bold text-green-300 transition hover:bg-green-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Unlock
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={openLockModal}
+                        disabled={actionLoading || isBanned}
+                        className="rounded-xl border border-yellow-400/40 bg-yellow-400/10 px-5 py-3 text-sm font-bold text-yellow-300 transition hover:bg-yellow-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Lock
+                      </button>
+                    )}
 
-                  <button
-                    type="button"
-                    onClick={openBanModal}
-                    disabled={actionLoading || isBanned}
-                    className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Ban
-                  </button>
-                </div>
+                    <button
+                      type="button"
+                      onClick={openBanModal}
+                      disabled={actionLoading || isBanned}
+                      className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Ban
+                    </button>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -580,7 +586,7 @@ const requestLockUser = () => {
                 </div>
 
                 <span className="w-fit rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-cyan-300">
-                  {wallet ? "Wallet data available" : "No wallet data"}
+                  {wallet ? "Wallet data available" : "Wallet snapshot unavailable"}
                 </span>
               </div>
 
@@ -618,7 +624,8 @@ const requestLockUser = () => {
 
               {!wallet && (
                 <p className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-4 py-3 text-sm text-yellow-200">
-                  No wallet data found for this user.
+                  Wallet data is loaded from the dashboard snapshot. If this user
+                  is outside the current snapshot, their wallet may not appear here.
                 </p>
               )}
             </section>
@@ -632,13 +639,6 @@ const requestLockUser = () => {
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <DetailItem label="Full name" value={user.fullName} />
                   <DetailItem label="Email" value={user.email} />
-
-                  {!isExpert && (
-                    <DetailItem
-                      label="Phone number"
-                      value={user.phoneNumber}
-                    />
-                  )}
 
                   <DetailItem
                     label="Sign-in method"
@@ -667,6 +667,13 @@ const requestLockUser = () => {
                       label="Last locked at"
                       value={formatDateTime(user.lastLockedAt)}
                     />
+
+                    {isLocked && (
+                      <DetailItem
+                        label="Lock time remaining"
+                        value={formatDuration(user.lockoutRemainingSeconds)}
+                      />
+                    )}
 
                     <DetailItem
                       label="Banned at"
@@ -1365,6 +1372,24 @@ function formatMoney(value) {
     currency: "VND",
     maximumFractionDigits: 0,
   }).format(Number.isNaN(number) ? 0 : number);
+}
+
+function formatDuration(totalSeconds) {
+  const seconds = Number(totalSeconds || 0);
+
+  if (!Number.isFinite(seconds) || seconds <= 0) return "Expired";
+
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+
+  const parts = [];
+
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  if (minutes > 0 || parts.length === 0) parts.push(`${minutes}m`);
+
+  return parts.join(" ");
 }
 
 function formatLabel(value) {

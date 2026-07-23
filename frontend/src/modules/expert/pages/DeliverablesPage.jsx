@@ -144,12 +144,8 @@ export default function DeliverablesPage() {
       return "Description must be at least 20 characters.";
     }
 
-    if (
-      !submissionForm.fileUrl.trim() &&
-      !submissionForm.demoUrl.trim() &&
-      !submissionForm.testResultUrl.trim()
-    ) {
-      return "Please provide at least File URL, Demo URL, or Test Result URL.";
+    if (!submissionForm.fileUrl.trim()) {
+      return "Please provide a public file or repository URL. Demo and test links are optional supporting links.";
     }
 
     return "";
@@ -365,7 +361,7 @@ export default function DeliverablesPage() {
                     </Field>
                   )}
 
-                  <Field label="File URL">
+                  <Field label="File or Repository URL">
                     <input
                       type="url"
                       value={submissionForm.fileUrl}
@@ -373,7 +369,7 @@ export default function DeliverablesPage() {
                       onChange={(event) =>
                         updateSubmissionField("fileUrl", event.target.value)
                       }
-                      placeholder="https://..."
+                      placeholder="https://github.com/... or https://drive.google.com/..."
                       className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] disabled:opacity-50"
                     />
                   </Field>
@@ -609,7 +605,16 @@ function SubmissionCard({ submission, onDetail }) {
           </p>
 
           <div className="mt-4 flex flex-wrap gap-2">
-            <LinkPill label="File" url={submission.fileUrl} />
+            {(submission.artifacts?.length
+              ? submission.artifacts
+              : [{ label: "File", url: submission.fileUrl }]
+            ).map((artifact, index) => (
+              <LinkPill
+                key={artifact.deliverableArtifactId || artifact.url || index}
+                label={artifact.label || formatArtifactType(artifact.artifactType)}
+                url={artifact.url}
+              />
+            ))}
             <LinkPill label="Demo" url={submission.demoUrl} />
             <LinkPill label="Test Result" url={submission.testResultUrl} />
           </div>
@@ -732,4 +737,13 @@ function getFriendlyError(err, fallback) {
   if (typeof data === "string") return data;
 
   return data?.message || data?.title || err?.message || fallback;
+}
+
+function formatArtifactType(value) {
+  return String(value || "File")
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

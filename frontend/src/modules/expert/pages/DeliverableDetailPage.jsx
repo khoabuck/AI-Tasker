@@ -217,7 +217,21 @@ export default function DeliverableDetailPage() {
 
               <Card title="Delivery links" icon="link">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  <LinkBox label="File" url={submission.fileUrl} />
+                  {(submission.artifacts?.length
+                    ? submission.artifacts
+                    : [{ label: "File", url: submission.fileUrl }]
+                  ).map((artifact, index) => (
+                    <LinkBox
+                      key={
+                        artifact.deliverableArtifactId || artifact.url || index
+                      }
+                      label={
+                        artifact.label ||
+                        formatArtifactType(artifact.artifactType)
+                      }
+                      url={artifact.url}
+                    />
+                  ))}
                   <LinkBox label="Demo" url={submission.demoUrl} />
                   <LinkBox
                     label="Test Result"
@@ -372,6 +386,15 @@ function LinkBox({ label, url }) {
       )}
     </div>
   );
+}
+
+function formatArtifactType(value) {
+  return String(value || "File")
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function FriendlyStatusBadge({ ui }) {

@@ -7,6 +7,11 @@ const getValue = (...values) => {
   );
 };
 
+const toNumber = (value, fallback = 0) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? fallback : number;
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -83,6 +88,9 @@ const normalizeJob = (job) => {
 
     clientId: getValue(job.clientId, job.ClientId, null),
 
+    clientProfileId: getValue(job.clientProfileId, job.ClientProfileId, null),
+    clientUserId: getValue(job.clientUserId, job.ClientUserId, null),
+
     clientName: getValue(
       job.clientName,
       job.ClientName,
@@ -92,6 +100,9 @@ const normalizeJob = (job) => {
       job.Client?.Name,
       "Client"
     ),
+
+    clientEmail: getValue(job.clientEmail, job.ClientEmail, ""),
+    clientType: getValue(job.clientType, job.ClientType, ""),
 
     category: getValue(
       job.category,
@@ -109,17 +120,42 @@ const normalizeJob = (job) => {
       ""
     ),
 
-    budgetMin: Number(
+    projectType: getValue(job.projectType, job.ProjectType, ""),
+
+    complexity: getValue(job.complexity, job.Complexity, ""),
+
+    expectedDeliverables: getValue(
+      job.expectedDeliverables,
+      job.ExpectedDeliverables,
+      ""
+    ),
+
+    budgetMin: toNumber(
       getValue(job.budgetMin, job.BudgetMin, job.minBudget, job.MinBudget, 0)
     ),
 
-    budgetMax: Number(
+    budgetMax: toNumber(
       getValue(job.budgetMax, job.BudgetMax, job.maxBudget, job.MaxBudget, 0)
     ),
 
-    budget: Number(getValue(job.budget, job.Budget, job.amount, job.Amount, 0)),
+    budget: toNumber(getValue(job.budget, job.Budget, job.amount, job.Amount, 0)),
 
-    proposalCount: Number(
+    deadline: getValue(job.deadline, job.Deadline, ""),
+    publishedAt: getValue(job.publishedAt, job.PublishedAt, ""),
+
+    isAiAssisted: Boolean(getValue(job.isAiAssisted, job.IsAiAssisted, false)),
+    aiGeneratedDescription: getValue(
+      job.aiGeneratedDescription,
+      job.AiGeneratedDescription,
+      ""
+    ),
+    postingChargeType: getValue(
+      job.postingChargeType,
+      job.PostingChargeType,
+      ""
+    ),
+
+    proposalCount: toNumber(
       getValue(
         job.proposalCount,
         job.ProposalCount,
@@ -128,6 +164,21 @@ const normalizeJob = (job) => {
         0
       )
     ),
+
+    submittedProposalCount: toNumber(
+      getValue(job.submittedProposalCount, job.SubmittedProposalCount, 0)
+    ),
+    acceptedProposalCount: toNumber(
+      getValue(job.acceptedProposalCount, job.AcceptedProposalCount, 0)
+    ),
+    rejectedProposalCount: toNumber(
+      getValue(job.rejectedProposalCount, job.RejectedProposalCount, 0)
+    ),
+    withdrawnProposalCount: toNumber(
+      getValue(job.withdrawnProposalCount, job.WithdrawnProposalCount, 0)
+    ),
+
+    skills: getValue(job.skills, job.Skills, []),
 
     createdAt: getValue(job.createdAt, job.CreatedAt, job.postedAt, job.PostedAt, ""),
     updatedAt: getValue(job.updatedAt, job.UpdatedAt, ""),
@@ -150,11 +201,28 @@ const normalizeProposal = (proposal) => {
     proposalId,
     id: proposalId,
 
+    jobId: getValue(proposal.jobId, proposal.JobId, null),
+    jobTitle: getValue(proposal.jobTitle, proposal.JobTitle, ""),
+
+    clientProfileId: getValue(
+      proposal.clientProfileId,
+      proposal.ClientProfileId,
+      null
+    ),
+    clientUserId: getValue(proposal.clientUserId, proposal.ClientUserId, null),
+    clientName: getValue(proposal.clientName, proposal.ClientName, "Client"),
+    clientAvatarUrl: getValue(
+      proposal.clientAvatarUrl,
+      proposal.ClientAvatarUrl,
+      ""
+    ),
+
     expertProfileId: getValue(
       proposal.expertProfileId,
       proposal.ExpertProfileId,
       null
     ),
+    expertUserId: getValue(proposal.expertUserId, proposal.ExpertUserId, null),
 
     expertName: getValue(
       proposal.expertName,
@@ -172,8 +240,16 @@ const normalizeProposal = (proposal) => {
       ""
     ),
 
-    proposedBudget: Number(
+    expertAvatarUrl: getValue(
+      proposal.expertAvatarUrl,
+      proposal.ExpertAvatarUrl,
+      ""
+    ),
+
+    proposedBudget: toNumber(
       getValue(
+        proposal.proposedPrice,
+        proposal.ProposedPrice,
         proposal.proposedBudget,
         proposal.ProposedBudget,
         proposal.amount,
@@ -182,7 +258,67 @@ const normalizeProposal = (proposal) => {
       )
     ),
 
+    proposedPrice: toNumber(
+      getValue(
+        proposal.proposedPrice,
+        proposal.ProposedPrice,
+        proposal.proposedBudget,
+        proposal.ProposedBudget,
+        proposal.amount,
+        proposal.Amount,
+        0
+      )
+    ),
+
+    proposedTimelineDays: toNumber(
+      getValue(
+        proposal.proposedTimelineDays,
+        proposal.ProposedTimelineDays,
+        proposal.timelineDays,
+        proposal.TimelineDays,
+        0
+      )
+    ),
+
+    expectedOutputs: getValue(
+      proposal.expectedOutputs,
+      proposal.ExpectedOutputs,
+      ""
+    ),
+    workingApproach: getValue(
+      proposal.workingApproach,
+      proposal.WorkingApproach,
+      ""
+    ),
+    preliminaryMilestonePlan: getValue(
+      proposal.preliminaryMilestonePlan,
+      proposal.PreliminaryMilestonePlan,
+      ""
+    ),
+    milestones: getValue(proposal.milestones, proposal.Milestones, []),
+
     status: String(getValue(proposal.status, proposal.Status, "PENDING")).toUpperCase(),
+    statusReason: getValue(proposal.statusReason, proposal.StatusReason, ""),
+    contractId: getValue(proposal.contractId, proposal.ContractId, null),
+    clientMissSignCount: toNumber(
+      getValue(proposal.clientMissSignCount, proposal.ClientMissSignCount, 0)
+    ),
+    expertMissSignCount: toNumber(
+      getValue(proposal.expertMissSignCount, proposal.ExpertMissSignCount, 0)
+    ),
+    latestVersionNumber: toNumber(
+      getValue(proposal.latestVersionNumber, proposal.LatestVersionNumber, 1)
+    ),
+    totalVersions: toNumber(
+      getValue(proposal.totalVersions, proposal.TotalVersions, 1)
+    ),
+    lastResubmittedAt: getValue(
+      proposal.lastResubmittedAt,
+      proposal.LastResubmittedAt,
+      null
+    ),
+    latestVersion: getValue(proposal.latestVersion, proposal.LatestVersion, null),
+
     createdAt: getValue(proposal.createdAt, proposal.CreatedAt, ""),
 
     raw: proposal,
@@ -190,8 +326,8 @@ const normalizeProposal = (proposal) => {
 };
 
 const adminJobService = {
-  async getAllJobs() {
-    const response = await adminJobApi.getAllJobs();
+  async getAllJobs(params = {}) {
+    const response = await adminJobApi.getAllJobs(params);
     return unwrapListData(response)
       .map(normalizeJob)
       .filter(Boolean)

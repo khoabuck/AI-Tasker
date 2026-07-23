@@ -18,6 +18,19 @@ const EMPTY_CANCEL_FORM = {
   reason: "",
 };
 
+const HIDDEN_SCROLLBAR_CLASS = "jobs-hidden-scrollbar";
+
+const HIDDEN_SCROLLBAR_STYLE = `
+  .${HIDDEN_SCROLLBAR_CLASS} {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .${HIDDEN_SCROLLBAR_CLASS}::-webkit-scrollbar {
+    display: none;
+  }
+`;
+
 export default function ManageJobsPage() {
   const [jobs, setJobs] = useState([]);
   const [selectedJob, setSelectedJob] = useState(null);
@@ -50,8 +63,13 @@ export default function ManageJobsPage() {
   }, [message]);
 
   useEffect(() => {
-    loadJobs();
-  }, []);
+    const timeoutId = window.setTimeout(() => {
+      loadJobs();
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchText, statusFilter]);
 
   const filteredJobs = useMemo(() => {
     const keyword = searchText.trim().toLowerCase();
@@ -69,7 +87,10 @@ export default function ManageJobsPage() {
         String(job.title || "").toLowerCase().includes(keyword) ||
         String(job.description || "").toLowerCase().includes(keyword) ||
         String(job.clientName || "").toLowerCase().includes(keyword) ||
-        String(job.category || "").toLowerCase().includes(keyword);
+        String(job.clientEmail || "").toLowerCase().includes(keyword) ||
+        String(job.category || "").toLowerCase().includes(keyword) ||
+        String(job.projectType || "").toLowerCase().includes(keyword) ||
+        String(job.complexity || "").toLowerCase().includes(keyword);
 
       return matchStatus && matchSearch;
     });
@@ -110,7 +131,10 @@ export default function ManageJobsPage() {
         setMessage("");
       }
 
-      const data = await adminJobService.getAllJobs();
+      const data = await adminJobService.getAllJobs({
+        search: searchText.trim() || undefined,
+        status: statusFilter === "ALL" ? undefined : statusFilter,
+      });
       setJobs(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("LOAD ADMIN JOBS ERROR:", err?.response?.data || err);
@@ -188,8 +212,6 @@ export default function ManageJobsPage() {
 
     if (!reason) {
       errors.reason = "Please enter a cancellation reason.";
-    } else if (reason.length < 10) {
-      errors.reason = "Cancellation reason must be at least 10 characters.";
     } else if (reason.length > 500) {
       errors.reason = "Cancellation reason cannot exceed 500 characters.";
     }
@@ -240,6 +262,8 @@ export default function ManageJobsPage() {
 
   return (
     <AdminLayout>
+      <style>{HIDDEN_SCROLLBAR_STYLE}</style>
+
       <div className="px-5 py-10 md:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
@@ -328,7 +352,7 @@ export default function ManageJobsPage() {
                     type="text"
                     value={searchText}
                     onChange={(event) => setSearchText(event.target.value)}
-                    placeholder="Search by title, description, client, or category..."
+                    placeholder="Search by title, description, client, email, or project type..."
                     className="w-full rounded-xl border border-white/10 bg-white/[0.04] py-3 pl-12 pr-4 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-[#00F0FF] focus:bg-white/[0.07]"
                   />
                 </div>
@@ -454,31 +478,33 @@ function CancelJobReviewModal({
   onConfirm,
 }) {
   return (
-    <div className="fixed inset-0 z-[1400] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-8 backdrop-blur-sm">
+    <div
+      className={`fixed inset-0 z-[1400] flex items-center justify-center overflow-y-auto bg-black/80 px-2 py-3 backdrop-blur-sm ${HIDDEN_SCROLLBAR_CLASS}`}
+    >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="cancel-job-review-title"
-        className="w-full max-w-lg rounded-2xl border border-red-400/25 bg-[#151a22] p-5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
+        className="w-full max-w-sm rounded-xl border border-red-400/25 bg-[#151a22] p-3.5 shadow-[0_32px_110px_rgba(0,0,0,0.75)]"
       >
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-red-400/30 bg-red-400/10 text-red-300">
-          <span className="material-symbols-outlined">warning</span>
+        <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg border border-red-400/30 bg-red-400/10 text-red-300">
+          <span className="material-symbols-outlined text-lg">warning</span>
         </div>
 
         <h2
           id="cancel-job-review-title"
-          className="text-xl font-black text-white"
+          className="text-base font-black text-white"
         >
           Confirm cancellation
         </h2>
 
-        <p className="mt-2 text-sm leading-6 text-gray-400">
+        <p className="mt-1.5 text-xs leading-5 text-gray-400">
           Review the moderation details below. After confirmation, this job will
           stop accepting new proposals and will leave the normal marketplace
           workflow.
         </p>
 
-        <div className="mt-5 space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="mt-3 space-y-1.5 rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
           <ReviewRow label="Job" value={job?.title || "Untitled Job"} />
           <ReviewRow label="Client" value={job?.clientName || "Client"} />
           <ReviewRow
@@ -490,18 +516,18 @@ function CancelJobReviewModal({
           <ReviewRow label="Admin Reason" value={reason || "N/A"} />
         </div>
 
-        <div className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+        <div className="mt-2.5 rounded-lg border border-yellow-400/20 bg-yellow-400/10 p-2.5 text-xs leading-5 text-yellow-100/80">
           Use this action only for invalid content, policy violations, or
           required moderation. Existing proposal records may remain available
           for audit and history.
         </div>
 
-        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+        <div className="mt-3 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Back
           </button>
@@ -510,7 +536,7 @@ function CancelJobReviewModal({
             type="button"
             disabled={loading}
             onClick={onConfirm}
-            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-red-400/50 bg-red-400/10 px-4 py-2.5 text-sm font-black text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Cancelling..." : "Confirm Cancellation"}
           </button>
@@ -522,7 +548,7 @@ function CancelJobReviewModal({
 
 function ReviewRow({ label, value }) {
   return (
-    <div className="grid grid-cols-[125px_minmax(0,1fr)] gap-3 text-sm">
+    <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2 text-xs">
       <span className="font-bold text-gray-500">{label}</span>
       <span className="break-words text-right font-semibold text-white">
         {value || "N/A"}
@@ -642,8 +668,15 @@ function JobCard({ job, disabled, onView, onCancel }) {
           <div className="mt-4 flex flex-wrap gap-2">
             <Badge label={`Client: ${job.clientName || "Client"}`} />
             <Badge label={`Budget: ${formatBudget(job)}`} />
-            {job.category && <Badge label={formatLabel(job.category)} />}
-            {job.level && <Badge label={formatLabel(job.level)} />}
+            {(job.projectType || job.category) && (
+              <Badge label={formatLabel(job.projectType || job.category)} />
+            )}
+            {(job.complexity || job.level) && (
+              <Badge label={formatLabel(job.complexity || job.level)} />
+            )}
+            {Array.isArray(job.skills) && job.skills.length > 0 && (
+              <Badge label={`${job.skills.length} skills`} />
+            )}
           </div>
         </div>
 
@@ -700,19 +733,21 @@ function JobDetailModal({
   const canCancel = ["DRAFT", "OPEN"].includes(status);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8">
-      <div className="w-full max-w-4xl rounded-2xl border border-white/10 bg-[#151a22] shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-white/10 px-6 py-5">
-          <div>
-            <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-cyan-300">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-2 py-3 ${HIDDEN_SCROLLBAR_CLASS}`}
+    >
+      <div className="max-h-[calc(100vh-1.25rem)] w-full max-w-[620px] overflow-hidden rounded-xl border border-white/10 bg-[#151a22] shadow-2xl">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-3.5 py-2.5">
+          <div className="min-w-0">
+            <p className="mb-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300">
               Job details
             </p>
 
-            <h2 className="text-xl font-bold text-white">
+            <h2 className="line-clamp-2 text-base font-bold leading-5 text-white">
               {job.title || "Untitled Job"}
             </h2>
 
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-[11px] text-gray-400">
               Client: {job.clientName || "Client"}
             </p>
           </div>
@@ -720,41 +755,87 @@ function JobDetailModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-gray-300 hover:text-white"
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs font-bold text-gray-300 hover:text-white"
           >
             Close
           </button>
         </div>
 
         {loading ? (
-          <div className="p-10 text-center text-gray-400">Loading detail...</div>
+          <div className="p-6 text-center text-sm text-gray-400">Loading detail...</div>
         ) : (
-          <div className="space-y-5 px-6 py-5">
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+          <div
+            className={`max-h-[calc(100vh-5.75rem)] space-y-2 overflow-y-auto px-3.5 py-2.5 ${HIDDEN_SCROLLBAR_CLASS}`}
+          >
+            <div className="grid grid-cols-2 gap-1.5 md:grid-cols-3">
               <InfoBox label="Status" value={formatLabel(status)} />
               <InfoBox label="Budget" value={formatBudget(job)} />
-              <InfoBox label="Category" value={formatLabel(job.category)} />
+              <InfoBox
+                label="Project Type"
+                value={formatLabel(job.projectType || job.category)}
+              />
+              <InfoBox
+                label="Complexity"
+                value={formatLabel(job.complexity || job.level)}
+              />
               <InfoBox label="Created" value={formatDateTime(job.createdAt, "N/A")} />
+              <InfoBox label="Deadline" value={formatDateTime(job.deadline, "N/A")} />
+              <InfoBox label="Published" value={formatDateTime(job.publishedAt, "N/A")} />
+              <InfoBox label="Client Email" value={job.clientEmail || "N/A"} />
+              <InfoBox
+                label="Client Type"
+                value={formatLabel(job.clientType)}
+              />
             </div>
 
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="mb-2 text-sm font-bold text-white">Description</h3>
-              <p className="whitespace-pre-wrap text-sm leading-6 text-gray-400">
+            <section className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+              <h3 className="mb-1 text-xs font-bold text-white">Description</h3>
+              <p className="whitespace-pre-wrap text-xs leading-5 text-gray-400">
                 {job.description || "No description provided."}
               </p>
             </section>
 
-            <section className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="mb-3 text-sm font-bold text-white">Proposals</h3>
+            {job.expectedDeliverables && (
+              <section className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+                <h3 className="mb-1 text-xs font-bold text-white">
+                  Expected Deliverables
+                </h3>
+                <p className="whitespace-pre-wrap text-xs leading-5 text-gray-400">
+                  {job.expectedDeliverables}
+                </p>
+              </section>
+            )}
+
+            {Array.isArray(job.skills) && job.skills.length > 0 && (
+              <section className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+                <h3 className="mb-1.5 text-xs font-bold text-white">
+                  Required Skills
+                </h3>
+                <div className="flex flex-wrap gap-1.5">
+                  {job.skills.map((skill, index) => (
+                    <Badge
+                      key={skill.skillId || skill.SkillId || index}
+                      label={skill.skillName || skill.SkillName || "Skill"}
+                      tone="cyan"
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            <section className="rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
+              <h3 className="mb-1.5 text-xs font-bold text-white">Proposals</h3>
 
               {proposalLoading ? (
-                <p className="text-sm text-gray-400">Loading proposals...</p>
+                <p className="text-xs text-gray-400">Loading proposals...</p>
               ) : proposals.length === 0 ? (
-                <p className="text-sm text-gray-500">
+                <p className="text-xs text-gray-500">
                   No proposals found for this job.
                 </p>
               ) : (
-                <div className="space-y-3">
+                <div
+                  className={`max-h-32 space-y-1.5 overflow-y-auto pr-1 ${HIDDEN_SCROLLBAR_CLASS}`}
+                >
                   {proposals.map((proposal, index) => (
                     <ProposalItem
                       key={proposal.proposalId || proposal.id || index}
@@ -765,7 +846,7 @@ function JobDetailModal({
               )}
             </section>
 
-            <div className="flex flex-col gap-3 border-t border-white/10 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-2 border-t border-white/10 pt-2.5 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-xs leading-5 text-gray-500">
                 Admin can cancel only Draft or Open jobs. Active jobs are locked
                 by project workflow.
@@ -775,7 +856,7 @@ function JobDetailModal({
                 <button
                   type="button"
                   onClick={onCancel}
-                  className="rounded-xl border border-red-400/40 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
+                  className="rounded-lg border border-red-400/40 bg-red-400/10 px-3.5 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black"
                 >
                   Cancel
                 </button>
@@ -790,23 +871,29 @@ function JobDetailModal({
 
 function ProposalItem({ proposal }) {
   return (
-    <article className="rounded-xl border border-white/10 bg-black/10 p-4">
-      <div className="mb-2 flex flex-wrap items-center gap-2">
+    <article className="rounded-lg border border-white/10 bg-black/10 p-2.5">
+      <div className="mb-1.5 flex flex-wrap items-center gap-1">
         <StatusBadge status={proposal.status || "PENDING"} />
         {proposal.createdAt && (
           <Badge label={`Submitted ${formatDateTime(proposal.createdAt, "N/A")}`} />
         )}
       </div>
 
-      <p className="font-bold text-white">{proposal.expertName || "Expert"}</p>
+      <p className="text-xs font-bold text-white">{proposal.expertName || "Expert"}</p>
 
-      <p className="mt-2 text-sm leading-6 text-gray-400">
+      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs leading-5 text-gray-400">
         {proposal.coverLetter || "No cover letter."}
       </p>
 
-      <p className="mt-3 text-sm font-bold text-cyan-300">
-        Proposed Budget: {formatMoney(proposal.proposedBudget)}
+      <p className="mt-1.5 text-xs font-bold text-cyan-300">
+        Proposed Price: {formatMoney(proposal.proposedPrice || proposal.proposedBudget)}
       </p>
+
+      {proposal.proposedTimelineDays > 0 && (
+        <p className="mt-1 text-xs font-semibold text-gray-500">
+          Timeline: {proposal.proposedTimelineDays} days
+        </p>
+      )}
     </article>
   );
 }
@@ -821,18 +908,20 @@ function CancelJobModal({
   onChange,
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-4 py-8 backdrop-blur-sm">
-      <div className="w-full max-w-lg rounded-2xl border border-red-400/20 bg-[#151a22] shadow-2xl">
-        <div className="border-b border-white/10 px-6 py-5">
-          <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-red-400/30 bg-red-400/10">
-            <span className="material-symbols-outlined text-2xl text-red-300">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/70 px-2 py-3 backdrop-blur-sm ${HIDDEN_SCROLLBAR_CLASS}`}
+    >
+      <div className="max-h-[calc(100vh-1.25rem)] w-full max-w-sm overflow-hidden rounded-xl border border-red-400/20 bg-[#151a22] shadow-2xl">
+        <div className="border-b border-white/10 px-4 py-3">
+          <div className="mb-2.5 flex h-9 w-9 items-center justify-center rounded-lg border border-red-400/30 bg-red-400/10">
+            <span className="material-symbols-outlined text-lg text-red-300">
               block
             </span>
           </div>
 
-          <h2 className="text-xl font-black text-white">Cancel this job?</h2>
+          <h2 className="text-base font-black text-white">Cancel this job?</h2>
 
-          <p className="mt-2 text-sm leading-6 text-gray-400">
+          <p className="mt-1.5 text-xs leading-5 text-gray-400">
             You are about to cancel{" "}
             <span className="font-bold text-white">
               {job.title || "Untitled Job"}
@@ -842,15 +931,17 @@ function CancelJobModal({
           </p>
         </div>
 
-        <div className="space-y-5 px-6 py-5">
-          <div className="grid grid-cols-1 gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:grid-cols-2">
+        <div
+          className={`max-h-[calc(100vh-13rem)] space-y-2.5 overflow-y-auto px-4 py-3 ${HIDDEN_SCROLLBAR_CLASS}`}
+        >
+          <div className="grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] p-2.5">
             <InfoBox label="Job" value={job.title || "Untitled Job"} />
             <InfoBox label="Client" value={job.clientName || "Client"} />
             <InfoBox label="Status" value={formatLabel(job.status)} />
             <InfoBox label="Budget" value={formatBudget(job)} />
           </div>
 
-          <div className="rounded-2xl border border-yellow-400/20 bg-yellow-400/10 p-4 text-sm leading-6 text-yellow-100/80">
+          <div className="rounded-lg border border-yellow-400/20 bg-yellow-400/10 p-2.5 text-xs leading-5 text-yellow-100/80">
             Please provide a clear reason. This helps the client understand why
             the job was cancelled.
           </div>
@@ -862,15 +953,16 @@ function CancelJobModal({
             error={errors.reason}
             onChange={(value) => onChange("reason", value)}
             placeholder="Example: This job post violates platform policy or contains invalid project information."
+            rows={2}
           />
         </div>
 
-        <div className="flex flex-col-reverse gap-3 border-t border-white/10 px-6 py-5 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2 border-t border-white/10 px-4 py-3 sm:flex-row sm:justify-end">
           <button
             type="button"
             onClick={onClose}
             disabled={loading}
-            className="rounded-xl border border-white/10 bg-white/[0.04] px-5 py-3 text-sm font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-white/10 bg-white/[0.04] px-3.5 py-2 text-xs font-bold text-gray-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             Keep Job
           </button>
@@ -879,7 +971,7 @@ function CancelJobModal({
             type="button"
             onClick={onConfirm}
             disabled={loading}
-            className="rounded-xl border border-red-400/50 bg-red-400/10 px-5 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-lg border border-red-400/50 bg-red-400/10 px-3.5 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Cancelling..." : "Confirm Cancel"}
           </button>
@@ -920,11 +1012,11 @@ function StatCard({ icon, label, value, description, tone = "cyan" }) {
 
 function InfoBox({ label, value }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-black/10 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-wider text-gray-500">
+    <div className="rounded-lg border border-white/10 bg-black/10 px-2.5 py-2">
+      <p className="text-[10px] uppercase tracking-wider text-gray-500">
         {label}
       </p>
-      <p className="mt-1 break-words text-sm font-bold text-white">
+      <p className="mt-0.5 break-words text-[11px] font-bold leading-4 text-white">
         {value || "N/A"}
       </p>
     </div>
@@ -952,7 +1044,7 @@ function StatusBadge({ status }) {
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${className}`}
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${className}`}
     >
       {formatLabel(value)}
     </span>
@@ -967,17 +1059,25 @@ function Badge({ label, tone = "default" }) {
 
   return (
     <span
-      className={`rounded-full border px-3 py-1 text-xs font-semibold ${className}`}
+      className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${className}`}
     >
       {label}
     </span>
   );
 }
 
-function TextArea({ label, value, error, required, onChange, placeholder }) {
+function TextArea({
+  label,
+  value,
+  error,
+  required,
+  onChange,
+  placeholder,
+  rows = 5,
+}) {
   return (
     <div>
-      <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-500">
+      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
         {label}
         {required && <span className="ml-1 text-red-400">*</span>}
       </label>
@@ -985,26 +1085,26 @@ function TextArea({ label, value, error, required, onChange, placeholder }) {
       <textarea
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={5}
+        rows={rows}
         maxLength={500}
         placeholder={placeholder}
-        className={`w-full resize-none rounded-xl border px-4 py-3 text-sm leading-6 text-white outline-none placeholder:text-gray-600 ${
+        className={`w-full resize-none rounded-lg border px-3 py-2 text-xs leading-5 text-white outline-none placeholder:text-gray-600 ${
           error
             ? "border-red-400/70 bg-red-500/10 focus:border-red-400"
             : "border-white/10 bg-white/[0.04] focus:border-cyan-400/50"
         }`}
       />
 
-      <div className="mt-2 flex items-center justify-between gap-3">
+      <div className="mt-1.5 flex items-center justify-between gap-3">
         {error ? (
-          <p className="text-sm font-semibold text-red-300">{error}</p>
+          <p className="text-xs font-semibold text-red-300">{error}</p>
         ) : (
-          <p className="text-xs leading-5 text-gray-500">
-            Minimum 10 characters. Be specific and user-friendly.
+          <p className="text-[11px] leading-4 text-gray-500">
+            Keep it clear and user-friendly. Maximum 500 characters.
           </p>
         )}
 
-        <p className="shrink-0 text-xs text-gray-500">
+        <p className="shrink-0 text-[11px] text-gray-500">
           {String(value || "").length}/500
         </p>
       </div>

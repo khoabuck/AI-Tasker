@@ -641,11 +641,9 @@ function PostDisputeDecisionNotice({ project, navigate }) {
               Waiting for client post-dispute decision
             </p>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-yellow-100/80">
-              Admin released the disputed milestone to the expert. Backend keeps
-              the project disputed until the client chooses Continue Project or
-              End Contract. No new escrow is locked in this step because the
-              remaining project escrow was already locked when the contract was
-              confirmed.
+              The disputed milestone was released to you. The project is waiting
+              for the client to choose whether to continue the project or end the
+              contract.
             </p>
           </div>
         </div>
@@ -756,9 +754,11 @@ function MilestoneCard({ milestone, onOpen }) {
             {milestone.title || "Untitled Milestone"}
           </h3>
 
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
-            {milestone.description || "No milestone description."}
-          </p>
+          {milestone.description && (
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-gray-400">
+              {milestone.description}
+            </p>
+          )}
         </div>
 
         <button

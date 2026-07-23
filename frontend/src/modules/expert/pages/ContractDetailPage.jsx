@@ -113,19 +113,6 @@ export default function ContractDetailPage() {
     ""
   );
 
-  const clientMessage = getField(
-    contract,
-    [
-      "chatSummary",
-      "ChatSummary",
-      "clientMessage",
-      "ClientMessage",
-      "message",
-      "Message",
-    ],
-    ""
-  );
-
   const clientName = getField(
     contract,
     ["clientName", "ClientName", "client.fullName", "Client.FullName"],
@@ -316,7 +303,7 @@ export default function ContractDetailPage() {
       type: "accept",
       title: "Sign this contract?",
       message:
-        "Your signature confirms the contract. Backend will create the project, create all milestones, and lock the full project escrow from the client wallet in one transaction.",
+        "Your signature confirms the contract. After both sides sign, the project and milestones will be created and the full project escrow will be secured in one transaction.",
       confirmLabel: "Sign Contract",
       tone: "success",
     });
@@ -413,6 +400,46 @@ export default function ContractDetailPage() {
     }
   };
 
+  const requestCancelDraft = () => {
+    if (!realContractId) {
+      setError(
+        "Contract information is unavailable. Please refresh the page and try again."
+      );
+      return;
+    }
+
+    setError("");
+    setConfirmAction({
+      type: "cancelDraft",
+      title: "Cancel this draft?",
+      message:
+        "This only cancels the current contract draft. Your accepted proposal stays selected, and the client can prepare a new contract if needed.",
+      confirmLabel: "Cancel Draft",
+      tone: "danger",
+    });
+  };
+
+  const executeCancelDraft = async () => {
+    try {
+      setActionLoading("cancelDraft");
+      setError("");
+      setMessage("");
+      setConfirmAction(null);
+
+      const updatedContract =
+        await contractService.cancelDraftContract(realContractId);
+
+      await refreshAfterAction(updatedContract);
+
+      setMessage("Contract draft cancelled successfully.");
+    } catch (err) {
+      console.error("CANCEL CONTRACT DRAFT ERROR:", err?.response?.data || err);
+      setError(getFriendlyError(err, "Cannot cancel this draft right now."));
+    } finally {
+      setActionLoading("");
+    }
+  };
+
   const handleConfirmAction = () => {
     if (confirmAction?.type === "accept") {
       executeAcceptContract();
@@ -421,6 +448,11 @@ export default function ContractDetailPage() {
 
     if (confirmAction?.type === "decline") {
       executeDeclineContract();
+      return;
+    }
+
+    if (confirmAction?.type === "cancelDraft") {
+      executeCancelDraft();
     }
   };
 
@@ -572,6 +604,21 @@ export default function ContractDetailPage() {
                     )}
                   </div>
                 )}
+
+                {canCancelDraftContract(status, contract) && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      disabled={actionLoading === "cancelDraft"}
+                      onClick={requestCancelDraft}
+                      className="w-full rounded-xl border border-red-400/50 bg-red-400/10 px-4 py-3 text-sm font-bold text-red-300 transition hover:bg-red-400 hover:text-black disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {actionLoading === "cancelDraft"
+                        ? "Cancelling..."
+                        : "Cancel Draft"}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -654,12 +701,6 @@ export default function ContractDetailPage() {
                 <TextValue value={contractTerms || "No payment terms provided."} />
               </Card>
 
-              {clientMessage && (
-                <Card title="Client Message" icon="chat">
-                  <TextValue value={clientMessage} />
-                </Card>
-              )}
-
               <Card title={`Milestones (${milestoneDrafts.length})`} icon="flag">
                 {milestoneDrafts.length === 0 ? (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -668,7 +709,8 @@ export default function ContractDetailPage() {
                     </p>
 
                     <p className="mt-2 text-sm leading-6 text-gray-400">
-                      The client may add milestones before the project starts.
+                      Milestones will appear here after the contract terms are
+                      prepared and available.
                     </p>
                   </div>
                 ) : (
@@ -868,29 +910,29 @@ function SigningFlowNotice({ contract, status }) {
   }
 
   const config = expired
-    ? {
-        tone: "red",
-        icon: "timer_off",
-        title: "Signing window expired",
-        message:
-          "This contract signing attempt is no longer active. Backend will cancel the draft and apply miss-signing policy.",
-      }
-    : waitingForClient
       ? {
-          tone: "yellow",
-          icon: "signature",
-          title: "Waiting for client signature",
+          tone: "red",
+          icon: "timer_off",
+          title: "Signing window expired",
           message:
-            "Client must sign first. Their signature only records intent and checks wallet capacity; it does not lock escrow yet.",
+          "This signing attempt is no longer active. The draft will be closed according to the signing policy.",
         }
-      : waitingForExpert
+      : waitingForClient
         ? {
-            tone: "cyan",
-            icon: "edit_square",
-            title: "Your signature is required",
+            tone: "yellow",
+            icon: "signature",
+            title: "Waiting for client signature",
             message:
-              "When you sign, backend confirms the contract, creates the project and milestones, then locks the full project escrow in one transaction.",
+            "The client signs first. Escrow is secured only after both sides have signed.",
           }
+        : waitingForExpert
+          ? {
+              tone: "cyan",
+              icon: "edit_square",
+              title: "Your signature is required",
+              message:
+              "When you sign, the contract is confirmed, the project starts, and the full project escrow is secured.",
+            }
         : {
             tone: "green",
             icon: "lock",
@@ -939,7 +981,7 @@ function ContractProgress({ status, contract, projectId }) {
     {
       label: "Client signature",
       helper: isClientConfirmed(contract)
-        ? "Client signed and wallet capacity was checked."
+        ? "Client signed the contract."
         : expired
           ? "Client signing window expired."
           : "Client signs first.",
@@ -1822,9 +1864,17 @@ function isContractAccepted(status) {
 }
 
 function isContractDeclined(status) {
-  return ["REJECTED", "CANCELLED", "CANCELED", "DECLINED"].includes(
-    normalizeStatus(status)
-  );
+  return [
+    "REJECTED",
+    "CANCELLED",
+    "CANCELED",
+    "DECLINED",
+    "EXPERT_DECLINE_DEAL",
+    "CLIENT_SIGN_TIMEOUT",
+    "EXPERT_SIGN_TIMEOUT",
+    "CANCELLED_DRAFT",
+    "DRAFT_CANCELLED",
+  ].includes(normalizeStatus(status));
 }
 
 function canAcceptContract(status, contract) {
@@ -1833,6 +1883,18 @@ function canAcceptContract(status, contract) {
 
 function canDeclineContract(status, contract) {
   return isWaitingForExpert(status, contract) && !isSigningExpired(contract);
+}
+
+function canCancelDraftContract(status, contract) {
+  const value = normalizeStatus(status);
+
+  return (
+    isDraftContract(value) &&
+    !isClientConfirmed(contract) &&
+    !isExpertConfirmed(contract) &&
+    !isContractDeclined(value) &&
+    !isSigningExpired(contract)
+  );
 }
 
 function getContractStatusLabel(status, contract) {
@@ -1859,6 +1921,11 @@ function getContractStatusLabel(status, contract) {
     CONFIRMED: "Confirmed",
     ACTIVE: "Active",
     SIGNED: "Signed",
+    EXPERT_DECLINE_DEAL: "Declined by Expert",
+    CLIENT_SIGN_TIMEOUT: "Client Signing Expired",
+    EXPERT_SIGN_TIMEOUT: "Expert Signing Expired",
+    CANCELLED_DRAFT: "Draft Cancelled",
+    DRAFT_CANCELLED: "Draft Cancelled",
     REJECTED: "Declined",
     DECLINED: "Declined",
     CANCELLED: "Declined",

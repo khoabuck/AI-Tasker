@@ -9,6 +9,19 @@ const getValue = (...values) => {
 
 const trim = (value) => String(value || "").trim();
 
+const toNumberOrNull = (value) => {
+  const number = Number(value);
+  return Number.isNaN(number) || number <= 0 ? null : number;
+};
+
+const setNumberField = (payload, key, value) => {
+  const number = toNumberOrNull(value);
+
+  if (number !== null) {
+    payload[key] = number;
+  }
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -292,59 +305,119 @@ const normalizeMessage = (item) => {
   };
 };
 
-const buildCreateConversationPayload = (payload = {}) => {
+const buildCreateConversationPayload = (data = {}) => {
+  const request = {};
+
   const participantUserId = getValue(
-    payload.participantUserId,
-    payload.ParticipantUserId,
-    payload.clientUserId,
-    payload.ClientUserId,
-    payload.receiverUserId,
-    payload.ReceiverUserId,
-    payload.otherUserId,
-    payload.OtherUserId,
-    payload.targetUserId,
-    payload.TargetUserId
+    data.participantUserId,
+    data.ParticipantUserId,
+    data.receiverUserId,
+    data.ReceiverUserId,
+    data.otherUserId,
+    data.OtherUserId,
+    data.targetUserId,
+    data.TargetUserId
   );
 
-  const clientProfileId = getValue(
-    payload.clientProfileId,
-    payload.ClientProfileId,
-    payload.participantClientProfileId,
-    payload.ParticipantClientProfileId
+  const participantRole = String(
+    getValue(data.participantRole, data.ParticipantRole, data.targetRole, "")
+  )
+    .trim()
+    .toUpperCase();
+
+  const conversationType = getValue(
+    data.conversationType,
+    data.ConversationType,
+    data.type,
+    data.Type
   );
 
-  const jobPostingId = getValue(
-    payload.jobPostingId,
-    payload.JobPostingId,
-    payload.jobId,
-    payload.JobId
-  );
-
-  const request = {
-    participantUserId: participantUserId
-      ? Number(participantUserId)
-      : clientProfileId
-      ? Number(clientProfileId)
-      : undefined,
-    projectId: getValue(payload.projectId, payload.ProjectId, null),
-    proposalId: getValue(payload.proposalId, payload.ProposalId, null),
-    contractId: getValue(payload.contractId, payload.ContractId, null),
-    initialMessage: trim(
-      getValue(payload.initialMessage, payload.message, payload.content, "")
-    ),
-  };
-
-  if (clientProfileId) request.clientProfileId = Number(clientProfileId);
-  if (jobPostingId) {
-    request.jobPostingId = Number(jobPostingId);
-    request.jobId = Number(jobPostingId);
+  if (conversationType) {
+    request.conversationType = String(conversationType).trim().toUpperCase();
   }
 
-  Object.keys(request).forEach((key) => {
-    if (request[key] === undefined || request[key] === null || request[key] === "") {
-      delete request[key];
-    }
-  });
+  setNumberField(
+    request,
+    "clientUserId",
+    getValue(data.clientUserId, data.ClientUserId)
+  );
+  setNumberField(
+    request,
+    "expertUserId",
+    getValue(data.expertUserId, data.ExpertUserId)
+  );
+
+  if (participantUserId) {
+    const targetKey =
+      participantRole === "EXPERT" ? "expertUserId" : "clientUserId";
+    setNumberField(request, targetKey, participantUserId);
+  }
+
+  setNumberField(
+    request,
+    "clientProfileId",
+    getValue(
+      data.clientProfileId,
+      data.ClientProfileId,
+      data.participantClientProfileId,
+      data.ParticipantClientProfileId
+    )
+  );
+  setNumberField(
+    request,
+    "expertProfileId",
+    getValue(
+      data.expertProfileId,
+      data.ExpertProfileId,
+      data.participantExpertProfileId,
+      data.ParticipantExpertProfileId
+    )
+  );
+  setNumberField(
+    request,
+    "relatedJobId",
+    getValue(
+      data.relatedJobId,
+      data.RelatedJobId,
+      data.jobPostingId,
+      data.JobPostingId,
+      data.jobId,
+      data.JobId
+    )
+  );
+  setNumberField(
+    request,
+    "relatedProposalId",
+    getValue(data.relatedProposalId, data.RelatedProposalId, data.proposalId, data.ProposalId)
+  );
+  setNumberField(
+    request,
+    "relatedContractId",
+    getValue(data.relatedContractId, data.RelatedContractId, data.contractId, data.ContractId)
+  );
+  setNumberField(
+    request,
+    "relatedProjectId",
+    getValue(data.relatedProjectId, data.RelatedProjectId, data.projectId, data.ProjectId)
+  );
+  setNumberField(
+    request,
+    "relatedMilestoneId",
+    getValue(data.relatedMilestoneId, data.RelatedMilestoneId, data.milestoneId, data.MilestoneId)
+  );
+  setNumberField(
+    request,
+    "relatedDisputeId",
+    getValue(data.relatedDisputeId, data.RelatedDisputeId, data.disputeId, data.DisputeId)
+  );
+
+  const initialMessage = trim(
+    getValue(data.initialMessage, data.InitialMessage, data.message, data.content, "")
+  );
+
+  if (initialMessage) {
+    request.initialMessage = initialMessage;
+  }
 
   return request;
 };
@@ -369,8 +442,21 @@ const conversationService = {
   async createConversation(payload) {
     const request = buildCreateConversationPayload(payload);
 
-    if (!request.participantUserId) {
-      throw new Error("participantUserId is required to create conversation.");
+    const hasParticipant =
+      request.clientUserId ||
+      request.expertUserId ||
+      request.clientProfileId ||
+      request.expertProfileId;
+    const hasRelatedEntity =
+      request.relatedJobId ||
+      request.relatedProposalId ||
+      request.relatedContractId ||
+      request.relatedProjectId ||
+      request.relatedMilestoneId ||
+      request.relatedDisputeId;
+
+    if (!hasParticipant && !hasRelatedEntity) {
+      throw new Error("A participant or related item is required to create conversation.");
     }
 
     const response = await conversationApi.createConversation(request);

@@ -545,66 +545,44 @@ export const normalizeWithdrawWarning = (warning) => {
 };
 
 const buildMilestonePayload = (milestone, options = {}) => {
-  const isDraft = options.draft === true;
-
   return {
-    title: isDraft
-      ? trimOrNull(milestone.title)
-      : String(milestone.title || "").trim(),
-    amount:
-      isDraft && String(milestone.amount ?? "").trim() === ""
-        ? null
-        : toNumber(milestone.amount, 0),
-    durationDays:
-      isDraft && String(milestone.durationDays ?? "").trim() === ""
-        ? null
-        : toInteger(milestone.durationDays, 0),
+    title: String(milestone?.title || "").trim(),
+    amount: toNumber(milestone?.amount, 0),
+    durationDays: toInteger(milestone?.durationDays, 0),
   };
 };
 
 export const buildProposalPayload = (jobId, formData, options = {}) => {
-  const isDraft = options.draft === true;
+  const includeJobId = options.includeJobId !== false;
   const normalizedJobId = toInteger(jobId, 0);
 
   const milestones = Array.isArray(formData?.milestones)
     ? formData.milestones
         .map((milestone) => buildMilestonePayload(milestone, options))
         .filter((milestone) => {
-          if (!isDraft) return true;
-
           return (
             milestone.title ||
-            milestone.amount !== null ||
-            milestone.durationDays !== null
+            Number(milestone.amount) > 0 ||
+            Number(milestone.durationDays) > 0
           );
         })
     : [];
 
-  return {
-    jobId: normalizedJobId,
-    jobPostingId: normalizedJobId,
-    coverLetter: isDraft
-      ? trimOrNull(formData?.coverLetter)
-      : String(formData?.coverLetter || "").trim(),
-    proposedPrice:
-      isDraft && String(formData?.proposedPrice ?? "").trim() === ""
-        ? null
-        : toNumber(formData?.proposedPrice, 0),
-    proposedTimelineDays:
-      isDraft && String(formData?.proposedTimelineDays ?? "").trim() === ""
-        ? null
-        : toInteger(formData?.proposedTimelineDays, 0),
-    expectedOutputs: isDraft
-      ? trimOrNull(formData?.expectedOutputs)
-      : String(formData?.expectedOutputs || "").trim(),
-    workingApproach: isDraft
-      ? trimOrNull(formData?.workingApproach)
-      : String(formData?.workingApproach || "").trim(),
-    preliminaryMilestonePlan: isDraft
-      ? trimOrNull(formData?.preliminaryMilestonePlan)
-      : String(formData?.preliminaryMilestonePlan || "").trim(),
+  const payload = {
+    coverLetter: String(formData?.coverLetter || "").trim(),
+    proposedPrice: toNumber(formData?.proposedPrice, 0),
+    proposedTimelineDays: toInteger(formData?.proposedTimelineDays, 0),
+    expectedOutputs: String(formData?.expectedOutputs || "").trim(),
+    workingApproach: String(formData?.workingApproach || "").trim(),
+    preliminaryMilestonePlan: trimOrNull(formData?.preliminaryMilestonePlan),
     milestones,
   };
+
+  if (includeJobId) {
+    payload.jobId = normalizedJobId;
+  }
+
+  return payload;
 };
 
 export const mapProposalToForm = (proposal) => {
@@ -785,8 +763,8 @@ const proposalService = {
       currentProposal?.jobId || formData?.jobId || formData?.jobPostingId;
 
     const response = await proposalApi.resubmitProposal(proposalId, {
-      ...buildProposalPayload(jobId, formData, { draft: false }),
-      resubmitNote: String(formData?.resubmitNote || "").trim(),
+      ...buildProposalPayload(jobId, formData, { includeJobId: false }),
+      resubmitNote: trimOrNull(formData?.resubmitNote),
     });
 
     return normalizeProposal(unwrapData(response));

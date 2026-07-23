@@ -162,13 +162,7 @@ export const normalizeMilestone = (milestone, index = 0) => {
       milestone.Name,
       `Milestone ${orderIndex || index + 1}`
     ),
-    description: getValue(
-      milestone.description,
-      milestone.Description,
-      milestone.expectedDeliverable,
-      milestone.ExpectedDeliverable,
-      ""
-    ),
+    description: getValue(milestone.description, milestone.Description, ""),
     acceptanceCriteria: getValue(
       milestone.acceptanceCriteria,
       milestone.AcceptanceCriteria,
@@ -491,13 +485,6 @@ const projectService = {
       .map((item, index) => normalizeMilestone(item, index))
       .filter(Boolean)
       .sort((a, b) => Number(a.orderIndex || 0) - Number(b.orderIndex || 0));
-  },
-
-  async createMilestone(projectId, payload) {
-    ensureId(projectId, "Invalid project id.");
-
-    const response = await projectApi.createMilestone(projectId, payload);
-    return normalizeMilestone(unwrapData(response));
   },
 
   async completeCheck(projectId) {

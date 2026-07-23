@@ -257,7 +257,8 @@ export default function MyProposalsPage() {
 
               <p className="mt-2 max-w-2xl text-sm leading-6 text-gray-400">
                 Track submitted proposals, review versions, continue drafts,
-                resubmit rejected proposals, or open contracts after acceptance.
+                revise proposals that are still open for resubmission, or open
+                contracts after acceptance.
               </p>
             </div>
 

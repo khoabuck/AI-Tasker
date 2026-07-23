@@ -207,6 +207,10 @@ export const normalizeDeliverable = (deliverable) => {
       ""
     ),
 
+    artifacts: normalizeArtifacts(
+      getValue(deliverable.artifacts, deliverable.Artifacts, [])
+    ),
+
     clientFeedback: getValue(
       deliverable.clientFeedback,
       deliverable.ClientFeedback,
@@ -263,6 +267,84 @@ export const normalizeDeliverable = (deliverable) => {
   };
 };
 
+function normalizeArtifact(artifact) {
+  if (!artifact) return null;
+
+  const artifactId = getValue(
+    artifact.deliverableArtifactId,
+    artifact.DeliverableArtifactId,
+    artifact.artifactId,
+    artifact.ArtifactId,
+    artifact.id,
+    artifact.Id,
+    null
+  );
+
+  return {
+    artifactId,
+    id: artifactId,
+
+    artifactType: String(
+      getValue(artifact.artifactType, artifact.ArtifactType, "FILE")
+    )
+      .trim()
+      .toUpperCase(),
+
+    label: getValue(artifact.label, artifact.Label, "Deliverable file"),
+
+    url: getValue(artifact.url, artifact.Url, artifact.fileUrl, artifact.FileUrl, ""),
+
+    provider: getValue(artifact.provider, artifact.Provider, ""),
+
+    accessLevel: String(
+      getValue(artifact.accessLevel, artifact.AccessLevel, "PUBLIC")
+    )
+      .trim()
+      .toUpperCase(),
+
+    version: getValue(artifact.version, artifact.Version, ""),
+    commitHash: getValue(artifact.commitHash, artifact.CommitHash, ""),
+    checksum: getValue(artifact.checksum, artifact.Checksum, ""),
+
+    raw: artifact,
+  };
+}
+
+function normalizeArtifacts(artifacts) {
+  return Array.isArray(artifacts)
+    ? artifacts.map(normalizeArtifact).filter(Boolean)
+    : [];
+}
+
+function buildArtifactPayload(artifact = {}, index = 0) {
+  const url = trim(getValue(artifact.url, artifact.Url, artifact.fileUrl, artifact.FileUrl));
+
+  if (!url) return null;
+
+  const artifactType = String(
+    getValue(artifact.artifactType, artifact.ArtifactType, artifact.type, "FILE")
+  )
+    .trim()
+    .toUpperCase();
+
+  const accessLevel = String(
+    getValue(artifact.accessLevel, artifact.AccessLevel, "PUBLIC")
+  )
+    .trim()
+    .toUpperCase();
+
+  return {
+    artifactType,
+    label: trim(getValue(artifact.label, artifact.Label, `Artifact ${index + 1}`)),
+    url,
+    provider: trim(getValue(artifact.provider, artifact.Provider, "")) || null,
+    accessLevel,
+    version: trim(getValue(artifact.version, artifact.Version, "")) || null,
+    commitHash: trim(getValue(artifact.commitHash, artifact.CommitHash, "")) || null,
+    checksum: trim(getValue(artifact.checksum, artifact.Checksum, "")) || null,
+  };
+}
+
 function buildSubmitPayload(formData = {}) {
   const fileUrl = trim(formData.fileUrl);
   const demoUrl = trim(formData.demoUrl);
@@ -271,14 +353,17 @@ function buildSubmitPayload(formData = {}) {
   const testSummary = trim(formData.testSummary);
   const description = trim(formData.description);
   const handoverNotes = trim(formData.handoverNotes);
+  const artifacts = normalizeArtifacts(
+    getValue(formData.artifacts, formData.Artifacts, [])
+  ).map(buildArtifactPayload).filter(Boolean);
 
   if (!description) {
     throw new Error("Deliverable description is required.");
   }
 
-  if (!fileUrl) {
+  if (!fileUrl && artifacts.length === 0) {
     throw new Error(
-      "A public file or repository URL is required for this deliverable."
+      "At least one product artifact or file URL is required for this deliverable."
     );
   }
 
@@ -289,7 +374,8 @@ function buildSubmitPayload(formData = {}) {
   }
 
   return {
-    fileUrl,
+    fileUrl: fileUrl || null,
+    artifacts,
     demoUrl: demoUrl || null,
     demoInstructions: demoInstructions || null,
     testResultUrl: testResultUrl || null,

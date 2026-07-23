@@ -7,6 +7,19 @@ const getValue = (...values) => {
   );
 };
 
+const toBoolean = (value, fallback = false) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+
+  const normalized = String(value).trim().toLowerCase();
+
+  if (["true", "1", "yes", "active"].includes(normalized)) return true;
+  if (["false", "0", "no", "inactive"].includes(normalized)) return false;
+
+  return fallback;
+};
+
 const unwrapData = (response) => {
   const data = response?.data;
 
@@ -82,7 +95,7 @@ const normalizeSkill = (item) => {
       "General"
     ),
 
-    isActive: Boolean(getValue(item.isActive, item.IsActive, true)),
+    isActive: toBoolean(getValue(item.isActive, item.IsActive), true),
 
     raw: item,
   };
@@ -131,6 +144,8 @@ const normalizeExpertSkill = (item) => {
     name: skillName,
 
     level: getValue(
+      item.skillLevel,
+      item.SkillLevel,
       item.level,
       item.Level,
       item.proficiencyLevel,
@@ -150,8 +165,9 @@ const normalizeExpertSkill = (item) => {
       )
     ),
 
-    isPrimary: Boolean(
-      getValue(item.isPrimary, item.IsPrimary, item.primary, item.Primary, false)
+    isPrimary: toBoolean(
+      getValue(item.isPrimary, item.IsPrimary, item.primary, item.Primary),
+      false
     ),
 
     raw: item,
@@ -162,16 +178,18 @@ const buildUpdateMySkillsPayload = (skills = []) => {
   const items = skills
     .map((item) => ({
       skillId: getValue(item.skillId, item.id),
-      level: String(getValue(item.level, "INTERMEDIATE")).trim(),
+      skillLevel: String(
+        getValue(item.skillLevel, item.SkillLevel, item.level, "INTERMEDIATE")
+      )
+        .trim()
+        .toUpperCase(),
       yearsOfExperience: Number(getValue(item.yearsOfExperience, 0)),
-      isPrimary: Boolean(getValue(item.isPrimary, false)),
+      isPrimary: toBoolean(getValue(item.isPrimary), false),
     }))
     .filter((item) => item.skillId);
 
   return {
     skills: items,
-    expertSkills: items,
-    items,
   };
 };
 

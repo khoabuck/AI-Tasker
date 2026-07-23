@@ -283,8 +283,23 @@ export default function SubmitProposalPage() {
 
   // ===== Draft and submit actions =====
   const handleSaveDraft = async () => {
+    setSubmitted(true);
+
     if (!jobId) {
       setError("Job information is missing. Please go back and choose a job.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    const errors = validateProposalForm(formData, {
+      checkMilestoneTotal: true,
+      checkMilestoneDuration: true,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setError(
+        "Please complete the highlighted fields before saving. Drafts use the same proposal rules as final submissions."
+      );
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -841,7 +856,6 @@ export default function SubmitProposalPage() {
 
                     <TextArea
                       label="Milestone overview"
-                      required
                       value={formData.preliminaryMilestonePlan}
                       onChange={(value) =>
                         updateField("preliminaryMilestonePlan", value)

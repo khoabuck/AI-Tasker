@@ -78,8 +78,7 @@ export default function ManageUsersPage() {
       const matchSearch =
         !search ||
         String(user.fullName || "").toLowerCase().includes(search) ||
-        String(user.email || "").toLowerCase().includes(search) ||
-        String(user.phoneNumber || "").toLowerCase().includes(search);
+        String(user.email || "").toLowerCase().includes(search);
 
       const matchRole = roleFilter === "ALL" || role === roleFilter;
       const matchStatus = statusFilter === "ALL" || status === statusFilter;
@@ -545,7 +544,7 @@ const requestLockUser = () => {
                 <input
                   value={keyword}
                   onChange={(event) => setKeyword(event.target.value)}
-                  placeholder="Search by name, email, or phone..."
+                  placeholder="Search by name or email..."
                   className="h-full flex-1 bg-transparent text-sm text-white outline-none placeholder:text-gray-600"
                 />
               </div>
