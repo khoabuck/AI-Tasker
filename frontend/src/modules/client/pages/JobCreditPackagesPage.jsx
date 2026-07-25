@@ -17,7 +17,6 @@
 // FE không tự tạo dữ liệu gói Free và không gọi API mua gói Free.
 
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
 import ClientLayout from "../../../components/layout/ClientLayout";
 import axiosInstance from "../../../api/axiosInstance";
 
@@ -50,8 +49,6 @@ function formatCurrency(amount, currency = "VND") {
 }
 
 export default function JobCreditPackagesPage() {
-  const navigate = useNavigate();
-
   const [packages, setPackages] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -200,7 +197,6 @@ export default function JobCreditPackagesPage() {
           }}
         >
         {packages.map((pkg) => {
-            const isPopular = pkg.isPopular === true;
             return (
             <div
                 key={
@@ -208,30 +204,33 @@ export default function JobCreditPackagesPage() {
                   `${pkg.packageName}-${pkg.displayOrder}`
                 }
                 style={{
-                background: isPopular ? "linear-gradient(180deg, rgba(0,240,255,0.12), rgba(16,19,25,0.92))" : "rgba(16,19,25,0.9)",
-                border: isPopular ? "1px solid rgba(0,240,255,0.45)" : "1px solid rgba(255,255,255,0.1)",
-                borderRadius: 18,
-                padding: 22,
-                boxShadow: isPopular ? "0 0 28px rgba(0,240,255,0.12)" : "0 8px 28px rgba(0,0,0,0.32)",
-                position: "relative",
+                  background: "rgba(16,19,25,0.9)",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 18,
+                  padding: 22,
+                  boxShadow: "0 8px 28px rgba(0,0,0,0.32)",
+                  position: "relative",
+
+                  // Giúp các phần bên trong card xếp theo chiều dọc
+                  // và cho phép đẩy nút xuống đáy.
+                  display: "flex",
+                  flexDirection: "column",
                 }}
             >
-                {isPopular && (
-                <span style={{ position: "absolute", top: 14, right: 14, fontSize: 10, padding: "4px 9px", borderRadius: 999, color: "#00F0FF", border: "1px solid rgba(0,240,255,0.35)", background: "rgba(0,240,255,0.08)", fontFamily: "JetBrains Mono, monospace", fontWeight: 700 }}>
-                    POPULAR
-                </span>
-                )}
 
                 <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 22, fontWeight: 800, color: "#e1e2eb", marginBottom: 8 }}>
                 {pkg.packageName}
                 </h3>
 
-                <p style={{ minHeight: 42, color: "#8c90a0", fontSize: 13, lineHeight: 1.6, marginBottom: 20 }}>
-                {pkg.description}
+                <p className="min-h-[96px] text-sm leading-8 text-[#b8bfd3]">
+                  {pkg.description}
                 </p>
 
                 <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 24, fontWeight: 800, color: pkg.isFreeTier ? "#c2c6d6" : "#00F0FF", marginBottom: 22 }}>
-                {formatCurrency(pkg.price, pkg.currency)}
+                {formatCurrency(
+                  pkg.price,
+                  pkg.currency ?? "VND"
+                )}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 22 }}>
@@ -246,67 +245,69 @@ export default function JobCreditPackagesPage() {
                 </div>
                 </div>
 
+                <div style={{ marginTop: "auto" }}>
                 {pkg.isFreeTier === true ? (
-                <button
-                  disabled
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: 10,
-                    background: "rgba(255,255,255,0.06)",
-                    color: "#8c90a0",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    fontWeight: 700,
-                    cursor: "not-allowed",
-                  }}
-                >
-                  Included
-                </button>
-              ) : pkg.isPurchasable !== true ? (
-                <button
-                  disabled
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: 10,
-                    background: "rgba(255,255,255,0.06)",
-                    color: "#8c90a0",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    fontWeight: 700,
-                    cursor: "not-allowed",
-                  }}
-                >
-                  Unavailable
-                </button>
-              ) : (
-                <button
-                  onClick={() => handlePurchase(pkg)}
-                  disabled={purchasingId === pkg.jobCreditPackageId}
-                  style={{
-                    width: "100%",
-                    padding: "12px",
-                    borderRadius: 10,
-                    background:
-                      purchasingId === pkg.jobCreditPackageId
-                        ? "#1d2026"
-                        : "#00F0FF",
-                    color:
-                      purchasingId === pkg.jobCreditPackageId
-                        ? "#8c90a0"
-                        : "#002022",
-                    border: "none",
-                    fontWeight: 800,
-                    cursor:
-                      purchasingId === pkg.jobCreditPackageId
-                        ? "not-allowed"
-                        : "pointer",
-                  }}
-                >
-                  {purchasingId === pkg.jobCreditPackageId
-                    ? "Processing..."
-                    : "Buy Package"}
-                </button>
-              )}
+                  <button
+                    disabled
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: 10,
+                      background: "rgba(255,255,255,0.06)",
+                      color: "#8c90a0",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      fontWeight: 700,
+                      cursor: "not-allowed",
+                    }}
+                  >
+                    Included
+                  </button>
+                ) : pkg.isPurchasable !== true ? (
+                  <button
+                    disabled
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: 10,
+                      background: "rgba(255,255,255,0.06)",
+                      color: "#8c90a0",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      fontWeight: 700,
+                      cursor: "not-allowed",
+                    }}
+                  >
+                    Unavailable
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handlePurchase(pkg)}
+                    disabled={purchasingId === pkg.jobCreditPackageId}
+                    style={{
+                      width: "100%",
+                      padding: "12px",
+                      borderRadius: 10,
+                      background:
+                        purchasingId === pkg.jobCreditPackageId
+                          ? "#1d2026"
+                          : "#00F0FF",
+                      color:
+                        purchasingId === pkg.jobCreditPackageId
+                          ? "#8c90a0"
+                          : "#002022",
+                      border: "none",
+                      fontWeight: 800,
+                      cursor:
+                        purchasingId === pkg.jobCreditPackageId
+                          ? "not-allowed"
+                          : "pointer",
+                    }}
+                  >
+                    {purchasingId === pkg.jobCreditPackageId
+                      ? "Processing..."
+                      : "Buy Package"}
+                  </button>
+                )}
+              </div>
             </div>
             );
         })}

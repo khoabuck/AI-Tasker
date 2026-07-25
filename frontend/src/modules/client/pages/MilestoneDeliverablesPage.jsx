@@ -38,9 +38,29 @@ const sectionLabel = {
 };
 
 const STATUS_CONFIG = {
-  SUBMITTED: { label: "Submitted", color: "#facc15" },
-  APPROVED:  { label: "Approved",  color: "#22c55e" },
-  REJECTED:  { label: "Revision Requested", color: "#f87171" },
+  SUBMITTED: {
+    label: "Submitted",
+    className:
+      "border-yellow-400/30 bg-yellow-400/10 text-yellow-400",
+  },
+
+  APPROVED: {
+    label: "Approved",
+    className:
+      "border-green-500/30 bg-green-500/10 text-green-500",
+  },
+
+  REVISION_REQUESTED: {
+    label: "Revision Requested",
+    className:
+      "border-red-400/30 bg-red-400/10 text-red-400",
+  },
+
+  REJECTED: {
+    label: "Rejected",
+    className:
+      "border-red-400/30 bg-red-400/10 text-red-400",
+  },
 };
 
 // Hiển thị 1 link field — nhiều field deliverable trỏ về cùng 1 URL placeholder
@@ -110,7 +130,13 @@ export default function MilestoneDeliverablesPage() {
   const navigate = useNavigate();
 
   const [milestone, setMilestone] = useState(null);
-  const [deliverable, setDeliverable] = useState(null); // bản mới nhất (versionNumber cao nhất)
+
+  // Toàn bộ lịch sử v1, v2, v3...
+  const [deliverables, setDeliverables] = useState([]);
+
+  // Bản mới nhất để Client review / approve / request revision.
+  const [deliverable, setDeliverable] = useState(null);
+  const [selectedVersion, setSelectedVersion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(null); // "approve" | "revision"
@@ -131,14 +157,28 @@ export default function MilestoneDeliverablesPage() {
       const msData = msRes.data?.data ?? msRes.data;
       setMilestone(msData);
 
-      const delRes = await axiosInstance.get(`/milestones/${milestoneId}/deliverables`, { signal });
+      const delRes = await axiosInstance.get(
+        `/milestones/${milestoneId}/deliverables`,
+        { signal }
+      );
+
       const delRaw = delRes.data?.data ?? delRes.data;
-      const list = Array.isArray(delRaw) ? delRaw : delRaw?.items ?? [];
 
-      const latest =
-        [...list].sort((a, b) => (b.versionNumber ?? 0) - (a.versionNumber ?? 0))[0] ?? null;
+      const list = Array.isArray(delRaw)
+        ? delRaw
+        : delRaw?.items ?? [];
 
-      setDeliverable(latest);
+      const sortedDeliverables = [...list].sort(
+        (a, b) =>
+          (b.versionNumber ?? 0) -
+          (a.versionNumber ?? 0)
+      );
+
+      setDeliverables(sortedDeliverables);
+
+      setDeliverable(
+        sortedDeliverables[0] ?? null
+      );
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
 
@@ -176,14 +216,14 @@ export default function MilestoneDeliverablesPage() {
     setActionError("");
 
     try {
-      await axiosInstance.post(
+      const res = await axiosInstance.post(
         `/deliverables/${deliverable.deliverableId}/approve`
       );
 
       navigate(`/client/projects/${milestone.projectId}`, {
         state: {
           successMsg:
-            "Deliverable approved! Funds have been released and the Expert can start the next milestone.",
+            res.data?.message || "Deliverable approved successfully.",
         },
       });
     } catch (err) {
@@ -250,7 +290,11 @@ export default function MilestoneDeliverablesPage() {
   const normalizedStatus = (deliverable?.status || "").toUpperCase();
 
   const dStatus =
-    STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.SUBMITTED;
+    STATUS_CONFIG[normalizedStatus] || {
+      label: normalizedStatus || "Unknown",
+      className:
+        "border-gray-500/30 bg-gray-500/10 text-gray-400",
+    };
 
   const canReview = normalizedStatus === "SUBMITTED";
   const submittedAt = deliverable?.submittedAt
@@ -287,10 +331,18 @@ export default function MilestoneDeliverablesPage() {
               </h1>
             </div>
             {deliverable && (
-              <span style={{ padding: "4px 12px", borderRadius: 999, fontSize: 11, fontWeight: 700, fontFamily: "JetBrains Mono, monospace", textTransform: "uppercase", color: dStatus.color, background: dStatus.color + "15", border: `1px solid ${dStatus.color}40`, whiteSpace: "nowrap" }}>
-                {dStatus.label}
-              </span>
-            )}
+            <span
+              className={`whitespace-nowrap rounded-full border px-3 py-1
+                font-mono text-[11px] font-bold uppercase
+                ${
+                  dStatus.className ??
+                  "border-gray-500/30 bg-gray-500/10 text-gray-400"
+                }
+              `}
+            >
+              {dStatus.label}
+            </span>
+          )}
           </div>
 
           <div style={{ display: "flex", gap: 28, flexWrap: "wrap" }}>
@@ -353,6 +405,32 @@ export default function MilestoneDeliverablesPage() {
               </div>
             )}
 
+            {/* demoInstructions */}
+            {deliverable.demoInstructions && (
+            <div className="mb-5 rounded-2xl border border-white/10 bg-[#101319]/85 p-7 shadow-xl backdrop-blur-xl">
+              <h3 className="mb-4 border-b border-white/10 pb-3 font-['Hanken_Grotesk'] text-[15px] font-bold text-[#e1e2eb]">
+                Demo Instructions
+              </h3>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {deliverable.demoInstructions}
+              </p>
+            </div>
+          )}
+
+            {/* Test Summary */}
+            {deliverable.testSummary && (
+            <div className="mb-5 rounded-2xl border border-white/10 bg-[#101319]/85 p-7 shadow-xl backdrop-blur-xl">
+              <h3 className="mb-4 border-b border-white/10 pb-3 font-['Hanken_Grotesk'] text-[15px] font-bold text-[#e1e2eb]">
+                Test Summary
+              </h3>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {deliverable.testSummary}
+              </p>
+            </div>
+          )}
+
             {deliverable.handoverNotes && (
               <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(192,193,255,0.15)", background: "rgba(192,193,255,0.02)" }}>
                 <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#c0c1ff", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(192,193,255,0.1)" }}>
@@ -361,6 +439,172 @@ export default function MilestoneDeliverablesPage() {
                 <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.9, whiteSpace: "pre-line", margin: 0, wordBreak: "break-word" }}>
                   {deliverable.handoverNotes}
                 </p>
+              </div>
+            )}
+
+            {deliverables.length > 0 && (
+              <div className="mb-5 rounded-2xl border border-white/10 bg-[#101319]/85 p-7 shadow-xl backdrop-blur-xl">
+                <div className="mb-4 flex items-center justify-between border-b border-white/10 pb-3">
+                  <div>
+                    <h3 className="m-0 font-['Hanken_Grotesk'] text-[15px] font-bold text-[#e1e2eb]">
+                      Submission History
+                    </h3>
+
+                    <p className="mt-1 text-xs text-[#8c90a0]">
+                      Track previous submissions and client review status.
+                    </p>
+                  </div>
+
+                  <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-3 py-1 font-mono text-xs font-bold text-cyan-400">
+                    {deliverables.length}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  {deliverables.map((item) => {
+                    const itemStatus = String(
+                      item?.status ?? ""
+                    )
+                      .trim()
+                      .toUpperCase();
+
+                    const statusConfig =
+                      STATUS_CONFIG[itemStatus] ?? {
+                        label: itemStatus || "Unknown",
+                        className:
+                          "border-gray-500/30 bg-gray-500/10 text-gray-400",
+                      };
+
+                    const itemSubmittedAt =
+                      item?.submittedAt
+                        ? new Date(
+                            item.submittedAt
+                          ).toLocaleString("vi-VN")
+                        : "—";
+
+                    const itemReviewedAt =
+                      item?.reviewedAt
+                        ? new Date(
+                            item.reviewedAt
+                          ).toLocaleString("vi-VN")
+                        : null;
+
+                    return (
+                      <div
+                        key={item.deliverableId}
+                        className="rounded-xl border border-white/10 bg-white/[0.02] p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[18px] text-cyan-400">
+                              history
+                            </span>
+
+                            <span className="text-sm font-bold text-[#e1e2eb]">
+                              Version v{item.versionNumber ?? "—"}
+                            </span>
+                          </div>
+
+                          <span
+                            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] font-bold uppercase ${statusConfig.className}`}
+                          >
+                            {statusConfig.label}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-2 text-xs text-[#8c90a0]">
+                          <div>
+                            <span className="font-semibold text-[#c2c6d6]">
+                              Submitted:
+                            </span>{" "}
+                            {itemSubmittedAt}
+                          </div>
+
+                          {itemReviewedAt && (
+                            <div>
+                              <span className="font-semibold text-[#c2c6d6]">
+                                Reviewed:
+                              </span>{" "}
+                              {itemReviewedAt}
+                            </div>
+                          )}
+                        </div>
+
+                        {item.clientFeedback && (
+                          <div className="mt-3 rounded-lg border border-yellow-400/20 bg-yellow-400/[0.06] p-3">
+                            <div className="mb-1 flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[16px] text-yellow-400">
+                                rate_review
+                              </span>
+
+                              <span className="text-xs font-bold text-yellow-400">
+                                Client Feedback
+                              </span>
+                            </div>
+
+                            <p className="m-0 whitespace-pre-line break-words text-[13px] leading-6 text-[#c2c6d6]">
+                              {item.clientFeedback}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedVersion(item)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-1.5 text-xs font-semibold text-cyan-400 transition hover:bg-cyan-400/15"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">
+                              visibility
+                            </span>
+                            View Details
+                          </button>
+                          {item.fileUrl && (
+                            <a
+                              href={item.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                folder_zip
+                              </span>
+                              File
+                            </a>
+                          )}
+
+                          {item.demoUrl && (
+                            <a
+                              href={item.demoUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                play_circle
+                              </span>
+                              Demo
+                            </a>
+                          )}
+
+                          {item.testResultUrl && (
+                            <a
+                              href={item.testResultUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                fact_check
+                              </span>
+                              Test Result
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -376,17 +620,6 @@ export default function MilestoneDeliverablesPage() {
               </div>
             )}
 
-            {/* Previous feedback nếu có (bản trước đã từng bị request revision) */}
-            {deliverable.clientFeedback && (
-              <div style={{ ...cardStyle, marginBottom: 20, border: "1px solid rgba(250,204,21,0.2)", background: "rgba(250,204,21,0.02)" }}>
-                <h3 style={{ fontFamily: "Hanken Grotesk, sans-serif", fontSize: 15, fontWeight: 700, color: "#facc15", marginBottom: 16, paddingBottom: 12, borderBottom: "1px solid rgba(250,204,21,0.1)" }}>
-                  Your Previous Feedback
-                </h3>
-                <p style={{ fontSize: 14, color: "#c2c6d6", lineHeight: 1.9, whiteSpace: "pre-line", margin: 0 }}>
-                  {deliverable.clientFeedback}
-                </p>
-              </div>
-            )}
 
             {actionError && (
               <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 8, padding: "10px 14px", color: "#f87171", fontSize: 13, marginBottom: 20 }}>{actionError}</div>
@@ -443,6 +676,198 @@ export default function MilestoneDeliverablesPage() {
           </>
         )}
       </div>
+
+      {selectedVersion && (
+      <div
+        onClick={() => setSelectedVersion(null)}
+        className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/75 p-6 backdrop-blur-sm"
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-white/10 bg-[#101319] p-7 shadow-2xl
+            [scrollbar-width:none]
+            [-ms-overflow-style:none]
+            [&::-webkit-scrollbar]:hidden"
+        >
+          {/* Header */}
+          <div className="mb-5 flex items-start justify-between gap-4 border-b border-white/10 pb-4">
+            <div>
+              <p className="mb-1 text-xs uppercase tracking-wider text-[#8c90a0]">
+                Submission Version
+              </p>
+
+              <h3 className="m-0 text-xl font-bold text-[#e1e2eb]">
+                Version v{selectedVersion.versionNumber ?? "—"}
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setSelectedVersion(null)}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.03] text-[#8c90a0] transition hover:border-white/20 hover:text-white"
+            >
+              <span className="material-symbols-outlined text-[20px]">
+                close
+              </span>
+            </button>
+          </div>
+
+          {/* Status + Time */}
+          <div className="mb-5 flex flex-wrap gap-3">
+            <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-[#c2c6d6]">
+              Status:{" "}
+              {STATUS_CONFIG[
+                String(selectedVersion.status ?? "")
+                  .trim()
+                  .toUpperCase()
+              ]?.label ??
+                selectedVersion.status ??
+                "Unknown"}
+            </span>
+
+            {selectedVersion.submittedAt && (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-[#c2c6d6]">
+                Submitted:{" "}
+                {new Date(
+                  selectedVersion.submittedAt
+                ).toLocaleString("vi-VN")}
+              </span>
+            )}
+
+            {selectedVersion.reviewedAt && (
+              <span className="rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs text-[#c2c6d6]">
+                Reviewed:{" "}
+                {new Date(
+                  selectedVersion.reviewedAt
+                ).toLocaleString("vi-VN")}
+              </span>
+            )}
+          </div>
+
+          {/* Links */}
+          <div className="mb-5">
+            <h4 className="mb-3 text-sm font-bold text-[#e1e2eb]">
+              Deliverable Links
+            </h4>
+
+            <div className="flex flex-col gap-2">
+              {selectedVersion.fileUrl && (
+                <a
+                  href={selectedVersion.fileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                >
+                  <span className="material-symbols-outlined text-[17px]">
+                    folder_zip
+                  </span>
+                  File / Repository
+                </a>
+              )}
+
+              {selectedVersion.demoUrl && (
+                <a
+                  href={selectedVersion.demoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                >
+                  <span className="material-symbols-outlined text-[17px]">
+                    play_circle
+                  </span>
+                  Demo
+                </a>
+              )}
+
+              {selectedVersion.testResultUrl && (
+                <a
+                  href={selectedVersion.testResultUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-sm text-[#c2c6d6] transition hover:border-cyan-400/30 hover:text-cyan-400"
+                >
+                  <span className="material-symbols-outlined text-[17px]">
+                    fact_check
+                  </span>
+                  Test Result
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          {selectedVersion.description && (
+            <div className="mb-5">
+              <h4 className="mb-2 text-sm font-bold text-[#e1e2eb]">
+                Description
+              </h4>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {selectedVersion.description}
+              </p>
+            </div>
+          )}
+
+          {/* Demo Instructions */}
+          {selectedVersion.demoInstructions && (
+            <div className="mb-5">
+              <h4 className="mb-2 text-sm font-bold text-[#e1e2eb]">
+                Demo Instructions
+              </h4>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {selectedVersion.demoInstructions}
+              </p>
+            </div>
+          )}
+
+          {/* Test Summary */}
+          {selectedVersion.testSummary && (
+            <div className="mb-5">
+              <h4 className="mb-2 text-sm font-bold text-[#e1e2eb]">
+                Test Summary
+              </h4>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {selectedVersion.testSummary}
+              </p>
+            </div>
+          )}
+
+          {/* Handover Notes */}
+          {selectedVersion.handoverNotes && (
+            <div className="mb-5">
+              <h4 className="mb-2 text-sm font-bold text-[#c0c1ff]">
+                Handover Notes
+              </h4>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {selectedVersion.handoverNotes}
+              </p>
+            </div>
+          )}
+
+          {/* Client Feedback */}
+          {selectedVersion.clientFeedback && (
+            <div className="rounded-xl border border-yellow-400/20 bg-yellow-400/[0.06] p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[17px] text-yellow-400">
+                  rate_review
+                </span>
+
+                <span className="text-sm font-bold text-yellow-400">
+                  Client Feedback
+                </span>
+              </div>
+
+              <p className="m-0 whitespace-pre-line break-words text-sm leading-7 text-[#c2c6d6]">
+                {selectedVersion.clientFeedback}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    )}
 
       {showRevisionModal && (
       <RequestRevisionModal
