@@ -12,6 +12,7 @@ public class RecommendationService : IRecommendationService
     private const string JobStatusOpen = "OPEN";
     private const string UserStatusActive = "ACTIVE";
     private const string ExpertReviewApproved = "APPROVED";
+    private const string ReviewStatusVisible = "VISIBLE";
 
     private const string ClientTypeBusiness = "BUSINESS";
     private const string BusinessVerificationVerified = "VERIFIED";
@@ -198,6 +199,8 @@ public class RecommendationService : IRecommendationService
             .Take(maxRecommendationResults)
             .ToList();
 
+        await ApplyVisibleReviewSummariesAsync(recommendations);
+
         return new PromptExpertRecommendationResponse
         {
             Prompt = prompt,
@@ -301,6 +304,8 @@ public class RecommendationService : IRecommendationService
             .ThenByDescending(x => x.ProfileScore)
             .Take(safeLimit)
             .ToList();
+
+        await ApplyVisibleReviewSummariesAsync(recommendations);
 
         return recommendations;
     }
@@ -419,6 +424,62 @@ public class RecommendationService : IRecommendationService
 
         return clientProfile.BusinessProfile != null &&
                clientProfile.BusinessProfile.VerificationStatus == BusinessVerificationVerified;
+    }
+
+    private async Task ApplyVisibleReviewSummariesAsync(
+        List<ExpertRecommendationResponse> recommendations
+    )
+    {
+        if (recommendations.Count == 0)
+        {
+            return;
+        }
+
+        var expertUserIds = recommendations
+            .Select(x => x.UserId)
+            .Distinct()
+            .ToList();
+
+        var reviewSummaries = await _dbContext.Reviews
+            .AsNoTracking()
+            .Where(x =>
+                expertUserIds.Contains(x.ExpertId) &&
+                x.Status == ReviewStatusVisible
+            )
+            .GroupBy(x => x.ExpertId)
+            .Select(group => new
+            {
+                ExpertUserId = group.Key,
+                TotalReviews = group.Count(),
+                AverageRating = group.Average(x => (decimal)x.Rating)
+            })
+            .ToListAsync();
+
+        var reviewSummaryByExpertUserId = reviewSummaries
+            .ToDictionary(
+                x => x.ExpertUserId,
+                x => new
+                {
+                    x.TotalReviews,
+                    AverageRating = Math.Round(x.AverageRating, 2)
+                }
+            );
+
+        foreach (var recommendation in recommendations)
+        {
+            if (reviewSummaryByExpertUserId.TryGetValue(
+                recommendation.UserId,
+                out var reviewSummary
+            ))
+            {
+                recommendation.AverageRating = reviewSummary.AverageRating;
+                recommendation.TotalReviews = reviewSummary.TotalReviews;
+                continue;
+            }
+
+            recommendation.AverageRating = 0m;
+            recommendation.TotalReviews = 0;
+        }
     }
 
     private static ExpertRecommendationResponse BuildExpertRecommendation(
