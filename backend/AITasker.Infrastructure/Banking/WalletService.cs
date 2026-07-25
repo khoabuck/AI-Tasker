@@ -806,6 +806,25 @@ namespace AITasker.Infrastructure.Banking
                 }
 
                 var escrow = await GetLockedEscrowByMilestoneAsync(milestoneId);
+                var now = DateTime.UtcNow;
+
+                var releasedRows = await _context.Escrows
+                    .Where(e =>
+                        e.EscrowId == escrow.EscrowId &&
+                        e.Status == EscrowStatusLocked)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(e => e.Status, EscrowStatusReleased)
+                        .SetProperty(e => e.UpdatedAt, now));
+
+                if (releasedRows != 1)
+                {
+                    throw new InvalidOperationException(
+                        "Milestone escrow is no longer LOCKED. It may already have been released or frozen by a dispute.");
+                }
+
+                // Keep the tracked entity consistent with the atomic database transition.
+                escrow.Status = EscrowStatusReleased;
+                escrow.UpdatedAt = now;
 
                 var clientWallet = await GetOrCreateWalletAsync(clientProfile.UserId);
                 var expertWallet = await GetOrCreateWalletAsync(expertProfile.UserId);
@@ -815,7 +834,6 @@ namespace AITasker.Infrastructure.Banking
                     throw new InvalidOperationException("Client locked balance is not enough to release escrow.");
                 }
 
-                var now = DateTime.UtcNow;
                 var expertServiceFeeAmount = CalculateExpertServiceFee(escrow.Amount, contract.ExpertFeeRate);
                 var expertNetAmount = escrow.Amount - expertServiceFeeAmount;
 
@@ -825,9 +843,6 @@ namespace AITasker.Infrastructure.Banking
                 expertWallet.PendingEarningsBalance += expertNetAmount;
                 expertWallet.TotalEarning += expertNetAmount;
                 expertWallet.UpdatedAt = now;
-
-                escrow.Status = EscrowStatusReleased;
-                escrow.UpdatedAt = now;
 
                 milestone.Status = MilestoneStatusApproved;
                 milestone.PaymentStatus = PaymentStatusReleased;
@@ -894,25 +909,32 @@ namespace AITasker.Infrastructure.Banking
                 await dbTransaction.CommitAsync();
                 dbTransactionCompleted = true;
 
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Milestone earning held",
-                    $"Milestone '{milestone.Title}' has been approved. The earning is held in pending earnings until the project is completed.",
-                    "ESCROW_RELEASED",
-                    relatedEntityType: "MILESTONE",
-                    relatedEntityId: milestone.MilestoneId,
-                    relatedProjectId: project.ProjectId,
-                    relatedMilestoneId: milestone.MilestoneId);
+                try
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        expertProfile.UserId,
+                        "Milestone earning held",
+                        $"Milestone '{milestone.Title}' has been approved. The earning is held in pending earnings until the project is completed.",
+                        "ESCROW_RELEASED",
+                        relatedEntityType: "MILESTONE",
+                        relatedEntityId: milestone.MilestoneId,
+                        relatedProjectId: project.ProjectId,
+                        relatedMilestoneId: milestone.MilestoneId);
 
-                await _notificationService.CreateNotificationAsync(
-                    clientProfile.UserId,
-                    "Escrow released",
-                    $"Escrow for milestone '{milestone.Title}' has been released.",
-                    "ESCROW_RELEASED",
-                    relatedEntityType: "MILESTONE",
-                    relatedEntityId: milestone.MilestoneId,
-                    relatedProjectId: project.ProjectId,
-                    relatedMilestoneId: milestone.MilestoneId);
+                    await _notificationService.CreateNotificationAsync(
+                        clientProfile.UserId,
+                        "Escrow released",
+                        $"Escrow for milestone '{milestone.Title}' has been released.",
+                        "ESCROW_RELEASED",
+                        relatedEntityType: "MILESTONE",
+                        relatedEntityId: milestone.MilestoneId,
+                        relatedProjectId: project.ProjectId,
+                        relatedMilestoneId: milestone.MilestoneId);
+                }
+                catch
+                {
+                    // Escrow release is already committed; notification failure must not cause a retry.
+                }
 
                 return await BuildProjectEscrowResponseAsync(
                     project,

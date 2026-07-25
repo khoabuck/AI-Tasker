@@ -304,27 +304,34 @@ namespace AITasker.Infrastructure.Deliverables
 
             await TryCompleteProjectAfterApprovalAsync(project.ProjectId);
 
-            await _notificationService.CreateNotificationAsync(
-                expertProfile.UserId,
-                "Deliverable approved",
-                $"Your deliverable for milestone '{milestone.Title}' was approved and escrow was released.",
-                "DELIVERABLE_APPROVED",
-                relatedEntityType: "DELIVERABLE",
-                relatedEntityId: deliverable.DeliverableId,
-                relatedProjectId: project.ProjectId,
-                relatedMilestoneId: milestone.MilestoneId,
-                relatedDeliverableId: deliverable.DeliverableId);
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Deliverable approved",
+                    $"Your deliverable for milestone '{milestone.Title}' was approved and escrow was released.",
+                    "DELIVERABLE_APPROVED",
+                    relatedEntityType: "DELIVERABLE",
+                    relatedEntityId: deliverable.DeliverableId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId,
+                    relatedDeliverableId: deliverable.DeliverableId);
 
-            await _notificationService.CreateNotificationAsync(
-                clientProfile.UserId,
-                "Deliverable approved",
-                $"You approved deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'.",
-                "DELIVERABLE_APPROVED",
-                relatedEntityType: "DELIVERABLE",
-                relatedEntityId: deliverable.DeliverableId,
-                relatedProjectId: project.ProjectId,
-                relatedMilestoneId: milestone.MilestoneId,
-                relatedDeliverableId: deliverable.DeliverableId);
+                await _notificationService.CreateNotificationAsync(
+                    clientProfile.UserId,
+                    "Deliverable approved",
+                    $"You approved deliverable v{deliverable.VersionNumber} for milestone '{milestone.Title}'.",
+                    "DELIVERABLE_APPROVED",
+                    relatedEntityType: "DELIVERABLE",
+                    relatedEntityId: deliverable.DeliverableId,
+                    relatedProjectId: project.ProjectId,
+                    relatedMilestoneId: milestone.MilestoneId,
+                    relatedDeliverableId: deliverable.DeliverableId);
+            }
+            catch
+            {
+                // Approval and escrow release are already committed; notification failure must not cause a retry.
+            }
 
             return await MapToDeliverableResponseAsync(deliverable);
         }

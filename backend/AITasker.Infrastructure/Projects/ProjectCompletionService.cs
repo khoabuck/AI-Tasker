@@ -62,6 +62,8 @@ public class ProjectCompletionService : IProjectCompletionService
             return NotReady(throwIfNotReady, "Cancelled project cannot be completed.");
         }
 
+        var isResolvedDisputedProject = false;
+
         if (string.Equals(project.Status, ProjectStatusDisputed, StringComparison.OrdinalIgnoreCase))
         {
             var hasOpenDisputeWhileDisputed = await HasOpenDisputeAsync(project.ProjectId);
@@ -70,12 +72,18 @@ public class ProjectCompletionService : IProjectCompletionService
             {
                 return NotReady(throwIfNotReady, "Disputed project cannot be completed until dispute is resolved.");
             }
+
+            // RELEASE_TO_EXPERT on the final milestone can settle every escrow while the
+            // project is still DISPUTED. In that case completion must be allowed directly;
+            // forcing Continue/End would incorrectly cancel an already completed project.
+            isResolvedDisputedProject = true;
         }
 
         if (!string.Equals(project.Status, ProjectStatusActive, StringComparison.OrdinalIgnoreCase) &&
-            !string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(project.Status, ProjectStatusCompleted, StringComparison.OrdinalIgnoreCase) &&
+            !isResolvedDisputedProject)
         {
-            return NotReady(throwIfNotReady, "Project can only be completed when it is ACTIVE.");
+            return NotReady(throwIfNotReady, "Project can only be completed when it is ACTIVE or a resolved DISPUTED project has no remaining escrow.");
         }
 
         if (project.EscrowLockedAt == null)
@@ -168,29 +176,37 @@ public class ProjectCompletionService : IProjectCompletionService
 
         if (!wasCompleted && sendNotifications)
         {
-            await _notificationService.CreateNotificationAsync(
-                clientProfile.UserId,
-                "Project completed",
-                $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED",
-                relatedEntityType: "PROJECT",
-                relatedEntityId: project.ProjectId,
-                relatedJobId: job.JobPostingId,
-                relatedProposalId: proposal.ProposalId,
-                relatedContractId: contract.ContractId,
-                relatedProjectId: project.ProjectId);
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    clientProfile.UserId,
+                    "Project completed",
+                    $"Project '{project.Title}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
 
-            await _notificationService.CreateNotificationAsync(
-                expertProfile.UserId,
-                "Project completed",
-                $"Project '{project.Title}' has been completed.",
-                "PROJECT_COMPLETED",
-                relatedEntityType: "PROJECT",
-                relatedEntityId: project.ProjectId,
-                relatedJobId: job.JobPostingId,
-                relatedProposalId: proposal.ProposalId,
-                relatedContractId: contract.ContractId,
-                relatedProjectId: project.ProjectId);
+                await _notificationService.CreateNotificationAsync(
+                    expertProfile.UserId,
+                    "Project completed",
+                    $"Project '{project.Title}' has been completed.",
+                    "PROJECT_COMPLETED",
+                    relatedEntityType: "PROJECT",
+                    relatedEntityId: project.ProjectId,
+                    relatedJobId: job.JobPostingId,
+                    relatedProposalId: proposal.ProposalId,
+                    relatedContractId: contract.ContractId,
+                    relatedProjectId: project.ProjectId);
+            }
+            catch
+            {
+                // Completion state and wallet settlement are already saved.
+                // Notification failure must not make project completion look unsuccessful.
+            }
         }
 
         return !wasCompleted;

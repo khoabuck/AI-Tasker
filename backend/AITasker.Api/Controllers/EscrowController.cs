@@ -53,43 +53,6 @@ namespace AITasker.Api.Controllers
             }
         }
 
-        [HttpPost("projects/{projectId:int}/lock")]
-        [Authorize(Roles = "CLIENT")]
-        public async Task<IActionResult> LockProjectEscrow(int projectId)
-        {
-            try
-            {
-                var currentUserId = GetCurrentUserId();
-
-                var result = await _walletService.LockProjectEscrowAsync(
-                    currentUserId,
-                    projectId);
-
-                return Ok(new
-                {
-                    success = true,
-                    message = result.Message,
-                    data = result
-                });
-            }
-            catch (UnauthorizedAccessException ex)
-            {
-                return StatusCode(StatusCodes.Status403Forbidden, new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-            catch (InvalidOperationException ex)
-            {
-                return BadRequest(new
-                {
-                    success = false,
-                    message = ex.Message
-                });
-            }
-        }
-
         private int GetCurrentUserId()
         {
             var userIdValue =
