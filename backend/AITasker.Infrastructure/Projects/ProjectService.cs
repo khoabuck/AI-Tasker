@@ -195,6 +195,13 @@ namespace AITasker.Infrastructure.Projects
                 }
 
                 var dispute = await GetPendingPostResolutionDecisionAsync(projectId);
+                var now = DateTime.UtcNow;
+
+                await ClaimPostResolutionDecisionAsync(
+                    dispute,
+                    "CONTINUE",
+                    currentUserId,
+                    now);
 
                 var remainingLockedEscrowExists = await _context.Escrows.AnyAsync(x =>
                     x.ProjectId == projectId &&
@@ -206,10 +213,6 @@ namespace AITasker.Infrastructure.Projects
                         "No remaining locked project escrow is available. End the contract instead.");
                 }
 
-                var now = DateTime.UtcNow;
-                dispute.PostResolutionDecision = "CONTINUE";
-                dispute.PostResolutionDecisionAt = now;
-                dispute.PostResolutionDecisionByUserId = currentUserId;
                 project.Status = ProjectStatusActive;
                 project.EndDate = null;
 
@@ -224,15 +227,22 @@ namespace AITasker.Infrastructure.Projects
 
                 var expertProfile = await GetExpertProfileByIdAsync(contract.ExpertId);
 
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Project continued",
-                    $"The client chose to continue project '{project.Title}'. The remaining project escrow stays locked and work may continue.",
-                    "PROJECT_CONTINUED_AFTER_DISPUTE",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId,
-                    relatedDisputeId: dispute.DisputeId);
+                try
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        expertProfile.UserId,
+                        "Project continued",
+                        $"The client chose to continue project '{project.Title}'. The remaining project escrow stays locked and work may continue.",
+                        "PROJECT_CONTINUED_AFTER_DISPUTE",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId,
+                        relatedDisputeId: dispute.DisputeId);
+                }
+                catch
+                {
+                    // Project continuation is already committed; notification failure must not cause a retry.
+                }
 
                 return await MapToProjectResponseAsync(project);
             }
@@ -280,6 +290,12 @@ namespace AITasker.Infrastructure.Projects
 
                 var dispute = await GetPendingPostResolutionDecisionAsync(projectId);
                 var now = DateTime.UtcNow;
+
+                await ClaimPostResolutionDecisionAsync(
+                    dispute,
+                    "END",
+                    currentUserId,
+                    now);
 
                 var clientWallet = await _walletService.GetWalletByUserIdAsync(clientProfile.UserId);
                 var remainingEscrows = await _context.Escrows
@@ -334,9 +350,6 @@ namespace AITasker.Infrastructure.Projects
                     project,
                     expertProfile);
 
-                dispute.PostResolutionDecision = "END";
-                dispute.PostResolutionDecisionAt = now;
-                dispute.PostResolutionDecisionByUserId = currentUserId;
                 project.Status = ProjectStatusCancelled;
                 project.EndDate = now;
                 contract.Status = ContractStatusCancelled;
@@ -351,15 +364,22 @@ namespace AITasker.Infrastructure.Projects
                 await transaction.CommitAsync();
                 transactionCompleted = true;
 
-                await _notificationService.CreateNotificationAsync(
-                    expertProfile.UserId,
-                    "Contract ended",
-                    $"The client ended project '{project.Title}' after dispute resolution. Future milestones were cancelled and unused escrow was refunded.",
-                    "PROJECT_ENDED_AFTER_DISPUTE",
-                    relatedEntityType: "PROJECT",
-                    relatedEntityId: project.ProjectId,
-                    relatedProjectId: project.ProjectId,
-                    relatedDisputeId: dispute.DisputeId);
+                try
+                {
+                    await _notificationService.CreateNotificationAsync(
+                        expertProfile.UserId,
+                        "Contract ended",
+                        $"The client ended project '{project.Title}' after dispute resolution. Future milestones were cancelled and unused escrow was refunded.",
+                        "PROJECT_ENDED_AFTER_DISPUTE",
+                        relatedEntityType: "PROJECT",
+                        relatedEntityId: project.ProjectId,
+                        relatedProjectId: project.ProjectId,
+                        relatedDisputeId: dispute.DisputeId);
+                }
+                catch
+                {
+                    // End/refund is already committed; notification failure must not cause a retry.
+                }
 
                 return await MapToProjectResponseAsync(project);
             }
@@ -372,6 +392,35 @@ namespace AITasker.Infrastructure.Projects
 
                 throw;
             }
+        }
+
+        private async Task ClaimPostResolutionDecisionAsync(
+            Dispute dispute,
+            string decision,
+            int currentUserId,
+            DateTime decisionAt)
+        {
+            var updatedRows = await _context.Disputes
+                .Where(x =>
+                    x.DisputeId == dispute.DisputeId &&
+                    x.Status == DisputeStatusResolved &&
+                    x.ResolutionType == ResolutionReleaseToExpert &&
+                    x.PostResolutionDecision == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(x => x.PostResolutionDecision, decision)
+                    .SetProperty(x => x.PostResolutionDecisionAt, decisionAt)
+                    .SetProperty(x => x.PostResolutionDecisionByUserId, currentUserId));
+
+            if (updatedRows != 1)
+            {
+                throw new InvalidOperationException(
+                    "A post-dispute decision has already been made for this project.");
+            }
+
+            // Keep the tracked entity synchronized with the atomic claim.
+            dispute.PostResolutionDecision = decision;
+            dispute.PostResolutionDecisionAt = decisionAt;
+            dispute.PostResolutionDecisionByUserId = currentUserId;
         }
 
         private async Task<Dispute> GetPendingPostResolutionDecisionAsync(int projectId)
