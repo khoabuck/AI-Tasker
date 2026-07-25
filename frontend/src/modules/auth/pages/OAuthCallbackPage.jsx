@@ -14,6 +14,8 @@ export default function OAuthCallbackPage() {
   useEffect(() => {
     let cancelled = false;
 
+
+    //tự kiểm tra phiên Google Login → lấy user từ Backend → cập nhật AuthContext → chuyển user đến đúng trang.
     const handleOAuthCallback = async () => {
       try {
         setError("");

@@ -31,16 +31,75 @@ const formatCurrency = (value) => {
 };
 
 const STATUS_CONFIG = {
-  ACTIVE:    { label: "Active",    color: "#facc15", bg: "rgba(250,204,21,0.08)", border: "rgba(250,204,21,0.25)" },
-  COMPLETED: { label: "Completed", color: "#22c55e", bg: "rgba(34,197,94,0.08)",  border: "rgba(34,197,94,0.25)"  },
-  DISPUTED:  { label: "Disputed",  color: "#f97316", bg: "rgba(249,115,22,0.08)", border: "rgba(249,115,22,0.25)" },
+  ACTIVE: {
+    label: "Active",
+    color: "#facc15",
+    bg: "rgba(250,204,21,0.08)",
+    border: "rgba(250,204,21,0.25)"
+  },
+
+  COMPLETED: {
+    label: "Completed",
+    color: "#22c55e",
+    bg: "rgba(34,197,94,0.08)",
+    border: "rgba(34,197,94,0.25)"
+  },
+
+  DISPUTED: {
+    label: "Disputed",
+    color: "#f97316",
+    bg: "rgba(249,115,22,0.08)",
+    border: "rgba(249,115,22,0.25)"
+  },
+
+  CANCELLED: {
+    label: "Cancelled",
+    color: "#f87171",
+    bg: "rgba(248,113,113,0.08)",
+    border: "rgba(248,113,113,0.25)"
+  },
 };
 
 const MILESTONE_STATUS = {
-  PENDING:   { label: "Pending",   color: "#8c90a0" },
-  SUBMITTED: { label: "Submitted", color: "#facc15" },
-  APPROVED:  { label: "Approved",  color: "#22c55e" },
-  REJECTED:  { label: "Rejected",  color: "#f87171" },
+  PENDING: {
+    label: "Pending",
+    color: "#8c90a0"
+  },
+
+  SUBMITTED: {
+    label: "Submitted",
+    color: "#facc15"
+  },
+
+  APPROVED: {
+    label: "Approved",
+    color: "#22c55e"
+  },
+
+  RESOLVED: {
+    label: "Resolved",
+    color: "#22c55e"
+  },
+
+  REJECTED: {
+    label: "Rejected",
+    color: "#f87171"
+  },
+
+  CANCELLED: {
+    label: "Cancelled",
+    color: "#f87171"
+  },
+
+  CANCELED: {
+    label: "Cancelled",
+    color: "#f87171"
+  },
+
+  REFUNDED: {
+    label: "Refunded",
+    color: "#f87171"
+  },
 };
 
 const PROJECT_POLL_INTERVAL_MS = 15000;
@@ -733,14 +792,51 @@ export default function ClientProjectDetailPage() {
     }
 
     try {
-      const res = await axiosInstance.get(`/projects/${projectId}`, { signal });
-      const projectData = res.data?.data ?? res.data;
+      const res = await axiosInstance.get(
+        `/projects/${projectId}`,
+        { signal }
+      );
+
+      const projectData =
+        res.data?.data ?? res.data;
+
+      const latestProjectStatus = String(
+        projectData?.status ?? ""
+      )
+        .trim()
+        .toUpperCase();
+
+      // Khi đang polling dispute mà BE đã chuyển project sang CANCELLED
+      // => dispute đã kết thúc theo nhánh hủy project.
+      // Đưa Client thẳng về tab Cancelled.
+      if (
+        silent &&
+        ["CANCELLED", "CANCELED"].includes(latestProjectStatus)
+      ) {
+        navigate(
+          "/client/projects?status=CANCELLED",
+          { replace: true }
+        );
+
+        return;
+      }
+
       setProject(projectData);
 
       try {
-        const msRes = await axiosInstance.get(`/projects/${projectId}/milestones`, { signal });
-        const msRaw = msRes.data?.data ?? msRes.data;
-        setMilestones(Array.isArray(msRaw) ? msRaw : msRaw?.items ?? []);
+        const msRes = await axiosInstance.get(
+          `/projects/${projectId}/milestones`,
+          { signal }
+        );
+
+        const msRaw =
+          msRes.data?.data ?? msRes.data;
+
+        setMilestones(
+          Array.isArray(msRaw)
+            ? msRaw
+            : msRaw?.items ?? []
+        );
       } catch {
         setMilestones([]);
       }
@@ -755,7 +851,7 @@ export default function ClientProjectDetailPage() {
         setLoading(false);
       }
     }
-  }, [projectId]);
+  }, [projectId, navigate]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -843,7 +939,8 @@ if (!project) return null;
     STATUS_CONFIG.ACTIVE;
 
   const requiresPostDisputeDecision =
-    Boolean(project?.requiresPostDisputeDecision) &&
+    normalizedProjectStatus === "DISPUTED" &&
+    project?.requiresPostDisputeDecision === true &&
     Boolean(projectId);
 
   const expertName = project.expertName || project.expert?.fullName || "Expert";
@@ -851,11 +948,40 @@ if (!project) return null;
     ? new Date(project.startDate || project.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })
     : "—";
 
-  // Milestone "đang làm" = milestone đầu tiên chưa APPROVED.
-  const currentMilestoneIndex = milestones.findIndex(
-    (m) => String(m.status ?? "").toUpperCase() !== "APPROVED"
-  );
-  const currentMilestone = currentMilestoneIndex >= 0 ? milestones[currentMilestoneIndex] : null;
+  // Milestone được xem là đã chốt.
+// APPROVED: Client approve bình thường.
+// RESOLVED: dispute đã được Admin xử lý xong.
+const isMilestoneFinished = (milestone) => {
+  const status = String(
+    milestone?.status ?? ""
+  )
+    .trim()
+    .toUpperCase();
+
+  return [
+    "APPROVED",
+    "RESOLVED",
+    "REFUNDED",
+    "CANCELLED",
+    "CANCELED",
+  ].includes(status);
+};
+
+// Milestone hiện tại = milestone đầu tiên chưa được chốt.
+const currentMilestoneIndex = milestones.findIndex(
+  (m) => !isMilestoneFinished(m)
+);
+
+const currentMilestone =
+  currentMilestoneIndex >= 0
+    ? milestones[currentMilestoneIndex]
+    : null;
+
+// Còn ít nhất một milestone chưa chốt
+// → Project vẫn còn công việc để Continue.
+const hasRemainingMilestone = milestones.some(
+  (m) => !isMilestoneFinished(m)
+);
 
   const handleContinueAfterDispute = async () => {
     if (!projectId || postDisputeActionLoading) {
@@ -873,11 +999,14 @@ if (!project) return null;
       setBannerMsg("Project continued successfully.");
       await fetchData(undefined, true);
     } catch (err) {
-      setPostDisputeActionError(
+      const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
-        "Continue project failed."
-      );
+        "Continue project failed.";
+
+      await fetchData(undefined, true);
+
+      setPostDisputeActionError(message);
     } finally {
       setPostDisputeActionLoading("");
     }
@@ -902,11 +1031,14 @@ if (!project) return null;
         },
       });
     } catch (err) {
-      setPostDisputeActionError(
+      const message =
         err?.response?.data?.message ||
         err?.response?.data?.title ||
-        "End contract failed."
-      );
+        "End contract failed.";
+
+      await fetchData(undefined, true);
+
+      setPostDisputeActionError(message);
     } finally {
       setPostDisputeActionLoading("");
     }
@@ -1078,8 +1210,9 @@ if (!project) return null;
               margin: "0 0 16px",
             }}
           >
-            The latest dispute was resolved in favor of the Expert. Please choose
-            whether you want to continue the project or end the contract.
+            {hasRemainingMilestone
+              ? "The latest dispute was resolved in favor of the Expert. Please choose whether you want to continue the project or end the contract."
+              : "The latest dispute was resolved in favor of the Expert. There are no remaining milestones to continue."}
           </p>
 
           {postDisputeActionError && (
@@ -1105,6 +1238,7 @@ if (!project) return null;
               flexWrap: "wrap",
             }}
           >
+            {hasRemainingMilestone && (
             <button
               type="button"
               onClick={handleContinueAfterDispute}
@@ -1126,6 +1260,7 @@ if (!project) return null;
                 ? "Continuing..."
                 : "Continue Project"}
             </button>
+          )}
 
             <button
               type="button"
@@ -1194,8 +1329,16 @@ if (!project) return null;
             {milestones.length > 0 && (
               <div style={{ marginTop: 16, display: "flex", gap: 4 }}>
                 {milestones.map((m, i) => {
-                  const done =
-                    String(m.status ?? "").toUpperCase() === "APPROVED";
+                  const normalizedMilestoneStatus = String(
+                    m.status ?? ""
+                  )
+                    .trim()
+                    .toUpperCase();
+
+                  const done = [
+                    "APPROVED",
+                    "RESOLVED",
+                  ].includes(normalizedMilestoneStatus);
                   const active = i === currentMilestoneIndex;
                   return (
                     <div key={m.milestoneId ?? i} style={{ flex: 1, height: 6, borderRadius: 3, background: done ? "#22c55e" : active ? "#facc15" : "rgba(255,255,255,0.08)" }} />
@@ -1217,16 +1360,57 @@ if (!project) return null;
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {milestones.map((m, index) => {
-                const normalizedStatus = String(m.status || "").toUpperCase();
-                const mCfg = MILESTONE_STATUS[normalizedStatus] || MILESTONE_STATUS.PENDING;
-                const isCurrent = index === currentMilestoneIndex;
+                const normalizedStatus = String(
+                  m.status ?? ""
+                )
+                  .trim()
+                  .toUpperCase();
 
-                const canOpenDeliverable = ["SUBMITTED", "APPROVED", "REJECTED"].includes(
-                  normalizedStatus
-                );
+                const normalizedPaymentStatus = String(
+                  m.paymentStatus ??
+                  m.escrowStatus ??
+                  ""
+                )
+                  .trim()
+                  .toUpperCase();
+
+                const mCfg =
+                  MILESTONE_STATUS[normalizedStatus] ||
+                  MILESTONE_STATUS.PENDING;
+
+                const isCurrent =
+                  index === currentMilestoneIndex;
+
+                // Milestone Client đã approve bình thường.
+                const isApproved =
+                  normalizedStatus === "APPROVED";
+
+                // Milestone vẫn đang trong flow review bình thường.
+                const canPreviewDeliverable =
+                  normalizedProjectStatus === "ACTIVE" &&
+                  ["SUBMITTED", "REJECTED"].includes(
+                    normalizedStatus
+                  );
+
+                // Dispute đã resolve và Expert thắng:
+                // milestone RESOLVED + tiền đã RELEASED cho Expert.
+                const isExpertWinResolved =
+                  normalizedStatus === "RESOLVED" &&
+                  normalizedPaymentStatus === "RELEASED";
+
+                // Chỉ cho xem:
+                // 1. milestone APPROVED;
+                // 2. milestone đang review khi project ACTIVE;
+                // 3. milestone dispute mà Expert thắng.
+                const canOpenDeliverable =
+                  isApproved ||
+                  canPreviewDeliverable ||
+                  isExpertWinResolved;
 
                 const deliverableButtonLabel =
-                  normalizedStatus === "SUBMITTED" ? "Preview" : "View";
+                  normalizedStatus === "SUBMITTED"
+                    ? "Preview"
+                    : "View";
 
                 return (
                   <div key={m.milestoneId ?? index}

@@ -14,6 +14,7 @@ const BG_IMAGE =
   "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
 
 
+  //một component nhỏ dùng để hiện lỗi ngay dưới từng ô input.
 function FieldError({ name, errors }) {
   if (!errors[name]) return null;
   return (
@@ -24,7 +25,9 @@ function FieldError({ name, errors }) {
   );
 }
 
+//Lấy object user thật ra khỏi response của /auth/me.
 function unwrapAuthUser(response) {
+  // Axios để body Backend trong response.data.
   const data = response?.data;
 
   return (
@@ -37,6 +40,8 @@ function unwrapAuthUser(response) {
   );
 }
 
+//dùng riêng cho Business Verification bị khóa.
+// nhận thời điểm khóa ---> số giây còn lại
 function getLockSeconds(lockedUntil) {
   if (!lockedUntil) return 0;
 
@@ -52,6 +57,7 @@ function getLockSeconds(lockedUntil) {
   );
 }
 
+// nhận tổng số giây ---> trả ra 1 chuỗi tg dễ đọc như 1d 2h 15m 50s
 function formatRemainingTime(totalSeconds) {
   const safeSeconds = Math.max(0, Number(totalSeconds) || 0);
 
@@ -131,6 +137,7 @@ function LockPopup({
   );
 }
 
+//Nhận error Axios lộn xộn → biến thành format thống nhất để page dễ dùng.
 function parseApiError(err) {
   const status = err?.response?.status;
   const resData = err?.response?.data;
@@ -161,6 +168,8 @@ function parseApiError(err) {
     });
   }
 
+  // Map một số message cụ thể
+  // sang đúng input.
   if (sourceData.message === "Phone number already exists.") {
     fieldErrors.phoneNumber = "This phone number is already in use.";
   }
@@ -501,6 +510,8 @@ export default function SetupProfilePage() {
     return errors;
   };
 
+  //Hàm này nhận kết quả đó và quyết định UI phải làm gì tiếp theo.
+  // VERIFIED, FAILED, LOCKED
   const applyBusinessVerificationResult = (data) => {
     const resultData = data?.data || data;
     const bp = resultData?.businessProfile;

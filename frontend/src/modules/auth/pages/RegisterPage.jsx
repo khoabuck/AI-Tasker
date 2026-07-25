@@ -17,7 +17,13 @@ const GoogleIcon = () => (
   </svg>
 );
 
+// Component chính của trang Register.
+//
+// Khi React Router cần hiển thị /register,
+// React sẽ render component này.
+
 export default function RegisterPage() {
+  // Lấy hàm navigate từ React Router.
   const navigate = useNavigate();
   const [form, setForm] = useState({ fullName: "", email: "", password: "", confirmPassword: "", terms: false });
   const [error, setError] = useState("");
@@ -37,12 +43,17 @@ export default function RegisterPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isFormValid) return;
+
+    // kiểm tra confirmPassword có giống vs password ko
     if (form.password !== form.confirmPassword) {
       setError("Confirm password does not match.");
       return;
     }
+    // dến đây là validation FE đã pass và chuyển nút thành Creating account
     setLoading(true);
+    // xóa lỗi cũ tr khi gọi API
     setError("");
+    // bắt đầu gọi API register
     try {
       await registerApi({ fullName: form.fullName, email: form.email, password: form.password });
       navigate("/verify-email-notice", { state: { email: form.email } });
@@ -144,7 +155,7 @@ export default function RegisterPage() {
                       type="text"
                       name="fullName"
                       value={form.fullName}
-                      onChange={handleChange}
+                      onChange={handleChange} // mỗi lần user gõ gọi lại handleChange
                       required
                       placeholder="Dr. Sarah Chen"
                       autoComplete="off"
@@ -152,7 +163,7 @@ export default function RegisterPage() {
                       autoCapitalize="off"
                       spellCheck={false}
                       style={inputStyle("fullName")}
-                      onFocus={() => setFocusField("fullName")}
+                      onFocus={() => setFocusField("fullName")} 
                       onBlur={() => setFocusField("")}
                     />
                   </div>

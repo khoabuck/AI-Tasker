@@ -56,7 +56,50 @@ export default function ClientDisputeDetailPage() {
   const projectId = searchParams.get("projectId");
   const navigate = useNavigate();
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+
+    document.documentElement.classList.add(
+      "dispute-hide-scrollbar"
+    );
+
+    const style = document.createElement("style");
+    style.id = "dispute-hide-scrollbar-style";
+
+    style.textContent = `
+      .dispute-hide-scrollbar,
+      .dispute-hide-scrollbar body,
+      .dispute-hide-scrollbar #root,
+      .dispute-hide-scrollbar * {
+        scrollbar-width: none !important;
+        -ms-overflow-style: none !important;
+      }
+
+      .dispute-hide-scrollbar::-webkit-scrollbar,
+      .dispute-hide-scrollbar body::-webkit-scrollbar,
+      .dispute-hide-scrollbar #root::-webkit-scrollbar,
+      .dispute-hide-scrollbar *::-webkit-scrollbar {
+        display: none !important;
+        width: 0 !important;
+        height: 0 !important;
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      document.documentElement.classList.remove(
+        "dispute-hide-scrollbar"
+      );
+
+      document
+        .getElementById("dispute-hide-scrollbar-style")
+        ?.remove();
+    };
+  }, []);
+
   const [dispute, setDispute] = useState(null);
+  const [milestones, setMilestones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [evidenceText, setEvidenceText] = useState("");
@@ -106,8 +149,29 @@ const isSubmitLocked =
 
   const disputeProjectId = projectId || dispute?.projectId;
 
+  const isMilestoneFinished = (milestone) => {
+    const status = String(
+      milestone?.status ?? ""
+    )
+      .trim()
+      .toUpperCase();
+
+    return [
+      "APPROVED",
+      "RESOLVED",
+      "REFUNDED",
+      "CANCELLED",
+      "CANCELED",
+    ].includes(status);
+  };
+
+  const hasRemainingMilestone = milestones.some(
+    (milestone) => !isMilestoneFinished(milestone)
+  );
+
   const requiresClientDecision =
-    Boolean(dispute?.requiresClientDecision) &&
+    normalizedDisputeStatus === "RESOLVED" &&
+    dispute?.requiresClientDecision === true &&
     !dispute?.postResolutionDecision &&
     Boolean(disputeProjectId);
 
@@ -129,9 +193,31 @@ const isSubmitLocked =
     const raw = res.data?.data ?? res.data;
     const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
-    const match = projectId
-      ? list.find((d) => String(d.projectId) === String(projectId))
-      : list[0];
+    const projectDisputes = projectId
+    ? list.filter(
+        (d) => String(d.projectId) === String(projectId)
+      )
+    : list;
+
+  const sortedDisputes = [...projectDisputes].sort((a, b) => {
+    const timeA = a?.createdAt
+      ? new Date(a.createdAt).getTime()
+      : 0;
+
+    const timeB = b?.createdAt
+      ? new Date(b.createdAt).getTime()
+      : 0;
+
+    return timeB - timeA;
+  });
+
+  const activeDispute = sortedDisputes.find((d) =>
+    ["OPEN", "PENDING", "UNDER_REVIEW"].includes(
+      String(d?.status ?? "").toUpperCase()
+    )
+  );
+
+const match = activeDispute ?? sortedDisputes[0];
 
     if (!match) {
       if (!silent) {
@@ -141,16 +227,84 @@ const isSubmitLocked =
     }
 
     const detailRes = await axiosInstance.get(
-      `/disputes/${match.disputeId}`,
+  `/disputes/${match.disputeId}`,
+  { signal }
+);
+
+if (signal?.aborted) return;
+
+const detail = detailRes.data?.data ?? detailRes.data;
+
+setDispute(detail ?? match);
+
+const currentProjectId =
+  projectId ||
+  detail?.projectId ||
+  match?.projectId;
+
+if (currentProjectId) {
+  try {
+    // Lấy trạng thái Project thật từ BE.
+    const projectRes = await axiosInstance.get(
+      `/projects/${currentProjectId}`,
       { signal }
     );
 
     if (signal?.aborted) return;
 
-    const detail = detailRes.data?.data ?? detailRes.data;
+    const projectData =
+      projectRes.data?.data ?? projectRes.data;
 
-    setDispute(detail ?? match);
-    setError("");
+    const latestProjectStatus = String(
+      projectData?.status ?? ""
+    )
+      .trim()
+      .toUpperCase();
+
+    // Client đang xem dispute.
+    // Nếu trong lần polling BE đã chuyển Project sang CANCELLED
+    // => đưa Client về tab Cancelled.
+    if (
+      silent &&
+      ["CANCELLED", "CANCELED"].includes(latestProjectStatus)
+    ) {
+      navigate(
+        "/client/projects?status=CANCELLED",
+        { replace: true }
+      );
+
+      return;
+    }
+
+    const milestoneRes = await axiosInstance.get(
+      `/projects/${currentProjectId}/milestones`,
+      { signal }
+    );
+
+    if (signal?.aborted) return;
+
+    const milestoneRaw =
+      milestoneRes.data?.data ?? milestoneRes.data;
+
+    setMilestones(
+      Array.isArray(milestoneRaw)
+        ? milestoneRaw
+        : milestoneRaw?.items ?? []
+    );
+  } catch (projectError) {
+    if (
+      projectError?.code === "ERR_CANCELED" ||
+      projectError?.name === "CanceledError" ||
+      signal?.aborted
+    ) {
+      return;
+    }
+
+    setMilestones([]);
+  }
+}
+
+setError("");
   } catch (err) {
     if (
       err?.code === "ERR_CANCELED" ||
@@ -172,7 +326,7 @@ const isSubmitLocked =
       setLoading(false);
     }
   }
-}, [projectId]);
+}, [projectId, navigate]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -305,29 +459,33 @@ const isSubmitLocked =
   };
 
   const handleContinueAfterDispute = async () => {
-  if (!disputeProjectId || postDisputeActionLoading) {
-    return;
-  }
+    if (!disputeProjectId || postDisputeActionLoading) {
+      return;
+    }
 
-  setPostDisputeActionLoading("continue");
-  setPostDisputeActionError("");
+    setPostDisputeActionLoading("continue");
+    setPostDisputeActionError("");
 
-  try {
-    await axiosInstance.post(
-      `/projects/${disputeProjectId}/continue-after-dispute`
-    );
+    try {
+      await axiosInstance.post(
+        `/projects/${disputeProjectId}/continue-after-dispute`
+      );
 
-    navigate(`/client/projects/${disputeProjectId}`);
-  } catch (err) {
-    setPostDisputeActionError(
-      err?.response?.data?.message ||
-      err?.response?.data?.title ||
-      "Continue project failed."
-    );
-  } finally {
-    setPostDisputeActionLoading("");
-  }
-};
+      navigate(`/client/projects/${disputeProjectId}`);
+    } catch (err) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.title ||
+        "Continue project failed.";
+
+      // Lấy lại trạng thái dispute thật từ BE
+      await fetchDispute(undefined, true);
+
+      setPostDisputeActionError(message);
+    } finally {
+      setPostDisputeActionLoading("");
+    }
+  };
 
 const handleEndAfterDispute = async () => {
   if (!disputeProjectId || postDisputeActionLoading) {
@@ -342,13 +500,20 @@ const handleEndAfterDispute = async () => {
       `/projects/${disputeProjectId}/end-after-dispute`
     );
 
-    navigate("/client/projects");
+    navigate(
+      "/client/projects?status=CANCELLED",
+      { replace: true }
+    );
   } catch (err) {
-    setPostDisputeActionError(
+    const message =
       err?.response?.data?.message ||
       err?.response?.data?.title ||
-      "End contract failed."
-    );
+      "End contract failed.";
+
+    // Lấy lại trạng thái dispute thật từ BE
+    await fetchDispute(undefined, true);
+
+    setPostDisputeActionError(message);
   } finally {
     setPostDisputeActionLoading("");
   }
@@ -908,8 +1073,9 @@ const handleEndAfterDispute = async () => {
               margin: "0 0 16px",
             }}
           >
-            The dispute was resolved in favor of the Expert. Please choose whether
-            you want to continue the project or end the contract.
+            {hasRemainingMilestone
+              ? "The dispute was resolved in favor of the Expert. Please choose whether you want to continue the project or end the contract."
+              : "The dispute was resolved in favor of the Expert. There are no remaining milestones to continue."}
           </p>
 
           {postDisputeActionError && (
@@ -935,6 +1101,7 @@ const handleEndAfterDispute = async () => {
               flexWrap: "wrap",
             }}
           >
+            {hasRemainingMilestone && (
             <button
               type="button"
               onClick={handleContinueAfterDispute}
@@ -947,13 +1114,16 @@ const handleEndAfterDispute = async () => {
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 700,
-                cursor: postDisputeActionLoading ? "not-allowed" : "pointer",
+                cursor: postDisputeActionLoading
+                  ? "not-allowed"
+                  : "pointer",
               }}
             >
               {postDisputeActionLoading === "continue"
                 ? "Continuing..."
                 : "Continue Project"}
             </button>
+          )}
 
             <button
               type="button"

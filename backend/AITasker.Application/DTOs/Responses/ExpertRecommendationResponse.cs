@@ -24,6 +24,10 @@ public class ExpertRecommendationResponse
 
     public decimal ProfileScore { get; set; }
 
+    public decimal AverageRating { get; set; }
+
+    public int TotalReviews { get; set; }
+
     public string Level { get; set; } = string.Empty;
 
     public decimal MatchScore { get; set; }
