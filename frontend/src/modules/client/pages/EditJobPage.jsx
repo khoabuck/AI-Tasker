@@ -51,7 +51,7 @@ const buildPayload = (form) => ({
   projectType: form.projectType,
   complexity: form.complexity || null,
   expectedDeliverables: form.expectedDeliverables || "",
-  isAiAssisted: !!form.aiGeneratedDescription,
+  isAiAssisted: Boolean(form.isAiAssisted),
   skillIds: form.skills.filter((s) => s.id > 0).map((s) => s.id),
 });
 
@@ -68,7 +68,6 @@ export default function EditJobPage() {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [saveSuccess, setSaveSuccess] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
 
   // Danh sách skill GỐC của job lúc mới tải trang — đóng vai trò baseline để
@@ -78,10 +77,7 @@ export default function EditJobPage() {
   const [originalSkillNames, setOriginalSkillNames] = useState([]);
   const [irrelevantSkills, setIrrelevantSkills] = useState([]);
 
-  // Chỉ hiện cảnh báo khi job GỐC được tạo bằng AI Assistant (có
-  // aiGeneratedDescription) — đồng bộ với PostJobPage chỉ cảnh báo ở mode
-  // "ai", không cảnh báo ở job tạo thủ công hoàn toàn.
-  const wasAiAssisted = !!form?.aiGeneratedDescription;
+  const wasAiAssisted = Boolean(form?.isAiAssisted);
 
   // ── Fetch job data để prefill ──────────────────────────────────────
   useEffect(() => {
@@ -116,6 +112,7 @@ export default function EditJobPage() {
           expectedDeliverables:  job.expectedDeliverables  || "",
           deadline:              deadlineDate,
           skills:                mappedSkills,
+          isAiAssisted: Boolean(job.isAiAssisted),
         });
 
         setOriginalSkillNames(mappedSkills.map((s) => s.name.toLowerCase()));
@@ -155,9 +152,8 @@ export default function EditJobPage() {
       );
     })
     .catch((err) => {
-      if (err?.code !== "ERR_CANCELED") {
-        console.error("Load skills failed:", err);
-      }
+      if (err?.code === "ERR_CANCELED") return;
+      setSkillOptions([]);
     });
 
   return () => controller.abort();
@@ -166,7 +162,6 @@ export default function EditJobPage() {
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
     setSaveError("");
-    setSaveSuccess(false);
   };
 
   const removeSkill = (skill) => {
@@ -223,15 +218,43 @@ export default function EditJobPage() {
     setCustomSkill("");
   };
 
+  const validateForm = () => {
+    if (!form.title.trim()) {
+      return "Job title cannot be empty.";
+    }
+
+    if (!form.description.trim()) {
+      return "Job description cannot be empty.";
+    }
+
+    const min = Number(form.budgetMin);
+    const max = Number(form.budgetMax);
+
+    if (!Number.isFinite(min) || min <= 0) {
+      return "Minimum budget must be greater than 0 VND.";
+    }
+
+    if (!Number.isFinite(max) || max <= 0) {
+      return "Maximum budget must be greater than 0 VND.";
+    }
+
+    if (min >= max) {
+      return "Minimum budget must be less than maximum budget.";
+    }
+
+    return "";
+  };
+
   // ── PUT /api/jobs/{id} — lưu thay đổi, KHÔNG đổi status ────────────
   const handleSave = async () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       return;
     }
     setSaving(true);
     setSaveError("");
-    setSaveSuccess(false);
     try {
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
       // Lưu xong quay về đúng tab của job trong JobsPage (không phải trang
@@ -246,20 +269,23 @@ export default function EditJobPage() {
   };
 
   const openSubmitConfirm = () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       return;
     }
 
     setSaveError("");
-    setSaveSuccess(false);
     setShowSubmitConfirm(true);
   };
 
   // ── PUT /api/jobs/{id} rồi PUT /api/jobs/{id}/submit — lưu + đổi status OPEN ──
   const handleSubmit = async () => {
-    if (!form.title.trim()) {
-      setSaveError("Job title cannot be empty.");
+    const validationError = validateForm();
+
+    if (validationError) {
+      setSaveError(validationError);
       setShowSubmitConfirm(false);
       return;
     }
@@ -269,10 +295,20 @@ export default function EditJobPage() {
     setShowSubmitConfirm(false);
 
     try {
-      // Save changes first, then submit
       await axiosInstance.put(`/jobs/${id}`, buildPayload(form));
-      await axiosInstance.put(`/jobs/${id}/submit`);
-      navigate("/client/jobs?status=OPEN");
+
+      const submitRes = await axiosInstance.put(`/jobs/${id}/submit`);
+
+      const newStatus = String(submitRes.data?.status ?? "")
+        .trim()
+        .toUpperCase();
+
+      if (!newStatus) {
+        setSaveError("Job submitted but no status was returned.");
+        return;
+      }
+
+      navigate(`/client/jobs?status=${newStatus}`);
     } catch (err) {
       setSaveError(err?.response?.data?.message || "Submit failed. Please try again.");
     } finally {
@@ -280,31 +316,57 @@ export default function EditJobPage() {
     }
 };
 
-  // ── Loading ────────────────────────────────────────────────────────
-  if (loading || !form) return (
-  <ClientLayout>
-    <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
-      <span className="material-symbols-outlined" style={{ fontSize: 48, display: "block", marginBottom: 16, animation: "spin 1s linear infinite", color: "#facc15" }}>autorenew</span>
-      Loading job data...
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </div>
-  </ClientLayout>
-);
+  if (loading) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 0", color: "#8c90a0" }}>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 48,
+              display: "block",
+              marginBottom: 16,
+              animation: "spin 1s linear infinite",
+              color: "#facc15",
+            }}
+          >
+            autorenew
+          </span>
+          Loading job data...
+        </div>
+      </ClientLayout>
+    );
+  }
 
-  // ── Fetch error ────────────────────────────────────────────────────
-  if (fetchError) return (
-    <ClientLayout>
-      <div style={{ textAlign: "center", padding: "120px 24px" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 48, color: "#f87171", display: "block", marginBottom: 12 }}>error_outline</span>
-        <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>{fetchError}</p>
-        <button onClick={() => navigate(-1)}
-          style={{ padding: "10px 24px", background: "#00F0FF", color: "#002022", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 700 }}>
-          Back 
-        </button>
-      </div>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
-    </ClientLayout>
-  );
+  if (fetchError) {
+    return (
+      <ClientLayout>
+        <div style={{ textAlign: "center", padding: "120px 24px" }}>
+          <span
+            className="material-symbols-outlined"
+            style={{
+              fontSize: 48,
+              color: "#f87171",
+              display: "block",
+              marginBottom: 12,
+            }}
+          >
+            error_outline
+          </span>
+
+          <p style={{ color: "#f87171", fontSize: 15, marginBottom: 20 }}>
+            {fetchError}
+          </p>
+
+          <button onClick={() => navigate(-1)}>
+            Back
+          </button>
+        </div>
+      </ClientLayout>
+    );
+  }
+
+  if (!form) return null;
 
   const isDraft = originalStatus === "DRAFT";
 
@@ -451,7 +513,7 @@ export default function EditJobPage() {
                       onFocus={(e) => (e.target.style.borderColor = "#00F0FF")}
                       onBlur={(e) => (e.target.style.borderColor = "rgba(0,240,255,0.25)")} />
                     <div style={{ position: "absolute", top: 10, right: 12, pointerEvents: "none" }}>
-                      <span style={{ fontSize: 9, fontFamily: "JetBrains Mono, monospace", color: "#00F0FF", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.1em" }}>Synthetix AI</span>
+                      <span style={{ fontSize: 9, fontFamily: "JetBrains Mono, monospace", color: "#00F0FF", opacity: 0.35, textTransform: "uppercase", letterSpacing: "0.1em" }}>AI Generated</span>
                     </div>
                   </div>
                 </div>
@@ -587,14 +649,6 @@ export default function EditJobPage() {
               </p>
             )}
           </div>
-
-          {/* Save success */}
-          {saveSuccess && (
-            <div style={{ background: "rgba(74,222,128,0.08)", border: "1px solid rgba(74,222,128,0.25)", borderRadius: 10, padding: "12px 16px", color: "#4ade80", fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>check_circle</span>
-              Lưu thành công! Job đã được cập nhật.
-            </div>
-          )}
 
           {/* Error */}
           {saveError && (

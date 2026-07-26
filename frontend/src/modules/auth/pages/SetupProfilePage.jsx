@@ -103,6 +103,12 @@ function LockPopup({
               Business verification locked
             </h2>
 
+            {message && (
+              <p className="mt-1 text-sm leading-5 text-red-100/70">
+                {message}
+              </p>
+            )}
+
           </div>
         </div>
 

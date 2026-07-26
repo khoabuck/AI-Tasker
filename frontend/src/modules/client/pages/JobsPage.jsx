@@ -47,14 +47,9 @@ const STATUS_CONFIG = {
 };
 
 function normalizeJobStatus(status) {
-  const s = (status || "").toUpperCase();
-  if (s === "DRAFT") return "DRAFT";
-  if (s === "CANCELLED") return "CANCELLED";
-  if (s === "ACTIVE") return "ACTIVE"; // Project đã active (escrow locked) → không
-    // thuộc về trang Job nữa (trang Job chỉ có 3 tab Draft/Open/Cancelled), nên
-    // KHÔNG map về OPEN. Vì STATUS_TABS không có tab "ACTIVE" nào, job này sẽ
-    // tự động không hiện ở tab nào cả → coi như đã "biến mất" khỏi trang Job.
-  return "OPEN"; // mọi status khác chưa xác định thì tạm coi là OPEN
+  return String(status ?? "")
+    .trim()
+    .toUpperCase();
 }
 
 function JobCard({ job, onStatusChange }) {
@@ -63,6 +58,7 @@ function JobCard({ job, onStatusChange }) {
   const [checkingProposal, setCheckingProposal] = useState(false);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [submitError, setSubmitError] = useState("");
 
   // Lưu đủ trạng thái của proposal ACCEPTED.
   // Không chỉ lưu proposalId, vì còn phải biết contract đang DRAFT hay CANCELLED.
@@ -287,6 +283,7 @@ const acceptedDealLabel =
 
     const shouldHideJobActions =
     acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_DRAFT ||
+    acceptedDealState === ACCEPTED_DEAL_STATE.CONTRACT_CANCELLED ||
     acceptedDealState === ACCEPTED_DEAL_STATE.NO_CONTRACT ||
     acceptedDealState === ACCEPTED_DEAL_STATE.PROJECT_ACTIVE ||
     acceptedDealState === ACCEPTED_DEAL_STATE.UNKNOWN;
@@ -315,17 +312,29 @@ const acceptedDealColor =
     e.stopPropagation();
 
     setActionLoading(true);
-    try {
-      const res = await axiosInstance.put(`/jobs/${job.jobPostingId}/submit`);
+    setSubmitError("");
 
-      const newStatus = res?.data?.data?.status || "OPEN";
+    try {
+      const res = await axiosInstance.put(
+        `/jobs/${job.jobPostingId}/submit`
+      );
+
+      const newStatus = normalizeJobStatus(res.data?.status);
+
+      if (!newStatus) {
+        setSubmitError("Job submitted but no status was returned.");
+        return;
+      }
 
       onStatusChange(job.jobPostingId, newStatus);
 
-      navigate(`/client/jobs?status=OPEN`);
+      navigate(`/client/jobs?status=${newStatus}`);
     } catch (err) {
-      console.error("Submit job failed:", err);
-      alert(err?.response?.data?.message || "Failed to submit job. Please try again.");
+      setSubmitError(
+        err?.response?.data?.message ||
+          err?.response?.data?.title ||
+          "Failed to submit job. Please try again."
+      );
     } finally {
       setActionLoading(false);
     }
@@ -431,6 +440,22 @@ const acceptedDealColor =
       <p style={{ fontSize: 13, color: "#8c90a0", lineHeight: 1.6, margin: "0 0 14px", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
         {job.description}
       </p>
+
+      {submitError && (
+      <div
+        style={{
+          marginBottom: 14,
+          padding: "10px 14px",
+          borderRadius: 8,
+          background: "rgba(239,68,68,0.08)",
+          border: "1px solid rgba(239,68,68,0.25)",
+          color: "#f87171",
+          fontSize: 13,
+        }}
+      >
+        {submitError}
+      </div>
+    )}
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -736,7 +761,15 @@ export default function JobsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const activeStatus = searchParams.get("status") || "DRAFT";
+  const requestedStatus = normalizeJobStatus(
+    searchParams.get("status")
+  );
+
+  const activeStatus = STATUS_TABS.some(
+    (tab) => tab.key === requestedStatus
+  )
+    ? requestedStatus
+    : "DRAFT";
 
   const [allJobs, setAllJobs] = useState([]);
   const [loading, setLoading] = useState(true);

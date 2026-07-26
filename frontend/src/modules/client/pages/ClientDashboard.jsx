@@ -19,16 +19,32 @@ const normalizeLevel = (level) => {
 // ─── Component con: 1 Expert Card ─────────────────────
 function ExpertCard({ expert, onConnect }) {
   const navigate = useNavigate();
-  const skills = expert.expertSkills?.map((s) => s.skillName) || [];
+  const expertSkillNames =
+  expert.expertSkills
+    ?.map((s) => s.skillName)
+    .filter(Boolean) ?? [];
+
+  const skills =
+    expertSkillNames.length > 0
+      ? expertSkillNames
+      : typeof expert.skills === "string"
+        ? expert.skills
+            .split(",")
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [];
 
   return (
-    <div className="min-w-[320px] max-w-[320px] glass-card p-6 rounded-xl flex flex-col space-y-6
-                hover:border-cyan-400 hover:-translate-y-1
-                hover:shadow-[0_0_20px_rgba(0,240,255,0.15)] transition-all duration-300">
+    <div className="min-w-[320px] max-w-[320px] glass-card p-6 rounded-xl flex h-full flex-col gap-6
+            hover:border-cyan-400 hover:-translate-y-1
+            hover:shadow-[0_0_20px_rgba(0,240,255,0.15)] transition-all duration-300">
 
-      <div>
-        <h3 className="text-xl font-bold text-white">{expert.fullName}</h3>
-        <p className="text-xs font-mono text-cyan-400 tracking-wider mt-1">
+      <div className="min-h-[72px]">
+        <h3 className="text-xl font-bold text-white">
+          {expert.fullName}
+        </h3>
+
+        <p className="mt-1 line-clamp-2 text-xs font-mono tracking-wider text-cyan-400">
           {expert.professionalTitle}
         </p>
       </div>
@@ -54,11 +70,39 @@ function ExpertCard({ expert, onConnect }) {
 
         <div>
           <p className="text-[10px] font-mono text-gray-400 uppercase mb-1">
-            Profile Score
+            Rating
           </p>
-          <p className="text-sm font-bold text-cyan-400">
-            {expert.profileScore}
-          </p>
+
+          {Number(expert.totalReviews ?? 0) > 0 ? (
+            <div className="flex items-center gap-1">
+              <div className="flex">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <span
+                    key={star}
+                    className={
+                      star <= Math.floor(Number(expert.averageRating ?? 0))
+                        ? "text-yellow-400"
+                        : "text-gray-600"
+                    }
+                  >
+                    {star <= Math.floor(Number(expert.averageRating ?? 0))
+                      ? "★"
+                      : "☆"}
+                  </span>
+                ))}
+              </div>
+
+              <span className="text-xs text-gray-400">
+                {Number(expert.averageRating ?? 0).toFixed(1)}
+                {" "}
+                ({expert.totalReviews})
+              </span>
+            </div>
+          ) : (
+            <p className="text-sm font-bold text-gray-400">
+              No reviews yet
+            </p>
+          )}
         </div>
 
         <div>
@@ -71,16 +115,16 @@ function ExpertCard({ expert, onConnect }) {
         </div>
       </div>
 
-      <div>
-        <p className="text-[10px] font-mono text-gray-400 uppercase tracking-wider mb-3">
+      <div className="flex-1">
+        <p className="mb-3 text-[10px] font-mono uppercase tracking-wider text-gray-400">
           Core Expertise
         </p>
+
         <div className="flex flex-wrap gap-2">
           {skills.map((skill) => (
             <span
               key={skill}
-              className="px-2 py-1 rounded text-[10px] font-mono
-                         bg-cyan-400/10 text-[#d3fbff] border border-cyan-400/20"
+              className="rounded border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[10px] font-mono text-[#d3fbff]"
             >
               {skill}
             </span>
@@ -88,7 +132,7 @@ function ExpertCard({ expert, onConnect }) {
         </div>
       </div>
 
-      <div className="mt-auto pt-4 flex gap-3">
+      <div className="mt-auto flex gap-3 pt-4">
         <button
           type="button"
           onClick={() => navigate(`/client/experts/${expert.expertProfileId}`)}
@@ -182,7 +226,7 @@ function ExpertSection({ title, icon, iconColor, experts, onConnect }) {
       <div className="relative">
         <div
             ref={scrollRef}
-            className="mx-auto flex gap-6 overflow-x-hidden scroll-smooth
+            className="mx-auto flex items-stretch gap-6 overflow-x-hidden scroll-smooth
                       [scrollbar-width:none] [-ms-overflow-style:none]
                       [&::-webkit-scrollbar]:hidden"
             style={{
@@ -233,12 +277,53 @@ function ExpertSection({ title, icon, iconColor, experts, onConnect }) {
     </section>
   );
 }
+
+async function fetchAllAvailableExperts() {
+  const firstResponse = await axiosInstance.get("/experts", {
+    params: {
+      availableOnly: true,
+    },
+  });
+
+  const firstData = firstResponse.data;
+
+  const allExperts = Array.isArray(firstData?.items)
+    ? [...firstData.items]
+    : [];
+
+  const currentPage = Number(firstData?.page ?? 1);
+  const totalPages = Number(firstData?.totalPages ?? currentPage);
+  const pageSize = Number(firstData?.pageSize);
+
+  for (
+    let page = currentPage + 1;
+    page <= totalPages;
+    page += 1
+  ) {
+    const response = await axiosInstance.get("/experts", {
+      params: {
+        availableOnly: true,
+        page,
+        ...(pageSize > 0 ? { pageSize } : {}),
+      },
+    });
+
+    const pageItems = Array.isArray(response.data?.items)
+      ? response.data.items
+      : [];
+
+    allExperts.push(...pageItems);
+  }
+
+  return allExperts;
+}
 // ─── Page chính ───────────────────────────────────────
 export default function ClientDashboard() {
   const navigate = useNavigate();
   const [experts, setExperts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [connectError, setConnectError] = useState("");
 
   useEffect(() => {
     const fetchExperts = async () => {
@@ -246,16 +331,7 @@ export default function ClientDashboard() {
         setLoading(true);
         setError("");
 
-        const res = await axiosInstance.get("/experts", {
-          params: {
-            availableOnly: true,
-            page: 1,
-            pageSize: 12,
-          },
-        });
-
-        const raw = res.data;
-        const items = Array.isArray(raw) ? raw : raw?.items || raw?.data || [];
+        const items = await fetchAllAvailableExperts();
         setExperts(items);
       } catch (err) {
         setError(
@@ -276,10 +352,15 @@ export default function ClientDashboard() {
 
   // code mới
   const handleConnect = async (expert) => {
+    setConnectError("");
+
     try {
-      const existing = await findExistingConversationWithExpert(axiosInstance, {
-        expertUserId: expert.userId,
-      });
+      const existing = await findExistingConversationWithExpert(
+        axiosInstance,
+        {
+          expertUserId: expert.userId,
+        }
+      );
 
       if (existing?.conversationId) {
         navigate(`/client/messages/${existing.conversationId}`);
@@ -287,10 +368,15 @@ export default function ClientDashboard() {
       }
 
       navigate(
-        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
+        `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(
+          expert.fullName
+        )}`
       );
-    } catch{
-      return;
+    } catch (err) {
+      setConnectError(
+        err?.response?.data?.message ||
+          "Unable to open conversation with the expert."
+      );
     }
   };
 
@@ -305,9 +391,15 @@ export default function ClientDashboard() {
             AI Expert Marketplace
           </h2>
           <p className="text-gray-400 max-w-2xl">
-            Browse available AI experts by level, experience, profile score, and skills.
+            Browse available AI experts by level, experience, rating, and skills.
           </p>
         </div>
+
+        {connectError && (
+          <div className="rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+            {connectError}
+          </div>
+        )}
 
         {loading && (
           <p className="text-gray-400">Loading expert list...</p>

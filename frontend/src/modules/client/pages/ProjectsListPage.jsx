@@ -37,8 +37,14 @@ const STATUS_CONFIG = {
 
 function ProjectCard({ project, hasReview }) {
   const navigate = useNavigate();
-  const normalizedStatus = String(project.status ?? "").toUpperCase();
-  const cfg = STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.ACTIVE;
+  const normalizedStatus = String(project.status ?? "")
+    .trim()
+    .toUpperCase();
+
+  const cfg = STATUS_CONFIG[normalizedStatus] || {
+    label: normalizedStatus || "Unknown",
+    color: "#9ca3af",
+  };
   const expertName = project.expertName || project.expert?.fullName || "Expert";
 
   return (
@@ -64,7 +70,8 @@ function ProjectCard({ project, hasReview }) {
         </div>
         <span
           className={`whitespace-nowrap rounded-full border px-3 py-1 font-mono text-[10px] font-bold uppercase ${
-            STATUS_CLASS[normalizedStatus] || STATUS_CLASS.ACTIVE
+            STATUS_CLASS[normalizedStatus] ||
+            "border-gray-400/30 bg-gray-400/10 text-gray-400"
           }`}
         >
           {cfg.label}
@@ -151,7 +158,9 @@ export default function ProjectsListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const activeStatus = searchParams.get("status") || "ACTIVE";
-  const [bannerMsg, setBannerMsg] = useState(location.state?.successMsg || "");
+  const [bannerMsg] = useState(
+    location.state?.successMsg || ""
+  );
 
   useEffect(() => {
   window.scrollTo(0, 0);
@@ -182,7 +191,7 @@ export default function ProjectsListPage() {
 
         const reviewedIds = new Set(
           reviews
-            .map((review) => review.projectId ?? review.project?.projectId)
+            .map((review) => review.projectId)
             .filter(Boolean)
         );
 

@@ -75,7 +75,20 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
 
   const name = expert.fullName;
   const role = expert.professionalTitle;
-  const skills = expert.expertSkills?.map((s) => s.skillName) ?? [];
+  const expertSkillNames =
+  expert.expertSkills
+    ?.map((s) => s.skillName)
+    .filter(Boolean) ?? [];
+
+  const skills =
+    expertSkillNames.length > 0
+      ? expertSkillNames
+      : typeof expert.skills === "string"
+        ? expert.skills
+            .split(",")
+            .map((skill) => skill.trim())
+            .filter(Boolean)
+        : [];
   const bio = expert.bio;
   const badge = expert.level;
 
@@ -90,12 +103,9 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 
   const expertProfileId = expert.expertProfileId;
-  const isTertiary = badge === "TOP PICK";
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border border-white/[0.12] p-6 backdrop-blur-md transition-colors ${
-      isTertiary ? "bg-[#101319] hover:border-indigo-300/50" : "bg-[#1d2026]/80 hover:border-cyan-400/50"
-    }`}>
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.12] bg-[#1d2026]/80 p-6 backdrop-blur-md transition-colors hover:border-cyan-400/50">
       {badge && (
         <div className="absolute right-0 top-0 rounded-bl-xl border-b border-l border-cyan-400/20 bg-cyan-400/[0.09] px-3 py-1">
           <span className="font-mono text-[10px] font-bold text-cyan-400">{badge}</span>
@@ -131,11 +141,7 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
       <div className="mb-4 flex flex-wrap gap-2">
         {skills.map((skill) => (
           <span key={skill}
-            className={`rounded px-2 py-1 font-mono text-[10px] ${
-              isTertiary
-                ? "border border-indigo-300/30 bg-indigo-300/10 text-indigo-300"
-                : "border border-white/10 bg-[#272a30]/80 text-gray-300"
-            }`}>
+            className="rounded border border-white/10 bg-[#272a30]/80 px-2 py-1 font-mono text-[10px] text-gray-300">
             {skill}
           </span>
         ))}
@@ -160,8 +166,46 @@ function ExpertCard({ expert, onConnect, onViewProfile }) {
   );
 }
 
+async function fetchAllExperts(params) {
+  // Không truyền page/pageSize.
+  // BE tự dùng cấu hình mặc định và trả page + totalPages.
+  const firstResponse = await axiosInstance.get("/experts", {
+    params,
+  });
+
+  const firstData = firstResponse.data;
+
+  const allExperts = Array.isArray(firstData?.items)
+    ? [...firstData.items]
+    : [];
+
+  const currentPage = Number(firstData?.page ?? 1);
+  const totalPages = Number(firstData?.totalPages ?? currentPage);
+
+  for (
+    let page = currentPage + 1;
+    page <= totalPages;
+    page += 1
+  ) {
+    const response = await axiosInstance.get("/experts", {
+      params: {
+        ...params,
+        page,
+      },
+    });
+
+    const pageItems = Array.isArray(response.data?.items)
+      ? response.data.items
+      : [];
+
+    allExperts.push(...pageItems);
+  }
+
+  return allExperts;
+}
+
 export default function ExpertSearchPage() {
-  const initial = restoreState();
+  const [initial] = useState(() => restoreState());
 
   const [query, setQuery] = useState(initial?.query ?? "");
   const [seniority, setSeniority] = useState(initial?.seniority ?? "");
@@ -169,6 +213,7 @@ export default function ExpertSearchPage() {
   const [searching, setSearching] = useState(false);
   const [experts, setExperts] = useState(initial?.experts ?? []);
   const [hasSearched, setHasSearched] = useState(initial?.hasSearched ?? false);
+  const [connectError, setConnectError] = useState("");
 
   const navigate = useNavigate();
 
@@ -191,7 +236,7 @@ export default function ExpertSearchPage() {
 
   const handleConnect = async (expert) => {
     saveSearchState();
-
+    setConnectError("");
     try {
       const existing = await findExistingConversationWithExpert(axiosInstance, {
         expertUserId: expert.userId,
@@ -206,8 +251,10 @@ export default function ExpertSearchPage() {
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
     } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the expert.");
+      setConnectError(
+        err?.response?.data?.message ||
+          "Unable to open conversation with the expert."
+      );
     }
   };
 
@@ -265,18 +312,11 @@ export default function ExpertSearchPage() {
           ? selectedOption.values[0]
           : undefined;
 
-      const res = await axiosInstance.get("/experts", {
-        params: {
-          keyword: nextQuery.trim() || undefined,
-          level: levelParam,
-          availableOnly: true,
-          page: 1,
-          pageSize: 100,
-        },
+      let items = await fetchAllExperts({
+        keyword: nextQuery.trim() || undefined,
+        level: levelParam,
+        availableOnly: true,
       });
-
-      const data = res.data;
-      let items = Array.isArray(data) ? data : (data?.items || data?.data || []);
 
       // Lọc phía FE riêng cho "Mid" vì BE chỉ nhận 1 level.
       if (selectedOption && selectedOption.values.length > 1) {
@@ -335,7 +375,7 @@ export default function ExpertSearchPage() {
 
   return (
     <ClientLayout>
-      <div className="min-h-screen px-6 pb-12 pt-12">
+      <div className="px-6 pb-12 pt-12">
 
         {/* Header */}
         <div className="mx-auto mb-8 max-w-[900px] text-center">
@@ -444,6 +484,15 @@ export default function ExpertSearchPage() {
 
           {/* Results */}
           <div className="flex-1">
+            {connectError && (
+              <div className="mb-5 flex items-center gap-2 rounded-xl border border-red-400/25 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+                <span className="material-symbols-outlined text-[18px]">
+                  error
+                </span>
+
+                {connectError}
+              </div>
+            )}
             {searching && (
               <div className="py-20 text-center">
                 <span className="material-symbols-outlined mb-4 block animate-spin text-cyan-400" style={{ fontSize: 64 }}>autorenew</span>

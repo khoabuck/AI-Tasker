@@ -66,6 +66,11 @@ const MILESTONE_STATUS = {
     color: "#8c90a0"
   },
 
+  FUNDED: {
+    label: "Funded",
+    color: "#00F0FF"
+  },
+
   SUBMITTED: {
     label: "Submitted",
     color: "#facc15"
@@ -129,6 +134,7 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+
 
   const respondentUserId =
     project?.expertUserId ??
@@ -352,7 +358,8 @@ function OpenDisputeModal({ project, milestone, onClose, onSubmitted }) {
 
           <div>
             <label style={{ display: "block", fontFamily: "JetBrains Mono, monospace", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", color: "#8c90a0", marginBottom: 8 }}>
-              Evidence (further description)
+              Evidence (further description){" "}
+              <span style={{ color: "#f87171" }}>*</span>
             </label>
             <textarea
               value={evidenceText}
@@ -777,6 +784,7 @@ export default function ClientProjectDetailPage() {
   project?.latestProposalId;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [milestoneError, setMilestoneError] = useState("");
   const [disputeModal, setDisputeModal] = useState(null); // { milestone } | { milestone: null } khi mở cho cả project
   // bannerMsg dùng chung cho mọi thông báo thành công cần hiện khi quay lại trang
   // này — ví dụ sau khi vừa approve 1 deliverable ở MilestoneDeliverablesPage và
@@ -789,9 +797,11 @@ export default function ClientProjectDetailPage() {
     if (!silent) {
       setLoading(true);
       setError("");
+      setMilestoneError("");
     }
 
     try {
+      // 1. Load project
       const res = await axiosInstance.get(
         `/projects/${projectId}`,
         { signal }
@@ -806,9 +816,7 @@ export default function ClientProjectDetailPage() {
         .trim()
         .toUpperCase();
 
-      // Khi đang polling dispute mà BE đã chuyển project sang CANCELLED
-      // => dispute đã kết thúc theo nhánh hủy project.
-      // Đưa Client thẳng về tab Cancelled.
+      // Client thắng dispute → project CANCELLED
       if (
         silent &&
         ["CANCELLED", "CANCELED"].includes(latestProjectStatus)
@@ -823,6 +831,7 @@ export default function ClientProjectDetailPage() {
 
       setProject(projectData);
 
+      // 2. Load milestones
       try {
         const msRes = await axiosInstance.get(
           `/projects/${projectId}/milestones`,
@@ -837,14 +846,28 @@ export default function ClientProjectDetailPage() {
             ? msRaw
             : msRaw?.items ?? []
         );
-      } catch {
-        setMilestones([]);
+
+        if (!silent) {
+          setMilestoneError("");
+        }
+      } catch (err) {
+        if (err?.code === "ERR_CANCELED") return;
+
+        if (!silent) {
+          setMilestoneError(
+            err?.response?.data?.message ||
+              "Unable to load project milestones."
+          );
+        }
       }
     } catch (err) {
       if (err?.code === "ERR_CANCELED") return;
 
       if (!silent) {
-        setError(err?.response?.data?.message || "Unable to load project information.");
+        setError(
+          err?.response?.data?.message ||
+            "Unable to load project information."
+        );
       }
     } finally {
       if (!silent) {
@@ -935,8 +958,12 @@ if (!project) return null;
   const normalizedProjectStatus = String(project.status ?? "").toUpperCase();
 
   const statusCfg =
-    STATUS_CONFIG[normalizedProjectStatus] ||
-    STATUS_CONFIG.ACTIVE;
+    STATUS_CONFIG[normalizedProjectStatus] || {
+      label: normalizedProjectStatus || "Unknown",
+      color: "#9ca3af",
+      bg: "rgba(156,163,175,0.08)",
+      border: "rgba(156,163,175,0.25)",
+    };
 
   const requiresPostDisputeDecision =
     normalizedProjectStatus === "DISPUTED" &&
@@ -1069,14 +1096,40 @@ const hasRemainingMilestone = milestones.some(
 
           {/* Expert info */}
           <div style={{ paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+            {project.expertAvatarUrl ? (
             <img
-                src={
-                  project.expertAvatarUrl ||
-                  `https://i.pravatar.cc/80?u=${project.expertProfileId || project.expertUserId || project.projectId}`
-                }
-                alt={expertName}
-                style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(0,240,255,0.25)" }}
-              />
+              src={project.expertAvatarUrl}
+              alt={expertName}
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                objectFit: "cover",
+                border: "2px solid rgba(0,240,255,0.25)",
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: "50%",
+                background: "#272a30",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "#8c90a0",
+                flexShrink: 0,
+              }}
+            >
+              <span
+                className="material-symbols-outlined"
+                style={{ fontSize: 26 }}
+              >
+                person
+              </span>
+            </div>
+          )}
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 15, fontWeight: 700, color: "#e1e2eb", margin: "0 0 2px", fontFamily: "Hanken Grotesk, sans-serif" }}>{expertName}</p>
               <p style={{ fontSize: 12, color: "#8c90a0", margin: 0 }}>{project.expertTitle || "AI Expert"}</p>
@@ -1329,16 +1382,7 @@ const hasRemainingMilestone = milestones.some(
             {milestones.length > 0 && (
               <div style={{ marginTop: 16, display: "flex", gap: 4 }}>
                 {milestones.map((m, i) => {
-                  const normalizedMilestoneStatus = String(
-                    m.status ?? ""
-                  )
-                    .trim()
-                    .toUpperCase();
-
-                  const done = [
-                    "APPROVED",
-                    "RESOLVED",
-                  ].includes(normalizedMilestoneStatus);
+                  const done = isMilestoneFinished(m);
                   const active = i === currentMilestoneIndex;
                   return (
                     <div key={m.milestoneId ?? i} style={{ flex: 1, height: 6, borderRadius: 3, background: done ? "#22c55e" : active ? "#facc15" : "rgba(255,255,255,0.08)" }} />
@@ -1355,7 +1399,20 @@ const hasRemainingMilestone = milestones.some(
             Milestones
           </h3>
 
-          {milestones.length === 0 ? (
+          {milestoneError ? (
+          <div
+            style={{
+              background: "rgba(239,68,68,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
+              borderRadius: 8,
+              padding: "12px 14px",
+              color: "#f87171",
+              fontSize: 13,
+            }}
+          >
+            {milestoneError}
+          </div>
+        ) : milestones.length === 0 ? (
             <p style={{ fontSize: 14, color: "#8c90a0", textAlign: "center", padding: "24px 0" }}>No milestones have been created yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1375,8 +1432,10 @@ const hasRemainingMilestone = milestones.some(
                   .toUpperCase();
 
                 const mCfg =
-                  MILESTONE_STATUS[normalizedStatus] ||
-                  MILESTONE_STATUS.PENDING;
+                MILESTONE_STATUS[normalizedStatus] || {
+                  label: normalizedStatus || "Unknown",
+                  color: "#9ca3af",
+                };
 
                 const isCurrent =
                   index === currentMilestoneIndex;

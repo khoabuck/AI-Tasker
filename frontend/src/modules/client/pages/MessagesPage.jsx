@@ -7,9 +7,9 @@
 // BE trả message đầy đủ:
 // GET messages trả danh sách lịch sử.
 // POST messages trả message vừa tạo.
-// FE không tạo pending message, dùng dữ liệu từ BE. Dùng optional chaining +
-// nhiều tên field dự phòng. Khi có response thật, kiểm tra lại field tên/avatar đối phương
-// và field phân biệt "tin nhắn của tôi" trong messages[].
+// FE không tạo pending message.
+// Conversation và message được hiển thị từ dữ liệu BE trả về.
+// senderUserId được dùng để xác định tin nhắn của user hiện tại.
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -56,7 +56,7 @@ export default function MessagesPage() {
   const overrideJobTitle = searchParams.get("jobTitle");
   const isNewChatDraft = !conversationId && !!newExpertUserId;
   const currentUser = authService.getCurrentUser();
-  const currentUserId = currentUser?.userId ?? currentUser?.id;
+  const currentUserId = currentUser?.userId;
 
   const [conversations, setConversations] = useState([]);
   const [activeChat, setActiveChat] = useState(null);
@@ -64,6 +64,7 @@ export default function MessagesPage() {
   const [input, setInput] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [listError, setListError] = useState("");
   const [error, setError] = useState("");
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState(null);
@@ -75,57 +76,60 @@ export default function MessagesPage() {
 
   // ── Load conversations ───────────────────────────────────────────
   const fetchConversations = useCallback(async () => {
+    setListError("");
+
     try {
       const res = await axiosInstance.get("/conversations/me");
-      
-      const raw = res.data?.data ?? res.data;
-      const list = Array.isArray(raw) ? raw : raw?.items ?? [];
+
+      const list = Array.isArray(res.data?.data)
+        ? res.data.data
+        : [];
 
       const normalized = list
-      .map((c) => {
-        const convId = c.conversationId ?? c.id ?? c.conversationID;
-
-        return {
-          id: convId,
-          name: c.expertName || c.otherPartyName || c.clientName || "Expert",
-          avatar:
-            c.expertAvatarUrl ||
-            c.otherPartyAvatarUrl ||
-            null,
-          online: c.isOtherPartyOnline ?? false,
-          lastMessage: c.lastMessage?.content || c.lastMessageContent || "Start conversation",
-          time: timeAgo(c.lastMessage?.createdAt || c.lastMessageAt || c.updatedAt || c.createdAt),
-          unread: c.unreadCount || 0,
+        .map((c) => ({
+          id: c.conversationId,
+          name: c.expertName || "Expert",
+          avatar: c.expertAvatarUrl || null,
+          lastMessage: c.lastMessageContent || "Start conversation",
+          time: timeAgo(c.lastMessageAt || c.createdAt),
           relatedProposalId: c.relatedProposalId,
           relatedJobId: c.relatedJobId,
           relatedJobTitle: c.relatedJobTitle,
           raw: c,
-        };
-      })
-      .filter((c) => c.id != null);
+        }))
+        .filter((c) => c.id != null);
 
       setConversations(normalized);
 
       if (normalized.length > 0) {
-      const target = initialConvId
-        ? normalized.find((c) => String(c.id) === String(initialConvId))
-        : isNewChatDraft
-        ? null // đang tạo draft chat mới — không tự chọn conversation nào khác
-        : normalized[0];
+        const target = initialConvId
+          ? normalized.find(
+              (c) => String(c.id) === String(initialConvId)
+            )
+          : isNewChatDraft
+          ? null
+          : normalized[0];
 
-      if (!isNewChatDraft) {
-        const resolved = target ?? normalized[0];
-        setActiveChat(
-          resolved && overrideJobTitle
-            ? { ...resolved, relatedJobTitle: overrideJobTitle }
-            : resolved
-        );
+        if (!isNewChatDraft) {
+          const resolved = target ?? normalized[0];
+
+          setActiveChat(
+            resolved && overrideJobTitle
+              ? {
+                  ...resolved,
+                  relatedJobTitle: overrideJobTitle,
+                }
+              : resolved
+          );
+        }
+      } else if (!isNewChatDraft) {
+        setActiveChat(null);
       }
-    } else if (!isNewChatDraft) {
-      setActiveChat(null);
-    }
     } catch (err) {
-      setError(err?.response?.data?.message || "Unable to load conversations.");
+      setListError(
+        err?.response?.data?.message ||
+          "Unable to load conversations."
+      );
     } finally {
       setLoadingList(false);
     }
@@ -138,18 +142,18 @@ export default function MessagesPage() {
 
   setActiveChat({
     id: null,
-    name: newExpertName ? decodeURIComponent(newExpertName) : "Expert",
+    name: newExpertName || "Expert",
     avatar: null,
-    online: false,
     lastMessage: "",
     time: "",
-    unread: 0,
     relatedProposalId: null,
     relatedJobId: null,
     relatedJobTitle: null,
     raw: {
       expertUserId: Number(newExpertUserId),
-      expertProfileId: newExpertProfileId ? Number(newExpertProfileId) : null,
+      expertProfileId: newExpertProfileId
+        ? Number(newExpertProfileId)
+        : null,
     },
   });
   setMessages([]);
@@ -166,18 +170,13 @@ export default function MessagesPage() {
       const list = Array.isArray(raw) ? raw : raw?.items ?? [];
 
       const normalized = list.map((m) => {
-        const senderId = m.senderUserId ?? m.senderId ?? m.userId;
-
         const isMe =
-          currentUserId != null && senderId != null
-            ? String(senderId) === String(currentUserId)
-            : Boolean(
-                m.isMine ??
-                  (m.senderRole === "CLIENT" || m.senderType === "CLIENT")
-              );
+          currentUserId != null &&
+          m.senderUserId != null &&
+          String(m.senderUserId) === String(currentUserId);
 
         return {
-          id: m.conversationMessageId ?? m.messageId ?? m.id,
+          id: m.conversationMessageId,
           text: m.content,
           isMe,
           time: formatMessageTime(m.createdAt),
@@ -187,10 +186,11 @@ export default function MessagesPage() {
         };
       });
 
+      setMessages(normalized);
 
-    setMessages(normalized);
-
-     
+      if (!silent) {
+        setError("");
+      }
     } catch (err) {
       if (!silent) setError(err?.response?.data?.message || "Unable to load messages.");
     } finally {
@@ -307,6 +307,44 @@ useEffect(() => {
     );
   }
 
+  if (listError) {
+    return (
+      <div
+        style={{
+          height: "100vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "#101319",
+        }}
+      >
+        <ClientNavbar />
+
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: 12,
+            color: "#f87171",
+          }}
+        >
+          <span
+            className="material-symbols-outlined"
+            style={{ fontSize: 48 }}
+          >
+            error_outline
+          </span>
+
+          <p style={{ fontSize: 14 }}>
+            {listError}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeChat) {
     return (
       <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#101319" }}>
@@ -347,28 +385,71 @@ useEffect(() => {
                 </div>
               ) : (
                 conversations.map((conv) => (
-                  <div key={conv.id} onClick={() => setActiveChat(conv)}
+                  <div key={conv.id} onClick={() => {
+                        setActiveChat(conv);
+                        navigate(`/client/messages/${conv.id}`, {
+                          replace: true,
+                        });
+                      }}
                     style={{ padding: 12, borderRadius: 12, marginBottom: 4, cursor: "pointer", background: activeChat?.id === conv.id ? "rgba(173,198,255,0.08)" : "transparent", border: `1px solid ${activeChat?.id === conv.id ? "rgba(173,198,255,0.2)" : "transparent"}`, transition: "all 0.2s", position: "relative" }}>
                     <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <div style={{ position: "relative", flexShrink: 0 }}>
-                        <img src={conv.avatar} alt={conv.name} style={{ width: 44, height: 44, borderRadius: "50%", objectFit: "cover", filter: conv.online ? "none" : "grayscale(0.5) opacity(0.8)" }} />
-                        <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, background: conv.online ? "#00F0FF" : "#8c90a0", borderRadius: "50%", border: "2px solid #1d2026" }} />
-                      </div>
+                      <div style={{ flexShrink: 0 }}>
+                      {conv.avatar ? (
+                        <img
+                          src={conv.avatar}
+                          alt={conv.name}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: 44,
+                            height: 44,
+                            borderRadius: "50%",
+                            background: "#272a30",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "#8c90a0",
+                          }}
+                        >
+                          <span
+                            className="material-symbols-outlined"
+                            style={{ fontSize: 24 }}
+                          >
+                            person
+                          </span>
+                        </div>
+                      )}
+                    </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3, gap: 6 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: 4, minWidth: 0, flex: 1 }}>
-                            <span style={{ fontWeight: conv.unread > 0 ? 700 : 500, fontSize: 14, color: "#e1e2eb", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.name}</span>
+                            <span
+                              style={{
+                                fontWeight: 500,
+                                fontSize: 14,
+                                color: "#e1e2eb",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {conv.name}
+                            </span>
                           </div>
 
                           <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
                             <span style={{ fontSize: 10, color: "#8c90a0" }}>{conv.time}</span>
                           </div>
                         </div>
-                        <p style={{ fontSize: 12, color: conv.unread > 0 ? "#c2c6d6" : "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.lastMessage}</p>
+                        <p style={{ fontSize: 12, color: "#8c90a0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{conv.lastMessage}</p>
                       </div>
-                      {conv.unread > 0 && (
-                        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#00F0FF", color: "#002022", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{conv.unread}</div>
-                      )}
                     </div>
                   </div>
                 ))
@@ -413,10 +494,41 @@ useEffect(() => {
                     arrow_back
                   </span>
                 </button>
-                <div style={{ position: "relative" }}>
-                  <img src={activeChat.avatar} alt={activeChat.name} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(173,198,255,0.3)" }} />
-                  {activeChat.online && <div style={{ position: "absolute", bottom: -1, right: -1, width: 10, height: 10, background: "#00F0FF", borderRadius: "50%", border: "2px solid #101319" }} />}
-                </div>
+                <div>
+                {activeChat.avatar ? (
+                  <img
+                    src={activeChat.avatar}
+                    alt={activeChat.name}
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "2px solid rgba(173,198,255,0.3)",
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      background: "#272a30",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#8c90a0",
+                    }}
+                  >
+                    <span
+                      className="material-symbols-outlined"
+                      style={{ fontSize: 21 }}
+                    >
+                      person
+                    </span>
+                  </div>
+                )}
+              </div>
                 <div>
                   <h3 style={{ fontWeight: 700, fontSize: 14, marginBottom: 2 }}>{activeChat.name}</h3>
                 </div>
@@ -499,9 +611,15 @@ useEffect(() => {
                 <div className="relative shrink-0">
                   <button
                     type="button"
-                    onClick={() => setShowAttachMenu((v) => !v)}
+                    disabled={!activeChat?.id}
+                    onClick={() => {
+                      if (!activeChat?.id) return;
+                      setShowAttachMenu((v) => !v);
+                    }}
                     className={`flex h-10 w-10 items-center justify-center rounded-full transition-all duration-200 ${
-                      showAttachMenu
+                      !activeChat?.id
+                        ? "cursor-not-allowed text-slate-600 opacity-50"
+                        : showAttachMenu
                         ? "bg-cyan-500 text-white shadow-lg shadow-cyan-500/30"
                         : "text-slate-400 hover:bg-cyan-500/10 hover:text-cyan-400"
                     }`}
@@ -548,7 +666,15 @@ useEffect(() => {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={(e) => handleUploadFile(e.target.files?.[0])}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+
+                      if (file) {
+                        handleUploadFile(file);
+                      }
+
+                      e.target.value = "";
+                    }}
                   />
 
                 </div>
@@ -645,8 +771,6 @@ useEffect(() => {
           />
         </div>
       )}
-
-      
     </>
   );
 }
