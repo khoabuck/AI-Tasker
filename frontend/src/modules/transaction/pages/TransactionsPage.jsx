@@ -246,11 +246,6 @@ useEffect(() => {
   selectedTransactionId,
 ]);
 
-  const handleExport = () => {
-    // TODO (BE): GET /wallet/transactions/export → download file
-    alert("Export coming soon!");
-  };
-
   return (
     <ClientLayout>
       <div className="mx-auto max-w-[1440px] px-12 py-10">

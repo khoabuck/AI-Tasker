@@ -2,8 +2,6 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import authService from "../../../services/auth.service";
 import { useAuth } from "../../../context/AuthContext";
-import { clearAuth } from "../../../utils/auth.utils";
-import { BACKEND_URL } from "../../../config/env";
 
 // biến tổng số giây thành phút 
 // 125s --> 2:05
@@ -346,9 +344,7 @@ export default function LoginPage() {
 };
 
   const handleGoogleLogin = () => {
-    window.location.assign(
-      `${BACKEND_URL}/api/auth/google-login`
-    );
+    authService.loginWithGoogle();
   };
 
   return (

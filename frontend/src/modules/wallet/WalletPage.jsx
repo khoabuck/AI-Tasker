@@ -1,4 +1,4 @@
-// src/modules/client/pages/WalletPage.jsx
+// src/modules/wallet/WalletPage.jsx
 //
 // GET  /api/wallets/balance                              → số dư hiện tại
 // GET  /api/transactions/me                               → lịch sử giao dịch
@@ -41,7 +41,7 @@ const formatCurrency = (value) => {
 };
 
 const QUICK_DEPOSIT_AMOUNTS = [
-  20000,
+  25000,
   50000,
   100000,
   500000,
@@ -80,7 +80,6 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(0);
-  const [qrOpenedAt, setQrOpenedAt] = useState(null);
 
   // Mở lại order cũ luôn vào step "qr" — không tự đoán hết hạn dựa vào giờ máy client,
   // chỉ dựa vào status thật trả về từ BE (EXPIRED/CANCELLED) qua polling bên dưới.
@@ -123,41 +122,19 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
     return () => { stopped = true; clearInterval(pollInterval); };
   }, [step, order, onClose, onSuccess]);
 
-  // Countdown tới expiresAt — chỉ để HIỂN THỊ, không tự quyết định hết hạn.
-  // Việc hết hạn thật được xác nhận qua polling status ở trên (BE trả EXPIRED/CANCELLED).
   useEffect(() => {
     if (step !== "qr" || !order?.expiresAt) return;
 
     const updateCountdown = () => {
-      if (!order?.createdAt || !order?.expiresAt) {
-        setSecondsLeft(0);
-        return;
-      }
-
-      const createdTime = Date.parse(order.createdAt);
-      const expiresTime = Date.parse(order.expiresAt);
-
-      const totalSeconds = Math.max(
-        0,
-        Math.floor((expiresTime - createdTime) / 1000)
-      );
-
-      const openedAt = qrOpenedAt || Date.now();
-
-      const elapsedSeconds = Math.max(
-        0,
-        Math.floor((Date.now() - openedAt) / 1000)
-      );
-
-      const remain = Math.max(0, totalSeconds - elapsedSeconds);
-
-      setSecondsLeft(remain);
+      setSecondsLeft(getDepositRemainingSeconds(order));
     };
 
     updateCountdown();
+
     const timer = setInterval(updateCountdown, 1000);
+
     return () => clearInterval(timer);
-  }, [step, order, qrOpenedAt]);
+  }, [step, order]);
 
   const formatTime = (s) => {
     const m = Math.floor(s / 60);
@@ -173,7 +150,6 @@ function DepositModal({ onClose, onSuccess, existingOrder, onOrderCreated }) {
       const orderData = res;
 
       setOrder(orderData);
-      setQrOpenedAt(Date.now());
       onOrderCreated?.(orderData);
       setStep("qr");
     } catch (err) {
@@ -741,7 +717,7 @@ export default function WalletPage() {
     // PENDING: vừa tạo yêu cầu, tiền bị giữ
     // PROCESSING: admin đã gửi payout qua PayOS, đang xử lý
     // PAID: đã rút thành công
-    return ["PENDING", "PROCESSING", "PAID"].includes(status);
+    return ["PENDING", "PROCESSING"].includes(status);
   })
   .reduce((sum, w) => {
     return sum + Number(w.amount ?? 0);
@@ -874,7 +850,7 @@ const metrics = balance
                   No transactions have been made yet.
                 </div>
               ) : (
-                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                <div className="wallet-scroll-area">
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                     <thead>
                       <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -936,7 +912,7 @@ const metrics = balance
                     No deposit orders yet.
                   </div>
                 ) : (
-                  <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                  <div className="wallet-scroll-area">
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       {depositOrders.filter(Boolean).map((order, i) => {
                       const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString("vi-VN") : "—";
@@ -1038,7 +1014,7 @@ const metrics = balance
                   No withdrawal requests yet.
                 </div>
               ) : (
-                <div className="wallet-scroll-area" style={{ maxHeight: 420 }}>
+                <div className="wallet-scroll-area">
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
                     <tr style={{ background: "rgba(35,42,53,0.5)", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
@@ -1131,17 +1107,10 @@ const metrics = balance
         }
 
         .wallet-scroll-area {
-        max-height: 420px;
-        overflow-y: auto;
-        overflow-x: hidden;
-
-        scrollbar-width: none;
-        -ms-overflow-style: none;
-      }
-
-      .wallet-scroll-area::-webkit-scrollbar {
-        display: none;
-      }
+          width: 100%;
+          min-width: 0;
+          overflow-x: hidden;
+        }
       `}</style>
     </ClientLayout>
   );

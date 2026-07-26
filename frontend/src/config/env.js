@@ -14,4 +14,4 @@ export const API_BASE_URL =
 
 
 export const BACKEND_URL =
-  API_BASE_URL.replace("/api", "");
+  API_BASE_URL.replace(/\/api\/?$/, "");

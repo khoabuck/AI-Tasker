@@ -96,7 +96,7 @@ const buildPayload = (form) => ({
   if (form.budgetMin === "") return "Budget min is required.";
   if (form.budgetMax === "") return "Budget max is required.";
   if (Number.isNaN(budgetMin) || Number.isNaN(budgetMax)) return "Budget must be valid numbers.";
-  if (budgetMin < 0 || budgetMax < 0) return "Budget cannot be negative.";
+  if (budgetMin <= 0 || budgetMax <= 0) return "Budget must be greater than 0.";
   if (budgetMin >= budgetMax) return "Budget min must be less than budget max.";
   if (!form.projectType.trim()) return "Project type is required.";
   if (!form.complexity.trim()) return "Complexity is required.";
@@ -310,7 +310,7 @@ const toggleSkill = (skill) => {
   // POST /api/jobs/ai-assistant/analyze
   const handleGenerate = async () => {
     if (!form.description.trim()) {
-      alert("Please enter a description before generating!");
+      setError("Please enter a description before generating!");
       return;
     }
 

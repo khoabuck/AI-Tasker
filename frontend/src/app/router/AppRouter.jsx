@@ -171,7 +171,6 @@ export default function AppRouter() {
 
       {/* Client projects */}
       <Route path="/client/projects" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsListPage /></ProtectedRoute>} />
-      <Route path="/client/projects-old" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ProjectsPage /></ProtectedRoute>} />
       <Route path="/client/projects/:id" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientProjectDetailPage /></ProtectedRoute>} />
       <Route path="/client/projects/:id/review" element={<ProtectedRoute allowedRoles={["CLIENT"]}><ClientReviewPage /></ProtectedRoute>} />
       <Route path="/client/milestones/:milestoneId/deliverables" element={<ProtectedRoute allowedRoles={["CLIENT"]}><MilestoneDeliverablesPage /></ProtectedRoute>} />

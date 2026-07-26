@@ -334,9 +334,12 @@ export default function AIMatchingPage() {
         `/client/messages?newExpertUserId=${expert.userId}&newExpertProfileId=${expert.expertProfileId}&newExpertName=${encodeURIComponent(expert.fullName)}`
       );
     } catch (err) {
-      console.error("Find conversation failed:", err);
-      alert("Unable to open conversation with the Expert.");
-    }
+        console.error("Find conversation failed:", err);
+        setError(
+          err?.response?.data?.message ||
+            "Unable to open conversation with the Expert."
+        );
+      }
   };
 
   const handleSearch = async (searchText) => {

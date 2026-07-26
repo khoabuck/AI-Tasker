@@ -1,12 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { registerApi } from "../../../api/auth.api";
 import { getErrorMessage } from "../../../utils/auth.utils";
-import { BACKEND_URL } from "../../../config/env";
+import { registerApi, loginWithGoogleApi,} from "../../../api/auth.api";
 
 const BG_IMAGE = "https://lh3.googleusercontent.com/aida/ADBb0uiAogMCN4ONd1eV0ckwyeNv8QfTOCxlvbOfag-KSL1Cdba-otv2YjPez9ovCM3FL-qyGKTDeVirDziA80hhQSTs6XXast-3vn_rIy5jZgYjYUXxWbn7589Hj6JdyzhvkZYNXQ9pQUbNptjiPkROg5Kp1z8ZHsKZL28Xmx-Rtm9fYag14W6IkJdjjWBtwCUOnpOhakWfAR9l6aohBmWnTPgav2fsqTD4ZFoyetZhmIs7tPIQxkGVlrRy0gVd";
-
-const GOOGLE_LOGIN_URL = `${BACKEND_URL}/api/auth/google-login`;
 
 const GoogleIcon = () => (
   <svg style={{ width: 20, height: 20 }} viewBox="0 0 24 24">
@@ -66,7 +63,7 @@ export default function RegisterPage() {
 
 
   const handleGoogleLogin = () => {
-    window.location.href = GOOGLE_LOGIN_URL;
+    loginWithGoogleApi();
   };
 
   const inputStyle = (fieldName) => ({
@@ -345,9 +342,9 @@ export default function RegisterPage() {
               </div>
 
               {/* Google */}
-              <button type="button" onClick={handleGoogleLogin}
-                style={{ width: "100%", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px", color: "#e1e2eb", fontSize: 15, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, transition: "background 0.2s" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#32353b")}
+              <button type="button" onClick={handleGoogleLogin} disabled={loading}
+                style={{ width: "100%", background: "#232A35", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px", color: "#e1e2eb", fontSize: 15, cursor: loading ? "not-allowed" : "pointer", opacity: loading ? 0.6 : 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 24, transition: "background 0.2s, opacity 0.2s" }}
+                onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = "#32353b"; }}
                 onMouseLeave={(e) => (e.currentTarget.style.background = "#232A35")}>
                 <GoogleIcon />
                 <span>Continue with Google</span>

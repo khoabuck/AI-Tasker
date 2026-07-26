@@ -127,6 +127,7 @@ const isClosed = [
 const normalizedEvidenceText = evidenceText.trim();
 const normalizedEvidenceFileUrl = evidenceFileUrl.trim();
 
+const hasEvidenceText = normalizedEvidenceText.length > 0;
 const hasEvidenceUrl = normalizedEvidenceFileUrl.length > 0;
 const hasEvidenceImages = evidenceFiles.length > 0;
 const hasEvidenceAttachment =
@@ -137,6 +138,7 @@ const hasEvidenceAttachment =
 const canSubmitEvidence =
   !isClosed &&
   Boolean(dispute?.disputeId) &&
+  hasEvidenceText &&
   hasEvidenceAttachment &&
   !submittingEvidence &&
   !evidenceSent;
@@ -385,10 +387,18 @@ setError("");
 
   const handleAddEvidence = async () => {
     if (!canSubmitEvidence) {
+      if (!hasEvidenceText) {
+        setEvidenceError(
+          "Evidence description is required."
+        );
+        return;
+      }
+
       if (!hasEvidenceAttachment) {
         setEvidenceError(
           "Provide a proof link or upload at least one image."
         );
+        return;
       }
 
       return;
